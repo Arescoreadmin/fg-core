@@ -105,7 +105,7 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 271,
+    "control": 272,
     "data": 52,
     "evidence": 23,
     "rbac": 5,
@@ -113,7 +113,7 @@
     "ui": 47
   },
   "removed": [],
-  "runtime_count": 437,
+  "runtime_count": 438,
   "runtime_only": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",
@@ -135,6 +135,7 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
+    "GET /field-assessment/engagements/{engagement_id}/execution-state",
     "GET /metrics",
     "GET /ui/ai",
     "GET /ui/ai/experience",
@@ -212,5 +213,7 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": []
+  "unauthorized_runtime_only": [
+    "GET /field-assessment/engagements/{engagement_id}/execution-state"
+  ]
 }

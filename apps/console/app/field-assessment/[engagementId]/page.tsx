@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from '@fg/ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@fg/ui';
 import { StatusBadge } from '@/components/field-assessment/StatusBadge';
 import { StatusTransitionBar } from '@/components/field-assessment/StatusTransitionBar';
-import { ProgressChecklist } from '@/components/field-assessment/ProgressChecklist';
+import { GuidedExecutionPanel } from '@/components/field-assessment/GuidedExecutionPanel';
 import { ScanImportPanel } from '@/components/field-assessment/ScanImportPanel';
 import { DocumentRegistrationPanel } from '@/components/field-assessment/DocumentRegistrationPanel';
 import { ObservationForm } from '@/components/field-assessment/ObservationForm';
@@ -26,6 +26,7 @@ import {
   type Finding,
   type EvidenceLink,
   type AuditEvent,
+  type ExecutionState,
 } from '@/lib/fieldAssessmentApi';
 
 const TAB_SECTIONS: Record<string, string> = {
@@ -55,13 +56,16 @@ export default function EngagementWorkspacePage() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [evidenceLinks, setEvidenceLinks] = useState<EvidenceLink[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [executionState, setExecutionState] = useState<ExecutionState | null>(null);
 
   const [engLoading, setEngLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
+  const [executionLoading, setExecutionLoading] = useState(true);
   const [findingsLoading, setFindingsLoading] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [engError, setEngError] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
   const [findingsError, setFindingsError] = useState<string | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
 
@@ -107,6 +111,19 @@ export default function EngagementWorkspacePage() {
     if (linkRes.status === 'fulfilled') setEvidenceLinks(linkRes.value);
   }, [engagementId]);
 
+  const loadExecutionState = useCallback(async () => {
+    setExecutionLoading(true);
+    setExecutionError(null);
+    try {
+      const state = await fieldAssessmentApi.getExecutionState(engagementId);
+      setExecutionState(state);
+    } catch (e) {
+      setExecutionError(e instanceof Error ? e.message : 'Failed to load execution state');
+    } finally {
+      setExecutionLoading(false);
+    }
+  }, [engagementId]);
+
   const loadFindings = useCallback(async () => {
     setFindingsLoading(true);
     setFindingsError(null);
@@ -137,7 +154,8 @@ export default function EngagementWorkspacePage() {
     loadEngagement();
     loadSummary();
     loadCollections();
-  }, [loadEngagement, loadSummary, loadCollections]);
+    loadExecutionState();
+  }, [loadEngagement, loadSummary, loadCollections, loadExecutionState]);
 
   useEffect(() => {
     if (activeTab === 'findings') loadFindings();
@@ -148,10 +166,11 @@ export default function EngagementWorkspacePage() {
     const updated = await fieldAssessmentApi.transitionEngagement(engagementId, { new_status: newStatus, reason });
     setEngagement(updated);
     loadSummary();
+    loadExecutionState();
   }
 
   function handleSectionClick(key: string) {
-    const tab = TAB_SECTIONS[key];
+    const tab = TAB_SECTIONS[key] ?? key;
     if (tab) setActiveTab(tab);
   }
 
@@ -228,23 +247,19 @@ export default function EngagementWorkspacePage() {
         {/* Main workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
-          {/* Sidebar: checklist + summary stats */}
+          {/* Sidebar: guided execution + summary stats */}
           <aside className="lg:col-span-1 space-y-4">
             <Card className="border-border">
               <CardHeader className="pb-2 pt-3 px-4">
-                <CardTitle className="text-sm">Progress Checklist</CardTitle>
+                <CardTitle className="text-sm">Guided Execution Panel</CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
-                {summary ? (
-                  <ProgressChecklist summary={summary} onSectionClick={handleSectionClick} />
-                ) : (
-                  <div className="h-32 animate-pulse bg-surface-2 rounded" aria-busy="true" />
-                )}
-                {summaryError && (
-                  <Alert variant="destructive" className="mt-2">
-                    <AlertDescription className="text-xs">{summaryError}</AlertDescription>
-                  </Alert>
-                )}
+                <GuidedExecutionPanel
+                  executionState={executionState}
+                  loading={executionLoading}
+                  error={executionError}
+                  onSectionClick={handleSectionClick}
+                />
               </CardContent>
             </Card>
 
@@ -318,6 +333,7 @@ export default function EngagementWorkspacePage() {
                       onSuccess={(scan) => {
                         setScans((prev) => [scan, ...prev]);
                         loadSummary();
+                        loadExecutionState();
                       }}
                     />
                   </CardContent>
@@ -349,6 +365,7 @@ export default function EngagementWorkspacePage() {
                       onSuccess={(doc) => {
                         setDocuments((prev) => [doc, ...prev]);
                         loadSummary();
+                        loadExecutionState();
                       }}
                     />
                   </CardContent>
@@ -380,6 +397,7 @@ export default function EngagementWorkspacePage() {
                       onSuccess={(obs) => {
                         setObservations((prev) => [obs, ...prev]);
                         loadSummary();
+                        loadExecutionState();
                       }}
                     />
                   </CardContent>
@@ -454,6 +472,7 @@ export default function EngagementWorkspacePage() {
                       onSuccess={(obs) => {
                         setObservations((prev) => [obs, ...prev]);
                         loadSummary();
+                        loadExecutionState();
                       }}
                     />
                   </CardContent>
@@ -494,6 +513,7 @@ export default function EngagementWorkspacePage() {
                       onSuccess={(link) => {
                         setEvidenceLinks((prev) => [link, ...prev]);
                         loadSummary();
+                        loadExecutionState();
                       }}
                     />
                   </CardContent>

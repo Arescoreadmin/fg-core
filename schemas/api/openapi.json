@@ -1203,6 +1203,52 @@
         "title": "AssessmentType",
         "type": "string"
       },
+      "AssetCandidateActionResponse": {
+        "properties": {
+          "candidate_action_id": {
+            "title": "Candidate Action Id",
+            "type": "string"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "lineage_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lineage Refs",
+            "type": "array"
+          },
+          "source_entity_id": {
+            "title": "Source Entity Id",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "target_ui_section": {
+            "title": "Target Ui Section",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_action_id",
+          "source_type",
+          "source_entity_id",
+          "title",
+          "instruction",
+          "lineage_refs",
+          "target_ui_section"
+        ],
+        "title": "AssetCandidateActionResponse",
+        "type": "object"
+      },
       "AssetResponse": {
         "properties": {
           "asset_id": {
@@ -2249,6 +2295,29 @@
         "title": "ComplianceClassification",
         "type": "string"
       },
+      "ConfidenceImpactResponse": {
+        "properties": {
+          "affected_scope": {
+            "title": "Affected Scope",
+            "type": "string"
+          },
+          "delta": {
+            "title": "Delta",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "delta",
+          "affected_scope"
+        ],
+        "title": "ConfidenceImpactResponse",
+        "type": "object"
+      },
       "ConfigWriteRequest": {
         "properties": {
           "config_payload": {
@@ -2313,6 +2382,42 @@
           "collection_id"
         ],
         "title": "ConnectorIngestRequest",
+        "type": "object"
+      },
+      "ContinuityOpportunityResponse": {
+        "properties": {
+          "opportunity_id": {
+            "title": "Opportunity Id",
+            "type": "string"
+          },
+          "opportunity_type": {
+            "title": "Opportunity Type",
+            "type": "string"
+          },
+          "recommended_follow_up": {
+            "title": "Recommended Follow Up",
+            "type": "string"
+          },
+          "related_entity_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Related Entity Ids",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "opportunity_id",
+          "opportunity_type",
+          "title",
+          "related_entity_ids",
+          "recommended_follow_up"
+        ],
+        "title": "ContinuityOpportunityResponse",
         "type": "object"
       },
       "ControlResponse": {
@@ -4953,6 +5058,52 @@
         "title": "EnrollmentTokenCreateResponse",
         "type": "object"
       },
+      "EscalationItemResponse": {
+        "properties": {
+          "ambiguity_type": {
+            "title": "Ambiguity Type",
+            "type": "string"
+          },
+          "escalation_id": {
+            "title": "Escalation Id",
+            "type": "string"
+          },
+          "must_block_progression": {
+            "title": "Must Block Progression",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "recommended_reviewer_role": {
+            "title": "Recommended Reviewer Role",
+            "type": "string"
+          },
+          "related_entities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Related Entities",
+            "type": "array"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "escalation_id",
+          "severity",
+          "reason",
+          "ambiguity_type",
+          "related_entities",
+          "recommended_reviewer_role",
+          "must_block_progression"
+        ],
+        "title": "EscalationItemResponse",
+        "type": "object"
+      },
       "EvidenceAnchorCreate": {
         "additionalProperties": false,
         "properties": {
@@ -5555,6 +5706,130 @@
           "expires_at_utc"
         ],
         "title": "ExceptionRequestCreate",
+        "type": "object"
+      },
+      "ExecutionStateResponse": {
+        "properties": {
+          "assessment_type": {
+            "title": "Assessment Type",
+            "type": "string"
+          },
+          "asset_candidate_actions": {
+            "items": {
+              "$ref": "#/components/schemas/AssetCandidateActionResponse"
+            },
+            "title": "Asset Candidate Actions",
+            "type": "array"
+          },
+          "blocking_gate_count": {
+            "title": "Blocking Gate Count",
+            "type": "integer"
+          },
+          "completed_gate_count": {
+            "title": "Completed Gate Count",
+            "type": "integer"
+          },
+          "completion_ratio": {
+            "title": "Completion Ratio",
+            "type": "number"
+          },
+          "continuity_opportunities": {
+            "items": {
+              "$ref": "#/components/schemas/ContinuityOpportunityResponse"
+            },
+            "title": "Continuity Opportunities",
+            "type": "array"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "escalation_items": {
+            "items": {
+              "$ref": "#/components/schemas/EscalationItemResponse"
+            },
+            "title": "Escalation Items",
+            "type": "array"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessGateResponse"
+            },
+            "title": "Gates",
+            "type": "array"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "next_actions": {
+            "items": {
+              "$ref": "#/components/schemas/NextActionResponse"
+            },
+            "title": "Next Actions",
+            "type": "array"
+          },
+          "overall_readiness_state": {
+            "title": "Overall Readiness State",
+            "type": "string"
+          },
+          "playbook_id": {
+            "title": "Playbook Id",
+            "type": "string"
+          },
+          "playbook_version": {
+            "title": "Playbook Version",
+            "type": "string"
+          },
+          "readiness_categories": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Readiness Categories",
+            "type": "object"
+          },
+          "readiness_score": {
+            "title": "Readiness Score",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "transition_blockers": {
+            "items": {
+              "$ref": "#/components/schemas/TransitionBlockerResponse"
+            },
+            "title": "Transition Blockers",
+            "type": "array"
+          },
+          "warning_gate_count": {
+            "title": "Warning Gate Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "engagement_id",
+          "assessment_type",
+          "playbook_id",
+          "playbook_version",
+          "overall_readiness_state",
+          "readiness_score",
+          "completion_ratio",
+          "blocking_gate_count",
+          "warning_gate_count",
+          "completed_gate_count",
+          "gates",
+          "next_actions",
+          "escalation_items",
+          "transition_blockers",
+          "asset_candidate_actions",
+          "continuity_opportunities",
+          "readiness_categories",
+          "generated_at",
+          "schema_version"
+        ],
+        "title": "ExecutionStateResponse",
         "type": "object"
       },
       "ExportClassification": {
@@ -8236,6 +8511,75 @@
         "title": "MonitoringRunSummaryResponse",
         "type": "object"
       },
+      "NextActionResponse": {
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "closes_gate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Closes Gate Ids",
+            "type": "array"
+          },
+          "expected_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Evidence",
+            "type": "array"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "required_input_type": {
+            "title": "Required Input Type",
+            "type": "string"
+          },
+          "safe_for_junior_assessor": {
+            "title": "Safe For Junior Assessor",
+            "type": "boolean"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "target_ui_section": {
+            "title": "Target Ui Section",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "why_it_matters": {
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_id",
+          "priority",
+          "title",
+          "instruction",
+          "why_it_matters",
+          "closes_gate_ids",
+          "required_input_type",
+          "target_ui_section",
+          "expected_evidence",
+          "safe_for_junior_assessor",
+          "severity"
+        ],
+        "title": "NextActionResponse",
+        "type": "object"
+      },
       "ObservationDomain": {
         "enum": [
           "ai_governance",
@@ -9234,6 +9578,122 @@
           "domain_id"
         ],
         "title": "ReadinessGapResponse",
+        "type": "object"
+      },
+      "ReadinessGateResponse": {
+        "properties": {
+          "blocks_status_transition": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocks Status Transition",
+            "type": "array"
+          },
+          "confidence_impact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfidenceImpactResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence_present": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Present",
+            "type": "array"
+          },
+          "evidence_required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Required",
+            "type": "array"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "gate_id": {
+            "title": "Gate Id",
+            "type": "string"
+          },
+          "gate_type": {
+            "title": "Gate Type",
+            "type": "string"
+          },
+          "missing_items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Items",
+            "type": "array"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "readiness_category": {
+            "title": "Readiness Category",
+            "type": "string"
+          },
+          "recommended_action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Action Id"
+          },
+          "related_entity_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Related Entity Ids",
+            "type": "array"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "why_it_matters": {
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gate_id",
+          "gate_type",
+          "readiness_category",
+          "severity",
+          "priority",
+          "status",
+          "title",
+          "explanation",
+          "why_it_matters",
+          "evidence_required",
+          "evidence_present",
+          "missing_items",
+          "related_entity_ids",
+          "blocks_status_transition",
+          "recommended_action_id",
+          "confidence_impact"
+        ],
+        "title": "ReadinessGateResponse",
         "type": "object"
       },
       "ReadinessImpactEstimateResponse": {
@@ -12263,6 +12723,32 @@
           "count"
         ],
         "title": "TopItem",
+        "type": "object"
+      },
+      "TransitionBlockerResponse": {
+        "properties": {
+          "blocked_by_gate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked By Gate Ids",
+            "type": "array"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "target_status": {
+            "title": "Target Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_status",
+          "blocked_by_gate_ids",
+          "explanation"
+        ],
+        "title": "TransitionBlockerResponse",
         "type": "object"
       },
       "TransitionEngagementRequest": {
@@ -28770,6 +29256,64 @@
           }
         },
         "summary": "Create Evidence Link Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/execution-state": {
+      "get": {
+        "operationId": "get_engagement_execution_state_route_field_assessment_engagements__engagement_id__execution_state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Engagement Execution State Route",
         "tags": [
           "field-assessment"
         ]

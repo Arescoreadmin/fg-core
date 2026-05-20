@@ -41,6 +41,9 @@ from services.field_assessment.models import (
     ScanSourceType,
     ScanValidationError,
 )
+from services.canonical import utc_iso8601_z_now
+from services.field_assessment.playbooks import get_playbook
+from services.field_assessment.readiness import build_execution_state
 from services.field_assessment.redaction import redact_payload
 from services.field_assessment.scan_registry import validate_scan_payload
 from services.field_assessment.store import (
@@ -357,6 +360,101 @@ class AuditEventResponse(BaseModel):
     payload: dict[str, Any]
     schema_version: str
     created_at: str
+
+
+class ConfidenceImpactResponse(BaseModel):
+    reason: str
+    delta: int
+    affected_scope: str
+
+
+class ReadinessGateResponse(BaseModel):
+    gate_id: str
+    gate_type: str
+    readiness_category: str
+    severity: str
+    priority: int
+    status: str
+    title: str
+    explanation: str
+    why_it_matters: str
+    evidence_required: list[str]
+    evidence_present: list[str]
+    missing_items: list[str]
+    related_entity_ids: list[str]
+    blocks_status_transition: list[str]
+    recommended_action_id: str | None
+    confidence_impact: ConfidenceImpactResponse | None
+
+
+class NextActionResponse(BaseModel):
+    action_id: str
+    priority: int
+    title: str
+    instruction: str
+    why_it_matters: str
+    closes_gate_ids: list[str]
+    required_input_type: str
+    target_ui_section: str
+    expected_evidence: list[str]
+    safe_for_junior_assessor: bool
+    severity: str
+
+
+class EscalationItemResponse(BaseModel):
+    escalation_id: str
+    severity: str
+    reason: str
+    ambiguity_type: str
+    related_entities: list[str]
+    recommended_reviewer_role: str
+    must_block_progression: bool
+
+
+class TransitionBlockerResponse(BaseModel):
+    target_status: str
+    blocked_by_gate_ids: list[str]
+    explanation: str
+
+
+class AssetCandidateActionResponse(BaseModel):
+    candidate_action_id: str
+    source_type: str
+    source_entity_id: str
+    title: str
+    instruction: str
+    lineage_refs: list[str]
+    target_ui_section: str
+
+
+class ContinuityOpportunityResponse(BaseModel):
+    opportunity_id: str
+    opportunity_type: str
+    title: str
+    related_entity_ids: list[str]
+    recommended_follow_up: str
+
+
+class ExecutionStateResponse(BaseModel):
+    engagement_id: str
+    assessment_type: str
+    playbook_id: str
+    playbook_version: str
+    overall_readiness_state: str
+    readiness_score: int
+    completion_ratio: float
+    blocking_gate_count: int
+    warning_gate_count: int
+    completed_gate_count: int
+    gates: list[ReadinessGateResponse]
+    next_actions: list[NextActionResponse]
+    escalation_items: list[EscalationItemResponse]
+    transition_blockers: list[TransitionBlockerResponse]
+    asset_candidate_actions: list[AssetCandidateActionResponse]
+    continuity_opportunities: list[ContinuityOpportunityResponse]
+    readiness_categories: dict[str, str]
+    generated_at: str
+    schema_version: str
 
 
 # ---------------------------------------------------------------------------
@@ -1323,6 +1421,67 @@ def get_engagement_summary_route(
         critical_findings_count=findings_by_severity.get("critical", 0),
         schema_version="1.0",
     )
+
+
+# ---------------------------------------------------------------------------
+# Route — Deterministic execution state
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/engagements/{engagement_id}/execution-state",
+    response_model=ExecutionStateResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_engagement_execution_state_route(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ExecutionStateResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    scans = list_scan_results(
+        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
+    )
+    documents = list_document_analyses(
+        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
+    )
+    observations = list_observations(
+        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
+    )
+    findings = list_findings(
+        db,
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+        severity_filter=None,
+        status_filter=None,
+        limit=100,
+    )
+    evidence_links = list_evidence_links(
+        db,
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+        source_entity_id=None,
+        limit=100,
+    )
+    playbook = get_playbook(eng.assessment_type)
+    execution_state = build_execution_state(
+        engagement=eng,
+        playbook=playbook,
+        scan_results=scans,
+        document_analyses=documents,
+        observations=observations,
+        findings=findings,
+        evidence_links=evidence_links,
+        generated_at=utc_iso8601_z_now(),
+    )
+    return ExecutionStateResponse(**execution_state.to_dict())
 
 
 # ---------------------------------------------------------------------------

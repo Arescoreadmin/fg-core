@@ -10970,3 +10970,47 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - `api/db.py` (added db_models_governance_assets import)
 - `api/main.py` (registered governance_assets_router + governance_assets_audit_router)
 - `docs/ai/PR_FIX_LOG.md` (this entry)
+
+---
+
+### 2026-05-20 — Field Assessment Playbooks, Readiness Gates & Guided Execution
+
+**Branch:** `field-assessment-guided-execution`
+
+**Area:** Field Assessment Engagement Substrate.
+
+**What was built:**
+
+1. **Typed playbooks** (`services/field_assessment/playbooks.py`) — deterministic, versioned playbooks for `ai_governance` and `comprehensive`, with prepared fallback coverage for `hipaa`, `soc2`, `iso27001`, and `cmmc`.
+
+2. **Readiness engine** (`services/field_assessment/readiness.py`) — deterministic execution-state evaluation across engagement status, scans, documents, observations, interviews, evidence links, findings, and asset candidate opportunities.
+
+3. **Execution-state API** (`GET /field-assessment/engagements/{engagement_id}/execution-state`) — tenant-scoped, `governance:read`, auth-context tenant only, 404 on wrong tenant, no raw scan payloads, no secrets, export-safe response.
+
+4. **Guided execution UI** (`GuidedExecutionPanel`) — replaces local checklist authority with server-authored readiness, blocking gates, next actions, escalation items, transition blockers, asset candidate actions, and readiness categories.
+
+5. **Deterministic gates** — required scans, document classes, document freshness, interviews, observation domains, evidence graph linkage, findings without evidence, high-risk findings without remediation, scan evidence not linked to graph, and ambiguous/shadow observations.
+
+6. **Confidence impacts** — missing/stale/unlinked evidence and unsupported findings produce deterministic confidence impacts without AI-authored conclusions.
+
+7. **Transition blockers** — execution-state exposes deterministic blockers for `evidence_collected`, `report_generation`, and `delivered`; backend transition enforcement is intentionally deferred to a later PR.
+
+8. **Asset Registry bridge preparation** — detects candidate actions from eligible scans and shadow observations only; this PR does not create Governance Asset Registry records.
+
+9. **Continuity opportunities** — emits recurring attestation, monitoring, remediation workflow, and asset registry onboarding opportunities from current engagement lineage.
+
+**Security impact:**
+- Tenant isolation remains rooted in authenticated request state only.
+- No request-body tenant trust was added.
+- Cross-tenant execution-state retrieval returns 404.
+- Execution-state responses exclude raw payloads, credentials, and document contents.
+- Frontend displays API state only and does not compute authoritative readiness locally.
+
+**Tests added/updated:**
+- `tests/test_field_assessment_readiness.py`
+- `apps/console/tests/field-assessment-workspace.test.js`
+
+**Known deferred follow-ups:**
+- Backend status transition enforcement using readiness blockers.
+- Governance Asset Registry candidate creation workflow.
+- Dedicated review queue persistence for escalations.

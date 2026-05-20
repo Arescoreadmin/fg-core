@@ -100,6 +100,10 @@ test('EngagementSummaryPanel component exists', () => {
   assert.ok(exists('components/field-assessment/EngagementSummaryPanel.tsx'));
 });
 
+test('GuidedExecutionPanel component exists', () => {
+  assert.ok(exists('components/field-assessment/GuidedExecutionPanel.tsx'));
+});
+
 // ─── packages/ui new exports ──────────────────────────────────────────────────
 
 test('packages/ui exports Textarea', () => {
@@ -187,6 +191,13 @@ test('API client covers summary endpoint', () => {
   assert.ok(src.includes('/summary'), 'Must target /summary endpoint');
 });
 
+test('API client covers execution-state endpoint', () => {
+  const src = read('lib/fieldAssessmentApi.ts');
+  assert.ok(src.includes('getExecutionState'), 'Must export getExecutionState');
+  assert.ok(src.includes('/execution-state'), 'Must target /execution-state endpoint');
+  assert.ok(src.includes('ExecutionState'), 'Must type execution-state response');
+});
+
 // ─── Security — tenant_id never in request body ───────────────────────────────
 
 test('API client never sends tenant_id in request body', () => {
@@ -242,6 +253,12 @@ test('No localStorage governance state in workspace page', () => {
   const src = read('app/field-assessment/[engagementId]/page.tsx');
   assert.ok(!src.includes('localStorage'), 'Workspace page must not use localStorage for governance state');
   assert.ok(!src.includes('sessionStorage'), 'Workspace page must not use sessionStorage');
+});
+
+test('GuidedExecutionPanel has no browser storage governance state', () => {
+  const src = read('components/field-assessment/GuidedExecutionPanel.tsx');
+  assert.ok(!src.includes('localStorage'), 'GuidedExecutionPanel must not use localStorage');
+  assert.ok(!src.includes('sessionStorage'), 'GuidedExecutionPanel must not use sessionStorage');
 });
 
 test('No mock API data in production components', () => {
@@ -415,11 +432,33 @@ test('ProgressChecklist derives state from summary, not local state', () => {
   assert.ok(!src.includes('useState') || src.includes('summary'), 'ProgressChecklist must not invent local completion truth');
 });
 
+test('GuidedExecutionPanel renders server-authored readiness surfaces', () => {
+  const src = read('components/field-assessment/GuidedExecutionPanel.tsx');
+  assert.ok(src.includes('next_actions'), 'GuidedExecutionPanel must render next actions from API');
+  assert.ok(src.includes('blocking_gate_count'), 'GuidedExecutionPanel must render blocking gates from API');
+  assert.ok(src.includes('escalation_items'), 'GuidedExecutionPanel must render escalation items from API');
+  assert.ok(src.includes('transition_blockers'), 'GuidedExecutionPanel must render transition blockers from API');
+  assert.ok(src.includes('asset_candidate_actions'), 'GuidedExecutionPanel must render asset candidate actions from API');
+});
+
+test('GuidedExecutionPanel does not compute authoritative readiness locally', () => {
+  const src = read('components/field-assessment/GuidedExecutionPanel.tsx');
+  assert.ok(src.includes('overall_readiness_state'), 'GuidedExecutionPanel must display server readiness state');
+  assert.ok(!src.includes('setExecutionState'), 'GuidedExecutionPanel must not mutate execution state');
+  assert.ok(!src.includes('Math.round'), 'GuidedExecutionPanel must not calculate readiness score locally');
+});
+
 // ─── Workspace page ───────────────────────────────────────────────────────────
 
 test('Workspace page has loading skeleton', () => {
   const src = read('app/field-assessment/[engagementId]/page.tsx');
   assert.ok(src.includes('animate-pulse') || src.includes('loading'), 'Workspace must have loading state');
+});
+
+test('Workspace page uses GuidedExecutionPanel instead of local readiness authority', () => {
+  const src = read('app/field-assessment/[engagementId]/page.tsx');
+  assert.ok(src.includes('GuidedExecutionPanel'), 'Workspace must render GuidedExecutionPanel');
+  assert.ok(src.includes('getExecutionState'), 'Workspace must fetch execution-state API');
 });
 
 test('Workspace page has error state', () => {
