@@ -449,3 +449,125 @@ test('List page has error state', () => {
   const src = read('app/field-assessment/page.tsx');
   assert.ok(src.includes('error') || src.includes('Error'), 'List page must have safe error state');
 });
+
+// ─── Sidebar nav link ─────────────────────────────────────────────────────────
+
+test('Sidebar includes Field Assessments nav link', () => {
+  const src = read('components/layout/Sidebar.tsx');
+  assert.ok(src.includes('/field-assessment'), 'Sidebar must link to /field-assessment');
+  assert.ok(src.includes('Field Assessments') || src.includes('Field Assessment'), 'Sidebar must label the nav item');
+  assert.ok(src.includes('ClipboardCheck'), 'Sidebar must use ClipboardCheck icon for field assessment');
+});
+
+// ─── Audit trail ─────────────────────────────────────────────────────────────
+
+test('fieldAssessmentApi exports listAuditEvents', () => {
+  const src = read('lib/fieldAssessmentApi.ts');
+  assert.ok(src.includes('listAuditEvents'), 'API client must export listAuditEvents');
+  assert.ok(src.includes('audit-events'), 'API client must target /audit-events endpoint');
+});
+
+test('AuditEvent type is defined in API client', () => {
+  const src = read('lib/fieldAssessmentApi.ts');
+  assert.ok(src.includes('AuditEvent'), 'API client must define AuditEvent type');
+  assert.ok(src.includes('event_type'), 'AuditEvent must have event_type field');
+  assert.ok(src.includes('reason_code'), 'AuditEvent must have reason_code field');
+});
+
+test('Workspace page has history tab', () => {
+  const src = read('app/field-assessment/[engagementId]/page.tsx');
+  assert.ok(src.includes('value="history"'), 'Workspace must include history tab');
+  assert.ok(src.includes('listAuditEvents'), 'Workspace must call listAuditEvents');
+  assert.ok(src.includes('auditEvents'), 'Workspace must hold auditEvents state');
+});
+
+test('History tab lazy-loads on first activation', () => {
+  const src = read('app/field-assessment/[engagementId]/page.tsx');
+  assert.ok(
+    src.includes("activeTab === 'history'") || src.includes("activeTab==='history'"),
+    'History tab must lazy-load — only fetch when activated',
+  );
+});
+
+// ─── Observation type filter ──────────────────────────────────────────────────
+
+test('listObservations accepts observation_type filter param', () => {
+  const src = read('lib/fieldAssessmentApi.ts');
+  assert.ok(src.includes('observation_type'), 'listObservations must accept observation_type filter');
+});
+
+// ─── Structured evidence KV editor ───────────────────────────────────────────
+
+test('ObservationForm has structured-evidence-editor', () => {
+  const src = read('components/field-assessment/ObservationForm.tsx');
+  assert.ok(src.includes('structured-evidence-editor') || src.includes('structured_evidence'), 'ObservationForm must include structured evidence editor');
+  assert.ok(src.includes('kvPairs') || src.includes('buildStructuredEvidence'), 'ObservationForm must build structured_evidence dict');
+});
+
+test('ObservationForm submits structured_evidence field', () => {
+  const src = read('components/field-assessment/ObservationForm.tsx');
+  assert.ok(src.includes('structured_evidence'), 'captureObservation payload must include structured_evidence');
+});
+
+// ─── Offline draft queue ──────────────────────────────────────────────────────
+
+test('fieldAssessmentDrafts.ts utility exists', () => {
+  assert.ok(exists('lib/fieldAssessmentDrafts.ts'), 'Missing lib/fieldAssessmentDrafts.ts');
+});
+
+test('Draft queue uses IndexedDB, not localStorage', () => {
+  const src = read('lib/fieldAssessmentDrafts.ts');
+  assert.ok(src.includes('indexedDB'), 'Draft queue must use IndexedDB');
+  assert.ok(!src.includes('localStorage'), 'Draft queue must not use localStorage');
+  assert.ok(!src.includes('sessionStorage'), 'Draft queue must not use sessionStorage');
+});
+
+test('Draft queue exports saveDraft, loadDraft, clearDraft', () => {
+  const src = read('lib/fieldAssessmentDrafts.ts');
+  assert.ok(src.includes('saveDraft'), 'Must export saveDraft');
+  assert.ok(src.includes('loadDraft'), 'Must export loadDraft');
+  assert.ok(src.includes('clearDraft'), 'Must export clearDraft');
+});
+
+test('ScanImportPanel integrates draft queue', () => {
+  const src = read('components/field-assessment/ScanImportPanel.tsx');
+  assert.ok(src.includes('saveDraft') || src.includes('loadDraft'), 'ScanImportPanel must use draft queue');
+  assert.ok(src.includes('clearDraft'), 'ScanImportPanel must clear draft on successful submit');
+});
+
+test('ObservationForm integrates draft queue', () => {
+  const src = read('components/field-assessment/ObservationForm.tsx');
+  assert.ok(src.includes('saveDraft') || src.includes('loadDraft'), 'ObservationForm must use draft queue');
+  assert.ok(src.includes('clearDraft'), 'ObservationForm must clear draft on successful submit');
+});
+
+// ─── Finding drill-down ───────────────────────────────────────────────────────
+
+test('FindingPreviewPanel has expand/collapse interaction', () => {
+  const src = read('components/field-assessment/FindingPreviewPanel.tsx');
+  assert.ok(src.includes('expandedId') || src.includes('expanded'), 'FindingPreviewPanel must support expand/collapse');
+  assert.ok(src.includes('aria-expanded'), 'FindingPreviewPanel must set aria-expanded on cards');
+});
+
+test('FindingPreviewPanel shows full detail in expanded state', () => {
+  const src = read('components/field-assessment/FindingPreviewPanel.tsx');
+  assert.ok(src.includes('evidence_ref_ids'), 'Expanded finding must show evidence_ref_ids');
+  assert.ok(src.includes('nist_ai_rmf_mappings'), 'Expanded finding must show NIST AI RMF mappings');
+  assert.ok(src.includes('framework_mappings'), 'Expanded finding must show framework mappings');
+});
+
+// ─── Observation expand/collapse ──────────────────────────────────────────────
+
+test('Workspace observation list has expand/collapse', () => {
+  const src = read('app/field-assessment/[engagementId]/page.tsx');
+  assert.ok(src.includes('expandedObsId') || src.includes('isExpanded'), 'Workspace observation list must support expand/collapse');
+  assert.ok(src.includes('structured_evidence'), 'Expanded observation must show structured_evidence');
+});
+
+// ─── Evidence lineage graph ───────────────────────────────────────────────────
+
+test('EvidenceLinkPanel has SVG lineage graph', () => {
+  const src = read('components/field-assessment/EvidenceLinkPanel.tsx');
+  assert.ok(src.includes('<svg') || src.includes('EvidenceLineageGraph'), 'EvidenceLinkPanel must include SVG lineage visualization');
+  assert.ok(!src.includes('import * as d3') && !src.includes("from 'd3'"), 'Evidence graph must not use d3 — inline SVG only');
+});

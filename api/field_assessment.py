@@ -49,6 +49,7 @@ from services.field_assessment.store import (
     get_engagement,
     get_finding,
     get_scan_result,
+    list_audit_events,
     list_document_analyses,
     list_engagements,
     list_evidence_links,
@@ -338,6 +339,17 @@ class EngagementSummaryResponse(BaseModel):
     findings_by_severity: dict[str, int]
     open_findings_count: int
     schema_version: str
+
+
+class AuditEventResponse(BaseModel):
+    id: str
+    engagement_id: str
+    event_type: str
+    actor: str
+    reason_code: str
+    payload: dict[str, Any]
+    schema_version: str
+    created_at: str
 
 
 # ---------------------------------------------------------------------------
@@ -909,6 +921,7 @@ def capture_observation_route(
 def list_observations_route(
     engagement_id: str,
     request: Request,
+    observation_type: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ObservationResponse]:
@@ -920,7 +933,11 @@ def list_observations_route(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
     rows = list_observations(
-        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=limit
+        db,
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+        limit=limit,
+        observation_type=observation_type,
     )
     return [_observation_to_response(r) for r in rows]
 
@@ -1211,3 +1228,44 @@ def get_engagement_summary_route(
         open_findings_count=open_findings_count,
         schema_version="1.0",
     )
+
+
+# ---------------------------------------------------------------------------
+# Route — Audit events (append-only; read-only surface)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/engagements/{engagement_id}/audit-events",
+    response_model=list[AuditEventResponse],
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_audit_events_route(
+    engagement_id: str,
+    request: Request,
+    limit: int = Query(100, ge=1, le=100),
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[AuditEventResponse]:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    rows = list_audit_events(
+        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=limit
+    )
+    return [
+        AuditEventResponse(
+            id=r.id,
+            engagement_id=r.engagement_id,
+            event_type=r.event_type,
+            actor=r.actor,
+            reason_code=r.reason_code,
+            payload=r.payload or {},
+            schema_version=r.schema_version,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]

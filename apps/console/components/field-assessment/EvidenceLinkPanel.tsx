@@ -6,6 +6,98 @@ import { Alert, AlertDescription } from '@fg/ui';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@fg/ui';
 import { fieldAssessmentApi, type EvidenceEntityType, type EvidenceLink } from '@/lib/fieldAssessmentApi';
 
+// ---------------------------------------------------------------------------
+// Evidence lineage SVG graph (inline — no external deps)
+// ---------------------------------------------------------------------------
+
+const NODE_W = 140;
+const NODE_H = 40;
+const H_GAP = 90;
+const V_GAP = 54;
+const PAD = 16;
+
+function truncate(s: string, max = 16): string {
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
+function EvidenceLineageGraph({ links }: { links: EvidenceLink[] }) {
+  // Collect unique source and evidence nodes
+  const sourceKeys = Array.from(new Set(links.map((l) => `${l.source_entity_type}:${l.source_entity_id}`)));
+  const evidenceKeys = Array.from(new Set(links.map((l) => `${l.evidence_entity_type}:${l.evidence_entity_id}`)));
+
+  const svgW = 2 * NODE_W + H_GAP + 2 * PAD;
+  const svgH = Math.max(sourceKeys.length, evidenceKeys.length) * V_GAP + 2 * PAD + NODE_H;
+
+  function sourceY(i: number) { return PAD + i * V_GAP; }
+  function evidenceY(i: number) { return PAD + i * V_GAP; }
+  const srcX = PAD;
+  const evX = PAD + NODE_W + H_GAP;
+
+  return (
+    <div className="space-y-1" aria-label="evidence-lineage-graph">
+      <p className="text-xs font-semibold text-muted uppercase tracking-wider">Lineage Graph</p>
+      <div className="overflow-x-auto rounded border border-border bg-surface-2 p-2">
+        <svg
+          width={svgW}
+          height={svgH}
+          aria-label="Evidence lineage visualization"
+          className="block"
+        >
+          {/* Edges */}
+          {links.map((l, i) => {
+            const si = sourceKeys.indexOf(`${l.source_entity_type}:${l.source_entity_id}`);
+            const ei = evidenceKeys.indexOf(`${l.evidence_entity_type}:${l.evidence_entity_id}`);
+            const x1 = srcX + NODE_W;
+            const y1 = sourceY(si) + NODE_H / 2;
+            const x2 = evX;
+            const y2 = evidenceY(ei) + NODE_H / 2;
+            const mx = (x1 + x2) / 2;
+            return (
+              <path
+                key={i}
+                d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeOpacity="0.25"
+                markerEnd="url(#arrowhead)"
+              />
+            );
+          })}
+          {/* Arrowhead marker */}
+          <defs>
+            <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" opacity="0.4" />
+            </marker>
+          </defs>
+          {/* Source nodes */}
+          {sourceKeys.map((k, i) => {
+            const [type, id] = k.split(':');
+            return (
+              <g key={k} transform={`translate(${srcX},${sourceY(i)})`}>
+                <rect width={NODE_W} height={NODE_H} rx="4" fill="transparent" stroke="currentColor" strokeOpacity="0.2" strokeWidth="1" />
+                <text x="8" y="14" fontSize="8" fill="currentColor" opacity="0.5" fontFamily="monospace">{type}</text>
+                <text x="8" y="27" fontSize="10" fill="currentColor" opacity="0.8" fontFamily="monospace">{truncate(id)}</text>
+              </g>
+            );
+          })}
+          {/* Evidence nodes */}
+          {evidenceKeys.map((k, i) => {
+            const [type, id] = k.split(':');
+            return (
+              <g key={k} transform={`translate(${evX},${evidenceY(i)})`}>
+                <rect width={NODE_W} height={NODE_H} rx="4" fill="transparent" stroke="currentColor" strokeOpacity="0.2" strokeWidth="1" />
+                <text x="8" y="14" fontSize="8" fill="currentColor" opacity="0.5" fontFamily="monospace">{type}</text>
+                <text x="8" y="27" fontSize="10" fill="currentColor" opacity="0.8" fontFamily="monospace">{truncate(id)}</text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 const EVIDENCE_TYPES: { value: EvidenceEntityType; label: string }[] = [
   { value: 'scan_result', label: 'Scan Result' },
   { value: 'document_analysis', label: 'Document Analysis' },
@@ -134,7 +226,7 @@ export function EvidenceLinkPanel({ engagementId, existingLinks, onSuccess }: Pr
       </Button>
 
       {existingLinks.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-4">
           <p className="text-xs font-semibold text-muted uppercase tracking-wider">
             Existing Links ({existingLinks.length})
           </p>
@@ -158,6 +250,8 @@ export function EvidenceLinkPanel({ engagementId, existingLinks, onSuccess }: Pr
               ))}
             </TableBody>
           </Table>
+
+          <EvidenceLineageGraph links={existingLinks} />
         </div>
       )}
     </div>

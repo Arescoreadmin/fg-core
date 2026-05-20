@@ -10830,3 +10830,42 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - Finding creation UI — findings are substrate-normalized only
 - Autonomous governance recommendations — deferred
 - Navigation link from main console sidebar to /field-assessment — requires separate shell PR
+
+---
+
+### 2026-05-19 — PR 2 (improvements): 8 enhancements to Field Data Collector UI
+
+**Branch:** feat/field-assessment-data-collector-ui-pr2
+
+**Changes implemented:**
+
+1. **Console nav link** — `ClipboardCheck` / "Field Assessments" added to Governance group in `Sidebar.tsx`
+
+2. **Structured evidence KV editor** — ObservationForm.tsx: dynamic key-value pair builder; assembles into `structured_evidence` on submit
+
+3. **Backend observation type filter** — `list_observations()` in store.py + `?observation_type=` query param in `list_observations_route`
+
+4. **Audit trail tab** — `list_audit_events()` store function + `AuditEventResponse` Pydantic model + `GET /audit-events` route + `listAuditEvents` API client method + "History" tab in workspace page (lazy-loaded)
+
+5. **Finding detail drill-down** — FindingPreviewPanel.tsx: click-to-expand showing full evidence refs, NIST AI RMF mappings, framework mappings, finding ID, type, confidence
+
+6. **Observation expand/collapse** — Workspace page observation list rows expand on click to show domain, assessor, linked findings, structured evidence
+
+7. **Offline draft queue** — `fieldAssessmentDrafts.ts` (IndexedDB, no localStorage); integrated into ScanImportPanel and ObservationForm with auto-save + restore + clear-on-submit
+
+8. **Evidence lineage SVG** — Inline SVG directed graph in EvidenceLinkPanel.tsx; no external npm deps; cubic bezier edges between source and evidence nodes
+
+**Files touched (16):**
+- `services/field_assessment/store.py`
+- `api/field_assessment.py`
+- `apps/console/components/layout/Sidebar.tsx`
+- `apps/console/lib/fieldAssessmentApi.ts`
+- `apps/console/lib/fieldAssessmentDrafts.ts` (new)
+- `apps/console/components/field-assessment/ObservationForm.tsx`
+- `apps/console/components/field-assessment/ScanImportPanel.tsx`
+- `apps/console/components/field-assessment/FindingPreviewPanel.tsx`
+- `apps/console/components/field-assessment/EvidenceLinkPanel.tsx`
+- `apps/console/app/field-assessment/[engagementId]/page.tsx`
+- `apps/console/tests/field-assessment-workspace.test.js`
+- `tests/test_field_assessment.py`
+- `docs/ai/PR_FIX_LOG.md` (this entry)

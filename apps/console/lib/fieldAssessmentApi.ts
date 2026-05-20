@@ -209,6 +209,17 @@ export interface EngagementSummary {
   critical_findings_count: number;
 }
 
+export interface AuditEvent {
+  id: string;
+  engagement_id: string;
+  event_type: string;
+  actor: string;
+  reason_code: string;
+  payload: Record<string, unknown>;
+  schema_version: string;
+  created_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Request shapes
 // ---------------------------------------------------------------------------
@@ -368,8 +379,11 @@ export const fieldAssessmentApi = {
     });
   },
 
-  listObservations(engagementId: string): Promise<Observation[]> {
-    return request(`/engagements/${engagementId}/observations`);
+  listObservations(engagementId: string, params?: { observation_type?: string }): Promise<Observation[]> {
+    const q = new URLSearchParams();
+    if (params?.observation_type) q.set('observation_type', params.observation_type);
+    const qs = q.toString() ? `?${q}` : '';
+    return request(`/engagements/${engagementId}/observations${qs}`);
   },
 
   // Findings (read-only — normalized server-side)
@@ -400,5 +414,10 @@ export const fieldAssessmentApi = {
   // Summary
   getSummary(engagementId: string): Promise<EngagementSummary> {
     return request(`/engagements/${engagementId}/summary`);
+  },
+
+  // Audit events (read-only — append-only server-side)
+  listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
+    return request(`/engagements/${engagementId}/audit-events`);
   },
 };

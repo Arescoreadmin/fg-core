@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from api.db_models_field_assessment import (
     FaDocumentAnalysis,
     FaEngagement,
+    FaEngagementAuditEvent,
     FaEvidenceLink,
     FaFieldObservation,
     FaNormalizedFinding,
@@ -344,6 +345,7 @@ def list_observations(
     engagement_id: str,
     tenant_id: str,
     limit: int,
+    observation_type: str | None = None,
 ) -> list[FaFieldObservation]:
     limit = min(limit, MAX_PAGE_SIZE)
     stmt = (
@@ -353,6 +355,28 @@ def list_observations(
             FaFieldObservation.tenant_id == tenant_id,
         )
         .order_by(FaFieldObservation.created_at.desc())
+        .limit(limit)
+    )
+    if observation_type is not None:
+        stmt = stmt.where(FaFieldObservation.observation_type == observation_type)
+    return list(db.execute(stmt).scalars().all())
+
+
+def list_audit_events(
+    db: Session,
+    *,
+    engagement_id: str,
+    tenant_id: str,
+    limit: int = 100,
+) -> list[FaEngagementAuditEvent]:
+    limit = min(limit, MAX_PAGE_SIZE)
+    stmt = (
+        select(FaEngagementAuditEvent)
+        .where(
+            FaEngagementAuditEvent.engagement_id == engagement_id,
+            FaEngagementAuditEvent.tenant_id == tenant_id,
+        )
+        .order_by(FaEngagementAuditEvent.created_at.desc())
         .limit(limit)
     )
     return list(db.execute(stmt).scalars().all())

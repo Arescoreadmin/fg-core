@@ -25,6 +25,7 @@ import {
   type Observation,
   type Finding,
   type EvidenceLink,
+  type AuditEvent,
 } from '@/lib/fieldAssessmentApi';
 
 const TAB_SECTIONS: Record<string, string> = {
@@ -53,15 +54,19 @@ export default function EngagementWorkspacePage() {
   const [observations, setObservations] = useState<Observation[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [evidenceLinks, setEvidenceLinks] = useState<EvidenceLink[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
 
   const [engLoading, setEngLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [findingsLoading, setFindingsLoading] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [engError, setEngError] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [findingsError, setFindingsError] = useState<string | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState('overview');
+  const [expandedObsId, setExpandedObsId] = useState<string | null>(null);
 
   const loadEngagement = useCallback(async () => {
     setEngLoading(true);
@@ -115,6 +120,19 @@ export default function EngagementWorkspacePage() {
     }
   }, [engagementId]);
 
+  const loadAuditEvents = useCallback(async () => {
+    setAuditLoading(true);
+    setAuditError(null);
+    try {
+      const events = await fieldAssessmentApi.listAuditEvents(engagementId);
+      setAuditEvents(events);
+    } catch (e) {
+      setAuditError(e instanceof Error ? e.message : 'Failed to load audit history');
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [engagementId]);
+
   useEffect(() => {
     loadEngagement();
     loadSummary();
@@ -123,7 +141,8 @@ export default function EngagementWorkspacePage() {
 
   useEffect(() => {
     if (activeTab === 'findings') loadFindings();
-  }, [activeTab, loadFindings]);
+    if (activeTab === 'history') loadAuditEvents();
+  }, [activeTab, loadFindings, loadAuditEvents]);
 
   async function handleTransition(newStatus: EngagementStatus) {
     const updated = await fieldAssessmentApi.transitionEngagement(engagementId, { new_status: newStatus });
@@ -252,10 +271,11 @@ export default function EngagementWorkspacePage() {
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="scans">Scans ({scans.length})</TabsTrigger>
                 <TabsTrigger value="documents">Documents ({documents.length})</TabsTrigger>
-                <TabsTrigger value="observations">Observations ({observations.length})</TabsTrigger>
+                <TabsTrigger value="observations">Observations ({observations.filter((o) => o.observation_type !== 'interview').length})</TabsTrigger>
                 <TabsTrigger value="interviews">Interviews</TabsTrigger>
                 <TabsTrigger value="evidence">Evidence Links ({evidenceLinks.length})</TabsTrigger>
                 <TabsTrigger value="findings">Findings</TabsTrigger>
+                <TabsTrigger value="history">History</TabsTrigger>
               </TabsList>
 
               {/* Overview */}
@@ -371,16 +391,53 @@ export default function EngagementWorkspacePage() {
                     </p>
                     {observations
                       .filter((o) => o.observation_type !== 'interview')
-                      .map((o) => (
-                        <div key={o.id} className="p-3 rounded border border-border bg-surface-2 space-y-1 text-xs">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium text-foreground">{o.title}</span>
-                            <span className="capitalize text-muted">{o.severity}</span>
-                            <span className="capitalize text-muted">{o.observation_type.replace(/_/g, ' ')}</span>
+                      .map((o) => {
+                        const isExpanded = expandedObsId === o.id;
+                        return (
+                          <div
+                            key={o.id}
+                            className="p-3 rounded border border-border bg-surface-2 space-y-1 text-xs cursor-pointer"
+                            onClick={() => setExpandedObsId(isExpanded ? null : o.id)}
+                            role="button"
+                            aria-expanded={isExpanded}
+                            tabIndex={0}
+                            onKeyDown={(e) => e.key === 'Enter' && setExpandedObsId(isExpanded ? null : o.id)}
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-foreground">{o.title}</span>
+                              <span className="capitalize text-muted">{o.severity}</span>
+                              <span className="capitalize text-muted">{o.observation_type.replace(/_/g, ' ')}</span>
+                              <span className="ml-auto text-muted">{isExpanded ? '▲' : '▼'}</span>
+                            </div>
+                            <p className={`text-muted ${isExpanded ? '' : 'line-clamp-2'}`}>{o.description}</p>
+                            {isExpanded && (
+                              <div className="border-t border-border pt-2 mt-2 space-y-1">
+                                <div className="flex flex-wrap gap-3">
+                                  <span className="text-muted">Domain: <span className="text-foreground capitalize">{o.domain.replace(/_/g, ' ')}</span></span>
+                                  <span className="text-muted">Assessor: <span className="text-foreground">{o.assessor_id}</span></span>
+                                </div>
+                                {o.linked_finding_ids.length > 0 && (
+                                  <div>
+                                    <span className="text-muted">Linked findings: </span>
+                                    <span className="font-mono text-foreground">{o.linked_finding_ids.join(', ')}</span>
+                                  </div>
+                                )}
+                                {Object.keys(o.structured_evidence).length > 0 && (
+                                  <div className="space-y-0.5">
+                                    <p className="text-muted font-semibold">Structured evidence:</p>
+                                    {Object.entries(o.structured_evidence).map(([k, v]) => (
+                                      <div key={k} className="font-mono">
+                                        <span className="text-muted">{k}: </span>
+                                        <span className="text-foreground">{String(v)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <p className="text-muted line-clamp-2">{o.description}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                   </div>
                 )}
               </TabsContent>
@@ -458,6 +515,59 @@ export default function EngagementWorkspacePage() {
                       loading={findingsLoading}
                       error={findingsError}
                     />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Audit History (append-only; read-only surface) */}
+              <TabsContent value="history">
+                <Card className="border-border">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Audit History</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Append-only event log — all mutations recorded by the governance substrate
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    {auditLoading && (
+                      <div className="space-y-2" aria-busy="true">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="h-14 rounded border border-border bg-surface-2 animate-pulse" />
+                        ))}
+                      </div>
+                    )}
+                    {auditError && !auditLoading && (
+                      <Alert variant="destructive">
+                        <AlertDescription>{auditError}</AlertDescription>
+                      </Alert>
+                    )}
+                    {!auditLoading && !auditError && auditEvents.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-12 text-center text-muted">
+                        <p className="text-sm font-medium">No audit events yet</p>
+                        <p className="text-xs mt-1">Events are recorded automatically on every mutation</p>
+                      </div>
+                    )}
+                    {!auditLoading && auditEvents.length > 0 && (
+                      <div className="space-y-2" aria-label="audit-event-list">
+                        {auditEvents.map((ev) => (
+                          <div key={ev.id} className="p-3 rounded border border-border bg-surface-2 text-xs space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono font-medium text-foreground">{ev.event_type}</span>
+                              <span className="text-muted">{ev.actor}</span>
+                              <span className="ml-auto text-muted font-mono">{formatDate(ev.created_at)}</span>
+                            </div>
+                            <div className="text-muted">
+                              Code: <span className="font-mono text-foreground">{ev.reason_code}</span>
+                            </div>
+                            {Object.keys(ev.payload).length > 0 && (
+                              <pre className="text-xs font-mono bg-background rounded p-2 overflow-auto max-h-24 text-muted">
+                                {JSON.stringify(ev.payload, null, 2)}
+                              </pre>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

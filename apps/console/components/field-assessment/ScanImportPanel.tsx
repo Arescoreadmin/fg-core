@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@fg/ui';
 import { Textarea } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { fieldAssessmentApi, type ScanSourceType, type ScanResultSummary } from '@/lib/fieldAssessmentApi';
+import { saveDraft, loadDraft, clearDraft } from '@/lib/fieldAssessmentDrafts';
 
 const SOURCE_TYPES: { value: ScanSourceType; label: string }[] = [
   { value: 'microsoft_graph', label: 'Microsoft Graph' },
@@ -54,9 +55,27 @@ export function ScanImportPanel({ engagementId, onSuccess }: Props) {
   const [sourceType, setSourceType] = useState<ScanSourceType | ''>('');
   const [jsonText, setJsonText] = useState('');
   const [collectedAt, setCollectedAt] = useState('');
+  const [hasDraft, setHasDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ScanResultSummary | null>(null);
+
+  // Restore draft on mount
+  useEffect(() => {
+    loadDraft('scan', engagementId).then((draft) => {
+      if (!draft) return;
+      if (draft.sourceType) setSourceType(draft.sourceType as ScanSourceType);
+      if (draft.jsonText) setJsonText(draft.jsonText as string);
+      if (draft.collectedAt) setCollectedAt(draft.collectedAt as string);
+      setHasDraft(true);
+    });
+  }, [engagementId]);
+
+  // Auto-save on changes
+  useEffect(() => {
+    if (!sourceType && !jsonText) return;
+    saveDraft('scan', engagementId, { sourceType, jsonText, collectedAt });
+  }, [engagementId, sourceType, jsonText, collectedAt]);
 
   const parseResult = jsonText.trim() ? parsePreview(jsonText) : null;
   const preview = parseResult && 'preview' in parseResult ? parseResult.preview : null;
@@ -85,6 +104,8 @@ export function ScanImportPanel({ engagementId, onSuccess }: Props) {
       setJsonText('');
       setSourceType('');
       setCollectedAt('');
+      setHasDraft(false);
+      clearDraft('scan', engagementId);
       onSuccess(result);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : 'Submission failed');
@@ -172,6 +193,12 @@ export function ScanImportPanel({ engagementId, onSuccess }: Props) {
           <AlertDescription>
             Scan imported — evidence hash: <code className="font-mono text-xs">{lastResult.evidence_hash}</code>
           </AlertDescription>
+        </Alert>
+      )}
+
+      {hasDraft && !lastResult && (
+        <Alert variant="info">
+          <AlertDescription className="text-xs">Draft restored from previous session.</AlertDescription>
         </Alert>
       )}
 

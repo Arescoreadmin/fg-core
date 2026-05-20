@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@fg/ui';
 import { Textarea } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
@@ -11,6 +11,7 @@ import {
   type ObservationSeverity,
   type Observation,
 } from '@/lib/fieldAssessmentApi';
+import { saveDraft, loadDraft, clearDraft } from '@/lib/fieldAssessmentDrafts';
 
 const DOMAINS: { value: ObservationDomain; label: string }[] = [
   { value: 'ai_governance', label: 'AI Governance' },
@@ -44,6 +45,11 @@ interface Props {
   onSuccess: (obs: Observation) => void;
 }
 
+interface KvPair {
+  key: string;
+  value: string;
+}
+
 export function ObservationForm({ engagementId, onSuccess }: Props) {
   const [domain, setDomain] = useState<ObservationDomain | ''>('');
   const [obsType, setObsType] = useState<ObservationType | ''>('');
@@ -51,9 +57,32 @@ export function ObservationForm({ engagementId, onSuccess }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [linkedFindingIds, setLinkedFindingIds] = useState('');
+  const [kvPairs, setKvPairs] = useState<KvPair[]>([]);
+  const [hasDraft, setHasDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastObs, setLastObs] = useState<Observation | null>(null);
+
+  // Restore draft on mount
+  useEffect(() => {
+    loadDraft('observation', engagementId).then((draft) => {
+      if (!draft) return;
+      if (draft.domain) setDomain(draft.domain as ObservationDomain);
+      if (draft.obsType) setObsType(draft.obsType as ObservationType);
+      if (draft.severity) setSeverity(draft.severity as ObservationSeverity);
+      if (draft.title) setTitle(draft.title as string);
+      if (draft.description) setDescription(draft.description as string);
+      if (draft.linkedFindingIds) setLinkedFindingIds(draft.linkedFindingIds as string);
+      if (Array.isArray(draft.kvPairs)) setKvPairs(draft.kvPairs as KvPair[]);
+      setHasDraft(true);
+    });
+  }, [engagementId]);
+
+  // Auto-save draft on field changes (debounced via useEffect dependency)
+  useEffect(() => {
+    if (!domain && !obsType && !title && !description) return;
+    saveDraft('observation', engagementId, { domain, obsType, severity, title, description, linkedFindingIds, kvPairs });
+  }, [engagementId, domain, obsType, severity, title, description, linkedFindingIds, kvPairs]);
 
   const canSubmit =
     domain !== '' &&
@@ -62,6 +91,26 @@ export function ObservationForm({ engagementId, onSuccess }: Props) {
     title.trim() !== '' &&
     description.trim() !== '' &&
     !submitting;
+
+  function addKvPair() {
+    setKvPairs((prev) => [...prev, { key: '', value: '' }]);
+  }
+
+  function updateKvPair(index: number, field: 'key' | 'value', val: string) {
+    setKvPairs((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: val } : p)));
+  }
+
+  function removeKvPair(index: number) {
+    setKvPairs((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function buildStructuredEvidence(): Record<string, string> {
+    const ev: Record<string, string> = {};
+    for (const { key, value } of kvPairs) {
+      if (key.trim()) ev[key.trim()] = value;
+    }
+    return ev;
+  }
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -78,6 +127,7 @@ export function ObservationForm({ engagementId, onSuccess }: Props) {
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean),
+        structured_evidence: buildStructuredEvidence(),
       });
       setLastObs(obs);
       setDomain('');
@@ -86,6 +136,9 @@ export function ObservationForm({ engagementId, onSuccess }: Props) {
       setTitle('');
       setDescription('');
       setLinkedFindingIds('');
+      setKvPairs([]);
+      setHasDraft(false);
+      clearDraft('observation', engagementId);
       onSuccess(obs);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Capture failed');
@@ -172,6 +225,51 @@ export function ObservationForm({ engagementId, onSuccess }: Props) {
           onChange={(e) => setLinkedFindingIds(e.target.value)}
         />
       </div>
+
+      <div className="space-y-2" aria-label="structured-evidence-editor">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">Structured Evidence (key-value)</Label>
+          <button
+            type="button"
+            onClick={addKvPair}
+            className="text-xs text-primary hover:underline focus-visible:outline-none"
+          >
+            + Add field
+          </button>
+        </div>
+        {kvPairs.map((pair, i) => (
+          <div key={i} className="flex gap-2 items-center">
+            <Input
+              placeholder="key"
+              className="flex-1 text-xs"
+              value={pair.key}
+              onChange={(e) => updateKvPair(i, 'key', e.target.value)}
+              aria-label={`Evidence key ${i + 1}`}
+            />
+            <Input
+              placeholder="value"
+              className="flex-1 text-xs"
+              value={pair.value}
+              onChange={(e) => updateKvPair(i, 'value', e.target.value)}
+              aria-label={`Evidence value ${i + 1}`}
+            />
+            <button
+              type="button"
+              onClick={() => removeKvPair(i)}
+              className="text-xs text-muted hover:text-danger shrink-0 focus-visible:outline-none"
+              aria-label="Remove field"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {hasDraft && (
+        <Alert variant="info">
+          <AlertDescription className="text-xs">Draft restored from previous session.</AlertDescription>
+        </Alert>
+      )}
 
       {lastObs && (
         <Alert variant="success">
