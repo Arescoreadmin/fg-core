@@ -3735,3 +3735,32 @@ EU AI Act Art. 9 (risk management), SOC 2 CC6/CC9 (change mgmt, vendor risk), NI
 
 **Compliance posture:**
 Router scope-gated and tenant-isolated throughout. Ed25519 signing infrastructure reused from existing `api/signed_artifacts.py` (no new signing code). No secrets stored in any new table. Raw scan payloads never copied into governance tables — only external_id references. Route inventory and contract authority regeneration pending (CI gates).
+
+---
+
+## PR 4 — Report Generation Engine (2026-05-20)
+
+**Change:** Added `/verify/` prefix to `PUBLIC_PATHS_PREFIX` in `api/security/public_paths.py`.
+
+**Reason:** The `GET /verify/{report_hash}` endpoint must be publicly accessible so clients can
+verify report authenticity without FrostGate API credentials. The endpoint is read-only and
+returns only report metadata (posture score, finding count, report type) derived from
+`manifest_hash` lookup — no PII, no raw findings, no tenant-identifying data beyond the
+hashed tenant_id already embedded in the report the client holds.
+
+**Security assessment:**
+- The endpoint is a hash-keyed lookup: callers who do not have the 64-char SHA-256 hex
+  manifest_hash cannot enumerate or discover reports. Enumeration requires knowing a valid hash.
+- The response deliberately omits findings detail and raw tenant context.
+- No write operations on this path.
+- Auth bypass is intentional and bounded: the public path matches only `/verify/` prefix.
+
+**Files touched:**
+- `api/security/public_paths.py` — `/verify/` added to PUBLIC_PATHS_PREFIX
+- `api/connectors_msgraph_report.py` (new — GET report + GET /verify/{hash})
+- `services/connectors/msgraph/posture_score.py` (new — pure posture score calculator)
+- `services/connectors/msgraph/report.py` (new — deterministic report generator)
+- `services/field_assessment/connectors/msgraph_bridge.py` (report generation wired at import)
+- `api/field_assessment.py` — ConnectorImportResponse.report_id field added
+- `api/main.py` — connectors_msgraph_report_router registered
+- `docs/ai/PR_FIX_LOG.md` (PR 4 entry)

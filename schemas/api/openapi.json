@@ -2480,6 +2480,17 @@
             "title": "Manifest Hash",
             "type": "string"
           },
+          "report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Id"
+          },
           "scan_result_id": {
             "title": "Scan Result Id",
             "type": "string"
@@ -8664,6 +8675,163 @@
         "title": "MonitoringRunSummaryResponse",
         "type": "object"
       },
+      "MsgraphReportResponse": {
+        "properties": {
+          "critical_count": {
+            "title": "Critical Count",
+            "type": "integer"
+          },
+          "endpoints_called": {
+            "title": "Endpoints Called",
+            "type": "integer"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "finding_count": {
+            "title": "Finding Count",
+            "type": "integer"
+          },
+          "findings": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "framework_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Framework Refs",
+            "type": "array"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "high_count": {
+            "title": "High Count",
+            "type": "integer"
+          },
+          "informational_count": {
+            "title": "Informational Count",
+            "type": "integer"
+          },
+          "is_finalized": {
+            "title": "Is Finalized",
+            "type": "boolean"
+          },
+          "low_count": {
+            "title": "Low Count",
+            "type": "integer"
+          },
+          "manifest_hash": {
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "medium_count": {
+            "title": "Medium Count",
+            "type": "integer"
+          },
+          "operator_receipt_hmac": {
+            "title": "Operator Receipt Hmac",
+            "type": "string"
+          },
+          "posture_ai_governance": {
+            "title": "Posture Ai Governance",
+            "type": "integer"
+          },
+          "posture_band": {
+            "title": "Posture Band",
+            "type": "string"
+          },
+          "posture_compliance": {
+            "title": "Posture Compliance",
+            "type": "integer"
+          },
+          "posture_overall": {
+            "title": "Posture Overall",
+            "type": "integer"
+          },
+          "posture_security": {
+            "title": "Posture Security",
+            "type": "integer"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "report_type": {
+            "title": "Report Type",
+            "type": "string"
+          },
+          "scan_completed_at": {
+            "title": "Scan Completed At",
+            "type": "string"
+          },
+          "scan_result_id": {
+            "title": "Scan Result Id",
+            "type": "string"
+          },
+          "scan_type": {
+            "title": "Scan Type",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "scopes_authorized": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes Authorized",
+            "type": "array"
+          },
+          "tenant_id_hash": {
+            "title": "Tenant Id Hash",
+            "type": "string"
+          },
+          "verification_url": {
+            "title": "Verification Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "scan_result_id",
+          "engagement_id",
+          "tenant_id_hash",
+          "scan_completed_at",
+          "generated_at",
+          "schema_version",
+          "report_type",
+          "posture_overall",
+          "posture_band",
+          "posture_security",
+          "posture_compliance",
+          "posture_ai_governance",
+          "finding_count",
+          "critical_count",
+          "high_count",
+          "medium_count",
+          "low_count",
+          "informational_count",
+          "findings",
+          "framework_refs",
+          "scan_type",
+          "scopes_authorized",
+          "endpoints_called",
+          "operator_receipt_hmac",
+          "manifest_hash",
+          "verification_url",
+          "is_finalized"
+        ],
+        "title": "MsgraphReportResponse",
+        "type": "object"
+      },
       "NextActionResponse": {
         "properties": {
           "action_id": {
@@ -13194,6 +13362,118 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VerifyReportResponse": {
+        "properties": {
+          "finding_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Count"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Hash"
+          },
+          "posture_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posture Band"
+          },
+          "posture_overall": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posture Overall"
+          },
+          "report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Id"
+          },
+          "report_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Type"
+          },
+          "scan_completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scan Completed At"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "VerifyReportResponse",
         "type": "object"
       },
       "VersionFloorRequest": {
@@ -29186,6 +29466,74 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}": {
+      "get": {
+        "description": "Retrieve the governance report generated from a verified MS Graph scan.\n\nThe report includes posture score, all findings, framework coverage,\nand a verification URL clients can use to confirm report integrity.",
+        "operationId": "get_msgraph_report_field_assessment_engagements__engagement_id__connector_runs_msgraph_reports__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MsgraphReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Msgraph Report",
+        "tags": [
+          "connectors-msgraph-report"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/document-analyses": {
       "get": {
         "operationId": "list_document_analyses_route_field_assessment_engagements__engagement_id__document_analyses_get",
@@ -36283,6 +36631,49 @@
           }
         },
         "summary": "V1 Status"
+      }
+    },
+    "/verify/{report_hash}": {
+      "get": {
+        "description": "Verify a delivered MS Graph governance report by its manifest hash.\n\nEvery report embeds a verification_url pointing here.\nReturns status='verified' with report metadata if the hash exists.\nReturns status='not_found' if the hash is unknown (tampered or fabricated).\nNo authentication required \u2014 clients verify without needing API access.",
+        "operationId": "verify_report_verify__report_hash__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_hash",
+            "required": true,
+            "schema": {
+              "title": "Report Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Report",
+        "tags": [
+          "connectors-msgraph-report"
+        ]
       }
     }
   }

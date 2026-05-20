@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from api.db_models_field_assessment import FaEvidenceLink, FaScanResult
+from api.db_models_governance_report import GovernanceReportRecord
 from services.canonical import canonical_json_bytes, utc_iso8601_z_now
 from services.connectors.msgraph.acknowledgment import verify_receipt
 from services.connectors.msgraph.findings.derivation import hash_tenant_id
@@ -25,6 +26,7 @@ from services.connectors.msgraph.manifest import (
     SCHEMA_VERSION as MSGRAPH_SCHEMA_VERSION,
 )
 from services.connectors.msgraph.schema.integrity import SignedManifest
+from services.connectors.msgraph.report import generate_report, report_to_json
 from services.connectors.msgraph.schema.scan_result import Finding, ScanResult
 from services.field_assessment.audit import emit_engagement_audit_event
 from services.field_assessment.models import EvidenceLinkDuplicate
@@ -93,6 +95,7 @@ class ConnectorImportResult:
     evidence_links_imported: int
     asset_candidates_detected: int
     import_status: str
+    report_id: str | None = None
     schema_version: str = "1.0"
 
     def to_dict(self) -> dict[str, Any]:
@@ -222,6 +225,13 @@ def import_msgraph_scan_result(
         connector_import_id=connector_import_id,
     )
 
+    report_id = _store_report(
+        db=db,
+        tenant_id=tenant_id,
+        scan=scan,
+        scan_result_id=scan_record.id,
+    )
+
     _audit(
         db,
         tenant_id,
@@ -239,6 +249,7 @@ def import_msgraph_scan_result(
             "evidence_links_imported": links_imported,
             "asset_candidates_detected": len(normalized_payload["asset_candidates"]),
             "import_status": import_status,
+            "report_id": report_id,
         },
     )
     return ConnectorImportResult(
@@ -255,7 +266,39 @@ def import_msgraph_scan_result(
         evidence_links_imported=links_imported,
         asset_candidates_detected=len(normalized_payload["asset_candidates"]),
         import_status=import_status,
+        report_id=report_id,
     )
+
+
+def _store_report(
+    *,
+    db: Any,
+    tenant_id: str,
+    scan: ScanResult,
+    scan_result_id: str,
+) -> str | None:
+    """Generate and persist a governance report for a verified scan.
+
+    Best-effort: if generation or storage fails, the error is swallowed so the
+    import itself always succeeds. The caller logs the report_id on success.
+    """
+    try:
+        report = generate_report(scan=scan, scan_result_id=scan_result_id)
+        record = GovernanceReportRecord(
+            id=report.report_id,
+            assessment_id=scan_result_id,
+            tenant_id=tenant_id,
+            version=1,
+            schema_version=report.schema_version,
+            manifest_hash=report.manifest_hash,
+            report_json=report_to_json(report),
+            generated_at=report.generated_at,
+            is_finalized=False,
+        )
+        db.add(record)
+        return report.report_id
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _verify_acknowledgment(scan: ScanResult) -> None:

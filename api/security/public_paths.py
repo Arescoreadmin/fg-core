@@ -38,4 +38,5 @@ PUBLIC_PATHS_PREFIX: tuple[str, ...] = (
     "/roe",
     "/_legacy",
     "/ui",
+    "/verify/",
 )

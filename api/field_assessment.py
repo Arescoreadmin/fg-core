@@ -496,6 +496,7 @@ class ConnectorImportResponse(BaseModel):
     evidence_links_imported: int
     asset_candidates_detected: int
     import_status: str
+    report_id: str | None = None
     schema_version: str
 
 

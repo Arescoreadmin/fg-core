@@ -6,6 +6,28 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-20 — PR 4: Report Generation Engine
+
+**Branch:** `feat/timeline-export-replay-adapters-pr102`
+
+**Area:** services/connectors/msgraph/, services/field_assessment/connectors/, api/
+
+**What was built:**
+- `services/connectors/msgraph/posture_score.py` — severity-weighted 0–100 posture score with per-domain breakdown and band classification
+- `services/connectors/msgraph/report.py` — deterministic `MsgraphScanReport` generator with manifest_hash and embedded verification_url
+- `services/field_assessment/connectors/msgraph_bridge.py` — report generation wired into import pipeline; `ConnectorImportResult.report_id` added
+- `api/connectors_msgraph_report.py` — `GET /field-assessment/...reports/{report_id}` (auth) and `GET /verify/{report_hash}` (public)
+- `api/security/public_paths.py` — `/verify/` prefix added to public path list
+- `api/field_assessment.py` — `ConnectorImportResponse.report_id` field added
+
+**Design invariants:**
+- Report generation is best-effort at import time (failure never blocks import)
+- manifest_hash excludes generated_at — identical scan always yields identical hash
+- verification_url is embedded in every report for client-side proof
+- No PII: tenant_id_hash only, no display names or UPNs
+
+---
+
 ### 2026-05-19 — PR 360 (addendum): Fix pre-existing opentelemetry DeprecationWarning breaking fg-fast
 
 **Branch:** `claude/audit-ai-platform-dZCwv`
