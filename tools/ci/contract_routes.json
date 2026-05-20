@@ -1352,6 +1352,12 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/audit-events",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/document-analyses",
       "scopes": [],
       "source": "contract"
@@ -1861,7 +1867,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-19T20:48:40.214659+00:00",
+  "generated_at": "2026-05-20T10:36:35.812630+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
