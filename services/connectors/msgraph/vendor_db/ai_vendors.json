@@ -1,0 +1,21 @@
+{
+  "_schema_version": "1.0",
+  "_description": "Known AI vendor application IDs and display name patterns for M365 tenant detection.",
+  "known_ai_apps": [
+    {"app_id": "b4bac898-59da-4f50-a36c-8acd2395cc5a", "name": "Microsoft Copilot", "category": "licensed", "publisher": "Microsoft Corporation"},
+    {"app_id": "fb8d773d-7ef8-4ec0-a117-179f88add510", "name": "Microsoft 365 Copilot", "category": "licensed", "publisher": "Microsoft Corporation"},
+    {"app_id": "2d7f3606-b07d-41d1-b9d2-0d0c9296a6e8", "name": "GitHub Copilot", "category": "licensed", "publisher": "GitHub, Inc."},
+    {"app_id": "cfb096f5-a73b-4f72-a852-85c3e2e46e46", "name": "ChatGPT Enterprise", "category": "third_party", "publisher": "OpenAI, L.L.C."},
+    {"app_id": "a3a08892-6ae8-4b25-8e1f-e9b91c6bb8bb", "name": "OpenAI", "category": "third_party", "publisher": "OpenAI, L.L.C."},
+    {"app_id": "9d21671d-df25-4cf6-8a4e-33a7f4f9b2e1", "name": "Anthropic Claude", "category": "third_party", "publisher": "Anthropic"},
+    {"app_id": "1fec8e78-bce4-4aaf-ab1b-5451cc387264", "name": "Google Workspace AI", "category": "third_party", "publisher": "Google LLC"},
+    {"app_id": "00000003-0000-0ff1-ce00-000000000000", "name": "SharePoint Online", "category": "licensed", "publisher": "Microsoft Corporation"},
+    {"app_id": "48ac35b8-9aa8-4d74-927d-1f4a14a0b239", "name": "Microsoft Azure OpenAI", "category": "licensed", "publisher": "Microsoft Corporation"}
+  ],
+  "ai_display_name_patterns": [
+    "copilot", "chatgpt", "openai", "claude", "gemini", "bard",
+    "anthropic", "cohere", "midjourney", "stable diffusion",
+    "dall-e", "perplexity", "notion ai", "grammarly", "jasper",
+    "writesonic", "copy.ai", "character.ai", "inflection", "mistral"
+  ]
+}
