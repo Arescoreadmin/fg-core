@@ -3655,3 +3655,23 @@ No new tables. `uq_fa_scan_evidence` constraint added to existing `fa_scan_resul
 
 **Compliance posture:**
 All 39 field assessment tests pass (10 unit, 29 integration). New tests cover: single scan result GET, scan deduplication, `collected_at` validation (valid + invalid), list payload exclusion, orphan link rejection. Route inventory regenerated. Contract authority refreshed. `make fg-fast` passes.
+
+## 2026-05-20 — PR 3: Scan Result Import Framework — CI gate fixes and gap remediation
+
+**Classification:** SOC-HIGH-002 (route inventory regeneration). No new auth logic. No infra changes. No schema migrations beyond auto-created `fa_quarantined_scans` table (ORM `create_all`, no SQL migration file).
+
+**SOC review:**
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `contract_routes.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated via `make route-inventory-generate` and `make route-inventory-audit` (passes) to include new `GET /field-assessment/engagements/{engagement_id}/audit-events` route added in the scan ingest quarantine audit trail feature. No routes removed. No auth class changes.
+- `GET /field-assessment/engagements/{engagement_id}/audit-events` — scope-gated `governance:read`; tenant-isolated via `_resolve_caller_tenant`; returns only events for the resolved tenant. Listed in route inventory as `tenant_bound: true`, `scoped: true`, `plane: control`.
+- `apps/console/tsconfig.json` — adds `paths` mappings for packages used by `packages/ui/src/` (class-variance-authority, radix-ui, lucide-react, clsx, tailwind-merge) to resolve from `apps/console/node_modules/` during TypeScript type-checking. No security surface change; TypeScript compilation only.
+- `packages/ui/src/tabs.tsx` — `defaultValue` made optional (default `''`) to support controlled Tabs usage (`value` + `onValueChange` without `defaultValue`). No behaviour change for existing uncontrolled usages.
+- `services/field_assessment/redaction.py` — word-boundary anchors removed from `_SENSITIVE_KEY_RE` (Bug 1: `access_token`, `api_token` now matched); walk-into-dicts/lists under sensitive keys instead of block-redacting (preserves sibling non-sensitive fields); JSON-in-JSON recursive redaction; extended `_SECRET_VALUE_PATTERNS` (AWS STS, GitHub OAuth, Anthropic, Stripe, Databricks, Vault, MongoDB URI, Azure storage, padded base64).
+- `services/field_assessment/scan_registry.py` — `_field_count()` counts list items (Bug 2 fix); `REQUIRED_FIELDS` maps field → expected Python type; per-source quarantine overrides (AWS 8K, endpoint_inventory 10K, google_workspace/oauth_inventory 5K); `DEPRECATED_SCHEMA_VERSIONS` infrastructure; `validate_scan_payload()` returns deprecation notice string or `None`.
+- `services/field_assessment/store.py` — `create_quarantined_scan()` added; persists `fa_quarantined_scans` records on rejection. Raw payload NOT stored — only hash + metadata.
+- `api/field_assessment.py` — quarantine/validation rejections emit `scan_result.quarantined` audit events before returning 422; `scan_result.ingested` audit payload includes `redacted_paths` list; deprecation notice surfaced in audit when applicable.
+
+**DB schema changes:**
+`fa_quarantined_scans` table auto-created by `init_db()` → `create_all()`. No SQL migration file (ORM-managed new table). No existing table modifications.
+
+**Compliance posture:**
+77 field assessment tests pass (expanded from 41). New tests cover: compound-key redaction (Bug 1), false-positive guard (hex hashes not redacted), JSON-in-JSON redaction, extended secret patterns, field-type validation, per-source quarantine thresholds, `_field_count` list-item counting (Bug 2), quarantine audit trail, deprecation infrastructure. Route inventory regenerated and audited. Contract authority refreshed. `make fg-fast` passes locally.
