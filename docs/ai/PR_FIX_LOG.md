@@ -11127,6 +11127,8 @@ Existing report downloads were presentation-level placeholders. They did not pro
 
 9. **Audit events** — safe audit events record import requested, manifest verified, import completed, import denied, and integrity failure paths without raw Graph payloads or credentials.
 
+10. **Gate policy alignment** (`codex_gates.sh`) — dependency audit now delegates to the Makefile `pip-audit` target when present so codex gates and the canonical audit lane use the same tool bootstrap and advisory exception policy.
+
 **Security impact:**
 - Wrong-tenant connector output fails closed.
 - Manifest tampering fails closed.

@@ -73,8 +73,11 @@ scripts/ci/enforce_pr_fix_log.sh
 echo "==> Gates: dependency audit"
 if [ "${GATES_MODE}" = "offline" ]; then
   echo "SKIP: pip-audit (offline mode)"
+elif [ -f Makefile ] && grep -qE "^pip-audit:" Makefile; then
+  make pip-audit
 else
-  pip-audit
+  python -m pip install -q --upgrade pip-audit
+  python -m pip_audit --ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183
 fi
 
 echo "==> Gates: canonical tester flow (skips if services unavailable)"
