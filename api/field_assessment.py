@@ -36,9 +36,13 @@ from services.field_assessment.models import (
     ObservationDomain,
     ObservationSeverity,
     ObservationType,
+    ScanQuarantinedError,
     ScanResultNotFound,
     ScanSourceType,
+    ScanValidationError,
 )
+from services.field_assessment.redaction import redact_payload
+from services.field_assessment.scan_registry import validate_scan_payload
 from services.field_assessment.store import (
     compute_evidence_hash,
     create_document_analysis,
@@ -671,15 +675,35 @@ def ingest_scan_result_route(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
+    # Schema version allowlist + quarantine + required-field checks.
+    try:
+        validate_scan_payload(
+            body.source_type.value, body.schema_version, body.raw_payload
+        )
+    except ScanValidationError as exc:
+        raise HTTPException(
+            status_code=422, detail=api_error("SCAN_VALIDATION_ERROR", exc.message)
+        )
+    except ScanQuarantinedError as exc:
+        raise HTTPException(
+            status_code=422, detail=api_error("SCAN_QUARANTINED", exc.message)
+        )
+
+    # Compute evidence hash over the original (pre-redaction) payload so that
+    # expected_evidence_hash from the caller remains verifiable.
+    original_hash = compute_evidence_hash(body.raw_payload)
+
     if body.expected_evidence_hash is not None:
-        actual_hash = compute_evidence_hash(body.raw_payload)
-        if actual_hash != body.expected_evidence_hash:
+        if original_hash != body.expected_evidence_hash:
             raise HTTPException(
                 status_code=422,
                 detail=api_error(
                     "EVIDENCE_HASH_MISMATCH", "payload hash does not match expected"
                 ),
             )
+
+    # Redact credentials/secrets before storage.
+    redaction = redact_payload(body.raw_payload)
 
     result = create_scan_result(
         db,
@@ -688,15 +712,17 @@ def ingest_scan_result_route(
         source_type=body.source_type.value,
         schema_version=body.schema_version,
         collected_at=body.collected_at,
-        raw_payload=body.raw_payload,
+        raw_payload=redaction.payload,
         normalized_payload=body.normalized_payload,
         object_count=body.object_count,
+        evidence_hash=original_hash,
     )
     scan_audit_payload = {
         "scan_result_id": result.id,
         "source_type": body.source_type.value,
         "object_count": body.object_count,
         "evidence_hash": result.evidence_hash,
+        "redacted_field_count": redaction.redacted_count,
     }
     emit_engagement_audit_event(
         db,
