@@ -49,6 +49,7 @@ from services.field_assessment.store import (
     create_engagement,
     create_evidence_link,
     create_observation,
+    create_quarantined_scan,
     create_scan_result,
     get_engagement,
     get_finding,
@@ -675,23 +676,77 @@ def ingest_scan_result_route(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
+    # Compute evidence hash over the original payload first so we can record it
+    # in the quarantine store even if validation fails.
+    original_hash = compute_evidence_hash(body.raw_payload)
+
     # Schema version allowlist + quarantine + required-field checks.
+    # On failure: record to quarantine store for audit, then reject with 422.
+    deprecation_notice: str | None = None
     try:
-        validate_scan_payload(
+        deprecation_notice = validate_scan_payload(
             body.source_type.value, body.schema_version, body.raw_payload
         )
     except ScanValidationError as exc:
+        create_quarantined_scan(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            source_type=body.source_type.value,
+            schema_version=body.schema_version,
+            quarantine_reason="SCAN_VALIDATION_ERROR",
+            quarantine_detail=exc.message,
+            payload_hash=original_hash,
+            object_count=body.object_count,
+        )
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan_result.quarantined",
+            actor=actor,
+            reason_code="SCAN_VALIDATION_ERROR",
+            payload={
+                "source_type": body.source_type.value,
+                "schema_version": body.schema_version,
+                "payload_hash": original_hash,
+                "quarantine_detail": exc.message,
+            },
+        )
+        db.commit()
         raise HTTPException(
             status_code=422, detail=api_error("SCAN_VALIDATION_ERROR", exc.message)
         )
     except ScanQuarantinedError as exc:
+        create_quarantined_scan(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            source_type=body.source_type.value,
+            schema_version=body.schema_version,
+            quarantine_reason="SCAN_QUARANTINED",
+            quarantine_detail=exc.message,
+            payload_hash=original_hash,
+            object_count=body.object_count,
+        )
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan_result.quarantined",
+            actor=actor,
+            reason_code="SCAN_QUARANTINED",
+            payload={
+                "source_type": body.source_type.value,
+                "schema_version": body.schema_version,
+                "payload_hash": original_hash,
+                "quarantine_detail": exc.message,
+            },
+        )
+        db.commit()
         raise HTTPException(
             status_code=422, detail=api_error("SCAN_QUARANTINED", exc.message)
         )
-
-    # Compute evidence hash over the original (pre-redaction) payload so that
-    # expected_evidence_hash from the caller remains verifiable.
-    original_hash = compute_evidence_hash(body.raw_payload)
 
     if body.expected_evidence_hash is not None:
         if original_hash != body.expected_evidence_hash:
@@ -717,13 +772,16 @@ def ingest_scan_result_route(
         object_count=body.object_count,
         evidence_hash=original_hash,
     )
-    scan_audit_payload = {
+    scan_audit_payload: dict[str, Any] = {
         "scan_result_id": result.id,
         "source_type": body.source_type.value,
         "object_count": body.object_count,
         "evidence_hash": result.evidence_hash,
         "redacted_field_count": redaction.redacted_count,
+        "redacted_paths": redaction.redacted_paths,
     }
+    if deprecation_notice:
+        scan_audit_payload["schema_version_deprecation_notice"] = deprecation_notice
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,

@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from './cn';
-import { type HTMLAttributes } from 'react';
+import { type HTMLAttributes, type ReactNode } from 'react';
 
 const alertVariants = cva(
   'relative w-full rounded border px-4 py-3 text-sm',
@@ -20,7 +20,9 @@ const alertVariants = cva(
 
 export interface AlertProps
   extends HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof alertVariants> {}
+    VariantProps<typeof alertVariants> {
+  children?: ReactNode;
+}
 
 export function Alert({ className, variant, children, ...props }: AlertProps) {
   return (

@@ -17,6 +17,7 @@ from api.db_models_field_assessment import (
     FaEvidenceLink,
     FaFieldObservation,
     FaNormalizedFinding,
+    FaQuarantinedScan,
     FaScanResult,
 )
 from services.canonical import canonical_json_bytes, utc_iso8601_z_now
@@ -241,6 +242,41 @@ def list_scan_results(
         .limit(limit)
     )
     return list(db.execute(stmt).scalars().all())
+
+
+def create_quarantined_scan(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    source_type: str,
+    schema_version: str,
+    quarantine_reason: str,
+    quarantine_detail: str,
+    payload_hash: str,
+    object_count: int,
+    schema_version_deprecated: str | None = None,
+) -> FaQuarantinedScan:
+    """Record a rejected scan ingest attempt for audit purposes.
+
+    The raw payload is deliberately NOT stored — only its hash and rejection metadata.
+    """
+    record = FaQuarantinedScan(
+        id=_new_id(),
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        source_type=source_type,
+        schema_version=schema_version,
+        quarantine_reason=quarantine_reason,
+        quarantine_detail=quarantine_detail,
+        payload_hash=payload_hash,
+        object_count=object_count,
+        schema_version_deprecated=schema_version_deprecated,
+        created_at=utc_iso8601_z_now(),
+    )
+    db.add(record)
+    db.flush()
+    return record
 
 
 # ---------------------------------------------------------------------------

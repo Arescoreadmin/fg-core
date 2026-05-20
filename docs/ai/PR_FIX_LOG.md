@@ -10869,3 +10869,60 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - `apps/console/tests/field-assessment-workspace.test.js`
 - `tests/test_field_assessment.py`
 - `docs/ai/PR_FIX_LOG.md` (this entry)
+
+---
+
+### 2026-05-20 — PR 3: Scan Result Import Framework + PR 3 Gap Fixes
+
+**Branch:** feat/scan-result-import-framework-pr3
+
+**Changes implemented:**
+
+**PR 3 — Initial implementation:**
+
+1. **Credential redaction** (`services/field_assessment/redaction.py` NEW) — recursive walk of raw_payload redacting by key-name pattern and value pattern (Bearer tokens, AWS AKIDs, GitHub PATs, OpenAI keys, JWTs, PEM headers)
+
+2. **Scan source registry** (`services/field_assessment/scan_registry.py` NEW) — per-source-type schema_version allowlists, required field checks, quarantine thresholds (depth ≤ 12, fields ≤ 2000, per-field ≤ 64 KiB)
+
+3. **Domain exceptions** (`services/field_assessment/models.py`) — ScanValidationError, ScanQuarantinedError
+
+4. **Idempotency-preserving hash** (`services/field_assessment/store.py`) — create_scan_result() accepts optional pre-computed evidence_hash
+
+5. **Route wiring** (`api/field_assessment.py`) — validation → quarantine → hash → redact pipeline before DB write; redacted_field_count in audit event
+
+6. **41 tests** (`tests/test_scan_import.py` NEW)
+
+**PR 3 gap fixes (post-review):**
+
+7. **Bug fix — token key-name matching** (`redaction.py`) — removed \b word-boundary anchors from _SENSITIVE_KEY_RE so access_token, api_token, private_key_id, etc. are caught; also added role_arn, external_id, kms_key, connection_string, sas_token, storage_key patterns
+
+8. **Bug fix — array field count** (`scan_registry.py`) — _field_count() now counts list items (len(obj) + sum) not just nested structure; flat arrays of scalars now correctly contribute to MAX_FIELD_COUNT
+
+9. **JSON-in-JSON redaction** (`redaction.py`) — string values deserialised as JSON are walked recursively; secrets inside Terraform state / CloudFormation outputs / Helm values are caught; re-serialised only when secrets found
+
+10. **Expanded secret patterns** (`redaction.py`) — added Databricks (dapi), HashiCorp Vault (s.), Stripe (sk_live_, rk_live_), AWS STS (ASIA), GitHub OAuth (gho_), Anthropic (sk-ant-), MongoDB URIs, Azure connection strings, properly-padded base64 blobs
+
+11. **Per-source quarantine thresholds** (`scan_registry.py`) — AWS: 8K fields, endpoint_inventory: 10K, google_workspace/oauth_inventory: 5K
+
+12. **Field type validators** (`scan_registry.py`) — required fields now checked for correct Python type (e.g., `users` must be list not string)
+
+13. **Schema version deprecation infrastructure** (`scan_registry.py`) — DEPRECATED_SCHEMA_VERSIONS dict; validate_schema_version() returns deprecation notice; notice surfaced in audit event payload
+
+14. **Quarantine store** (`api/db_models_field_assessment.py`, `services/field_assessment/store.py`) — FaQuarantinedScan ORM model (NEW TABLE: fa_quarantined_scans); create_quarantined_scan() store function; rejected scans recorded with hash + reason before 422 is returned
+
+15. **Quarantine audit events** (`api/field_assessment.py`) — scan_result.quarantined audit events emitted on both SCAN_VALIDATION_ERROR and SCAN_QUARANTINED rejections
+
+16. **Redacted paths in audit** (`api/field_assessment.py`) — redacted_paths list (not just count) now recorded in scan_result.ingested audit event
+
+17. **TypeScript Alert children** (`packages/ui/src/alert.tsx`) — explicitly declared children?: ReactNode in AlertProps to fix Docker Next.js build failure under strict TS configs
+
+**Files touched:**
+- `services/field_assessment/redaction.py` (rewritten)
+- `services/field_assessment/scan_registry.py` (rewritten)
+- `services/field_assessment/models.py`
+- `services/field_assessment/store.py`
+- `api/field_assessment.py`
+- `api/db_models_field_assessment.py` (new table: fa_quarantined_scans)
+- `packages/ui/src/alert.tsx`
+- `tests/test_scan_import.py` (expanded)
+- `docs/ai/PR_FIX_LOG.md` (this entry)
