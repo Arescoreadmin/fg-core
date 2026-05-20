@@ -279,10 +279,23 @@ def _store_report(
 ) -> str | None:
     """Generate and persist a governance report for a verified scan.
 
+    Idempotent by (tenant_id, assessment_id=scan_result_id, manifest_hash):
+    if a report already exists for this scan, the existing report_id is returned
+    without re-generating, re-inserting, or emitting duplicate audit state.
+
     Best-effort: if generation or storage fails, the error is swallowed so the
     import itself always succeeds. The caller logs the report_id on success.
     """
     try:
+        existing = db.execute(
+            select(GovernanceReportRecord).where(
+                GovernanceReportRecord.assessment_id == scan_result_id,
+                GovernanceReportRecord.tenant_id == tenant_id,
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing.id
+
         report = generate_report(scan=scan, scan_result_id=scan_result_id)
         record = GovernanceReportRecord(
             id=report.report_id,

@@ -159,6 +159,8 @@ def get_msgraph_report(
     and a verification URL clients can use to confirm report integrity.
     """
     tenant_id = _resolve_caller_tenant(request)
+    if tenant_id is None:
+        raise HTTPException(status_code=401, detail="tenant context required")
     record = _load_report_record(db, report_id=report_id, tenant_id=tenant_id)
 
     rj: dict[str, Any] = record.report_json or {}
