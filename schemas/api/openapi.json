@@ -7813,7 +7813,8 @@
           "strength",
           "concern",
           "finding",
-          "note"
+          "note",
+          "interview"
         ],
         "title": "ObservationType",
         "type": "string"
