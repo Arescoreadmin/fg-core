@@ -221,6 +221,101 @@ export interface AuditEvent {
   created_at: string;
 }
 
+export interface ConfidenceImpact {
+  reason: string;
+  delta: number;
+  affected_scope: string;
+}
+
+export interface ReadinessGate {
+  gate_id: string;
+  gate_type: string;
+  readiness_category: string;
+  severity: ObservationSeverity;
+  priority: number;
+  status: 'passed' | 'warning' | 'blocked' | 'not_applicable';
+  title: string;
+  explanation: string;
+  why_it_matters: string;
+  evidence_required: string[];
+  evidence_present: string[];
+  missing_items: string[];
+  related_entity_ids: string[];
+  blocks_status_transition: string[];
+  recommended_action_id: string | null;
+  confidence_impact: ConfidenceImpact | null;
+}
+
+export interface ExecutionNextAction {
+  action_id: string;
+  priority: number;
+  title: string;
+  instruction: string;
+  why_it_matters: string;
+  closes_gate_ids: string[];
+  required_input_type: string;
+  target_ui_section: string;
+  expected_evidence: string[];
+  safe_for_junior_assessor: boolean;
+  severity: ObservationSeverity;
+}
+
+export interface EscalationItem {
+  escalation_id: string;
+  severity: ObservationSeverity;
+  reason: string;
+  ambiguity_type: string;
+  related_entities: string[];
+  recommended_reviewer_role: string;
+  must_block_progression: boolean;
+}
+
+export interface TransitionBlocker {
+  target_status: EngagementStatus;
+  blocked_by_gate_ids: string[];
+  explanation: string;
+}
+
+export interface AssetCandidateAction {
+  candidate_action_id: string;
+  source_type: string;
+  source_entity_id: string;
+  title: string;
+  instruction: string;
+  lineage_refs: string[];
+  target_ui_section: string;
+}
+
+export interface ContinuityOpportunity {
+  opportunity_id: string;
+  opportunity_type: string;
+  title: string;
+  related_entity_ids: string[];
+  recommended_follow_up: string;
+}
+
+export interface ExecutionState {
+  engagement_id: string;
+  assessment_type: AssessmentType;
+  playbook_id: string;
+  playbook_version: string;
+  overall_readiness_state: string;
+  readiness_score: number;
+  completion_ratio: number;
+  blocking_gate_count: number;
+  warning_gate_count: number;
+  completed_gate_count: number;
+  gates: ReadinessGate[];
+  next_actions: ExecutionNextAction[];
+  escalation_items: EscalationItem[];
+  transition_blockers: TransitionBlocker[];
+  asset_candidate_actions: AssetCandidateAction[];
+  continuity_opportunities: ContinuityOpportunity[];
+  readiness_categories: Record<string, string>;
+  generated_at: string;
+  schema_version: string;
+}
+
 // ---------------------------------------------------------------------------
 // Request shapes
 // ---------------------------------------------------------------------------
@@ -415,6 +510,11 @@ export const fieldAssessmentApi = {
   // Summary
   getSummary(engagementId: string): Promise<EngagementSummary> {
     return request(`/engagements/${engagementId}/summary`);
+  },
+
+  // Deterministic guided execution state (server-authored readiness)
+  getExecutionState(engagementId: string): Promise<ExecutionState> {
+    return request(`/engagements/${engagementId}/execution-state`);
   },
 
   // Audit events (read-only — append-only server-side)

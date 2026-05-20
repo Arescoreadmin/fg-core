@@ -1,3 +1,24 @@
+## 2026-05-20 — SOC-HIGH-002 — Field Assessment execution-state route inventory update
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (tools/ci route inventory update)
+
+**Files changed:**
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json` — regenerated via `make route-inventory-generate` after adding the Field Assessment execution-state API.
+- `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — regenerated as part of the same route inventory refresh.
+- `BLUEPRINT_STAGED.md` and mirrored contract authority metadata — refreshed via `make contract-authority-refresh` after OpenAPI/route metadata changed.
+
+**New route:**
+- `GET /field-assessment/engagements/{engagement_id}/execution-state` — tenant-scoped guided execution state for deterministic playbook/readiness evaluation.
+
+**Security posture:**
+- Route requires `governance:read`.
+- Tenant binding remains auth-context-only through the existing Field Assessment tenant resolver.
+- Cross-tenant retrieval follows existing engagement lookup behavior and returns 404.
+- Response is export-safe: no raw scan payloads, credentials, secrets, or document contents.
+- The frontend displays server-authored readiness and does not calculate authoritative governance readiness locally.
+
+---
+
 ## 2026-05-20 — SOC-HIGH-002 — PR 3.5: Governance asset routes marked tenant-bound
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (tools/ci route inventory update)

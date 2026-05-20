@@ -35,7 +35,7 @@
   "governance": {
     "contract_count": 333,
     "contract_only": [],
-    "runtime_count": 437,
+    "runtime_count": 438,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -57,6 +57,7 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
+      "GET /field-assessment/engagements/{engagement_id}/execution-state",
       "GET /metrics",
       "GET /ui/ai",
       "GET /ui/ai/experience",
@@ -141,7 +142,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "9642510e014d6dbd6a343fb559021b1671754407d09a1f217053fb6f71e1d1e7",
+  "governance_fingerprint": "d88a9dcc5ab90c80c851d254d886704c66b7f59be08cd7137a23e1fda14900a1",
   "planes": [
     {
       "compat": {
@@ -448,6 +449,7 @@
       "GET /field-assessment/engagements/{engagement_id}/audit-events",
       "GET /field-assessment/engagements/{engagement_id}/document-analyses",
       "GET /field-assessment/engagements/{engagement_id}/evidence-links",
+      "GET /field-assessment/engagements/{engagement_id}/execution-state",
       "GET /field-assessment/engagements/{engagement_id}/findings",
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "GET /field-assessment/engagements/{engagement_id}/observations",
