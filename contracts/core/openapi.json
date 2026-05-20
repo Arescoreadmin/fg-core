@@ -1301,6 +1301,54 @@
         "title": "AttachEvidenceRequest",
         "type": "object"
       },
+      "AuditEventResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "title": "Payload",
+            "type": "object"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "engagement_id",
+          "event_type",
+          "actor",
+          "reason_code",
+          "payload",
+          "schema_version",
+          "created_at"
+        ],
+        "title": "AuditEventResponse",
+        "type": "object"
+      },
       "BackupScope": {
         "enum": [
           "full",
@@ -4293,6 +4341,10 @@
             "title": "Client Name",
             "type": "string"
           },
+          "critical_findings_count": {
+            "title": "Critical Findings Count",
+            "type": "integer"
+          },
           "engagement_id": {
             "title": "Engagement Id",
             "type": "string"
@@ -4324,6 +4376,10 @@
             "title": "Total Document Analyses",
             "type": "integer"
           },
+          "total_evidence_links": {
+            "title": "Total Evidence Links",
+            "type": "integer"
+          },
           "total_findings": {
             "title": "Total Findings",
             "type": "integer"
@@ -4346,8 +4402,10 @@
           "total_document_analyses",
           "total_observations",
           "total_findings",
+          "total_evidence_links",
           "findings_by_severity",
           "open_findings_count",
+          "critical_findings_count",
           "schema_version"
         ],
         "title": "EngagementSummaryResponse",
@@ -27499,6 +27557,80 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/audit-events": {
+      "get": {
+        "operationId": "list_audit_events_route_field_assessment_engagements__engagement_id__audit_events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEventResponse"
+                  },
+                  "title": "Response List Audit Events Route Field Assessment Engagements  Engagement Id  Audit Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Audit Events Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/document-analyses": {
       "get": {
         "operationId": "list_document_analyses_route_field_assessment_engagements__engagement_id__document_analyses_get",
@@ -27975,6 +28107,22 @@
             "schema": {
               "title": "Engagement Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "observation_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Observation Type"
             }
           },
           {

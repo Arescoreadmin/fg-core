@@ -20,6 +20,7 @@ Tables:
   fa_normalized_findings      — core governance finding objects
   fa_evidence_links           — evidence relationship graph
   fa_engagement_audit_events  — append-only audit trail
+  fa_quarantined_scans        — rejected scan ingest attempts (audit trail)
 """
 
 from __future__ import annotations
@@ -249,4 +250,35 @@ class FaEngagementAuditEvent(Base):
             "created_at",
         ),
         Index("ix_fa_audit_events_tenant_type", "tenant_id", "event_type"),
+    )
+
+
+class FaQuarantinedScan(Base):
+    """Audit record for scan ingest attempts rejected by validation or quarantine.
+
+    The raw payload is NOT stored — only its hash and the rejection metadata.
+    This preserves an audit trail without persisting untrusted / malicious data.
+
+    Schema note (PR 4): new table added to Base.metadata; auto-created by
+    init_db() → create_all() in both SQLite (tests) and Postgres (production).
+    No SQL migration file is needed for this table.
+    """
+
+    __tablename__ = "fa_quarantined_scans"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    quarantine_reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    quarantine_detail: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    schema_version_deprecated: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_quarantined_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_quarantined_tenant_reason", "tenant_id", "quarantine_reason"),
     )

@@ -11,12 +11,12 @@ interface TabsCtx {
 const TabsContext = createContext<TabsCtx>({ active: '', setActive: () => {} });
 
 export interface TabsProps extends HTMLAttributes<HTMLDivElement> {
-  defaultValue: string;
+  defaultValue?: string;
   value?: string;
   onValueChange?: (v: string) => void;
 }
 
-export function Tabs({ defaultValue, value, onValueChange, className, children, ...props }: TabsProps) {
+export function Tabs({ defaultValue = '', value, onValueChange, className, children, ...props }: TabsProps) {
   const [internal, setInternal] = useState(defaultValue);
   const active = value ?? internal;
   const setActive = (v: string) => {

@@ -17,6 +17,7 @@ from api.db_models_field_assessment import (
     FaEvidenceLink,
     FaFieldObservation,
     FaNormalizedFinding,
+    FaQuarantinedScan,
     FaScanResult,
 )
 from services.canonical import canonical_json_bytes, utc_iso8601_z_now
@@ -164,14 +165,23 @@ def create_scan_result(
     raw_payload: dict[str, Any],
     normalized_payload: dict[str, Any] | None,
     object_count: int,
+    evidence_hash: str | None = None,
 ) -> FaScanResult:
-    """Idempotent via uq_fa_scan_evidence — returns existing record on duplicate payload."""
-    evidence_hash = compute_evidence_hash(raw_payload)
+    """Idempotent via uq_fa_scan_evidence — returns existing record on duplicate payload.
+
+    Pass *evidence_hash* when the caller has already computed the hash (e.g. over the
+    pre-redaction payload) to preserve idempotency through the redaction pipeline.
+    """
+    actual_hash = (
+        evidence_hash
+        if evidence_hash is not None
+        else compute_evidence_hash(raw_payload)
+    )
 
     existing_stmt = select(FaScanResult).where(
         FaScanResult.engagement_id == engagement_id,
         FaScanResult.tenant_id == tenant_id,
-        FaScanResult.evidence_hash == evidence_hash,
+        FaScanResult.evidence_hash == actual_hash,
     )
     existing = db.execute(existing_stmt).scalar_one_or_none()
     if existing is not None:
@@ -185,7 +195,7 @@ def create_scan_result(
         source_type=source_type,
         schema_version=schema_version,
         collected_at=collected_at,
-        evidence_hash=evidence_hash,
+        evidence_hash=actual_hash,
         raw_payload=raw_payload,
         normalized_payload=normalized_payload,
         object_count=object_count,
@@ -232,6 +242,41 @@ def list_scan_results(
         .limit(limit)
     )
     return list(db.execute(stmt).scalars().all())
+
+
+def create_quarantined_scan(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    source_type: str,
+    schema_version: str,
+    quarantine_reason: str,
+    quarantine_detail: str,
+    payload_hash: str,
+    object_count: int,
+    schema_version_deprecated: str | None = None,
+) -> FaQuarantinedScan:
+    """Record a rejected scan ingest attempt for audit purposes.
+
+    The raw payload is deliberately NOT stored — only its hash and rejection metadata.
+    """
+    record = FaQuarantinedScan(
+        id=_new_id(),
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        source_type=source_type,
+        schema_version=schema_version,
+        quarantine_reason=quarantine_reason,
+        quarantine_detail=quarantine_detail,
+        payload_hash=payload_hash,
+        object_count=object_count,
+        schema_version_deprecated=schema_version_deprecated,
+        created_at=utc_iso8601_z_now(),
+    )
+    db.add(record)
+    db.flush()
+    return record
 
 
 # ---------------------------------------------------------------------------
