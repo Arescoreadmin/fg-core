@@ -11326,3 +11326,59 @@ Persistent governance asset candidate staging between connector detection and Ga
 - Contract authority refreshed (`make contract-authority-refresh`, sha256=9b33c334...)
 - Route inventory regenerated (1 new route: qa-approve)
 - SOC_EXECUTION_GATES updated
+
+
+---
+
+### 2026-05-21 — PR 8: Governance Promotion Schema Foundation
+
+**Branch:** `feat/governance-promotion-schema-pr8`
+
+**Area:** `api/db_models_governance_workflows.py`, `api/db_models_governance_assets.py`, `api/db_models_governance_promotion.py`, `api/db.py`, `services/field_assessment/store.py`, `services/field_assessment/promotion_store.py`, `services/field_assessment/models.py`, `migrations/postgres/`
+
+**What was built:**
+- `GovernancePromotion` ORM model + `governance_promotions` table — one record per delivered engagement; `UNIQUE(tenant_id, engagement_id)` enforces idempotency; status lifecycle `pending → completed | failed`; `gate_snapshot_json` preserves gate state at delivery time; `baseline_readiness_score` seeds continuous readiness posture
+- `GovernanceWorkflow.finding_id` (nullable) — prerequisite for PR 9 enforcement that every promotion-created workflow links to the finding that caused it
+- `GaAsset.source_scan_result_id` + `source_engagement_id` (nullable) — provenance chain for assets promoted from Field Assessment
+- `services/field_assessment/promotion_store.py` — `get_promotion`, `create_promotion`, `complete_promotion`, `fail_promotion`, `update_corpus_count`
+- `list_scan_results_for_tenant` / `list_findings_for_tenant` / `list_documents_for_tenant` — tenant-scoped cross-engagement queries (used by promotion and drift in PR 9/10)
+- `PromotionAlreadyExists` + `PromotionNotFound` domain exceptions
+
+**Migrations:**
+- `0061_governance_workflow_finding_id.sql` — `finding_id` + partial index on `governance_workflows`
+- `0062_governance_asset_provenance.sql` — `source_scan_result_id` + `source_engagement_id` + partial indexes on `governance_assets`
+- `0063_governance_promotions.sql` — new `governance_promotions` table with unique + status indexes
+
+**Design decisions:**
+- Purely additive — no routes changed, no behavior changes; all enforcement deferred to PR 9
+- `GovernancePromotion` registered in `api/db.py` so `init_db()` creates the table automatically
+- Tenant-level store queries do not replace engagement-scoped ones — both exist side-by-side
+
+---
+
+### 2026-05-21 — PR 8 CI Regression Repair: Migration Replay + Docker Compose
+
+**Branch:** `feat/governance-promotion-schema-pr8`
+
+**Root cause:**
+PR 6 introduced `governance_workflows` via ORM model only (`api/db_models_governance_workflows.py`) with no corresponding SQL `CREATE TABLE` migration. SQLite dev/test path used `Base.metadata.create_all()` which masked the gap. Migration 0061 (added in PR 8) attempted `ALTER TABLE governance_workflows ADD COLUMN IF NOT EXISTS finding_id` — failing on fresh PostgreSQL replay with `psycopg.errors.UndefinedTable: relation "governance_workflows" does not exist`. Docker Compose `frostgate-migrate` uses the same `api.db_migrations --apply` path, so it exited with code 1 and blocked all dependent services.
+
+**Failing migration:** `migrations/postgres/0061_governance_workflow_finding_id.sql` — ALTER TABLE against a table that no prior migration ever created.
+
+**Repair:**
+Replaced the content of `0061_governance_workflow_finding_id.sql` with a combined migration that:
+1. `CREATE TABLE IF NOT EXISTS governance_workflows` with full schema (all columns from current ORM model including `finding_id`, all indexes)
+2. `ALTER TABLE governance_workflows ADD COLUMN IF NOT EXISTS finding_id TEXT` — handles existing databases that had the table from `create_all` but not the column
+3. All indexes use `CREATE INDEX IF NOT EXISTS` for full idempotency
+
+No migration was renumbered. No migration enforcement was weakened. No skip/xfail added.
+
+**Idempotency proof:**
+- Fresh Postgres: CREATE TABLE runs; ALTER TABLE is no-op (column already present)
+- Existing DB without finding_id: CREATE TABLE is no-op; ALTER TABLE adds column
+- Existing DB with finding_id: both are no-ops; indexes upserted safely
+
+**Supplemental — Docker Compose still failing after initial 0061 repair:**
+0062_governance_asset_provenance.sql had the identical root cause: governance_assets was also ORM-only (introduced PR 3.5) with no SQL migration. ALTER TABLE governance_assets ADD COLUMN on a non-existent table caused frostgate-migrate to exit 1. Applied the same CREATE TABLE IF NOT EXISTS + ALTER TABLE IF NOT EXISTS + IF NOT EXISTS indexes pattern to 0062. Validated:
+- `docker compose down -v && docker compose up --build --abort-on-container-exit frostgate-migrate` → migrations 0044–0063 applied, frostgate-migrate exited 0
+- `make fg-fast` → 398 passed, EXIT:0

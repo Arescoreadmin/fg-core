@@ -188,3 +188,9 @@ class EngagementGateBlocked(FieldAssessmentError):
         self.gate_ids = gate_ids
         self.not_ready_reasons = not_ready_reasons
         super().__init__(message)
+
+
+class PromotionNotFound(FieldAssessmentError): ...
+
+
+class PromotionAlreadyExists(FieldAssessmentError): ...

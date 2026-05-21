@@ -18,6 +18,7 @@ os.environ.setdefault("FG_ACKNOWLEDGMENT_KEY", "test-key-32-bytes-exactly-padded
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 
 _TENANT = "tenant-gate-enforce"
 
@@ -44,7 +45,7 @@ def _make_engagement(client: TestClient) -> dict:
     return resp.json()
 
 
-def _transition(client: TestClient, eng_id: str, new_status: str) -> dict:
+def _transition(client: TestClient, eng_id: str, new_status: str) -> Response:
     return client.patch(
         f"/field-assessment/engagements/{eng_id}/status",
         json={"new_status": new_status, "reason": "test"},

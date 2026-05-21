@@ -87,6 +87,8 @@ class GaAsset(Base):
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_email: Mapped[str] = mapped_column(String(512), nullable=False)
+    source_scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_engagement_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         Index("ix_ga_assets_tenant_type", "tenant_id", "asset_type"),

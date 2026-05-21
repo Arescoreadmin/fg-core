@@ -584,3 +584,59 @@ def list_evidence_links(
         stmt = stmt.where(FaEvidenceLink.source_entity_id == source_entity_id)
     stmt = stmt.order_by(FaEvidenceLink.created_at.desc()).limit(limit)
     return list(db.execute(stmt).scalars().all())
+
+
+# ---------------------------------------------------------------------------
+# Tenant-level queries (cross-engagement, used by promotion and drift)
+# ---------------------------------------------------------------------------
+
+
+def list_scan_results_for_tenant(
+    db: Session,
+    *,
+    tenant_id: str,
+    limit: int = MAX_PAGE_SIZE,
+) -> list[FaScanResult]:
+    """All scan results for a tenant, newest first. Used for cross-engagement drift."""
+    limit = min(limit, MAX_PAGE_SIZE)
+    stmt = (
+        select(FaScanResult)
+        .where(FaScanResult.tenant_id == tenant_id)
+        .order_by(FaScanResult.created_at.desc())
+        .limit(limit)
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+def list_findings_for_tenant(
+    db: Session,
+    *,
+    tenant_id: str,
+    limit: int = MAX_PAGE_SIZE,
+) -> list[FaNormalizedFinding]:
+    """All findings for a tenant, newest first. Used for cross-engagement baseline."""
+    limit = min(limit, MAX_PAGE_SIZE)
+    stmt = (
+        select(FaNormalizedFinding)
+        .where(FaNormalizedFinding.tenant_id == tenant_id)
+        .order_by(FaNormalizedFinding.created_at.desc())
+        .limit(limit)
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+def list_documents_for_tenant(
+    db: Session,
+    *,
+    tenant_id: str,
+    limit: int = MAX_PAGE_SIZE,
+) -> list[FaDocumentAnalysis]:
+    """All documents for a tenant, newest first. Used for RAG corpus feed."""
+    limit = min(limit, MAX_PAGE_SIZE)
+    stmt = (
+        select(FaDocumentAnalysis)
+        .where(FaDocumentAnalysis.tenant_id == tenant_id)
+        .order_by(FaDocumentAnalysis.created_at.desc())
+        .limit(limit)
+    )
+    return list(db.execute(stmt).scalars().all())
