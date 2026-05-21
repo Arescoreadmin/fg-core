@@ -11353,3 +11353,27 @@ Persistent governance asset candidate staging between connector detection and Ga
 - Purely additive — no routes changed, no behavior changes; all enforcement deferred to PR 9
 - `GovernancePromotion` registered in `api/db.py` so `init_db()` creates the table automatically
 - Tenant-level store queries do not replace engagement-scoped ones — both exist side-by-side
+
+---
+
+### 2026-05-21 — PR 8 CI Regression Repair: Migration Replay + Docker Compose
+
+**Branch:** `feat/governance-promotion-schema-pr8`
+
+**Root cause:**
+PR 6 introduced `governance_workflows` via ORM model only (`api/db_models_governance_workflows.py`) with no corresponding SQL `CREATE TABLE` migration. SQLite dev/test path used `Base.metadata.create_all()` which masked the gap. Migration 0061 (added in PR 8) attempted `ALTER TABLE governance_workflows ADD COLUMN IF NOT EXISTS finding_id` — failing on fresh PostgreSQL replay with `psycopg.errors.UndefinedTable: relation "governance_workflows" does not exist`. Docker Compose `frostgate-migrate` uses the same `api.db_migrations --apply` path, so it exited with code 1 and blocked all dependent services.
+
+**Failing migration:** `migrations/postgres/0061_governance_workflow_finding_id.sql` — ALTER TABLE against a table that no prior migration ever created.
+
+**Repair:**
+Replaced the content of `0061_governance_workflow_finding_id.sql` with a combined migration that:
+1. `CREATE TABLE IF NOT EXISTS governance_workflows` with full schema (all columns from current ORM model including `finding_id`, all indexes)
+2. `ALTER TABLE governance_workflows ADD COLUMN IF NOT EXISTS finding_id TEXT` — handles existing databases that had the table from `create_all` but not the column
+3. All indexes use `CREATE INDEX IF NOT EXISTS` for full idempotency
+
+No migration was renumbered. No migration enforcement was weakened. No skip/xfail added.
+
+**Idempotency proof:**
+- Fresh Postgres: CREATE TABLE runs; ALTER TABLE is no-op (column already present)
+- Existing DB without finding_id: CREATE TABLE is no-op; ALTER TABLE adds column
+- Existing DB with finding_id: both are no-ops; indexes upserted safely
