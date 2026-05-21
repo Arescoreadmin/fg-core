@@ -244,6 +244,8 @@ def import_msgraph_scan_result(
         manifest_hash=manifest_hash,
     )
 
+    _rebuild_graph_for_engagement(db=db, tenant_id=tenant_id, engagement_id=engagement_id)
+
     _audit(
         db,
         tenant_id,
@@ -280,6 +282,21 @@ def import_msgraph_scan_result(
         import_status=import_status,
         report_id=report_id,
     )
+
+
+def _rebuild_graph_for_engagement(*, db: Any, tenant_id: str, engagement_id: str) -> None:
+    """Best-effort graph rebuild after msgraph import. Failures are silently swallowed."""
+    try:
+        from services.governance_graph.builder import build_graph_for_engagement
+
+        build_graph_for_engagement(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            triggered_by="msgraph_import",
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _store_report(
