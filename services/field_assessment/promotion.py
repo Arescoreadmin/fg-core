@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from api.db_models_governance_asset_candidates import GaAssetCandidate
 from api.db_models_governance_assets import GaAsset
 from api.db_models_governance_promotion import GovernancePromotion
+from api.rag.ingest import CorpusDocument, IngestRequest, IngestStatus, ingest_corpus
 from services.canonical import utc_iso8601_z_now
 from services.field_assessment.models import PromotionAlreadyExists
 from services.field_assessment.promotion_store import (
@@ -39,8 +40,10 @@ from services.field_assessment.promotion_store import (
     fail_promotion,
     get_promotion,
     reset_promotion_for_retry,
+    update_corpus_count,
 )
 from services.field_assessment.store import list_findings
+from services.field_assessment.timeline import emit_fa_timeline_event
 from services.governance_workflows.engine import create_workflow
 
 log = logging.getLogger("frostgate.fa.promotion")
@@ -125,6 +128,14 @@ def promote_engagement_to_governance(
                 engagement_id,
                 fail_exc,
             )
+
+    if promotion.status == "completed":
+        _emit_promotion_timeline(
+            db, tenant_id=tenant_id, engagement_id=engagement_id, promotion=promotion
+        )
+        _feed_findings_to_corpus(
+            db, tenant_id=tenant_id, engagement_id=engagement_id, promotion=promotion
+        )
 
     return promotion
 
@@ -224,3 +235,94 @@ def _promote_asset_candidates(
         count += 1
 
     return count
+
+
+def _emit_promotion_timeline(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    promotion: GovernancePromotion,
+) -> None:
+    """Emit promotion timeline event. Failure-safe: never raises."""
+    try:
+        emit_fa_timeline_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="field_assessment.engagement.promoted",
+            payload={
+                "promotion_id": promotion.id,
+                "workflow_count": promotion.workflow_count,
+                "asset_count": promotion.asset_count,
+                "baseline_readiness_score": promotion.baseline_readiness_score,
+            },
+            replay_eligible=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error(
+            "Failed to emit promotion timeline event for engagement %s: %s",
+            engagement_id,
+            exc,
+        )
+
+
+def _feed_findings_to_corpus(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    promotion: GovernancePromotion,
+) -> None:
+    """Feed engagement findings into the RAG corpus. Failure-safe: never raises."""
+    try:
+        findings = list_findings(
+            db,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+            severity_filter=None,
+            status_filter=None,
+            limit=_MAX_FINDINGS,
+        )
+        if not findings:
+            return
+
+        docs = [
+            CorpusDocument(
+                source_id=f"fa:{engagement_id}:finding:{f.id}",
+                content=f"{f.title}\n\n{f.description}".strip(),
+                metadata={
+                    "finding_id": f.id,
+                    "engagement_id": engagement_id,
+                    "severity": f.severity,
+                    "finding_type": f.finding_type,
+                },
+            )
+            for f in findings
+        ]
+
+        result = ingest_corpus(
+            IngestRequest(documents=docs),
+            trusted_tenant_id=tenant_id,
+        )
+        count = sum(
+            1 for r in result.records if r.status == IngestStatus.SUCCESS
+        )
+        update_corpus_count(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            corpus_entries_added=count,
+        )
+        log.info(
+            "Corpus feed completed for engagement %s: %d documents ingested",
+            engagement_id,
+            count,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error(
+            "Corpus feed failed for engagement %s (tenant %s): %s",
+            engagement_id,
+            tenant_id,
+            exc,
+        )

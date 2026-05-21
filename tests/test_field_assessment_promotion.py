@@ -32,6 +32,7 @@ import api.db_models_governance_workflows  # noqa: F401
 import api.db_models_governance_assets  # noqa: F401
 import api.db_models_governance_asset_candidates  # noqa: F401
 import api.db_models_governance_promotion  # noqa: F401
+import api.db_models_timeline  # noqa: F401
 
 
 from api.db_models_governance_asset_candidates import GaAssetCandidate
@@ -597,3 +598,105 @@ class TestPromotionRaceAndIntegrity:
         assert p2.tenant_id == _TENANT
         assert p1.engagement_id == eng_t1.id
         assert p2.engagement_id == eng_t2.id
+
+
+class TestEvidenceContinuity:
+    def test_corpus_entries_added_reflects_finding_count(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "corp-1")
+        _add_finding(db, eng.id, "corp-1a")
+        _add_finding(db, eng.id, "corp-1b")
+
+        promo = promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=82,
+        )
+
+        db.refresh(promo)
+        assert promo.status == "completed"
+        assert promo.corpus_entries_added == 2
+
+    def test_corpus_entries_zero_when_no_findings(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "corp-2")
+
+        promo = promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=82,
+        )
+
+        db.refresh(promo)
+        assert promo.status == "completed"
+        assert promo.corpus_entries_added == 0
+
+    def test_promotion_timeline_event_emitted(self, db: Session) -> None:
+        from api.db_models_timeline import TimelineEventRecord as TimelineEvent
+
+        eng = _make_delivered_engagement(db, "corp-3")
+        _add_finding(db, eng.id, "corp-3a")
+
+        promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=80,
+        )
+
+        event = (
+            db.query(TimelineEvent)
+            .filter_by(
+                tenant_id=_TENANT,
+                source_id=eng.id,
+                event_type="field_assessment.engagement.promoted",
+            )
+            .first()
+        )
+        assert event is not None
+        assert event.payload["workflow_count"] == 1
+        assert event.payload["baseline_readiness_score"] == 80
+
+    def test_corpus_feed_failure_does_not_affect_promotion_status(
+        self, db: Session
+    ) -> None:
+        eng = _make_delivered_engagement(db, "corp-4")
+        _add_finding(db, eng.id, "corp-4a")
+
+        with patch(
+            "services.field_assessment.promotion.ingest_corpus",
+            side_effect=RuntimeError("simulated corpus failure"),
+        ):
+            promo = promote_engagement_to_governance(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=eng.id,
+                gate_snapshot=_GATE_SNAPSHOT,
+                baseline_readiness_score=82,
+            )
+
+        assert promo.status == "completed"
+        db.refresh(promo)
+        assert promo.corpus_entries_added == 0
+
+    def test_timeline_event_failure_does_not_affect_promotion_status(
+        self, db: Session
+    ) -> None:
+        eng = _make_delivered_engagement(db, "corp-5")
+
+        with patch(
+            "services.field_assessment.promotion.emit_fa_timeline_event",
+            side_effect=RuntimeError("simulated timeline failure"),
+        ):
+            promo = promote_engagement_to_governance(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=eng.id,
+                gate_snapshot=_GATE_SNAPSHOT,
+                baseline_readiness_score=82,
+            )
+
+        assert promo.status == "completed"
