@@ -30,6 +30,7 @@ _ACTOR = "ops@example.com"
 @pytest.fixture()
 def engine():
     import api.signed_artifacts  # noqa: F401
+
     os.environ.setdefault("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
     os.environ.setdefault(
         "FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="

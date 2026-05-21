@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from services.connectors.drift.engine import DriftFindingRecord, DriftResult
 from services.connectors.drift.scorer import compute_posture_delta, _drift_confidence
 
@@ -10,7 +9,11 @@ from services.connectors.drift.scorer import compute_posture_delta, _drift_confi
 def _make_drift_result(**counts: int) -> DriftResult:
     findings: list[DriftFindingRecord] = []
     for delta_class, count in counts.items():
-        sev = "critical" if "regress" in delta_class or delta_class == "escalated" else "high"
+        sev = (
+            "critical"
+            if "regress" in delta_class or delta_class == "escalated"
+            else "high"
+        )
         for i in range(count):
             findings.append(
                 DriftFindingRecord(
@@ -36,18 +39,21 @@ def _make_drift_result(**counts: int) -> DriftResult:
 class TestDriftConfidence:
     def test_fresh_scan_is_100(self) -> None:
         from datetime import UTC, datetime, timedelta
+
         now = (datetime.now(UTC) - timedelta(days=1)).isoformat()
         conf, _ = _drift_confidence(now)
         assert conf == 100
 
     def test_week_old_scan_is_85(self) -> None:
         from datetime import UTC, datetime, timedelta
+
         ts = (datetime.now(UTC) - timedelta(days=5)).isoformat()
         conf, _ = _drift_confidence(ts)
         assert conf == 85
 
     def test_old_scan_degrades(self) -> None:
         from datetime import UTC, datetime, timedelta
+
         ts = (datetime.now(UTC) - timedelta(days=60)).isoformat()
         conf, _ = _drift_confidence(ts)
         assert conf == 30
@@ -75,8 +81,12 @@ class TestComputePostureDelta:
         drift = _make_drift_result(regressed=1)
         result = compute_posture_delta(
             drift,
-            current_open_findings=[{"severity": "critical", "nist_ai_rmf_mappings": []}],
-            baseline_open_findings=[{"severity": "critical", "nist_ai_rmf_mappings": []}],
+            current_open_findings=[
+                {"severity": "critical", "nist_ai_rmf_mappings": []}
+            ],
+            baseline_open_findings=[
+                {"severity": "critical", "nist_ai_rmf_mappings": []}
+            ],
             current_scan_collected_at="2026-05-20T00:00:00Z",
         )
         assert result.drift_severity == "critical_regression"
@@ -145,7 +155,8 @@ class TestComputePostureDelta:
         result = compute_posture_delta(
             drift,
             current_open_findings=[{"severity": "low", "nist_ai_rmf_mappings": []}] * 5,
-            baseline_open_findings=[{"severity": "low", "nist_ai_rmf_mappings": []}] * 5,
+            baseline_open_findings=[{"severity": "low", "nist_ai_rmf_mappings": []}]
+            * 5,
             current_scan_collected_at="2026-05-20T00:00:00Z",
         )
         assert result.drift_severity == "stable"

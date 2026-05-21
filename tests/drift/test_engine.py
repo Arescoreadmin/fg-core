@@ -13,10 +13,9 @@ from sqlalchemy.orm import Session
 
 from api.db_models import Base
 import api.db_models_field_assessment  # noqa: F401
-import api.db_models_drift              # noqa: F401
+import api.db_models_drift  # noqa: F401
 
 from api.db_models_field_assessment import (
-    FaEngagement,
     FaEvidenceLink,
     FaNormalizedFinding,
     FaScanResult,
@@ -31,6 +30,7 @@ _ENGAGEMENT = "eng-drift-001"
 @pytest.fixture()
 def engine():
     import api.signed_artifacts  # noqa: F401
+
     os.environ.setdefault("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
     os.environ.setdefault(
         "FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
@@ -178,15 +178,16 @@ class TestComputeDrift:
         # Different row ID, same logical finding (same finding_type+title) in current scan
         now = utc_iso8601_z_now()
         from api.db_models_field_assessment import FaNormalizedFinding
+
         curr_row = FaNormalizedFinding(
             id="f-regress-curr",
             tenant_id=_TENANT,
             engagement_id=_ENGAGEMENT,
-            finding_type="ai_governance",        # same as f-regress-early
+            finding_type="ai_governance",  # same as f-regress-early
             findings_hash="f-regress-curr-hash",
             severity="critical",
             status="open",
-            title="Finding f-regress-early",     # same title → same stable key
+            title="Finding f-regress-early",  # same title → same stable key
             description="test",
             source_attribution="microsoft_graph",
             confidence_score=80,

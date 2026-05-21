@@ -1735,7 +1735,9 @@ def pin_baseline(
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
-        raise HTTPException(status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message))
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
 
     # Verify the scan belongs to this engagement/tenant
     scan_row = db.execute(
@@ -1748,7 +1750,9 @@ def pin_baseline(
     if scan_row is None:
         raise HTTPException(
             status_code=404,
-            detail=api_error("SCAN_NOT_FOUND", "scan_result_id not found for this engagement"),
+            detail=api_error(
+                "SCAN_NOT_FOUND", "scan_result_id not found for this engagement"
+            ),
         )
 
     now = utc_iso8601_z_now()
@@ -1765,6 +1769,7 @@ def pin_baseline(
         prev.is_active = False
 
     import hashlib
+
     baseline_id = hashlib.sha256(
         f"{tenant_id}:{engagement_id}:{body.scan_result_id}:{now}".encode()
     ).hexdigest()[:32]
@@ -1847,7 +1852,9 @@ def get_drift_report(
     engagement_id: str,
     request: Request,
     current_scan_id: str = Query(..., description="ID of the current FaScanResult"),
-    emit_alerts: bool = Query(True, description="Persist alert records for this drift run"),
+    emit_alerts: bool = Query(
+        True, description="Persist alert records for this drift run"
+    ),
     db: Session = Depends(auth_ctx_db_session),
 ) -> DriftReportResponse:
     """Compute drift between the pinned baseline and a specified current scan.
@@ -1860,7 +1867,9 @@ def get_drift_report(
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
-        raise HTTPException(status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message))
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
 
     baseline_row = db.execute(
         select(FaDriftBaseline).where(
@@ -1887,10 +1896,14 @@ def get_drift_report(
             current_scan_id=current_scan_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=api_error("SCAN_NOT_FOUND", str(exc)))
+        raise HTTPException(
+            status_code=404, detail=api_error("SCAN_NOT_FOUND", str(exc))
+        )
 
     # Collect open findings for GPS computation
-    current_finding_ids_set = {f.finding_id for f in drift.findings if f.delta_class != "resolved"}
+    current_finding_ids_set = {
+        f.finding_id for f in drift.findings if f.delta_class != "resolved"
+    }
     # Regressed findings were absent from the baseline by definition — exclude them.
     # Only persisted/resolved/escalated/de_escalated represent findings that were
     # actually in the baseline scan.
@@ -1908,8 +1921,11 @@ def get_drift_report(
                 FaNormalizedFinding.id.in_(current_finding_ids_set),
                 FaNormalizedFinding.status == "open",
             )
-        ).scalars().all()
-        if current_finding_ids_set else []
+        )
+        .scalars()
+        .all()
+        if current_finding_ids_set
+        else []
     )
     baseline_rows = (
         db.execute(
@@ -1918,8 +1934,11 @@ def get_drift_report(
                 FaNormalizedFinding.engagement_id == engagement_id,
                 FaNormalizedFinding.id.in_(baseline_finding_ids_set),
             )
-        ).scalars().all()
-        if baseline_finding_ids_set else []
+        )
+        .scalars()
+        .all()
+        if baseline_finding_ids_set
+        else []
     )
 
     current_open_dicts = [
@@ -1940,7 +1959,9 @@ def get_drift_report(
     # Fetch scan timestamps for confidence + verifiability
     current_scan = db.get(FaScanResult, current_scan_id)
     baseline_scan = db.get(FaScanResult, baseline_row.pinned_scan_id)
-    current_collected_at = current_scan.collected_at if current_scan else utc_iso8601_z_now()
+    current_collected_at = (
+        current_scan.collected_at if current_scan else utc_iso8601_z_now()
+    )
     baseline_collected_at = baseline_scan.collected_at if baseline_scan else None
 
     # Scan signatures from stored manifest (verifiability chain).
@@ -1978,7 +1999,9 @@ def get_drift_report(
         for f in drift.findings
     ]
     # Enrich nist mappings for alert family grouping
-    finding_nist_map: dict[str, list] = {r.id: r.nist_ai_rmf_mappings or [] for r in current_rows + baseline_rows}
+    finding_nist_map: dict[str, list] = {
+        r.id: r.nist_ai_rmf_mappings or [] for r in current_rows + baseline_rows
+    }
     for d in drift_finding_dicts:
         d["nist_ai_rmf_mappings"] = finding_nist_map.get(d["finding_id"], [])
 
@@ -2011,7 +2034,11 @@ def get_drift_report(
         gps_delta=posture.gps_delta,
         counts=posture.counts,
         domain_subscores=[
-            {"function": s.function, "score": s.score, "open_finding_count": s.open_finding_count}
+            {
+                "function": s.function,
+                "score": s.score,
+                "open_finding_count": s.open_finding_count,
+            }
             for s in posture.domain_subscores
         ],
         findings=[
@@ -2076,7 +2103,9 @@ def create_connector_schedule(
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
-        raise HTTPException(status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message))
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
 
     try:
         schedule, is_new = upsert_schedule(
@@ -2121,7 +2150,9 @@ def list_connector_schedules(
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
-        raise HTTPException(status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message))
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
 
     rows = list_schedules(db, tenant_id=tenant_id, engagement_id=engagement_id)
     return [

@@ -108,7 +108,5 @@ class FaConnectorSchedule(Base):
             "source_type",
             name="uq_fa_connector_schedule",
         ),
-        Index(
-            "ix_fa_connector_schedules_engagement", "engagement_id", "tenant_id"
-        ),
+        Index("ix_fa_connector_schedules_engagement", "engagement_id", "tenant_id"),
     )
