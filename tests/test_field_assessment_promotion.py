@@ -13,6 +13,7 @@ Covers:
 
 from __future__ import annotations
 
+from typing import Any
 import os
 from unittest.mock import patch
 
@@ -80,7 +81,7 @@ def db(engine):
         yield session
 
 
-def _make_delivered_engagement(db: Session, suffix: str = "a") -> object:
+def _make_delivered_engagement(db: Session, suffix: str = "a") -> Any:
     eng = create_engagement(
         db,
         tenant_id=_TENANT,
@@ -109,7 +110,7 @@ def _make_delivered_engagement(db: Session, suffix: str = "a") -> object:
     return eng
 
 
-def _add_finding(db: Session, eng_id: str, scan_id_suffix: str = "x") -> object:
+def _add_finding(db: Session, eng_id: str, scan_id_suffix: str = "x") -> Any:
     scan = create_scan_result(
         db,
         tenant_id=_TENANT,
