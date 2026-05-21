@@ -53,13 +53,13 @@ class GovernancePromotion(Base):
     completed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     asset_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     workflow_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    corpus_entries_added: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    corpus_entries_added: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     baseline_readiness_score: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
-    gate_snapshot_json: Mapped[dict] = mapped_column(
-        JSON, nullable=False, default=dict
-    )
+    gate_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
