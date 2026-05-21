@@ -61,7 +61,7 @@ def _get_snapshot_seq(db: Session, tenant_id: str) -> int:
 
 
 def _derive_from_assets(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str
+    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
 ) -> tuple[int, int]:
     """Derive governance_asset, identity, and relationship nodes/edges from GaAsset."""
     nodes_upserted = 0
@@ -230,7 +230,7 @@ def _derive_from_assets(
 
 
 def _derive_from_candidates(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str
+    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
 ) -> tuple[int, int]:
     """Derive candidate nodes and PROMOTED_FROM edges from GaAssetCandidate."""
     nodes_upserted = 0
@@ -290,22 +290,19 @@ def _derive_from_candidates(
 
 
 def _derive_from_findings(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str
+    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
 ) -> tuple[int, int]:
     """Derive finding, control nodes and edges from FaNormalizedFinding."""
     nodes_upserted = 0
     edges_upserted = 0
 
-    findings = (
-        db.execute(
-            select(FaNormalizedFinding).where(
-                FaNormalizedFinding.tenant_id == tenant_id,
-                FaNormalizedFinding.status == "open",
-            )
-        )
-        .scalars()
-        .all()
+    stmt = select(FaNormalizedFinding).where(
+        FaNormalizedFinding.tenant_id == tenant_id,
+        FaNormalizedFinding.status == "open",
     )
+    if engagement_id is not None:
+        stmt = stmt.where(FaNormalizedFinding.engagement_id == engagement_id)
+    findings = db.execute(stmt).scalars().all()
 
     for finding in findings:
         upsert_node(
@@ -390,19 +387,16 @@ def _derive_from_findings(
 
 
 def _derive_from_scans(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str
+    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
 ) -> tuple[int, int]:
     """Derive scan nodes and DETECTED_BY edges from FaScanResult."""
     nodes_upserted = 0
     edges_upserted = 0
 
-    scans = (
-        db.execute(
-            select(FaScanResult).where(FaScanResult.tenant_id == tenant_id)
-        )
-        .scalars()
-        .all()
-    )
+    stmt = select(FaScanResult).where(FaScanResult.tenant_id == tenant_id)
+    if engagement_id is not None:
+        stmt = stmt.where(FaScanResult.engagement_id == engagement_id)
+    scans = db.execute(stmt).scalars().all()
 
     for scan in scans:
         upsert_node(
@@ -461,19 +455,16 @@ def _derive_from_scans(
 
 
 def _derive_from_engagements(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str
+    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
 ) -> tuple[int, int]:
     """Derive engagement nodes and SUPPORTS edges from FaEngagement."""
     nodes_upserted = 0
     edges_upserted = 0
 
-    engagements = (
-        db.execute(
-            select(FaEngagement).where(FaEngagement.tenant_id == tenant_id)
-        )
-        .scalars()
-        .all()
-    )
+    stmt = select(FaEngagement).where(FaEngagement.tenant_id == tenant_id)
+    if engagement_id is not None:
+        stmt = stmt.where(FaEngagement.id == engagement_id)
+    engagements = db.execute(stmt).scalars().all()
 
     for eng in engagements:
         upsert_node(
@@ -573,15 +564,17 @@ def _run_build(
 
     total_nodes = 0
     total_edges = 0
+    any_step_failed = False
 
-    # Best-effort derivation
+    # Best-effort derivation — pass engagement_id so scoped rebuilds filter correctly
     for step_name, step_fn in _DERIVATION_STEPS:
         try:
-            n, e = step_fn(db, tenant_id, snapshot_id, rebuild_started_at)
+            n, e = step_fn(db, tenant_id, snapshot_id, rebuild_started_at, engagement_id)
             total_nodes += n
             total_edges += e
         except Exception:  # noqa: BLE001
             log.warning("Derivation step %s failed", step_name, exc_info=True)
+            any_step_failed = True
 
     # Centrality
     try:
@@ -609,15 +602,25 @@ def _run_build(
     except Exception:  # noqa: BLE001
         log.warning("Anomaly detection failed", exc_info=True)
 
-    # Delete stale nodes/edges
+    # Delete stale nodes/edges — only when all derivation steps succeeded.
+    # If any step failed, retain last-known-good state rather than silently
+    # deleting nodes/edges that simply weren't re-derived due to the failure.
     nodes_deleted = 0
     edges_deleted = 0
-    try:
-        nodes_deleted, edges_deleted = delete_stale(
-            db, tenant_id=tenant_id, older_than=rebuild_started_at
+    if any_step_failed:
+        log.warning(
+            "Skipping stale-node cleanup for tenant=%s snapshot=%s "
+            "because one or more derivation steps failed — retaining last-known-good graph state.",
+            tenant_id,
+            snapshot_id,
         )
-    except Exception:  # noqa: BLE001
-        log.warning("delete_stale failed", exc_info=True)
+    else:
+        try:
+            nodes_deleted, edges_deleted = delete_stale(
+                db, tenant_id=tenant_id, older_than=rebuild_started_at
+            )
+        except Exception:  # noqa: BLE001
+            log.warning("delete_stale failed", exc_info=True)
 
     # Update snapshot counts
     snap.nodes_upserted = total_nodes

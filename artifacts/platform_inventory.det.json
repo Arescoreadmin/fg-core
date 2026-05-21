@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 337,
+    "contract_count": 344,
     "contract_only": [],
-    "runtime_count": 448,
+    "runtime_count": 456,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -57,9 +57,13 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
-      "GET /governance/candidates",
-      "GET /governance/candidates/inbox",
-      "GET /governance/candidates/{candidate_id}",
+      "GET /governance/graph/anomalies",
+      "GET /governance/graph/coverage",
+      "GET /governance/graph/lineage/{node_id}",
+      "GET /governance/graph/nodes",
+      "GET /governance/graph/nodes/{node_id}",
+      "GET /governance/graph/stats",
+      "GET /governance/graph/traverse",
       "GET /metrics",
       "GET /ui/ai",
       "GET /ui/ai/experience",
@@ -129,10 +133,7 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
-      "POST /governance/candidates/promote-batch",
-      "POST /governance/candidates/{candidate_id}/promote",
-      "POST /governance/candidates/{candidate_id}/reject",
-      "POST /governance/candidates/{candidate_id}/review",
+      "POST /governance/graph/rebuild",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -148,7 +149,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "2d8cd2256e10a272bf3d9c604c344e8491923c57937bd89f6edb1a2340bc822a",
+  "governance_fingerprint": "9aa98c01ebe3518cdd97babd886b6ea5f128e4d13a48d07a6bccb9c6b0426148",
   "planes": [
     {
       "compat": {
@@ -481,6 +482,13 @@
       "GET /governance/candidates/inbox",
       "GET /governance/candidates/{candidate_id}",
       "GET /governance/changes",
+      "GET /governance/graph/anomalies",
+      "GET /governance/graph/coverage",
+      "GET /governance/graph/lineage/{node_id}",
+      "GET /governance/graph/nodes",
+      "GET /governance/graph/nodes/{node_id}",
+      "GET /governance/graph/stats",
+      "GET /governance/graph/traverse",
       "GET /governance/timeline",
       "GET /governance/timeline/{event_id}",
       "GET /health",
@@ -613,6 +621,7 @@
       "POST /governance/candidates/{candidate_id}/review",
       "POST /governance/changes",
       "POST /governance/changes/{change_id}/approve",
+      "POST /governance/graph/rebuild",
       "POST /internal/connectors/{connector_id}/ingest",
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",

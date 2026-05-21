@@ -31,6 +31,7 @@ def _detect_ungoverned_high_centrality(
         db.execute(
             select(GovernanceGraphNode).where(
                 GovernanceGraphNode.tenant_id == tenant_id,
+                GovernanceGraphNode.snapshot_id == snapshot_id,
                 GovernanceGraphNode.node_type == "governance_asset",
                 GovernanceGraphNode.degree_centrality >= 5,
                 GovernanceGraphNode.trust_score == 100,
@@ -43,6 +44,7 @@ def _detect_ungoverned_high_centrality(
         owns_count = db.execute(
             select(GovernanceGraphEdge).where(
                 GovernanceGraphEdge.tenant_id == tenant_id,
+                GovernanceGraphEdge.snapshot_id == snapshot_id,
                 GovernanceGraphEdge.edge_type == "OWNS",
                 GovernanceGraphEdge.target_node_id == node.node_id,
             )
@@ -75,6 +77,7 @@ def _detect_privileged_identity_to_shadow_ai(
         db.execute(
             select(GovernanceGraphNode).where(
                 GovernanceGraphNode.tenant_id == tenant_id,
+                GovernanceGraphNode.snapshot_id == snapshot_id,
                 GovernanceGraphNode.node_type == "ai_system",
             )
         )
@@ -95,6 +98,7 @@ def _detect_privileged_identity_to_shadow_ai(
             db.execute(
                 select(GovernanceGraphEdge).where(
                     GovernanceGraphEdge.tenant_id == tenant_id,
+                    GovernanceGraphEdge.snapshot_id == snapshot_id,
                     GovernanceGraphEdge.edge_type.in_(["ACCESSES", "CONNECTED_TO"]),
                     GovernanceGraphEdge.target_node_id == ai_node_id,
                 )
@@ -130,6 +134,7 @@ def _detect_orphaned_findings(
         db.execute(
             select(GovernanceGraphNode).where(
                 GovernanceGraphNode.tenant_id == tenant_id,
+                GovernanceGraphNode.snapshot_id == snapshot_id,
                 GovernanceGraphNode.node_type == "finding",
             )
         )
@@ -140,6 +145,7 @@ def _detect_orphaned_findings(
         impacts = db.execute(
             select(GovernanceGraphEdge).where(
                 GovernanceGraphEdge.tenant_id == tenant_id,
+                GovernanceGraphEdge.snapshot_id == snapshot_id,
                 GovernanceGraphEdge.edge_type == "IMPACTS",
                 GovernanceGraphEdge.source_node_id == node.node_id,
             )
@@ -147,6 +153,7 @@ def _detect_orphaned_findings(
         detected_by = db.execute(
             select(GovernanceGraphEdge).where(
                 GovernanceGraphEdge.tenant_id == tenant_id,
+                GovernanceGraphEdge.snapshot_id == snapshot_id,
                 GovernanceGraphEdge.edge_type == "DETECTED_BY",
                 GovernanceGraphEdge.source_node_id == node.node_id,
             )
@@ -178,6 +185,7 @@ def _detect_zero_trust_score_nodes(
         db.execute(
             select(GovernanceGraphNode).where(
                 GovernanceGraphNode.tenant_id == tenant_id,
+                GovernanceGraphNode.snapshot_id == snapshot_id,
                 GovernanceGraphNode.trust_score == 0,
             )
         )
@@ -211,6 +219,7 @@ def _detect_promoted_candidate_no_owner(
         db.execute(
             select(GovernanceGraphEdge).where(
                 GovernanceGraphEdge.tenant_id == tenant_id,
+                GovernanceGraphEdge.snapshot_id == snapshot_id,
                 GovernanceGraphEdge.edge_type == "PROMOTED_FROM",
             )
         )
@@ -219,12 +228,18 @@ def _detect_promoted_candidate_no_owner(
     )
     promoted_asset_ids = {e.source_node_id for e in promoted_edges}
     for asset_node_id in promoted_asset_ids:
-        asset_node = db.get(GovernanceGraphNode, asset_node_id)
+        asset_node = db.execute(
+            select(GovernanceGraphNode).where(
+                GovernanceGraphNode.node_id == asset_node_id,
+                GovernanceGraphNode.snapshot_id == snapshot_id,
+            )
+        ).scalar_one_or_none()
         if asset_node is None or asset_node.node_type != "governance_asset":
             continue
         owns_edge = db.execute(
             select(GovernanceGraphEdge).where(
                 GovernanceGraphEdge.tenant_id == tenant_id,
+                GovernanceGraphEdge.snapshot_id == snapshot_id,
                 GovernanceGraphEdge.edge_type == "OWNS",
                 GovernanceGraphEdge.target_node_id == asset_node_id,
             )
