@@ -10763,6 +10763,76 @@
         "title": "PromoteRequest",
         "type": "object"
       },
+      "PromotionResponse": {
+        "properties": {
+          "asset_count": {
+            "title": "Asset Count",
+            "type": "integer"
+          },
+          "baseline_readiness_score": {
+            "title": "Baseline Readiness Score",
+            "type": "integer"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "promoted_at": {
+            "title": "Promoted At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "workflow_count": {
+            "title": "Workflow Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "status",
+          "promoted_at",
+          "asset_count",
+          "workflow_count",
+          "baseline_readiness_score"
+        ],
+        "title": "PromotionResponse",
+        "type": "object"
+      },
       "ROEEvaluationRequest": {
         "properties": {
           "classification": {
@@ -32142,6 +32212,65 @@
           }
         },
         "summary": "Capture Observation Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/promote": {
+      "post": {
+        "description": "Admin retry / status route for governance promotion.\n\nIdempotent: returns the existing completed promotion without re-running.\nRetry: re-runs promotion steps if the previous attempt failed.\nPrimary trigger is automatic on 'delivered' transition \u2014 this route is\nfor operator retries and promotion status inspection.",
+        "operationId": "promote_engagement_route_field_assessment_engagements__engagement_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Engagement Route",
         "tags": [
           "field-assessment"
         ]

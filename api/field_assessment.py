@@ -86,8 +86,11 @@ from api.db_models_field_assessment import (
     FaScanResult,
 )
 
+from api.db_models_governance_promotion import GovernancePromotion
 from api.db_models_governance_report import GovernanceReportRecord
 from services.field_assessment.normalizer import normalize_scan_findings
+from services.field_assessment.promotion import promote_engagement_to_governance
+from services.field_assessment.promotion_store import get_promotion
 
 from api.db_models_drift import FaDriftBaseline
 from services.connectors.drift.engine import compute_drift
@@ -864,6 +867,14 @@ def transition_engagement_route(
         occurred_at=eng.updated_at,
         payload=transition_payload,
     )
+    if body.new_status == "delivered":
+        promote_engagement_to_governance(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            gate_snapshot=gate_snapshot,
+            baseline_readiness_score=gate_snapshot.get("readiness_score", 0),
+        )
     db.commit()
     db.refresh(eng)
     return _engagement_to_response(eng)
@@ -2513,3 +2524,98 @@ def qa_approve_report_route(
         qa_approved_by=actor,
         qa_approved_at=now,
     )
+
+
+# ---------------------------------------------------------------------------
+# Route — Governance promotion (admin retry / status check)
+# ---------------------------------------------------------------------------
+
+
+class PromotionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    tenant_id: str
+    engagement_id: str
+    status: str
+    promoted_at: str
+    completed_at: str | None = None
+    asset_count: int
+    workflow_count: int
+    baseline_readiness_score: int
+    error_detail: str | None = None
+
+
+def _promotion_to_response(p: GovernancePromotion) -> PromotionResponse:
+    return PromotionResponse(
+        id=p.id,
+        tenant_id=p.tenant_id,
+        engagement_id=p.engagement_id,
+        status=p.status,
+        promoted_at=p.promoted_at,
+        completed_at=p.completed_at,
+        asset_count=p.asset_count,
+        workflow_count=p.workflow_count,
+        baseline_readiness_score=p.baseline_readiness_score,
+        error_detail=p.error_detail,
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/promote",
+    response_model=PromotionResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+    status_code=200,
+)
+def promote_engagement_route(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> PromotionResponse:
+    """Admin retry / status route for governance promotion.
+
+    Idempotent: returns the existing completed promotion without re-running.
+    Retry: re-runs promotion steps if the previous attempt failed.
+    Primary trigger is automatic on 'delivered' transition — this route is
+    for operator retries and promotion status inspection.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    if eng.status != "delivered":
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "ENGAGEMENT_NOT_DELIVERED",
+                "Promotion requires engagement status 'delivered'.",
+            ),
+        )
+
+    existing = get_promotion(db, tenant_id=tenant_id, engagement_id=engagement_id)
+    if existing is not None and existing.status == "completed":
+        return _promotion_to_response(existing)
+
+    execution_state = _evaluate_execution_state(db, eng=eng, tenant_id=tenant_id)
+    gate_snapshot = {
+        "gates_evaluated": [g.gate_id for g in execution_state.gates],
+        "gates_passed": [
+            g.gate_id for g in execution_state.gates if g.status == "passed"
+        ],
+        "readiness_score": execution_state.readiness_score,
+    }
+
+    promotion = promote_engagement_to_governance(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        gate_snapshot=gate_snapshot,
+        baseline_readiness_score=execution_state.readiness_score,
+    )
+    db.commit()
+    db.refresh(promotion)
+    return _promotion_to_response(promotion)
