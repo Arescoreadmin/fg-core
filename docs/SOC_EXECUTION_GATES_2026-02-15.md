@@ -3954,3 +3954,33 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tests/test_field_assessment_gate_enforcement.py` (new — 11 tests)
 - `tests/test_field_assessment_normalizer.py` (new — 12 tests)
 - `tests/test_field_assessment_report_qa_gate.py` (new — 10 tests)
+
+
+---
+
+## PR 9 — Governance Promotion Event
+
+**Date:** 2026-05-21
+**Branch:** feat/governance-promotion-event-pr9
+**Classification:** New internal route + promotion service + CI artifact regeneration (contract_routes, route_inventory, topology.sha256). No new public paths. No schema changes (all ORM/tables landed in PR 8).
+
+**SOC review:**
+- New route: `POST /field-assessment/engagements/{engagement_id}/promote` — requires `governance:write` scope (same tenant predicate as all FA routes). Returns 409 if engagement not `delivered`. Returns 404 if engagement not found.
+- Promotion auto-triggers inline on `delivered` transition — inside the existing transaction, before `db.commit()`. Failure is caught, logged, and recorded as `status=failed` on the `GovernancePromotion` record. The engagement stays `delivered` regardless.
+- No new public paths. No auth path changes. No PII added to any new fields.
+- `GovernancePromotion` writes use savepoints (`begin_nested()`) — only promotion writes are rolled back on failure; outer engagement transition always commits.
+- `_promote_findings_to_workflows()` caps at 100 findings per engagement (warns in log if limit hit).
+- `_promote_asset_candidates()` promotes only `status=detected` candidates with no `promoted_asset_id` — idempotent on retry.
+- Admin retry route resets `status=failed` promotions to `pending` and re-runs all steps — idempotent for `status=completed`.
+
+**DB schema changes:** None (GovernancePromotion, GaAsset provenance columns, GovernanceWorkflow finding_id all landed in PR 8 migrations 0061–0063).
+
+**Files touched:**
+- `services/field_assessment/promotion.py` (new — promotion service)
+- `services/field_assessment/promotion_store.py` — added `reset_promotion_for_retry()`
+- `api/field_assessment.py` — auto-trigger on delivered transition + admin retry route + PromotionResponse model
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tests/test_field_assessment_promotion.py` (new — 11 tests)

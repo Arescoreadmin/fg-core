@@ -103,6 +103,28 @@ def fail_promotion(
     return promotion
 
 
+def reset_promotion_for_retry(
+    db: Session,
+    *,
+    promotion: GovernancePromotion,
+    gate_snapshot: dict | None = None,
+    baseline_readiness_score: int | None = None,
+) -> GovernancePromotion:
+    """Reset a failed promotion to pending so it can be re-run."""
+    promotion.status = "pending"
+    promotion.error_detail = None
+    promotion.asset_count = 0
+    promotion.workflow_count = 0
+    promotion.corpus_entries_added = 0
+    promotion.completed_at = None
+    if gate_snapshot is not None:
+        promotion.gate_snapshot_json = gate_snapshot
+    if baseline_readiness_score is not None:
+        promotion.baseline_readiness_score = baseline_readiness_score
+    db.flush()
+    return promotion
+
+
 def update_corpus_count(
     db: Session,
     *,
