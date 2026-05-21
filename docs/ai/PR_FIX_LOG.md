@@ -11326,3 +11326,30 @@ Persistent governance asset candidate staging between connector detection and Ga
 - Contract authority refreshed (`make contract-authority-refresh`, sha256=9b33c334...)
 - Route inventory regenerated (1 new route: qa-approve)
 - SOC_EXECUTION_GATES updated
+
+
+---
+
+### 2026-05-21 — PR 8: Governance Promotion Schema Foundation
+
+**Branch:** `feat/governance-promotion-schema-pr8`
+
+**Area:** `api/db_models_governance_workflows.py`, `api/db_models_governance_assets.py`, `api/db_models_governance_promotion.py`, `api/db.py`, `services/field_assessment/store.py`, `services/field_assessment/promotion_store.py`, `services/field_assessment/models.py`, `migrations/postgres/`
+
+**What was built:**
+- `GovernancePromotion` ORM model + `governance_promotions` table — one record per delivered engagement; `UNIQUE(tenant_id, engagement_id)` enforces idempotency; status lifecycle `pending → completed | failed`; `gate_snapshot_json` preserves gate state at delivery time; `baseline_readiness_score` seeds continuous readiness posture
+- `GovernanceWorkflow.finding_id` (nullable) — prerequisite for PR 9 enforcement that every promotion-created workflow links to the finding that caused it
+- `GaAsset.source_scan_result_id` + `source_engagement_id` (nullable) — provenance chain for assets promoted from Field Assessment
+- `services/field_assessment/promotion_store.py` — `get_promotion`, `create_promotion`, `complete_promotion`, `fail_promotion`, `update_corpus_count`
+- `list_scan_results_for_tenant` / `list_findings_for_tenant` / `list_documents_for_tenant` — tenant-scoped cross-engagement queries (used by promotion and drift in PR 9/10)
+- `PromotionAlreadyExists` + `PromotionNotFound` domain exceptions
+
+**Migrations:**
+- `0061_governance_workflow_finding_id.sql` — `finding_id` + partial index on `governance_workflows`
+- `0062_governance_asset_provenance.sql` — `source_scan_result_id` + `source_engagement_id` + partial indexes on `governance_assets`
+- `0063_governance_promotions.sql` — new `governance_promotions` table with unique + status indexes
+
+**Design decisions:**
+- Purely additive — no routes changed, no behavior changes; all enforcement deferred to PR 9
+- `GovernancePromotion` registered in `api/db.py` so `init_db()` creates the table automatically
+- Tenant-level store queries do not replace engagement-scoped ones — both exist side-by-side
