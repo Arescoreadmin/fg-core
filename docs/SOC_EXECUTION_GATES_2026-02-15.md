@@ -3869,3 +3869,56 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tests/governance_graph/test_mutations.py` (new — 12 tests)
 - `tests/governance_graph/test_queries.py` (new — 14 tests)
 - `tests/governance_graph/test_integrity.py` (new — 8 tests + 1 empty-tenant check)
+
+## PR 6 — Autonomous Governance Workflow Engine (2026-05-21)
+
+**Classification:** New service + API routes + DB schema (1 new table, 1 new column). No auth path changes. No public paths. CI artifacts regenerated (contract_routes, route_inventory, topology.sha256).
+
+**SOC review:**
+- All 7 new workflow routes are auth-gated; no public paths introduced.
+- `governance_workflows` table is fully tenant-scoped; every query includes a `tenant_id` predicate.
+- Workflow ID is SHA-256(`tenant_id:engagement_id:template_name:context_ref_id`) — deterministic, collision-resistant, no random UUIDs.
+- State machine is fail-closed: transition to `resolved` requires all `required_types` present in FaEvidenceLink; `workflow_evidence_complete()` returns False for empty required_types.
+- Evidence is stored in existing `fa_evidence_links` table (source_entity_type="workflow") — no new PII surfaces.
+- Transitions are logged in existing `fa_engagement_audit_events` table (event_type="workflow.transition") — no separate transition table.
+- `escalate_overdue()` is best-effort — each overdue workflow is attempted independently; failures do not block others.
+- `trigger_type` extension on `fa_connector_schedules` — cron validation only applies when trigger_type="cron"; event-driven triggers bypass it.
+- New `finding_count` column on `fa_scan_results` — no PII; integer count only; set at ingest time in msgraph_bridge.
+- BFS traversal in `find_root_cause_candidates()` is bounded by the drift window timestamps — no unbounded graph walks.
+- RBAC routing uses real role names: `governance_admin`, `analyst`, `tenant_admin`.
+
+**DB schema changes:**
+- NEW table: `governance_workflows` — id (PK SHA-256[:32]), tenant_id, engagement_id, template_name, title, description, state, priority, assigned_to_role, context_ref_type, context_ref_id, due_at, created_by, created_at, updated_at, resolved_at, archived_at, metadata_ (JSON), schema_version.
+- NEW column: `fa_connector_schedules.trigger_type` (TEXT, default="cron") — extends event-driven scheduler triggers.
+- NEW column: `fa_scan_results.finding_count` (INTEGER, default=0) — enables O(1) drift velocity computation.
+
+**Files touched:**
+- `api/db_models_governance_workflows.py` (new — GovernanceWorkflow ORM model)
+- `api/db_models_drift.py` — trigger_type column added to FaConnectorSchedule
+- `api/db_models_field_assessment.py` — finding_count column added to FaScanResult
+- `api/db.py` — GovernanceWorkflow registered in _ensure_models_imported()
+- `api/governance_workflows.py` (new — 7 REST endpoints)
+- `api/field_assessment.py` — trigger_type on schedule routes; drift-velocity and correlation routes added
+- `api/main.py` — governance_workflows_router registered in both build_app() and build_contract_app()
+- `services/governance_workflows/__init__.py` (new — empty)
+- `services/governance_workflows/templates.py` (new — 4 frozen WorkflowTemplate definitions)
+- `services/governance_workflows/routing.py` (new — RoutingDecision + route_workflow())
+- `services/governance_workflows/evidence.py` (new — attach/complete/get evidence via FaEvidenceLink)
+- `services/governance_workflows/engine.py` (new — state machine, create_workflow, transition_workflow, escalate_overdue)
+- `services/connectors/drift/scheduler.py` — VALID_TRIGGER_TYPES + InvalidTriggerType + list_schedules_by_trigger
+- `services/connectors/drift/velocity.py` (new — compute_drift_velocity with MTTR and regression_rate)
+- `services/connectors/drift/correlation.py` (new — find_root_cause_candidates via GovernanceGraphEdge)
+- `services/field_assessment/connectors/msgraph_bridge.py` — finding_count set after _import_findings()
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `tests/governance_workflows/__init__.py` (new)
+- `tests/governance_workflows/test_templates.py` (new — 8 tests)
+- `tests/governance_workflows/test_routing.py` (new — 9 tests)
+- `tests/governance_workflows/test_evidence.py` (new — 10 tests)
+- `tests/governance_workflows/test_engine.py` (new — 20 tests)
+- `tests/drift/test_velocity.py` (new — 8 tests)
+- `tests/drift/test_correlation.py` (new — 6 tests)
+- `tests/drift/test_scheduler.py` — 5 new TestTriggerTypes tests added

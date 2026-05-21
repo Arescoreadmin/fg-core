@@ -1406,6 +1406,18 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/drift-report/correlation/{finding_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/drift-velocity",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/evidence-links",
       "scopes": [],
       "source": "contract"
@@ -1749,6 +1761,48 @@
     {
       "method": "GET",
       "path": "/governance/timeline/{event_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/workflows",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/workflows",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/workflows/templates",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/workflows/{workflow_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/workflows/{workflow_id}/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/workflows/{workflow_id}/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/governance/workflows/{workflow_id}/transition",
       "scopes": [],
       "source": "contract"
     },
@@ -2137,7 +2191,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-21T11:11:25.390608+00:00",
+  "generated_at": "2026-05-21T13:49:24.546617+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
