@@ -159,6 +159,7 @@ AI_GOVERNANCE_PLAYBOOK = FieldAssessmentPlaybook(
                 "finding.evidence.required",
                 "finding.remediation.required",
                 "escalation.critical.required",
+                "report.qa.approved",
             ),
         }
     ),
