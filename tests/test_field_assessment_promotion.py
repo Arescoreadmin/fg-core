@@ -14,6 +14,7 @@ Covers:
 from __future__ import annotations
 
 import os
+from unittest.mock import patch
 
 os.environ.setdefault("FG_ENV", "test")
 os.environ.setdefault("FG_ACKNOWLEDGMENT_KEY", "test-key-32-bytes-exactly-padded!!")
@@ -31,12 +32,18 @@ import api.db_models_governance_assets  # noqa: F401
 import api.db_models_governance_asset_candidates  # noqa: F401
 import api.db_models_governance_promotion  # noqa: F401
 
+
 from api.db_models_governance_asset_candidates import GaAssetCandidate
 from api.db_models_governance_assets import GaAsset
 from api.db_models_governance_workflows import GovernanceWorkflow
 from services.canonical import utc_iso8601_z_now
+from services.field_assessment.models import PromotionAlreadyExists
 from services.field_assessment.promotion import promote_engagement_to_governance
-from services.field_assessment.promotion_store import fail_promotion, get_promotion
+from services.field_assessment.promotion_store import (
+    create_promotion,
+    fail_promotion,
+    get_promotion,
+)
 from services.field_assessment.store import (
     create_engagement,
     create_scan_result,
@@ -77,10 +84,13 @@ def _make_delivered_engagement(db: Session, suffix: str = "a") -> object:
     eng = create_engagement(
         db,
         tenant_id=_TENANT,
-        engagement_id=f"eng-promo-{suffix}",
-        client_name="Promo Corp",
+        client_name=f"Promo Corp {suffix}",
+        client_domain=None,
         assessor_id="assessor-promo",
         assessment_type="ai_governance",
+        scheduled_date=None,
+        engagement_metadata={},
+        actor="test",
     )
     for status in (
         "pre_visit",
@@ -389,3 +399,200 @@ class TestPromotionAdminRoute:
 
         resp = c.post("/field-assessment/engagements/ghost-eng/promote")
         assert resp.status_code == 404
+
+
+_TENANT2 = "tenant-promotion-test-other"
+
+
+class TestPromotionRaceAndIntegrity:
+    def test_create_race_returns_existing_pending_promotion(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "race-p")
+        existing = create_promotion(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=82,
+        )
+        assert existing.status == "pending"
+
+        with patch(
+            "services.field_assessment.promotion.create_promotion",
+            side_effect=PromotionAlreadyExists("race"),
+        ):
+            result = promote_engagement_to_governance(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=eng.id,
+                gate_snapshot=_GATE_SNAPSHOT,
+                baseline_readiness_score=82,
+            )
+
+        assert result.id == existing.id
+        assert result.status == "pending"
+
+    def test_create_race_returns_existing_completed_promotion(
+        self, db: Session
+    ) -> None:
+        eng = _make_delivered_engagement(db, "race-c")
+
+        p1 = promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=82,
+        )
+        assert p1.status == "completed"
+
+        with patch(
+            "services.field_assessment.promotion.create_promotion",
+            side_effect=PromotionAlreadyExists("race"),
+        ):
+            result = promote_engagement_to_governance(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=eng.id,
+                gate_snapshot=_GATE_SNAPSHOT,
+                baseline_readiness_score=82,
+            )
+
+        assert result.id == p1.id
+        assert result.status == "completed"
+
+    def test_duplicate_asset_insert_is_skipped_idempotently(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "dup-asset")
+        scan = create_scan_result(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            source_type="microsoft_graph",
+            schema_version="1.0",
+            collected_at=utc_iso8601_z_now(),
+            raw_payload={},
+            normalized_payload=None,
+            object_count=0,
+            evidence_hash="hash-dup-asset",
+        )
+        _add_candidate(db, eng.id, scan.id, "dup-a1")
+
+        # First promotion succeeds
+        p1 = promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=80,
+        )
+        assert p1.status == "completed"
+        assert p1.asset_count == 1
+
+        # Reset to failed so retry logic re-runs asset promotion
+        fail_promotion(db, promotion=p1, error_detail="forced retry")
+
+        # Add a second candidate; the first asset already exists in GaAsset
+        _add_candidate(db, eng.id, scan.id, "dup-a2")
+        # Un-promote the first candidate so it gets selected again
+        from sqlalchemy import update as sa_update
+        from api.db_models_governance_asset_candidates import GaAssetCandidate as _C
+
+        db.execute(
+            sa_update(_C)
+            .where(_C.candidate_id == "cand-dup-a1")
+            .values(
+                status="detected",
+                promoted_asset_id=None,
+                promoted_at=None,
+                auto_promoted=False,
+            )
+        )
+        db.flush()
+
+        p2 = promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=80,
+        )
+        # Promotion completes: dup-a1 duplicate is skipped, dup-a2 is new
+        assert p2.status == "completed"
+        assert p2.asset_count == 1  # only the new candidate counted
+
+    def test_non_duplicate_asset_insert_failure_fails_promotion(
+        self, db: Session
+    ) -> None:
+        eng = _make_delivered_engagement(db, "non-dup-fail")
+        scan = create_scan_result(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            source_type="microsoft_graph",
+            schema_version="1.0",
+            collected_at=utc_iso8601_z_now(),
+            raw_payload={},
+            normalized_payload=None,
+            object_count=0,
+            evidence_hash="hash-non-dup",
+        )
+        _add_candidate(db, eng.id, scan.id, "nd-a1")
+
+        original_begin_nested = db.begin_nested
+
+        call_count = [0]
+
+        def patched_begin_nested():
+            call_count[0] += 1
+            ctx = original_begin_nested()
+            if call_count[0] == 2:
+                # Simulate non-duplicate failure on the first asset insert savepoint
+                class _FailCtx:
+                    def __enter__(self):
+                        return ctx.__enter__()
+
+                    def __exit__(self, exc_type, exc_val, exc_tb):
+                        ctx.__exit__(exc_type, exc_val, exc_tb)
+                        if exc_type is None:
+                            raise RuntimeError("simulated non-integrity DB failure")
+                        return False
+
+                return _FailCtx()
+            return ctx
+
+        with patch.object(db, "begin_nested", patched_begin_nested):
+            promo = promote_engagement_to_governance(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=eng.id,
+                gate_snapshot=_GATE_SNAPSHOT,
+                baseline_readiness_score=80,
+            )
+
+        # Failure is caught by the outer handler and recorded
+        assert promo.status == "failed"
+
+    def test_tenant_isolation_create_race(self, db: Session) -> None:
+        eng_t1 = _make_delivered_engagement(db, "iso-t1")
+        eng_t2 = _make_delivered_engagement(db, "iso-t2")
+
+        p1 = promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng_t1.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=82,
+        )
+
+        p2 = promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng_t2.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=75,
+        )
+
+        assert p1.id != p2.id
+        assert p1.tenant_id == _TENANT
+        assert p2.tenant_id == _TENANT
+        assert p1.engagement_id == eng_t1.id
+        assert p2.engagement_id == eng_t2.id

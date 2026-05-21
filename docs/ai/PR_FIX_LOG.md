@@ -11382,3 +11382,31 @@ No migration was renumbered. No migration enforcement was weakened. No skip/xfai
 0062_governance_asset_provenance.sql had the identical root cause: governance_assets was also ORM-only (introduced PR 3.5) with no SQL migration. ALTER TABLE governance_assets ADD COLUMN on a non-existent table caused frostgate-migrate to exit 1. Applied the same CREATE TABLE IF NOT EXISTS + ALTER TABLE IF NOT EXISTS + IF NOT EXISTS indexes pattern to 0062. Validated:
 - `docker compose down -v && docker compose up --build --abort-on-container-exit frostgate-migrate` → migrations 0044–0063 applied, frostgate-migrate exited 0
 - `make fg-fast` → 398 passed, EXIT:0
+
+---
+
+### 2026-05-21 — PR 9 (Promotion Event): Race handling + asset insert + missing fix log
+
+**Branch:** `feat/governance-promotion-event-pr9`
+
+**Root cause (3 issues):**
+
+1. **Idempotency race returned only `completed` rows** — `promote_engagement_to_governance()` caught `PromotionAlreadyExists` (lost a TOCTOU creation race), refetched the existing row, but re-raised if status was `pending`. A concurrent caller whose insert won the race owns that promotion's status transitions; the losing caller must return whatever exists, not raise.
+
+2. **Overbroad `except Exception` on asset insert** — `_promote_asset_candidates()` caught all exceptions as "duplicate candidate_id" and continued. A real DB failure (connection drop, FK violation, any non-IntegrityError) was silently swallowed, the candidate remained un-promoted, and the promotion was still recorded as `completed`. Narrowed to `IntegrityError` only; all other exceptions now propagate into the outer `fail_promotion` handler.
+
+3. **`docs/ai/PR_FIX_LOG.md` not updated** despite high-risk files changing (`api/field_assessment.py`, `services/field_assessment/promotion.py`, `services/field_assessment/promotion_store.py`, route inventory artifacts).
+
+**Files changed:**
+- `services/field_assessment/promotion.py` — P1-1: race returns existing row regardless of status; P1-2: `except IntegrityError` replaces `except Exception`
+- `tests/test_field_assessment_promotion.py` — 5 new tests: race pending, race completed, duplicate asset skip, non-duplicate failure fails promotion, tenant isolation
+- `docs/ai/PR_FIX_LOG.md` — this entry (was missing)
+
+**Security / integrity impact:**
+- Tenant isolation: `get_promotion()` always scopes by `(tenant_id, engagement_id)` — no cross-tenant row can be returned from the race path
+- No false `completed` promotions: non-duplicate insert failures now propagate and mark promotion `failed`
+- Deterministic audit: `GovernancePromotion.status` reliably reflects actual promotion outcome
+
+**Validation:**
+- `pytest tests/test_field_assessment_promotion.py -q` → 16 passed
+- `make fg-fast` → all gates pass, EXIT:0

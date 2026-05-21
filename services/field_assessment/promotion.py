@@ -25,6 +25,7 @@ import logging
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.db_models_governance_asset_candidates import GaAssetCandidate
@@ -86,11 +87,12 @@ def promote_engagement_to_governance(
                 baseline_readiness_score=baseline_readiness_score,
             )
         except PromotionAlreadyExists:
-            # Lost a creation race — return whatever exists
+            # Lost a creation race — another concurrent caller inserted first.
+            # Return whatever exists for this tenant/engagement; never re-raise.
             refetch = get_promotion(
                 db, tenant_id=tenant_id, engagement_id=engagement_id
             )
-            if refetch is not None and refetch.status == "completed":
+            if refetch is not None:
                 return refetch
             raise
 
@@ -209,8 +211,8 @@ def _promote_asset_candidates(
             with db.begin_nested():
                 db.add(asset)
                 db.flush()
-        except Exception:  # noqa: BLE001
-            # Asset already exists (duplicate candidate_id from prior promotion attempt)
+        except IntegrityError:
+            # Duplicate candidate_id — asset already promoted in a prior attempt.
             log.debug("Asset %s already exists, skipping.", candidate.candidate_id)
             continue
 
