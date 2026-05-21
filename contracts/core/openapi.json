@@ -784,6 +784,82 @@
         "title": "AlertRunSummaryResponse",
         "type": "object"
       },
+      "AnomalyResponse": {
+        "properties": {
+          "anomaly_id": {
+            "title": "Anomaly Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "detected_at": {
+            "title": "Detected At",
+            "type": "string"
+          },
+          "edge_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Edge Ids",
+            "type": "array"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Node Ids",
+            "type": "array"
+          },
+          "pattern_id": {
+            "title": "Pattern Id",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "anomaly_id",
+          "tenant_id",
+          "pattern_id",
+          "description",
+          "severity",
+          "node_ids",
+          "edge_ids",
+          "snapshot_id",
+          "detected_at",
+          "resolved_at",
+          "is_active"
+        ],
+        "title": "AnomalyResponse",
+        "type": "object"
+      },
       "ApprovalCreateRequest": {
         "properties": {
           "action": {
@@ -5214,6 +5290,88 @@
         "title": "DriftEventResponse",
         "type": "object"
       },
+      "EdgeResponse": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "integer"
+          },
+          "derived_at": {
+            "title": "Derived At",
+            "type": "string"
+          },
+          "edge_id": {
+            "title": "Edge Id",
+            "type": "string"
+          },
+          "edge_type": {
+            "title": "Edge Type",
+            "type": "string"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "properties": {
+            "title": "Properties",
+            "type": "object"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "source_node_id": {
+            "title": "Source Node Id",
+            "type": "string"
+          },
+          "source_ref": {
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "target_node_id": {
+            "title": "Target Node Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "edge_id",
+          "tenant_id",
+          "edge_type",
+          "source_node_id",
+          "target_node_id",
+          "weight",
+          "confidence",
+          "properties",
+          "source_ref",
+          "engagement_id",
+          "snapshot_id",
+          "derived_at"
+        ],
+        "title": "EdgeResponse",
+        "type": "object"
+      },
       "EngagementListResponse": {
         "properties": {
           "cursor": {
@@ -7442,6 +7600,64 @@
         "title": "GovernanceReportResponse",
         "type": "object"
       },
+      "GraphBuildResultResponse": {
+        "properties": {
+          "anomalies_detected": {
+            "title": "Anomalies Detected",
+            "type": "integer"
+          },
+          "built_at": {
+            "title": "Built At",
+            "type": "string"
+          },
+          "edges_deleted": {
+            "title": "Edges Deleted",
+            "type": "integer"
+          },
+          "edges_upserted": {
+            "title": "Edges Upserted",
+            "type": "integer"
+          },
+          "nodes_deleted": {
+            "title": "Nodes Deleted",
+            "type": "integer"
+          },
+          "nodes_upserted": {
+            "title": "Nodes Upserted",
+            "type": "integer"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_seq": {
+            "title": "Snapshot Seq",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "triggered_by": {
+            "title": "Triggered By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "snapshot_seq",
+          "tenant_id",
+          "nodes_upserted",
+          "edges_upserted",
+          "nodes_deleted",
+          "edges_deleted",
+          "anomalies_detected",
+          "triggered_by",
+          "built_at"
+        ],
+        "title": "GraphBuildResultResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -9144,6 +9360,138 @@
         "title": "NextActionResponse",
         "type": "object"
       },
+      "NodeDetailResponse": {
+        "properties": {
+          "neighbors": {
+            "items": {
+              "$ref": "#/components/schemas/NodeResponse"
+            },
+            "title": "Neighbors",
+            "type": "array"
+          },
+          "node": {
+            "$ref": "#/components/schemas/NodeResponse"
+          }
+        },
+        "required": [
+          "node",
+          "neighbors"
+        ],
+        "title": "NodeDetailResponse",
+        "type": "object"
+      },
+      "NodeResponse": {
+        "properties": {
+          "centrality_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Centrality Rank"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "integer"
+          },
+          "degree_centrality": {
+            "title": "Degree Centrality",
+            "type": "integer"
+          },
+          "derived_at": {
+            "title": "Derived At",
+            "type": "string"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_type": {
+            "title": "Node Type",
+            "type": "string"
+          },
+          "properties": {
+            "title": "Properties",
+            "type": "object"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "source_ref": {
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "trust_score": {
+            "title": "Trust Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "node_id",
+          "tenant_id",
+          "node_type",
+          "entity_id",
+          "entity_type",
+          "label",
+          "properties",
+          "tags",
+          "trust_score",
+          "degree_centrality",
+          "centrality_rank",
+          "confidence",
+          "source_ref",
+          "engagement_id",
+          "snapshot_id",
+          "derived_at"
+        ],
+        "title": "NodeResponse",
+        "type": "object"
+      },
       "ObservationDomain": {
         "enum": [
           "ai_governance",
@@ -10326,6 +10674,18 @@
           "estimation_rationale"
         ],
         "title": "ReadinessImpactEstimateResponse",
+        "type": "object"
+      },
+      "RebuildRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "triggered_by": {
+            "default": "rebuild_api",
+            "title": "Triggered By",
+            "type": "string"
+          }
+        },
+        "title": "RebuildRequest",
         "type": "object"
       },
       "ReceiptRequest": {
@@ -13528,6 +13888,45 @@
           "to_state"
         ],
         "title": "TransitionStateRequest",
+        "type": "object"
+      },
+      "TraversalResponse": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeResponse"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "max_depth_reached": {
+            "title": "Max Depth Reached",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeResponse"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "root_node_id": {
+            "title": "Root Node Id",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "root_node_id",
+          "nodes",
+          "edges",
+          "max_depth_reached",
+          "truncated"
+        ],
+        "title": "TraversalResponse",
         "type": "object"
       },
       "UpdateAssetRequest": {
@@ -33298,6 +33697,636 @@
         "summary": "Approve Change",
         "tags": [
           "governance"
+        ]
+      }
+    },
+    "/governance/graph/anomalies": {
+      "get": {
+        "description": "List structural graph anomalies.",
+        "operationId": "list_anomalies_governance_graph_anomalies_get",
+        "parameters": [
+          {
+            "description": "Only return active anomalies",
+            "in": "query",
+            "name": "active_only",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Only return active anomalies",
+              "title": "Active Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Filter by severity",
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by severity",
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AnomalyResponse"
+                  },
+                  "title": "Response List Anomalies Governance Graph Anomalies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Anomalies",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
+    "/governance/graph/coverage": {
+      "get": {
+        "description": "Return framework coverage based on control nodes in the graph.",
+        "operationId": "get_coverage_governance_graph_coverage_get",
+        "parameters": [
+          {
+            "description": "Framework identifier",
+            "in": "query",
+            "name": "framework",
+            "required": false,
+            "schema": {
+              "default": "NIST-AI-RMF",
+              "description": "Framework identifier",
+              "title": "Framework",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Coverage Governance Graph Coverage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Coverage",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
+    "/governance/graph/lineage/{node_id}": {
+      "get": {
+        "description": "Reconstruct provenance chain backwards from a node.",
+        "operationId": "get_lineage_governance_graph_lineage__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_depth",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Max Depth",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Lineage Governance Graph Lineage  Node Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lineage",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
+    "/governance/graph/nodes": {
+      "get": {
+        "description": "List governance graph nodes with optional type filter.",
+        "operationId": "list_nodes_governance_graph_nodes_get",
+        "parameters": [
+          {
+            "description": "Filter by node type",
+            "in": "query",
+            "name": "node_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by node type",
+              "title": "Node Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NodeResponse"
+                  },
+                  "title": "Response List Nodes Governance Graph Nodes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Nodes",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
+    "/governance/graph/nodes/{node_id}": {
+      "get": {
+        "description": "Get a single node with its immediate neighbors.",
+        "operationId": "get_node_governance_graph_nodes__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "outbound|inbound|both",
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "default": "both",
+              "description": "outbound|inbound|both",
+              "title": "Direction",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Node",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
+    "/governance/graph/rebuild": {
+      "post": {
+        "description": "Trigger a full governance topology graph rebuild for the caller's tenant.",
+        "operationId": "rebuild_graph_governance_graph_rebuild_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RebuildRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphBuildResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rebuild Graph",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
+    "/governance/graph/stats": {
+      "get": {
+        "description": "Return graph statistics: node/edge counts, centrality, trust distribution.",
+        "operationId": "get_stats_governance_graph_stats_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Stats Governance Graph Stats Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Stats",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
+    "/governance/graph/traverse": {
+      "get": {
+        "description": "BFS traversal from a root node. Capped at depth=10 and 500 nodes.",
+        "operationId": "traverse_graph_governance_graph_traverse_get",
+        "parameters": [
+          {
+            "description": "Root node ID",
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "description": "Root node ID",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_depth",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Max Depth",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated edge types to follow",
+            "in": "query",
+            "name": "edge_types",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated edge types to follow",
+              "title": "Edge Types"
+            }
+          },
+          {
+            "description": "outbound|inbound|both",
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "default": "outbound",
+              "description": "outbound|inbound|both",
+              "title": "Direction",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraversalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Traverse Graph",
+        "tags": [
+          "governance-graph"
         ]
       }
     },

@@ -41,25 +41,31 @@ def _detect_ungoverned_high_centrality(
         .all()
     )
     for node in nodes:
-        owns_count = db.execute(
-            select(GovernanceGraphEdge).where(
-                GovernanceGraphEdge.tenant_id == tenant_id,
-                GovernanceGraphEdge.snapshot_id == snapshot_id,
-                GovernanceGraphEdge.edge_type == "OWNS",
-                GovernanceGraphEdge.target_node_id == node.node_id,
+        owns_count = (
+            db.execute(
+                select(GovernanceGraphEdge).where(
+                    GovernanceGraphEdge.tenant_id == tenant_id,
+                    GovernanceGraphEdge.snapshot_id == snapshot_id,
+                    GovernanceGraphEdge.edge_type == "OWNS",
+                    GovernanceGraphEdge.target_node_id == node.node_id,
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if owns_count is None:
-            results.append({
-                "pattern_id": "ungoverned_high_centrality",
-                "description": (
-                    f"High-centrality governance_asset '{node.label}' "
-                    f"(degree={node.degree_centrality}) has no declared owners."
-                ),
-                "severity": "critical",
-                "node_ids": [node.node_id],
-                "edge_ids": [],
-            })
+            results.append(
+                {
+                    "pattern_id": "ungoverned_high_centrality",
+                    "description": (
+                        f"High-centrality governance_asset '{node.label}' "
+                        f"(degree={node.degree_centrality}) has no declared owners."
+                    ),
+                    "severity": "critical",
+                    "node_ids": [node.node_id],
+                    "edge_ids": [],
+                }
+            )
     return results
 
 
@@ -109,16 +115,18 @@ def _detect_privileged_identity_to_shadow_ai(
         for edge in risky_edges:
             src_node = db.get(GovernanceGraphNode, edge.source_node_id)
             if src_node and src_node.node_type == "identity":
-                results.append({
-                    "pattern_id": "privileged_identity_to_shadow_ai",
-                    "description": (
-                        f"Identity '{src_node.label}' has a '{edge.edge_type}' edge "
-                        f"to shadow AI system '{ai_node_id}' (discovery_source=discovered)."
-                    ),
-                    "severity": "high",
-                    "node_ids": [src_node.node_id, ai_node_id],
-                    "edge_ids": [edge.edge_id],
-                })
+                results.append(
+                    {
+                        "pattern_id": "privileged_identity_to_shadow_ai",
+                        "description": (
+                            f"Identity '{src_node.label}' has a '{edge.edge_type}' edge "
+                            f"to shadow AI system '{ai_node_id}' (discovery_source=discovered)."
+                        ),
+                        "severity": "high",
+                        "node_ids": [src_node.node_id, ai_node_id],
+                        "edge_ids": [edge.edge_id],
+                    }
+                )
     return results
 
 
@@ -142,33 +150,43 @@ def _detect_orphaned_findings(
         .all()
     )
     for node in finding_nodes:
-        impacts = db.execute(
-            select(GovernanceGraphEdge).where(
-                GovernanceGraphEdge.tenant_id == tenant_id,
-                GovernanceGraphEdge.snapshot_id == snapshot_id,
-                GovernanceGraphEdge.edge_type == "IMPACTS",
-                GovernanceGraphEdge.source_node_id == node.node_id,
+        impacts = (
+            db.execute(
+                select(GovernanceGraphEdge).where(
+                    GovernanceGraphEdge.tenant_id == tenant_id,
+                    GovernanceGraphEdge.snapshot_id == snapshot_id,
+                    GovernanceGraphEdge.edge_type == "IMPACTS",
+                    GovernanceGraphEdge.source_node_id == node.node_id,
+                )
             )
-        ).scalars().first()
-        detected_by = db.execute(
-            select(GovernanceGraphEdge).where(
-                GovernanceGraphEdge.tenant_id == tenant_id,
-                GovernanceGraphEdge.snapshot_id == snapshot_id,
-                GovernanceGraphEdge.edge_type == "DETECTED_BY",
-                GovernanceGraphEdge.source_node_id == node.node_id,
+            .scalars()
+            .first()
+        )
+        detected_by = (
+            db.execute(
+                select(GovernanceGraphEdge).where(
+                    GovernanceGraphEdge.tenant_id == tenant_id,
+                    GovernanceGraphEdge.snapshot_id == snapshot_id,
+                    GovernanceGraphEdge.edge_type == "DETECTED_BY",
+                    GovernanceGraphEdge.source_node_id == node.node_id,
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if impacts is None and detected_by is None:
-            results.append({
-                "pattern_id": "orphaned_finding",
-                "description": (
-                    f"Finding node '{node.label}' has no IMPACTS or DETECTED_BY edges — "
-                    "completely disconnected from the graph."
-                ),
-                "severity": "medium",
-                "node_ids": [node.node_id],
-                "edge_ids": [],
-            })
+            results.append(
+                {
+                    "pattern_id": "orphaned_finding",
+                    "description": (
+                        f"Finding node '{node.label}' has no IMPACTS or DETECTED_BY edges — "
+                        "completely disconnected from the graph."
+                    ),
+                    "severity": "medium",
+                    "node_ids": [node.node_id],
+                    "edge_ids": [],
+                }
+            )
     return results
 
 
@@ -193,16 +211,18 @@ def _detect_zero_trust_score_nodes(
         .all()
     )
     for node in nodes:
-        results.append({
-            "pattern_id": "zero_trust_score_node",
-            "description": (
-                f"Node '{node.label}' (type={node.node_type}) has trust_score=0 — "
-                "source record was deleted after derivation."
-            ),
-            "severity": "high",
-            "node_ids": [node.node_id],
-            "edge_ids": [],
-        })
+        results.append(
+            {
+                "pattern_id": "zero_trust_score_node",
+                "description": (
+                    f"Node '{node.label}' (type={node.node_type}) has trust_score=0 — "
+                    "source record was deleted after derivation."
+                ),
+                "severity": "high",
+                "node_ids": [node.node_id],
+                "edge_ids": [],
+            }
+        )
     return results
 
 
@@ -236,25 +256,31 @@ def _detect_promoted_candidate_no_owner(
         ).scalar_one_or_none()
         if asset_node is None or asset_node.node_type != "governance_asset":
             continue
-        owns_edge = db.execute(
-            select(GovernanceGraphEdge).where(
-                GovernanceGraphEdge.tenant_id == tenant_id,
-                GovernanceGraphEdge.snapshot_id == snapshot_id,
-                GovernanceGraphEdge.edge_type == "OWNS",
-                GovernanceGraphEdge.target_node_id == asset_node_id,
+        owns_edge = (
+            db.execute(
+                select(GovernanceGraphEdge).where(
+                    GovernanceGraphEdge.tenant_id == tenant_id,
+                    GovernanceGraphEdge.snapshot_id == snapshot_id,
+                    GovernanceGraphEdge.edge_type == "OWNS",
+                    GovernanceGraphEdge.target_node_id == asset_node_id,
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if owns_edge is None:
-            results.append({
-                "pattern_id": "promoted_candidate_no_owner",
-                "description": (
-                    f"Governance asset '{asset_node.label}' was auto-promoted from a candidate "
-                    "but has no OWNS edges — no declared owner."
-                ),
-                "severity": "high",
-                "node_ids": [asset_node_id],
-                "edge_ids": [],
-            })
+            results.append(
+                {
+                    "pattern_id": "promoted_candidate_no_owner",
+                    "description": (
+                        f"Governance asset '{asset_node.label}' was auto-promoted from a candidate "
+                        "but has no OWNS edges — no declared owner."
+                    ),
+                    "severity": "high",
+                    "node_ids": [asset_node_id],
+                    "edge_ids": [],
+                }
+            )
     return results
 
 

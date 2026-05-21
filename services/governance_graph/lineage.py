@@ -8,18 +8,28 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.db_models_governance_graph import GovernanceGraphEdge, GovernanceGraphNode
-from services.governance_graph.models import EdgeType, GraphEdge, GraphNode, LineageChain
-from services.governance_graph.queries import _orm_edge_to_dataclass, _orm_node_to_dataclass
+from services.governance_graph.models import (
+    EdgeType,
+    GraphEdge,
+    GraphNode,
+    LineageChain,
+)
+from services.governance_graph.queries import (
+    _orm_edge_to_dataclass,
+    _orm_node_to_dataclass,
+)
 
 # Edge types that represent provenance / lineage relationships
-LINEAGE_EDGE_TYPES: frozenset[EdgeType] = frozenset({
-    EdgeType.DETECTED_BY,
-    EdgeType.GENERATED,
-    EdgeType.SUPPORTS,
-    EdgeType.PROMOTED_FROM,
-    EdgeType.IMPACTS,
-    EdgeType.GOVERNED_BY,
-})
+LINEAGE_EDGE_TYPES: frozenset[EdgeType] = frozenset(
+    {
+        EdgeType.DETECTED_BY,
+        EdgeType.GENERATED,
+        EdgeType.SUPPORTS,
+        EdgeType.PROMOTED_FROM,
+        EdgeType.IMPACTS,
+        EdgeType.GOVERNED_BY,
+    }
+)
 
 _LINEAGE_EDGE_TYPE_VALUES: set[str] = {et.value for et in LINEAGE_EDGE_TYPES}
 

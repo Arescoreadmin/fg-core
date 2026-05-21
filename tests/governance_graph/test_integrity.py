@@ -134,6 +134,7 @@ class TestValidateGraphInvariants:
 
     def test_catches_invalid_node_type(self, db: Session) -> None:
         from api.db_models_governance_graph import GovernanceGraphNode
+
         # Insert node with invalid type directly
         bad_node = GovernanceGraphNode(
             node_id="bad-node-type-001",

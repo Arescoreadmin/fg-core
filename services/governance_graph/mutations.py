@@ -16,9 +16,7 @@ from services.canonical import utc_iso8601_z_now  # noqa: F401 — re-exported
 
 
 def _node_id(tenant_id: str, node_type: str, entity_id: str) -> str:
-    return hashlib.sha256(
-        f"{tenant_id}:{node_type}:{entity_id}".encode()
-    ).hexdigest()
+    return hashlib.sha256(f"{tenant_id}:{node_type}:{entity_id}".encode()).hexdigest()
 
 
 def _edge_id(
@@ -172,9 +170,7 @@ def upsert_anomaly(
     return a
 
 
-def delete_stale(
-    db: Session, *, tenant_id: str, older_than: str
-) -> tuple[int, int]:
+def delete_stale(db: Session, *, tenant_id: str, older_than: str) -> tuple[int, int]:
     """Delete nodes/edges not touched since older_than. Returns (nodes_deleted, edges_deleted)."""
     r_e = db.execute(
         sa_delete(GovernanceGraphEdge).where(
@@ -192,9 +188,7 @@ def delete_stale(
     return r_n.rowcount, r_e.rowcount
 
 
-def update_centrality(
-    db: Session, *, tenant_id: str, snapshot_id: str
-) -> int:
+def update_centrality(db: Session, *, tenant_id: str, snapshot_id: str) -> int:
     """Compute degree centrality for all nodes in this snapshot and rank them."""
     nodes = (
         db.execute(

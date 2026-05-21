@@ -37,7 +37,14 @@ def db(engine):
         yield session
 
 
-def _make_node(db: Session, *, entity_id: str = "asset-001", node_type: str = "governance_asset", tenant_id: str = _TENANT, derived_at: str = "2026-05-20T00:00:00Z") -> GovernanceGraphNode:
+def _make_node(
+    db: Session,
+    *,
+    entity_id: str = "asset-001",
+    node_type: str = "governance_asset",
+    tenant_id: str = _TENANT,
+    derived_at: str = "2026-05-20T00:00:00Z",
+) -> GovernanceGraphNode:
     return upsert_node(
         db,
         tenant_id=tenant_id,

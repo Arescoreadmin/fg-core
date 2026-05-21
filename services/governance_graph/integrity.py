@@ -26,7 +26,11 @@ def _get_entity_type_map() -> dict[str, tuple[Any, str]]:
 
     try:
         from api.db_models_governance_assets import GaAsset
-        from api.db_models_field_assessment import FaNormalizedFinding, FaScanResult, FaEngagement
+        from api.db_models_field_assessment import (
+            FaNormalizedFinding,
+            FaScanResult,
+            FaEngagement,
+        )
         from api.db_models_governance_asset_candidates import GaAssetCandidate
 
         _ENTITY_TYPE_MAP = {
@@ -35,7 +39,10 @@ def _get_entity_type_map() -> dict[str, tuple[Any, str]]:
             "fa_scan_results": (FaScanResult, "id"),
             "fa_engagements": (FaEngagement, "id"),
             "ga_asset_candidates": (GaAssetCandidate, "candidate_id"),
-            "governance_asset_owners": (None, ""),  # owners don't have a standalone table lookup
+            "governance_asset_owners": (
+                None,
+                "",
+            ),  # owners don't have a standalone table lookup
             "governance_asset_attestations": (None, ""),
             "framework_control": (None, ""),  # virtual — always live
         }
@@ -108,9 +115,18 @@ def recompute_trust_scores(db: Session, *, tenant_id: str) -> int:
 
 _VALID_NODE_TYPES = {nt.value for nt in NodeType}
 _VALID_EDGE_TYPES = {
-    "OWNS", "GOVERNED_BY", "USES", "ACCESSES", "CONNECTED_TO",
-    "GENERATED", "DETECTED_BY", "IMPACTS", "ATTESTED_BY", "SUPPORTS",
-    "RELATED_TO", "PROMOTED_FROM",
+    "OWNS",
+    "GOVERNED_BY",
+    "USES",
+    "ACCESSES",
+    "CONNECTED_TO",
+    "GENERATED",
+    "DETECTED_BY",
+    "IMPACTS",
+    "ATTESTED_BY",
+    "SUPPORTS",
+    "RELATED_TO",
+    "PROMOTED_FROM",
 }
 
 

@@ -53,9 +53,7 @@ class GovernanceGraphSnapshot(Base):
         String(16), nullable=False, default="1.0"
     )
 
-    __table_args__ = (
-        Index("ix_gg_snapshots_tenant_seq", "tenant_id", "snapshot_seq"),
-    )
+    __table_args__ = (Index("ix_gg_snapshots_tenant_seq", "tenant_id", "snapshot_seq"),)
 
 
 class GovernanceGraphNode(Base):

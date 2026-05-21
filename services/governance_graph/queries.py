@@ -21,14 +21,40 @@ MAX_TRAVERSE_NODES = 500
 
 FRAMEWORK_CONTROLS: dict[str, list[str]] = {
     "NIST-AI-RMF": [
-        "GOVERN-1.1", "GOVERN-1.2", "GOVERN-1.3", "GOVERN-2.1", "GOVERN-2.2",
-        "GOVERN-3.1", "GOVERN-4.1", "GOVERN-5.1", "GOVERN-5.2", "GOVERN-6.1",
-        "MAP-1.1", "MAP-1.5", "MAP-2.1", "MAP-2.2", "MAP-2.3", "MAP-3.1",
-        "MAP-3.5", "MAP-4.1", "MAP-5.1",
-        "MEASURE-1.1", "MEASURE-2.1", "MEASURE-2.2", "MEASURE-2.3",
-        "MEASURE-2.5", "MEASURE-2.6", "MEASURE-2.9", "MEASURE-3.1", "MEASURE-4.1",
-        "MANAGE-1.1", "MANAGE-1.3", "MANAGE-2.2", "MANAGE-2.4",
-        "MANAGE-3.1", "MANAGE-4.1",
+        "GOVERN-1.1",
+        "GOVERN-1.2",
+        "GOVERN-1.3",
+        "GOVERN-2.1",
+        "GOVERN-2.2",
+        "GOVERN-3.1",
+        "GOVERN-4.1",
+        "GOVERN-5.1",
+        "GOVERN-5.2",
+        "GOVERN-6.1",
+        "MAP-1.1",
+        "MAP-1.5",
+        "MAP-2.1",
+        "MAP-2.2",
+        "MAP-2.3",
+        "MAP-3.1",
+        "MAP-3.5",
+        "MAP-4.1",
+        "MAP-5.1",
+        "MEASURE-1.1",
+        "MEASURE-2.1",
+        "MEASURE-2.2",
+        "MEASURE-2.3",
+        "MEASURE-2.5",
+        "MEASURE-2.6",
+        "MEASURE-2.9",
+        "MEASURE-3.1",
+        "MEASURE-4.1",
+        "MANAGE-1.1",
+        "MANAGE-1.3",
+        "MANAGE-2.2",
+        "MANAGE-2.4",
+        "MANAGE-3.1",
+        "MANAGE-4.1",
     ],
 }
 
@@ -110,9 +136,7 @@ def get_neighbors(
     """Return neighbor nodes reachable in one hop."""
     neighbor_ids: set[str] = set()
 
-    def _query_edges(
-        src_col: Any, tgt_col: Any, neighbor_col: Any
-    ) -> list[str]:
+    def _query_edges(src_col: Any, tgt_col: Any, neighbor_col: Any) -> list[str]:
         q = select(neighbor_col).where(
             GovernanceGraphEdge.tenant_id == tenant_id,
             src_col == node_id,
@@ -440,7 +464,7 @@ def get_coverage(
     for node in control_nodes:
         eid = node.entity_id
         if eid.startswith(prefix):
-            eid = eid[len(prefix):]
+            eid = eid[len(prefix) :]
         covered_refs.add(eid)
 
     covered = [c for c in known_controls if c in covered_refs]

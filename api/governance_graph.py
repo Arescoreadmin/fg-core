@@ -290,9 +290,7 @@ def traverse_graph(
     """BFS traversal from a root node. Capped at depth=10 and 500 nodes."""
     tenant_id = _resolve_caller_tenant(request)
     edge_type_list = (
-        [e.strip() for e in edge_types.split(",") if e.strip()]
-        if edge_types
-        else None
+        [e.strip() for e in edge_types.split(",") if e.strip()] if edge_types else None
     )
     result = queries.traverse(
         db,
@@ -328,10 +326,14 @@ def get_lineage(
     )
     chain_out = []
     for node_dc, edge_dc in chain.chain:
-        chain_out.append({
-            "node": _graph_node_to_response(node_dc).model_dump(),
-            "edge": _graph_edge_to_response(edge_dc).model_dump() if edge_dc else None,
-        })
+        chain_out.append(
+            {
+                "node": _graph_node_to_response(node_dc).model_dump(),
+                "edge": _graph_edge_to_response(edge_dc).model_dump()
+                if edge_dc
+                else None,
+            }
+        )
     return {
         "origin_node_id": chain.origin_node_id,
         "chain": chain_out,

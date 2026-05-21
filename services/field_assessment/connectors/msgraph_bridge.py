@@ -244,7 +244,9 @@ def import_msgraph_scan_result(
         manifest_hash=manifest_hash,
     )
 
-    _rebuild_graph_for_engagement(db=db, tenant_id=tenant_id, engagement_id=engagement_id)
+    _rebuild_graph_for_engagement(
+        db=db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
 
     _audit(
         db,
@@ -284,7 +286,9 @@ def import_msgraph_scan_result(
     )
 
 
-def _rebuild_graph_for_engagement(*, db: Any, tenant_id: str, engagement_id: str) -> None:
+def _rebuild_graph_for_engagement(
+    *, db: Any, tenant_id: str, engagement_id: str
+) -> None:
     """Best-effort graph rebuild after msgraph import. Failures are silently swallowed."""
     try:
         from services.governance_graph.builder import build_graph_for_engagement

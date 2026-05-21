@@ -61,7 +61,11 @@ def _get_snapshot_seq(db: Session, tenant_id: str) -> int:
 
 
 def _derive_from_assets(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
+    db: Session,
+    tenant_id: str,
+    snapshot_id: str,
+    derived_at: str,
+    engagement_id: str | None = None,
 ) -> tuple[int, int]:
     """Derive governance_asset, identity, and relationship nodes/edges from GaAsset."""
     nodes_upserted = 0
@@ -230,7 +234,11 @@ def _derive_from_assets(
 
 
 def _derive_from_candidates(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
+    db: Session,
+    tenant_id: str,
+    snapshot_id: str,
+    derived_at: str,
+    engagement_id: str | None = None,
 ) -> tuple[int, int]:
     """Derive candidate nodes and PROMOTED_FROM edges from GaAssetCandidate."""
     nodes_upserted = 0
@@ -290,7 +298,11 @@ def _derive_from_candidates(
 
 
 def _derive_from_findings(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
+    db: Session,
+    tenant_id: str,
+    snapshot_id: str,
+    derived_at: str,
+    engagement_id: str | None = None,
 ) -> tuple[int, int]:
     """Derive finding, control nodes and edges from FaNormalizedFinding."""
     nodes_upserted = 0
@@ -387,7 +399,11 @@ def _derive_from_findings(
 
 
 def _derive_from_scans(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
+    db: Session,
+    tenant_id: str,
+    snapshot_id: str,
+    derived_at: str,
+    engagement_id: str | None = None,
 ) -> tuple[int, int]:
     """Derive scan nodes and DETECTED_BY edges from FaScanResult."""
     nodes_upserted = 0
@@ -455,7 +471,11 @@ def _derive_from_scans(
 
 
 def _derive_from_engagements(
-    db: Session, tenant_id: str, snapshot_id: str, derived_at: str, engagement_id: str | None = None
+    db: Session,
+    tenant_id: str,
+    snapshot_id: str,
+    derived_at: str,
+    engagement_id: str | None = None,
 ) -> tuple[int, int]:
     """Derive engagement nodes and SUPPORTS edges from FaEngagement."""
     nodes_upserted = 0
@@ -569,7 +589,9 @@ def _run_build(
     # Best-effort derivation — pass engagement_id so scoped rebuilds filter correctly
     for step_name, step_fn in _DERIVATION_STEPS:
         try:
-            n, e = step_fn(db, tenant_id, snapshot_id, rebuild_started_at, engagement_id)
+            n, e = step_fn(
+                db, tenant_id, snapshot_id, rebuild_started_at, engagement_id
+            )
             total_nodes += n
             total_edges += e
         except Exception:  # noqa: BLE001
@@ -651,7 +673,9 @@ def build_graph(
     triggered_by: str = "rebuild_api",
 ) -> GraphBuildResult:
     """Rebuild the full governance topology graph for a tenant."""
-    return _run_build(db, tenant_id=tenant_id, triggered_by=triggered_by, engagement_id=None)
+    return _run_build(
+        db, tenant_id=tenant_id, triggered_by=triggered_by, engagement_id=None
+    )
 
 
 def build_graph_for_engagement(
