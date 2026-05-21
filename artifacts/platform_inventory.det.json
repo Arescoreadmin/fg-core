@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 365,
+    "contract_count": 366,
     "contract_only": [],
-    "runtime_count": 469,
+    "runtime_count": 470,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "d376699079b33965a94ce659ceb67ed1aa3a5370e21ae5cb009d6351f0aac470",
+  "governance_fingerprint": "b4259da3a71eea4fbabf360b66e7af640ba12328c482938103cbed606b76ec90",
   "planes": [
     {
       "compat": {
@@ -610,6 +610,7 @@
       "POST /field-assessment/engagements/{engagement_id}/document-analyses",
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",
       "POST /field-assessment/engagements/{engagement_id}/observations",
+      "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-approve",
       "POST /field-assessment/engagements/{engagement_id}/scan-results",
       "POST /governance/assets",
       "POST /governance/assets/{asset_id}/attestations",

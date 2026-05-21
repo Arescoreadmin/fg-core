@@ -26,7 +26,11 @@ import api.db_models_field_assessment  # noqa: F401
 import api.db_models_drift  # noqa: F401
 import api.db_models_governance_report  # noqa: F401
 
-from api.db_models_field_assessment import FaEvidenceLink, FaNormalizedFinding
+from api.db_models_field_assessment import (
+    FaEvidenceLink,
+    FaNormalizedFinding,
+    FaScanResult,
+)
 from services.canonical import utc_iso8601_z_now
 from services.field_assessment.normalizer import normalize_scan_findings
 from services.field_assessment.store import create_scan_result
@@ -55,7 +59,7 @@ def db(engine):
         yield session
 
 
-def _make_scan(db: Session, scan_id_suffix: str = "a") -> object:
+def _make_scan(db: Session, scan_id_suffix: str = "a") -> FaScanResult:
     return create_scan_result(
         db,
         tenant_id=_TENANT,

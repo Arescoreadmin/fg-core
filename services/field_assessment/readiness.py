@@ -1061,7 +1061,9 @@ class _ReadinessBuilder:
                 evidence_present=[],
                 missing_items=["qa_approved_report"],
                 related_entity_ids=[
-                    str(_value(r, "id")) for r in self.reports if _value(r, "is_finalized")
+                    str(_value(r, "id"))
+                    for r in self.reports
+                    if _value(r, "is_finalized")
                 ],
                 blocks_status_transition=["delivered"],
                 recommended_action_id="action.approve_report_qa",

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 from types import SimpleNamespace
+from typing import Any
 
 os.environ.setdefault("FG_ENV", "test")
 
@@ -21,7 +22,7 @@ from services.field_assessment.playbooks import get_playbook
 from services.field_assessment.readiness import build_execution_state
 
 
-def _make_engagement(assessment_type: str = "ai_governance") -> object:
+def _make_engagement(assessment_type: str = "ai_governance") -> Any:
     return SimpleNamespace(
         id="eng-qa-gate",
         assessment_type=assessment_type,
@@ -35,7 +36,7 @@ def _make_report(
     is_finalized: bool = True,
     qa_approved_by: str | None = None,
     qa_approved_at: str | None = None,
-) -> object:
+) -> Any:
     return SimpleNamespace(
         id=report_id,
         is_finalized=is_finalized,
@@ -44,14 +45,14 @@ def _make_report(
     )
 
 
-def _get_gate(state: object, gate_id: str) -> object:
+def _get_gate(state: Any, gate_id: str) -> Any:
     for gate in state.gates:
         if gate.gate_id == gate_id:
             return gate
     raise AssertionError(f"gate {gate_id!r} not found")
 
 
-def _get_action(state: object, action_id: str) -> object | None:
+def _get_action(state: Any, action_id: str) -> Any | None:
     for action in state.next_actions:
         if action.action_id == action_id:
             return action
