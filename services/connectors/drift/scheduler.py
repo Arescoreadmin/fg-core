@@ -115,7 +115,7 @@ def list_schedules(
     tenant_id: str,
     engagement_id: str,
 ) -> list[FaConnectorSchedule]:
-    return (
+    rows = (
         db.execute(
             select(FaConnectorSchedule).where(
                 FaConnectorSchedule.tenant_id == tenant_id,
@@ -125,6 +125,7 @@ def list_schedules(
         .scalars()
         .all()
     )
+    return list(rows)
 
 
 def deactivate_schedule(

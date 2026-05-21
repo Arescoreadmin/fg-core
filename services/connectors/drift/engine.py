@@ -29,7 +29,11 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.db_models_field_assessment import FaEvidenceLink, FaNormalizedFinding, FaScanResult
+from api.db_models_field_assessment import (
+    FaEvidenceLink,
+    FaNormalizedFinding,
+    FaScanResult,
+)
 
 log = logging.getLogger("frostgate.connectors.drift.engine")
 
@@ -57,14 +61,16 @@ def _stable_key(finding_type: str, title: str) -> str:
 class DriftFindingRecord:
     """Classification result for a single finding in a drift computation."""
 
-    finding_id: str               # FaNormalizedFinding.id from the current scan row
+    finding_id: str  # FaNormalizedFinding.id from the current scan row
     findings_hash: str
     title: str
-    severity: str                 # current severity
-    baseline_severity: str | None # None when not in baseline
-    delta_class: str              # new | persisted | resolved | regressed | escalated | de_escalated
+    severity: str  # current severity
+    baseline_severity: str | None  # None when not in baseline
+    delta_class: (
+        str  # new | persisted | resolved | regressed | escalated | de_escalated
+    )
     evidence_ref_ids: list[str]
-    rationale: str                # human-readable explanation of classification
+    rationale: str  # human-readable explanation of classification
 
 
 @dataclass
@@ -104,26 +110,34 @@ def _findings_for_scan(
     Uses (finding_type, title) as the stable key so the same logical finding
     matches across scans regardless of per-run row ID variation.
     """
-    link_ids = db.execute(
-        select(FaEvidenceLink.source_entity_id).where(
-            FaEvidenceLink.tenant_id == tenant_id,
-            FaEvidenceLink.engagement_id == engagement_id,
-            FaEvidenceLink.source_entity_type == "finding",
-            FaEvidenceLink.evidence_entity_type == "scan_result",
-            FaEvidenceLink.evidence_entity_id == scan_id,
+    link_ids = (
+        db.execute(
+            select(FaEvidenceLink.source_entity_id).where(
+                FaEvidenceLink.tenant_id == tenant_id,
+                FaEvidenceLink.engagement_id == engagement_id,
+                FaEvidenceLink.source_entity_type == "finding",
+                FaEvidenceLink.evidence_entity_type == "scan_result",
+                FaEvidenceLink.evidence_entity_id == scan_id,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     if not link_ids:
         return {}
 
-    rows = db.execute(
-        select(FaNormalizedFinding).where(
-            FaNormalizedFinding.tenant_id == tenant_id,
-            FaNormalizedFinding.engagement_id == engagement_id,
-            FaNormalizedFinding.id.in_(set(link_ids)),
+    rows = (
+        db.execute(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.tenant_id == tenant_id,
+                FaNormalizedFinding.engagement_id == engagement_id,
+                FaNormalizedFinding.id.in_(set(link_ids)),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return {_stable_key(r.finding_type, r.title): r for r in rows}
 
@@ -144,13 +158,17 @@ def _stable_keys_in_earlier_scans(
     if not candidate_keys:
         return set()
 
-    earlier_scan_ids = db.execute(
-        select(FaScanResult.id).where(
-            FaScanResult.tenant_id == tenant_id,
-            FaScanResult.engagement_id == engagement_id,
-            FaScanResult.collected_at < before_collected_at,
+    earlier_scan_ids = (
+        db.execute(
+            select(FaScanResult.id).where(
+                FaScanResult.tenant_id == tenant_id,
+                FaScanResult.engagement_id == engagement_id,
+                FaScanResult.collected_at < before_collected_at,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     if not earlier_scan_ids:
         return set()
@@ -164,19 +182,25 @@ def _stable_keys_in_earlier_scans(
                 FaEvidenceLink.evidence_entity_type == "scan_result",
                 FaEvidenceLink.evidence_entity_id.in_(set(earlier_scan_ids)),
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
     if not earlier_finding_ids:
         return set()
 
-    earlier_rows = db.execute(
-        select(FaNormalizedFinding).where(
-            FaNormalizedFinding.tenant_id == tenant_id,
-            FaNormalizedFinding.engagement_id == engagement_id,
-            FaNormalizedFinding.id.in_(earlier_finding_ids),
+    earlier_rows = (
+        db.execute(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.tenant_id == tenant_id,
+                FaNormalizedFinding.engagement_id == engagement_id,
+                FaNormalizedFinding.id.in_(earlier_finding_ids),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     earlier_keys = {_stable_key(r.finding_type, r.title) for r in earlier_rows}
     return earlier_keys & candidate_keys
@@ -253,7 +277,11 @@ def compute_drift(
         row = current_row or baseline_row
         assert row is not None  # guaranteed by all_keys construction
 
-        current_sev = current_row.severity if current_row else (baseline_row.severity if baseline_row else "informational")
+        current_sev = (
+            current_row.severity
+            if current_row
+            else (baseline_row.severity if baseline_row else "informational")
+        )
         baseline_sev: str | None = baseline_row.severity if baseline_row else None
 
         if in_current and in_baseline:
@@ -287,7 +315,9 @@ def compute_drift(
                 rationale = "Finding not present in baseline — new attack surface."
         else:
             delta = "resolved"
-            rationale = "Finding present in baseline but absent from current scan — resolved."
+            rationale = (
+                "Finding present in baseline but absent from current scan — resolved."
+            )
 
         assert current_row is not None or baseline_row is not None
         output_row = current_row if current_row is not None else baseline_row

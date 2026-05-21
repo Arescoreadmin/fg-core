@@ -247,7 +247,7 @@ def list_active_alerts(
     engagement_id: str,
     limit: int = 100,
 ) -> list[FaDriftAlert]:
-    return (
+    rows = (
         db.execute(
             select(FaDriftAlert)
             .where(
@@ -261,3 +261,4 @@ def list_active_alerts(
         .scalars()
         .all()
     )
+    return list(rows)

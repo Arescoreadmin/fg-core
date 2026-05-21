@@ -50,12 +50,12 @@ _GPS_CAPS: dict[str, int] = {
 _SIGNIFICANCE_THRESHOLD = 2
 
 # Days-since-scan decay table for drift_confidence (days → confidence)
-_CONFIDENCE_DECAY: list[tuple[int, int]] = [
+_CONFIDENCE_DECAY: list[tuple[float, int]] = [
     (3, 100),
     (7, 85),
     (14, 70),
     (30, 50),
-    (math.inf, 30),  # type: ignore[arg-type]
+    (math.inf, 30),
 ]
 
 _NIST_FUNCTIONS = ("GOVERN", "MAP", "MEASURE", "MANAGE", "IMPROVE")
@@ -64,7 +64,7 @@ _NIST_FUNCTIONS = ("GOVERN", "MAP", "MEASURE", "MANAGE", "IMPROVE")
 @dataclass(frozen=True)
 class DomainSubscore:
     function: str  # NIST-AI-RMF function label
-    score: int     # 0–100
+    score: int  # 0–100
     open_finding_count: int
 
 
@@ -74,9 +74,9 @@ class PostureDelta:
 
     baseline_gps: int
     current_gps: int
-    gps_delta: int                    # current − baseline; negative = degraded
-    drift_severity: str               # critical_regression | posture_degraded | posture_improved | stable | no_baseline
-    drift_confidence: int             # 0–100 time-decayed
+    gps_delta: int  # current − baseline; negative = degraded
+    drift_severity: str  # critical_regression | posture_degraded | posture_improved | stable | no_baseline
+    drift_confidence: int  # 0–100 time-decayed
     drift_confidence_reason: str
     domain_subscores: list[DomainSubscore] = field(default_factory=list)
     counts: dict[str, int] = field(default_factory=dict)
@@ -110,8 +110,14 @@ def _drift_confidence(current_scan_collected_at: str) -> tuple[int, str]:
             if days <= 14:
                 return conf, f"scan is {days}d old — moderate confidence"
             if days <= 30:
-                return conf, f"scan is {days}d old — reduced confidence; consider a fresh scan"
-            return conf, f"scan is {days}d old — low confidence; fresh assessment recommended"
+                return (
+                    conf,
+                    f"scan is {days}d old — reduced confidence; consider a fresh scan",
+                )
+            return (
+                conf,
+                f"scan is {days}d old — low confidence; fresh assessment recommended",
+            )
     return 30, "scan age exceeds 30 days — low confidence"
 
 
@@ -168,7 +174,9 @@ def _nist_subscores(
 
     result = []
     for fn in _NIST_FUNCTIONS:
-        score = _score_from_severity_counts(domain_counts[fn]) if domain_counts[fn] else 100
+        score = (
+            _score_from_severity_counts(domain_counts[fn]) if domain_counts[fn] else 100
+        )
         result.append(
             DomainSubscore(
                 function=fn,
@@ -196,13 +204,13 @@ def compute_posture_delta(
     no_baseline=True: first run, returns no_baseline severity without computation.
     """
     if no_baseline:
-        current_counts = {
-            f.get("severity", "informational"): 0 for f in current_open_findings
+        no_baseline_counts: dict[str, int] = {
+            str(f.get("severity", "informational")): 0 for f in current_open_findings
         }
         for f in current_open_findings:
-            s = f.get("severity", "informational")
-            current_counts[s] = current_counts.get(s, 0) + 1
-        current_gps = _score_from_severity_counts(current_counts)
+            severity = str(f.get("severity", "informational"))
+            no_baseline_counts[severity] = no_baseline_counts.get(severity, 0) + 1
+        current_gps = _score_from_severity_counts(no_baseline_counts)
         conf, conf_reason = _drift_confidence(current_scan_collected_at)
         return PostureDelta(
             baseline_gps=current_gps,

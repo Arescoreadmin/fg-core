@@ -1987,7 +1987,7 @@ def get_drift_report(
     )
 
     # Emit alerts if requested
-    drift_finding_dicts = [
+    drift_finding_dicts: list[dict[str, Any]] = [
         {
             "finding_id": f.finding_id,
             "severity": f.severity,
@@ -1999,11 +1999,15 @@ def get_drift_report(
         for f in drift.findings
     ]
     # Enrich nist mappings for alert family grouping
-    finding_nist_map: dict[str, list] = {
-        r.id: r.nist_ai_rmf_mappings or [] for r in current_rows + baseline_rows
+    finding_nist_map: dict[str, list[Any]] = {
+        r.id: r.nist_ai_rmf_mappings or []
+        for r in list(current_rows) + list(baseline_rows)
     }
     for d in drift_finding_dicts:
-        d["nist_ai_rmf_mappings"] = finding_nist_map.get(d["finding_id"], [])
+        finding_id = d.get("finding_id")
+        d["nist_ai_rmf_mappings"] = (
+            finding_nist_map.get(finding_id, []) if isinstance(finding_id, str) else []
+        )
 
     alerts_emitted = 0
     if emit_alerts:
