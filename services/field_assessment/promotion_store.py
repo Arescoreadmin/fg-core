@@ -64,10 +64,10 @@ def create_promotion(
         baseline_readiness_score=baseline_readiness_score,
     )
     try:
-        db.add(record)
-        db.flush()
+        with db.begin_nested():
+            db.add(record)
+            db.flush()
     except IntegrityError:
-        db.rollback()
         raise PromotionAlreadyExists(
             f"promotion already exists for engagement {engagement_id}"
         )
