@@ -1,3 +1,23 @@
+## 2026-05-21 — PR 5.5: Drift Detection + Continuous Connector Intelligence
+
+**Classification:** New service layer + 4 new API routes + 3 new DB tables. Touches: `services/connectors/drift/`, `services/connectors/msgraph/delta.py`, `api/db_models_drift.py`, `api/field_assessment.py`, `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`. No CI workflow changes. No auth logic changes.
+
+**SOC review:**
+- 3 new tables (`fa_drift_baselines`, `fa_drift_alerts`, `fa_connector_schedules`): all tenant-scoped; `tenant_id` has no DEFAULT — service layer always provides explicit value
+- `FaDriftBaseline`: one active row per engagement; prior baseline de-activated before insert; full audit trail (actor_email, rationale, pinned_at)
+- `FaDriftAlert`: unique constraint on `(tenant_id, engagement_id, alert_fingerprint)`; deduplication prevents duplicate rows for ongoing conditions; reactivation path handles resolved→recurred fingerprints
+- All 4 new routes require `governance:read` or `governance:write` scope; tenant resolved from auth context only — never from request body
+- `POST /baseline` verifies scan belongs to requesting tenant before pinning; emits audit event
+- `GET /drift-report` returns 409 (not 200 empty) when no baseline is pinned — no silent auto-selection
+- Drift engine operates on `FaNormalizedFinding` rows only — no raw user content, no PII
+- Stable-key matching via `SHA-256(finding_type:title)` — deterministic, no random IDs
+- GPS score and domain subscores are pure arithmetic — no LLM inference, no external calls
+- Route inventory regenerated via `make route-inventory-generate`; contract authority refreshed via `make contract-authority-refresh`
+
+**43 new drift tests pass. 177 existing tests pass. No auth logic change.**
+
+---
+
 ## 2026-05-18 — PR 98: Deterministic Governance Report Core
 
 **Classification:** New service + API routes + DB schema migration. Touches: `services/governance/report/`, `api/governance_report_manager.py`, `api/db_models_governance_report.py`, `migrations/postgres/0055_governance_reports.sql`, `tools/ci/route_inventory.json`. No CI changes. No auth logic changes. No existing route modifications.

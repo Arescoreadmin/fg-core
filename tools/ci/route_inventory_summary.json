@@ -99,13 +99,13 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 344,
+  "contract_count": 356,
   "contract_only": [],
   "plane_coverage": {
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 290,
+    "control": 294,
     "data": 52,
     "evidence": 23,
     "rbac": 5,
@@ -113,7 +113,7 @@
     "ui": 47
   },
   "removed": [],
-  "runtime_count": 456,
+  "runtime_count": 460,
   "runtime_only": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",
@@ -135,13 +135,6 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
-    "GET /governance/graph/anomalies",
-    "GET /governance/graph/coverage",
-    "GET /governance/graph/lineage/{node_id}",
-    "GET /governance/graph/nodes",
-    "GET /governance/graph/nodes/{node_id}",
-    "GET /governance/graph/stats",
-    "GET /governance/graph/traverse",
     "GET /metrics",
     "GET /ui/ai",
     "GET /ui/ai/experience",
@@ -211,7 +204,6 @@
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
-    "POST /governance/graph/rebuild",
     "POST /ui/ai/chat",
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
@@ -220,14 +212,5 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": [
-    "GET /governance/graph/anomalies",
-    "GET /governance/graph/coverage",
-    "GET /governance/graph/lineage/{node_id}",
-    "GET /governance/graph/nodes",
-    "GET /governance/graph/nodes/{node_id}",
-    "GET /governance/graph/stats",
-    "GET /governance/graph/traverse",
-    "POST /governance/graph/rebuild"
-  ]
+  "unauthorized_runtime_only": []
 }

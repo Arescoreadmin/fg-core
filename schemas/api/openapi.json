@@ -2867,6 +2867,76 @@
         "title": "ConnectorIngestRequest",
         "type": "object"
       },
+      "ConnectorScheduleBody": {
+        "properties": {
+          "cron_expression": {
+            "maxLength": 128,
+            "minLength": 9,
+            "title": "Cron Expression",
+            "type": "string"
+          },
+          "source_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_type",
+          "cron_expression"
+        ],
+        "title": "ConnectorScheduleBody",
+        "type": "object"
+      },
+      "ConnectorScheduleResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "cron_expression": {
+            "title": "Cron Expression",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "engagement_id",
+          "source_type",
+          "cron_expression",
+          "created_by",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConnectorScheduleResponse",
+        "type": "object"
+      },
       "ContinuityOpportunityResponse": {
         "properties": {
           "opportunity_id": {
@@ -5288,6 +5358,190 @@
           "provenance_metadata"
         ],
         "title": "DriftEventResponse",
+        "type": "object"
+      },
+      "DriftFindingOut": {
+        "properties": {
+          "baseline_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Severity"
+          },
+          "delta_class": {
+            "title": "Delta Class",
+            "type": "string"
+          },
+          "evidence_ref_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ref Ids",
+            "type": "array"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "findings_hash": {
+            "title": "Findings Hash",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "findings_hash",
+          "title",
+          "severity",
+          "baseline_severity",
+          "delta_class",
+          "evidence_ref_ids",
+          "rationale"
+        ],
+        "title": "DriftFindingOut",
+        "type": "object"
+      },
+      "DriftReportResponse": {
+        "properties": {
+          "alerts_emitted": {
+            "title": "Alerts Emitted",
+            "type": "integer"
+          },
+          "baseline_gps": {
+            "title": "Baseline Gps",
+            "type": "integer"
+          },
+          "baseline_pinned_at": {
+            "title": "Baseline Pinned At",
+            "type": "string"
+          },
+          "baseline_pinned_by": {
+            "title": "Baseline Pinned By",
+            "type": "string"
+          },
+          "baseline_scan_id": {
+            "title": "Baseline Scan Id",
+            "type": "string"
+          },
+          "baseline_scan_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Scan Signature"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "current_gps": {
+            "title": "Current Gps",
+            "type": "integer"
+          },
+          "current_scan_id": {
+            "title": "Current Scan Id",
+            "type": "string"
+          },
+          "current_scan_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Scan Signature"
+          },
+          "domain_subscores": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Domain Subscores",
+            "type": "array"
+          },
+          "drift_confidence": {
+            "title": "Drift Confidence",
+            "type": "integer"
+          },
+          "drift_confidence_reason": {
+            "title": "Drift Confidence Reason",
+            "type": "string"
+          },
+          "drift_severity": {
+            "title": "Drift Severity",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/DriftFindingOut"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "gps_delta": {
+            "title": "Gps Delta",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "engagement_id",
+          "baseline_scan_id",
+          "current_scan_id",
+          "baseline_pinned_at",
+          "baseline_pinned_by",
+          "baseline_scan_signature",
+          "current_scan_signature",
+          "drift_severity",
+          "drift_confidence",
+          "drift_confidence_reason",
+          "baseline_gps",
+          "current_gps",
+          "gps_delta",
+          "counts",
+          "domain_subscores",
+          "findings",
+          "alerts_emitted",
+          "computed_at"
+        ],
+        "title": "DriftReportResponse",
         "type": "object"
       },
       "EdgeResponse": {
@@ -9778,6 +10032,83 @@
           "assigned_by_email"
         ],
         "title": "OwnerResponse",
+        "type": "object"
+      },
+      "PinBaselineBody": {
+        "properties": {
+          "rationale": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "scan_result_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Scan Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scan_result_id"
+        ],
+        "title": "PinBaselineBody",
+        "type": "object"
+      },
+      "PinBaselineResponse": {
+        "properties": {
+          "actor_email": {
+            "title": "Actor Email",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "pinned_at": {
+            "title": "Pinned At",
+            "type": "string"
+          },
+          "pinned_scan_id": {
+            "title": "Pinned Scan Id",
+            "type": "string"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          }
+        },
+        "required": [
+          "id",
+          "engagement_id",
+          "pinned_scan_id",
+          "actor_email",
+          "rationale",
+          "is_active",
+          "pinned_at"
+        ],
+        "title": "PinBaselineResponse",
         "type": "object"
       },
       "PlaybookTriggerRequest": {
@@ -30088,6 +30419,75 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/baseline": {
+      "post": {
+        "description": "Pin a scan result as the canonical drift baseline for this engagement.\n\nDrift reports always compute against the active baseline \u2014 never auto-select.\nPinning de-activates the previous baseline and emits an audit event.",
+        "operationId": "pin_baseline_field_assessment_engagements__engagement_id__baseline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinBaselineBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinBaselineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pin Baseline",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import": {
       "post": {
         "operationId": "import_msgraph_connector_run_route_field_assessment_engagements__engagement_id__connector_runs_msgraph_import_post",
@@ -30220,6 +30620,136 @@
         "summary": "Get Msgraph Report",
         "tags": [
           "connectors-msgraph-report"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/connector-schedules": {
+      "get": {
+        "description": "List all connector schedules for an engagement.",
+        "operationId": "list_connector_schedules_field_assessment_engagements__engagement_id__connector_schedules_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectorScheduleResponse"
+                  },
+                  "title": "Response List Connector Schedules Field Assessment Engagements  Engagement Id  Connector Schedules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Connector Schedules",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "description": "Create or update a cron schedule for a connector/engagement pair.\n\nOne active schedule per (engagement_id, source_type). Providing a new\ncron expression for an existing source_type replaces the prior schedule.",
+        "operationId": "create_connector_schedule_field_assessment_engagements__engagement_id__connector_schedules_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectorScheduleBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorScheduleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Connector Schedule",
+        "tags": [
+          "field-assessment"
         ]
       }
     },
@@ -30358,6 +30888,88 @@
           }
         },
         "summary": "Register Document Analysis Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/drift-report": {
+      "get": {
+        "description": "Compute drift between the pinned baseline and a specified current scan.\n\nReturns delta-classified findings, GPS scores, drift severity, NIST subscores,\nand chained scan signatures for independent auditability.\nRequires a pinned baseline \u2014 returns 409 when none exists.",
+        "operationId": "get_drift_report_field_assessment_engagements__engagement_id__drift_report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ID of the current FaScanResult",
+            "in": "query",
+            "name": "current_scan_id",
+            "required": true,
+            "schema": {
+              "description": "ID of the current FaScanResult",
+              "title": "Current Scan Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Persist alert records for this drift run",
+            "in": "query",
+            "name": "emit_alerts",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Persist alert records for this drift run",
+              "title": "Emit Alerts",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Drift Report",
         "tags": [
           "field-assessment"
         ]

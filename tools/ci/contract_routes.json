@@ -1358,6 +1358,12 @@
     },
     {
       "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/baseline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
       "scopes": [],
       "source": "contract"
@@ -1370,6 +1376,18 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-schedules",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-schedules",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/document-analyses",
       "scopes": [],
       "source": "contract"
@@ -1377,6 +1395,12 @@
     {
       "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/document-analyses",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/drift-report",
       "scopes": [],
       "source": "contract"
     },
@@ -1665,6 +1689,54 @@
     {
       "method": "POST",
       "path": "/governance/changes/{change_id}/approve",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/anomalies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/coverage",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/lineage/{node_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/nodes",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/nodes/{node_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/graph/rebuild",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/stats",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/traverse",
       "scopes": [],
       "source": "contract"
     },
@@ -2065,7 +2137,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-21T01:20:20.562389+00:00",
+  "generated_at": "2026-05-21T11:11:25.390608+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
