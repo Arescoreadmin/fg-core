@@ -11242,3 +11242,31 @@ Persistent governance asset candidate staging between connector detection and Ga
 **Tests:** 56 tests total — 15 model tests, 12 mutation tests, 14 query tests, 8 integrity tests (+ 7 existing bridge tests all still pass).
 
 **Gates passed:** ruff, mypy, pytest tests/governance_graph/ (56/56), pytest test_field_assessment_msgraph_bridge (7/7), route-inventory-generate, refresh_contract_authority, test_ci_soc_invariants, test_ci_security_guards, test_ci_route_lints, test_main_integrity.
+
+---
+
+### 2026-05-21 — PR 5.5: Drift Detection + Continuous Connector Intelligence
+
+**Branch:** `feat/drift-detection-continuous-intelligence-pr55`
+
+**Area:** `services/connectors/drift/`, `services/connectors/msgraph/delta.py`, `api/db_models_drift.py`, `api/field_assessment.py`, `tools/ci/`
+
+**What was built:**
+- `services/connectors/drift/engine.py` — connector-agnostic delta engine; stable cross-scan key via `SHA-256(finding_type:title)`; 6 delta classes including escalated/de_escalated
+- `services/connectors/drift/scorer.py` — Governance Posture Score (0–100), GPS delta, NIST-AI-RMF domain subscores, time-decayed drift_confidence
+- `services/connectors/drift/alerts.py` — fingerprinted alert deduplication; family grouping by NIST domain; reactivation of resolved alerts on reoccurrence
+- `services/connectors/drift/scheduler.py` — cron expression registry with 5-field validation
+- `services/connectors/msgraph/delta.py` — connector-level escalated/de_escalated enrichment
+- `api/db_models_drift.py` — `fa_drift_baselines`, `fa_drift_alerts`, `fa_connector_schedules`
+- `api/field_assessment.py` — 4 new routes: POST /baseline, GET /drift-report, POST/GET /connector-schedules
+
+**Bug fixes included (4 bot-reported):**
+- P1: Stable cross-scan finding key (finding IDs are scan-specific; matching now uses finding_type+title hash)
+- P1: Regressed findings excluded from baseline GPS inputs
+- P2: Alert fingerprint reoccurrence path reactivates inactive rows instead of inserting duplicate
+- P2: Manifest signature read from `normalized_payload["manifest"]` (correct bridge key)
+
+**CI fixes:**
+- Route inventory regenerated (4 new routes)
+- Contract authority refreshed (`make contract-authority-refresh`)
+- SOC_EXECUTION_GATES updated

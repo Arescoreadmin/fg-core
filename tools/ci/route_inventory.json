@@ -4796,6 +4796,23 @@
       ],
       "file": "api/field_assessment.py",
       "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/baseline",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
       "plane": "control",
       "plane_id": "control",
@@ -4830,6 +4847,40 @@
       ],
       "file": "api/field_assessment.py",
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-schedules",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-schedules",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/document-analyses",
       "plane": "control",
       "plane_id": "control",
@@ -4853,6 +4904,23 @@
       "scoped": true,
       "scopes": [
         "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/drift-report",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -7776,7 +7844,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-21T01:20:20.548655+00:00",
+  "generated_at": "2026-05-21T11:11:25.380893+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

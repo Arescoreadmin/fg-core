@@ -52,7 +52,7 @@ class Finding(BaseModel):
     remediation_effort: Literal["low", "medium", "high"]
     remediation_owner: Literal["IT", "Legal", "HR", "Exec", "Vendor"]
     first_seen_scan_id: str | None = None
-    delta_status: Literal["new", "persisted", "resolved", "regressed"] | None = None
+    delta_status: Literal["new", "persisted", "resolved", "regressed", "escalated", "de_escalated"] | None = None
     evidence_refs: list[str] = Field(default_factory=list)  # ref_id references
 
 

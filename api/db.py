@@ -186,6 +186,7 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_graph"
     )  # PR 5: governance topology graph
+    importlib.import_module("api.db_models_drift")  # PR 5.5: drift detection
 
 
 def _get_base():

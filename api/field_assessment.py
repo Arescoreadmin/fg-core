@@ -86,6 +86,16 @@ from api.db_models_field_assessment import (
     FaScanResult,
 )
 
+from api.db_models_drift import FaDriftBaseline
+from services.connectors.drift.engine import compute_drift
+from services.connectors.drift.scorer import compute_posture_delta
+from services.connectors.drift.alerts import emit_drift_alerts
+from services.connectors.drift.scheduler import (
+    InvalidCronExpression,
+    upsert_schedule,
+    list_schedules,
+)
+
 log = logging.getLogger("frostgate.api.field_assessment")
 
 router = APIRouter(
@@ -1677,6 +1687,484 @@ def list_audit_events_route(
             payload=r.payload or {},
             schema_version=r.schema_version,
             created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Route — Baseline pinning (Trust but Verify: explicit, named, audited)
+# ---------------------------------------------------------------------------
+
+
+class PinBaselineBody(BaseModel):
+    scan_result_id: str = Field(..., min_length=1, max_length=64)
+    rationale: str | None = Field(None, max_length=1024)
+
+
+class PinBaselineResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    engagement_id: str
+    pinned_scan_id: str
+    actor_email: str
+    rationale: str | None
+    is_active: bool
+    pinned_at: str
+
+
+@router.post(
+    "/engagements/{engagement_id}/baseline",
+    response_model=PinBaselineResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def pin_baseline(
+    engagement_id: str,
+    body: PinBaselineBody,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> PinBaselineResponse:
+    """Pin a scan result as the canonical drift baseline for this engagement.
+
+    Drift reports always compute against the active baseline — never auto-select.
+    Pinning de-activates the previous baseline and emits an audit event.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    # Verify the scan belongs to this engagement/tenant
+    scan_row = db.execute(
+        select(FaScanResult).where(
+            FaScanResult.id == body.scan_result_id,
+            FaScanResult.tenant_id == tenant_id,
+            FaScanResult.engagement_id == engagement_id,
+        )
+    ).scalar_one_or_none()
+    if scan_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "SCAN_NOT_FOUND", "scan_result_id not found for this engagement"
+            ),
+        )
+
+    now = utc_iso8601_z_now()
+
+    # De-activate previous active baseline
+    prev = db.execute(
+        select(FaDriftBaseline).where(
+            FaDriftBaseline.tenant_id == tenant_id,
+            FaDriftBaseline.engagement_id == engagement_id,
+            FaDriftBaseline.is_active.is_(True),
+        )
+    ).scalar_one_or_none()
+    if prev is not None:
+        prev.is_active = False
+
+    import hashlib
+
+    baseline_id = hashlib.sha256(
+        f"{tenant_id}:{engagement_id}:{body.scan_result_id}:{now}".encode()
+    ).hexdigest()[:32]
+    baseline = FaDriftBaseline(
+        id=baseline_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        pinned_scan_id=body.scan_result_id,
+        actor_email=actor,
+        rationale=body.rationale,
+        is_active=True,
+        pinned_at=now,
+    )
+    db.add(baseline)
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="drift.baseline_pinned",
+        actor=actor,
+        reason_code="BASELINE_PINNED",
+        payload={"pinned_scan_id": body.scan_result_id, "rationale": body.rationale},
+    )
+    db.commit()
+    return PinBaselineResponse(
+        id=baseline.id,
+        engagement_id=baseline.engagement_id,
+        pinned_scan_id=baseline.pinned_scan_id,
+        actor_email=baseline.actor_email,
+        rationale=baseline.rationale,
+        is_active=baseline.is_active,
+        pinned_at=baseline.pinned_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Route — Drift report
+# ---------------------------------------------------------------------------
+
+
+class DriftFindingOut(BaseModel):
+    finding_id: str
+    findings_hash: str
+    title: str
+    severity: str
+    baseline_severity: str | None
+    delta_class: str
+    evidence_ref_ids: list[str]
+    rationale: str
+
+
+class DriftReportResponse(BaseModel):
+    tenant_id: str
+    engagement_id: str
+    baseline_scan_id: str
+    current_scan_id: str
+    baseline_pinned_at: str
+    baseline_pinned_by: str
+    baseline_scan_signature: str | None
+    current_scan_signature: str | None
+    drift_severity: str
+    drift_confidence: int
+    drift_confidence_reason: str
+    baseline_gps: int
+    current_gps: int
+    gps_delta: int
+    counts: dict[str, int]
+    domain_subscores: list[dict]
+    findings: list[DriftFindingOut]
+    alerts_emitted: int
+    computed_at: str
+
+
+@router.get(
+    "/engagements/{engagement_id}/drift-report",
+    response_model=DriftReportResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_drift_report(
+    engagement_id: str,
+    request: Request,
+    current_scan_id: str = Query(..., description="ID of the current FaScanResult"),
+    emit_alerts: bool = Query(
+        True, description="Persist alert records for this drift run"
+    ),
+    db: Session = Depends(auth_ctx_db_session),
+) -> DriftReportResponse:
+    """Compute drift between the pinned baseline and a specified current scan.
+
+    Returns delta-classified findings, GPS scores, drift severity, NIST subscores,
+    and chained scan signatures for independent auditability.
+    Requires a pinned baseline — returns 409 when none exists.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    baseline_row = db.execute(
+        select(FaDriftBaseline).where(
+            FaDriftBaseline.tenant_id == tenant_id,
+            FaDriftBaseline.engagement_id == engagement_id,
+            FaDriftBaseline.is_active.is_(True),
+        )
+    ).scalar_one_or_none()
+    if baseline_row is None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "NO_BASELINE",
+                "no pinned baseline for this engagement; POST /baseline first",
+            ),
+        )
+
+    try:
+        drift = compute_drift(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            baseline_scan_id=baseline_row.pinned_scan_id,
+            current_scan_id=current_scan_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("SCAN_NOT_FOUND", str(exc))
+        )
+
+    # Collect open findings for GPS computation
+    current_finding_ids_set = {
+        f.finding_id for f in drift.findings if f.delta_class != "resolved"
+    }
+    # Regressed findings were absent from the baseline by definition — exclude them.
+    # Only persisted/resolved/escalated/de_escalated represent findings that were
+    # actually in the baseline scan.
+    baseline_finding_ids_set = {
+        f.finding_id
+        for f in drift.findings
+        if f.delta_class in ("persisted", "resolved", "escalated", "de_escalated")
+    }
+
+    current_rows = (
+        db.execute(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.tenant_id == tenant_id,
+                FaNormalizedFinding.engagement_id == engagement_id,
+                FaNormalizedFinding.id.in_(current_finding_ids_set),
+                FaNormalizedFinding.status == "open",
+            )
+        )
+        .scalars()
+        .all()
+        if current_finding_ids_set
+        else []
+    )
+    baseline_rows = (
+        db.execute(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.tenant_id == tenant_id,
+                FaNormalizedFinding.engagement_id == engagement_id,
+                FaNormalizedFinding.id.in_(baseline_finding_ids_set),
+            )
+        )
+        .scalars()
+        .all()
+        if baseline_finding_ids_set
+        else []
+    )
+
+    current_open_dicts = [
+        {
+            "severity": r.severity,
+            "nist_ai_rmf_mappings": r.nist_ai_rmf_mappings or [],
+        }
+        for r in current_rows
+    ]
+    baseline_open_dicts = [
+        {
+            "severity": r.severity,
+            "nist_ai_rmf_mappings": r.nist_ai_rmf_mappings or [],
+        }
+        for r in baseline_rows
+    ]
+
+    # Fetch scan timestamps for confidence + verifiability
+    current_scan = db.get(FaScanResult, current_scan_id)
+    baseline_scan = db.get(FaScanResult, baseline_row.pinned_scan_id)
+    current_collected_at = (
+        current_scan.collected_at if current_scan else utc_iso8601_z_now()
+    )
+    baseline_collected_at = baseline_scan.collected_at if baseline_scan else None
+
+    # Scan signatures from stored manifest (verifiability chain).
+    # The MS Graph bridge stores manifest data under normalized_payload["manifest"],
+    # not "integrity_manifest". Try both keys for forward compatibility.
+    def _extract_signature(scan: Any) -> str | None:
+        if not scan:
+            return None
+        payload = scan.normalized_payload or {}
+        manifest = payload.get("manifest") or payload.get("integrity_manifest") or {}
+        return (
+            manifest.get("integrity_hash")
+            or manifest.get("manifest_hash")
+            or manifest.get("manifest_signature")
+        )
+
+    posture = compute_posture_delta(
+        drift,
+        current_open_findings=current_open_dicts,
+        baseline_open_findings=baseline_open_dicts,
+        current_scan_collected_at=current_collected_at,
+        baseline_scan_collected_at=baseline_collected_at,
+    )
+
+    # Emit alerts if requested
+    drift_finding_dicts = [
+        {
+            "finding_id": f.finding_id,
+            "severity": f.severity,
+            "title": f.title,
+            "delta_class": f.delta_class,
+            "baseline_severity": f.baseline_severity,
+            "nist_ai_rmf_mappings": [],  # enriched from DB above
+        }
+        for f in drift.findings
+    ]
+    # Enrich nist mappings for alert family grouping
+    finding_nist_map: dict[str, list] = {
+        r.id: r.nist_ai_rmf_mappings or [] for r in current_rows + baseline_rows
+    }
+    for d in drift_finding_dicts:
+        d["nist_ai_rmf_mappings"] = finding_nist_map.get(d["finding_id"], [])
+
+    alerts_emitted = 0
+    if emit_alerts:
+        alerts = emit_drift_alerts(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            drift_findings=drift_finding_dicts,
+        )
+        alerts_emitted = len(alerts)
+        db.commit()
+
+    now = utc_iso8601_z_now()
+    return DriftReportResponse(
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        baseline_scan_id=baseline_row.pinned_scan_id,
+        current_scan_id=current_scan_id,
+        baseline_pinned_at=baseline_row.pinned_at,
+        baseline_pinned_by=baseline_row.actor_email,
+        baseline_scan_signature=_extract_signature(baseline_scan),
+        current_scan_signature=_extract_signature(current_scan),
+        drift_severity=posture.drift_severity,
+        drift_confidence=posture.drift_confidence,
+        drift_confidence_reason=posture.drift_confidence_reason,
+        baseline_gps=posture.baseline_gps,
+        current_gps=posture.current_gps,
+        gps_delta=posture.gps_delta,
+        counts=posture.counts,
+        domain_subscores=[
+            {
+                "function": s.function,
+                "score": s.score,
+                "open_finding_count": s.open_finding_count,
+            }
+            for s in posture.domain_subscores
+        ],
+        findings=[
+            DriftFindingOut(
+                finding_id=f.finding_id,
+                findings_hash=f.findings_hash,
+                title=f.title,
+                severity=f.severity,
+                baseline_severity=f.baseline_severity,
+                delta_class=f.delta_class,
+                evidence_ref_ids=f.evidence_ref_ids,
+                rationale=f.rationale,
+            )
+            for f in drift.findings
+        ],
+        alerts_emitted=alerts_emitted,
+        computed_at=now,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Route — Connector schedules
+# ---------------------------------------------------------------------------
+
+
+class ConnectorScheduleBody(BaseModel):
+    source_type: str = Field(..., min_length=1, max_length=64)
+    cron_expression: str = Field(..., min_length=9, max_length=128)
+
+
+class ConnectorScheduleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    engagement_id: str
+    source_type: str
+    cron_expression: str
+    created_by: str
+    is_active: bool
+    created_at: str
+    updated_at: str
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-schedules",
+    response_model=ConnectorScheduleResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def create_connector_schedule(
+    engagement_id: str,
+    body: ConnectorScheduleBody,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ConnectorScheduleResponse:
+    """Create or update a cron schedule for a connector/engagement pair.
+
+    One active schedule per (engagement_id, source_type). Providing a new
+    cron expression for an existing source_type replaces the prior schedule.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    try:
+        schedule, is_new = upsert_schedule(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            source_type=body.source_type,
+            cron_expression=body.cron_expression,
+            created_by=actor,
+        )
+    except InvalidCronExpression as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error("INVALID_CRON_EXPRESSION", str(exc)),
+        )
+
+    db.commit()
+    return ConnectorScheduleResponse(
+        id=schedule.id,
+        engagement_id=schedule.engagement_id,
+        source_type=schedule.source_type,
+        cron_expression=schedule.cron_expression,
+        created_by=schedule.created_by,
+        is_active=schedule.is_active,
+        created_at=schedule.created_at,
+        updated_at=schedule.updated_at,
+    )
+
+
+@router.get(
+    "/engagements/{engagement_id}/connector-schedules",
+    response_model=list[ConnectorScheduleResponse],
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_connector_schedules(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[ConnectorScheduleResponse]:
+    """List all connector schedules for an engagement."""
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rows = list_schedules(db, tenant_id=tenant_id, engagement_id=engagement_id)
+    return [
+        ConnectorScheduleResponse(
+            id=r.id,
+            engagement_id=r.engagement_id,
+            source_type=r.source_type,
+            cron_expression=r.cron_expression,
+            created_by=r.created_by,
+            is_active=r.is_active,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
         )
         for r in rows
     ]
