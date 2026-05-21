@@ -64,6 +64,7 @@ class GovernanceWorkflow(Base):
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    finding_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=False)
     resolved_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     archived_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     metadata_: Mapped[dict] = mapped_column(

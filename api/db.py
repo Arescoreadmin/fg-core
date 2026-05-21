@@ -190,6 +190,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_workflows"
     )  # PR 6: governance workflow engine
+    importlib.import_module(
+        "api.db_models_governance_promotion"
+    )  # PR 8: governance promotion record
 
 
 def _get_base():
