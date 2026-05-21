@@ -90,7 +90,9 @@ def compute_drift_velocity(
         .scalars()
         .all()
     )
-    scans = list(reversed(scans))  # restore chronological order for delta/presence logic
+    scans = list(
+        reversed(scans)
+    )  # restore chronological order for delta/presence logic
 
     if len(scans) < 2:
         return None
@@ -113,21 +115,18 @@ def compute_drift_velocity(
 
     # --- MTTR and regression_rate via stable-key presence matrix ---
     scan_ids = [s.id for s in scans]
-    link_rows = (
-        db.execute(
-            select(
-                FaEvidenceLink.source_entity_id,
-                FaEvidenceLink.evidence_entity_id,
-            ).where(
-                FaEvidenceLink.tenant_id == tenant_id,
-                FaEvidenceLink.engagement_id == engagement_id,
-                FaEvidenceLink.source_entity_type == "finding",
-                FaEvidenceLink.evidence_entity_type == "scan_result",
-                FaEvidenceLink.evidence_entity_id.in_(scan_ids),
-            )
+    link_rows = db.execute(
+        select(
+            FaEvidenceLink.source_entity_id,
+            FaEvidenceLink.evidence_entity_id,
+        ).where(
+            FaEvidenceLink.tenant_id == tenant_id,
+            FaEvidenceLink.engagement_id == engagement_id,
+            FaEvidenceLink.source_entity_type == "finding",
+            FaEvidenceLink.evidence_entity_type == "scan_result",
+            FaEvidenceLink.evidence_entity_id.in_(scan_ids),
         )
-        .all()
-    )
+    ).all()
 
     finding_ids = {row[0] for row in link_rows}
     if not finding_ids:
@@ -187,9 +186,7 @@ def compute_drift_velocity(
             first_dt_k = _parse_iso(scans[first_seen].collected_at)
             last_dt_k = _parse_iso(scans[last_seen].collected_at)
             if first_dt_k and last_dt_k and last_dt_k > first_dt_k:
-                resolution_days.append(
-                    (last_dt_k - first_dt_k).total_seconds() / 86400
-                )
+                resolution_days.append((last_dt_k - first_dt_k).total_seconds() / 86400)
 
         # Regression: gap in presence (present, absent, then present again)
         sorted_idx = sorted(indices)
@@ -200,12 +197,8 @@ def compute_drift_velocity(
                 ever_resolved.add(key)  # was resolved at least once
                 break
 
-    mttr_days = (
-        sum(resolution_days) / len(resolution_days) if resolution_days else None
-    )
-    regression_rate = (
-        len(regressed) / len(ever_resolved) if ever_resolved else 0.0
-    )
+    mttr_days = sum(resolution_days) / len(resolution_days) if resolution_days else None
+    regression_rate = len(regressed) / len(ever_resolved) if ever_resolved else 0.0
 
     return DriftVelocity(
         tenant_id=tenant_id,

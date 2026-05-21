@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 356,
+    "contract_count": 365,
     "contract_only": [],
-    "runtime_count": 460,
+    "runtime_count": 469,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "0820bbbfb6ca0ae90f9177382a83bcc56b79502b58820992d059e3c5248f98fb",
+  "governance_fingerprint": "d376699079b33965a94ce659ceb67ed1aa3a5370e21ae5cb009d6351f0aac470",
   "planes": [
     {
       "compat": {
@@ -450,6 +450,8 @@
       "GET /field-assessment/engagements/{engagement_id}/connector-schedules",
       "GET /field-assessment/engagements/{engagement_id}/document-analyses",
       "GET /field-assessment/engagements/{engagement_id}/drift-report",
+      "GET /field-assessment/engagements/{engagement_id}/drift-report/correlation/{finding_id}",
+      "GET /field-assessment/engagements/{engagement_id}/drift-velocity",
       "GET /field-assessment/engagements/{engagement_id}/evidence-links",
       "GET /field-assessment/engagements/{engagement_id}/execution-state",
       "GET /field-assessment/engagements/{engagement_id}/findings",
@@ -485,6 +487,10 @@
       "GET /governance/graph/traverse",
       "GET /governance/timeline",
       "GET /governance/timeline/{event_id}",
+      "GET /governance/workflows",
+      "GET /governance/workflows/templates",
+      "GET /governance/workflows/{workflow_id}/audit",
+      "GET /governance/workflows/{workflow_id}/evidence",
       "GET /health",
       "GET /health/detailed",
       "GET /health/live",
@@ -501,6 +507,7 @@
       "GET /status",
       "PATCH /field-assessment/engagements/{engagement_id}/status",
       "PATCH /governance/assets/{asset_id}",
+      "PATCH /governance/workflows/{workflow_id}/transition",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",
@@ -618,6 +625,8 @@
       "POST /governance/changes",
       "POST /governance/changes/{change_id}/approve",
       "POST /governance/graph/rebuild",
+      "POST /governance/workflows",
+      "POST /governance/workflows/{workflow_id}/evidence",
       "POST /internal/connectors/{connector_id}/ingest",
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",

@@ -54,9 +54,7 @@ _TEMPLATES: dict[str, WorkflowTemplate] = {
     ),
     "escalation": WorkflowTemplate(
         name="escalation",
-        description=(
-            "Finding unactioned X days → escalates to manager role → logged."
-        ),
+        description=("Finding unactioned X days → escalates to manager role → logged."),
         required_evidence_types=("text",),
         default_priority="critical",
         escalation_after_days=3,

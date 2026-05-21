@@ -49,9 +49,11 @@ def route_workflow(
         role = _SEVERITY_ROLE.get(severity.lower(), "analyst")
         if template_name == "asset_decommission" and role == "analyst":
             role = "governance_admin"
-        priority = severity.lower() if severity.lower() in (
-            "critical", "high", "medium", "low"
-        ) else "medium"
+        priority = (
+            severity.lower()
+            if severity.lower() in ("critical", "high", "medium", "low")
+            else "medium"
+        )
 
     return RoutingDecision(
         assigned_to_role=role,

@@ -89,11 +89,7 @@ def find_root_cause_candidates(
         )
 
         for edge in edge_rows:
-            direction = (
-                "outbound"
-                if edge.source_node_id == node.node_id
-                else "inbound"
-            )
+            direction = "outbound" if edge.source_node_id == node.node_id else "inbound"
             candidates.append(
                 RootCauseCandidate(
                     edge_id=edge.edge_id,
