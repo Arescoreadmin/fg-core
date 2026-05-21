@@ -1761,6 +1761,62 @@
         "title": "BackupScope",
         "type": "string"
       },
+      "BatchPromoteRequest": {
+        "properties": {
+          "candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_ids"
+        ],
+        "title": "BatchPromoteRequest",
+        "type": "object"
+      },
+      "BatchPromoteResponse": {
+        "properties": {
+          "already_promoted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Already Promoted",
+            "type": "array"
+          },
+          "errors": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "not_found": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Not Found",
+            "type": "array"
+          },
+          "promoted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Promoted",
+            "type": "array"
+          }
+        },
+        "required": [
+          "promoted",
+          "already_promoted",
+          "not_found",
+          "errors"
+        ],
+        "title": "BatchPromoteResponse",
+        "type": "object"
+      },
       "BillingRunCreateRequest": {
         "properties": {
           "contract_hash": {
@@ -1915,6 +1971,193 @@
           "reason"
         ],
         "title": "CancelCommandRequest",
+        "type": "object"
+      },
+      "CandidateResponse": {
+        "properties": {
+          "auto_promoted": {
+            "title": "Auto Promoted",
+            "type": "boolean"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "candidate_type": {
+            "title": "Candidate Type",
+            "type": "string"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "integer"
+          },
+          "detection_count": {
+            "title": "Detection Count",
+            "type": "integer"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "evidence_ref_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ref Ids",
+            "type": "array"
+          },
+          "first_detected_at": {
+            "title": "First Detected At",
+            "type": "string"
+          },
+          "last_detected_at": {
+            "title": "Last Detected At",
+            "type": "string"
+          },
+          "peak_confidence": {
+            "title": "Peak Confidence",
+            "type": "integer"
+          },
+          "promoted_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promoted Asset Id"
+          },
+          "promoted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promoted At"
+          },
+          "rejected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected At"
+          },
+          "rejected_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Reason"
+          },
+          "report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Id"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "risk_signal": {
+            "title": "Risk Signal",
+            "type": "string"
+          },
+          "scan_result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scan Result Id"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "suggested_asset_type": {
+            "title": "Suggested Asset Type",
+            "type": "string"
+          },
+          "suggested_name": {
+            "title": "Suggested Name",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "tenant_id",
+          "engagement_id",
+          "scan_result_id",
+          "report_id",
+          "source_type",
+          "candidate_type",
+          "risk_signal",
+          "suggested_name",
+          "suggested_asset_type",
+          "confidence",
+          "peak_confidence",
+          "status",
+          "promoted_asset_id",
+          "promoted_at",
+          "auto_promoted",
+          "rejected_reason",
+          "rejected_at",
+          "reviewed_by",
+          "detection_count",
+          "evidence_ref_ids",
+          "first_detected_at",
+          "last_detected_at",
+          "schema_version"
+        ],
+        "title": "CandidateResponse",
         "type": "object"
       },
       "CaptureObservationRequest": {
@@ -9676,6 +9919,23 @@
         "title": "PolicyStageRequest",
         "type": "object"
       },
+      "PromoteRequest": {
+        "properties": {
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          }
+        },
+        "title": "PromoteRequest",
+        "type": "object"
+      },
       "ROEEvaluationRequest": {
         "properties": {
           "classification": {
@@ -10518,6 +10778,24 @@
         "title": "RegisterSecretGovernanceRequest",
         "type": "object"
       },
+      "RejectRequest": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reviewed_by": {
+            "title": "Reviewed By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "reviewed_by"
+        ],
+        "title": "RejectRequest",
+        "type": "object"
+      },
       "RelationshipResponse": {
         "properties": {
           "created_at": {
@@ -11100,6 +11378,19 @@
           }
         },
         "title": "RetryWorkflowRequest",
+        "type": "object"
+      },
+      "ReviewRequest": {
+        "properties": {
+          "reviewed_by": {
+            "title": "Reviewed By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reviewed_by"
+        ],
+        "title": "ReviewRequest",
         "type": "object"
       },
       "RevokeKeyRequest": {
@@ -29468,7 +29759,6 @@
     },
     "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}": {
       "get": {
-        "description": "Retrieve the governance report generated from a verified MS Graph scan.\n\nThe report includes posture score, all findings, framework coverage,\nand a verification URL clients can use to confirm report integrity.",
         "operationId": "get_msgraph_report_field_assessment_engagements__engagement_id__connector_runs_msgraph_reports__report_id__get",
         "parameters": [
           {
@@ -30543,6 +30833,48 @@
         "summary": "Get Engagement Summary Route",
         "tags": [
           "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/reports/verify/{report_hash}": {
+      "get": {
+        "operationId": "verify_report_field_assessment_reports_verify__report_hash__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_hash",
+            "required": true,
+            "schema": {
+              "title": "Report Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Report",
+        "tags": [
+          "connectors-msgraph-report"
         ]
       }
     },
@@ -32210,6 +32542,511 @@
         "summary": "Verify Audit Chain",
         "tags": [
           "governance-audit"
+        ]
+      }
+    },
+    "/governance/candidates": {
+      "get": {
+        "operationId": "list_candidates_governance_candidates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CandidateResponse"
+                  },
+                  "title": "Response List Candidates Governance Candidates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Candidates",
+        "tags": [
+          "governance-candidates"
+        ]
+      }
+    },
+    "/governance/candidates/inbox": {
+      "get": {
+        "operationId": "get_inbox_governance_candidates_inbox_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CandidateResponse"
+                  },
+                  "title": "Response Get Inbox Governance Candidates Inbox Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Inbox",
+        "tags": [
+          "governance-candidates"
+        ]
+      }
+    },
+    "/governance/candidates/promote-batch": {
+      "post": {
+        "operationId": "promote_batch_governance_candidates_promote_batch_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchPromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchPromoteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Batch",
+        "tags": [
+          "governance-candidates"
+        ]
+      }
+    },
+    "/governance/candidates/{candidate_id}": {
+      "get": {
+        "operationId": "get_candidate_governance_candidates__candidate_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Candidate",
+        "tags": [
+          "governance-candidates"
+        ]
+      }
+    },
+    "/governance/candidates/{candidate_id}/promote": {
+      "post": {
+        "operationId": "promote_candidate_governance_candidates__candidate_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Candidate",
+        "tags": [
+          "governance-candidates"
+        ]
+      }
+    },
+    "/governance/candidates/{candidate_id}/reject": {
+      "post": {
+        "operationId": "reject_candidate_governance_candidates__candidate_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Candidate",
+        "tags": [
+          "governance-candidates"
+        ]
+      }
+    },
+    "/governance/candidates/{candidate_id}/review": {
+      "post": {
+        "operationId": "mark_under_review_governance_candidates__candidate_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark Under Review",
+        "tags": [
+          "governance-candidates"
         ]
       }
     },
@@ -36631,49 +37468,6 @@
           }
         },
         "summary": "V1 Status"
-      }
-    },
-    "/verify/{report_hash}": {
-      "get": {
-        "description": "Verify a delivered MS Graph governance report by its manifest hash.\n\nEvery report embeds a verification_url pointing here.\nReturns status='verified' with report metadata if the hash exists.\nReturns status='not_found' if the hash is unknown (tampered or fabricated).\nNo authentication required \u2014 clients verify without needing API access.",
-        "operationId": "verify_report_verify__report_hash__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "report_hash",
-            "required": true,
-            "schema": {
-              "title": "Report Hash",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerifyReportResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Verify Report",
-        "tags": [
-          "connectors-msgraph-report"
-        ]
       }
     }
   }

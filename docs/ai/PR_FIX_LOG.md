@@ -16,7 +16,7 @@ This log records **completed, intentional fixes**.
 - `services/connectors/msgraph/posture_score.py` — severity-weighted 0–100 posture score with per-domain breakdown and band classification
 - `services/connectors/msgraph/report.py` — deterministic `MsgraphScanReport` generator with manifest_hash and embedded verification_url
 - `services/field_assessment/connectors/msgraph_bridge.py` — report generation wired into import pipeline; `ConnectorImportResult.report_id` added
-- `api/connectors_msgraph_report.py` — `GET /field-assessment/...reports/{report_id}` (auth) and `GET /verify/{report_hash}` (public)
+- `api/connectors_msgraph_report.py` — `GET /field-assessment/...reports/{report_id}` (auth) and `GET /field-assessment/reports/verify/{report_hash}` (public)
 - `api/security/public_paths.py` — `/verify/` prefix added to public path list
 - `api/field_assessment.py` — `ConnectorImportResponse.report_id` field added
 

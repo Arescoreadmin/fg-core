@@ -379,7 +379,9 @@ def _persist_candidates(
                 candidate_type=raw["candidate_type"],
                 risk_signal=raw["risk_signal"],
                 suggested_name=raw.get("suggested_name", raw["risk_signal"]),
-                suggested_asset_type=raw.get("suggested_asset_type", raw["candidate_type"]),
+                suggested_asset_type=raw.get(
+                    "suggested_asset_type", raw["candidate_type"]
+                ),
                 confidence=raw["confidence"],
                 manifest_hash=manifest_hash,
                 evidence_ref_ids=raw.get("evidence_refs", []),
@@ -514,7 +516,9 @@ def _asset_candidates(
         if count <= 0:
             return
         source_ref = f"{kind}:{risk_signal}:{count}:{manifest_hash[:16]}"
-        signal_label = _SIGNAL_NAMES.get(risk_signal, risk_signal.replace("_", " ").title())
+        signal_label = _SIGNAL_NAMES.get(
+            risk_signal, risk_signal.replace("_", " ").title()
+        )
         candidates.append(
             {
                 "candidate_id": hashlib.sha256(source_ref.encode("utf-8")).hexdigest()[

@@ -1,11 +1,11 @@
-"""MS Graph scan report API — get report and public verification endpoint.
+"""MS Graph scan report API — get report and governed verification endpoint.
 
 Routes:
   GET /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}
       Returns the full governance report for a completed msgraph scan.
       Requires governance:read scope.
 
-  GET /verify/{report_hash}
+  GET /field-assessment/reports/verify/{report_hash}
       Public verification endpoint — no auth required.
       Returns report metadata and manifest validity for a given manifest_hash.
       Clients use this to confirm a delivered report was not tampered with.
@@ -26,11 +26,6 @@ from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
 
 router = APIRouter(tags=["connectors-msgraph-report"])
-
-
-# ---------------------------------------------------------------------------
-# Response models
-# ---------------------------------------------------------------------------
 
 
 class MsgraphReportResponse(BaseModel):
@@ -65,7 +60,7 @@ class MsgraphReportResponse(BaseModel):
 
 
 class VerifyReportResponse(BaseModel):
-    status: str  # "verified" | "not_found"
+    status: str
     report_id: str | None = None
     manifest_hash: str | None = None
     report_type: str | None = None
@@ -75,11 +70,6 @@ class VerifyReportResponse(BaseModel):
     posture_band: str | None = None
     finding_count: int | None = None
     schema_version: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _load_report_record(
@@ -137,11 +127,6 @@ def _record_to_response(record: GovernanceReportRecord) -> MsgraphReportResponse
     )
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
-
 @router.get(
     "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}",
     response_model=MsgraphReportResponse,
@@ -153,14 +138,10 @@ def get_msgraph_report(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphReportResponse:
-    """Retrieve the governance report generated from a verified MS Graph scan.
-
-    The report includes posture score, all findings, framework coverage,
-    and a verification URL clients can use to confirm report integrity.
-    """
     tenant_id = _resolve_caller_tenant(request)
     if tenant_id is None:
         raise HTTPException(status_code=401, detail="tenant context required")
+
     record = _load_report_record(db, report_id=report_id, tenant_id=tenant_id)
 
     rj: dict[str, Any] = record.report_json or {}
@@ -173,18 +154,14 @@ def get_msgraph_report(
     return _record_to_response(record)
 
 
-@router.get("/verify/{report_hash}", response_model=VerifyReportResponse)
+@router.get(
+    "/field-assessment/reports/verify/{report_hash}",
+    response_model=VerifyReportResponse,
+)
 def verify_report(
     report_hash: str,
     db: Session = Depends(auth_ctx_db_session),
 ) -> VerifyReportResponse:
-    """Verify a delivered MS Graph governance report by its manifest hash.
-
-    Every report embeds a verification_url pointing here.
-    Returns status='verified' with report metadata if the hash exists.
-    Returns status='not_found' if the hash is unknown (tampered or fabricated).
-    No authentication required — clients verify without needing API access.
-    """
     record = (
         db.query(GovernanceReportRecord)
         .filter(GovernanceReportRecord.manifest_hash == report_hash)

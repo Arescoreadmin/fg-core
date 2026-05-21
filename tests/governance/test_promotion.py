@@ -18,7 +18,6 @@ import api.db_models_field_assessment  # noqa: F401
 
 from api.db_models_governance_asset_candidates import AUTO_PROMOTE_CONFIDENCE_THRESHOLD
 from services.governance_asset_registry.candidates import (
-    get_candidate,
     mark_promoted,
     upsert_candidate,
 )
@@ -54,7 +53,9 @@ _TENANT = "tenant-promo-test"
 _ACTOR = "test@example.com"
 
 
-def _make_candidate(db: Session, *, risk_signal: str = "shadow_ai", confidence: int = 90):
+def _make_candidate(
+    db: Session, *, risk_signal: str = "shadow_ai", confidence: int = 90
+):
     candidate, _ = upsert_candidate(
         db,
         tenant_id=_TENANT,
@@ -89,7 +90,9 @@ class TestPromoteCandidateToAsset:
         asset1 = promote_candidate_to_asset(db, candidate=candidate, actor_email=_ACTOR)
 
         candidate2 = _make_candidate(db, risk_signal="shadow_ai")
-        asset2 = promote_candidate_to_asset(db, candidate=candidate2, actor_email=_ACTOR)
+        asset2 = promote_candidate_to_asset(
+            db, candidate=candidate2, actor_email=_ACTOR
+        )
 
         assert asset1.asset_id == asset2.asset_id
 
@@ -127,7 +130,9 @@ class TestAutoPromoteIfEligible:
         assert candidate.auto_promoted is True
 
     def test_low_confidence_does_not_promote(self, db: Session) -> None:
-        candidate = _make_candidate(db, confidence=AUTO_PROMOTE_CONFIDENCE_THRESHOLD - 1)
+        candidate = _make_candidate(
+            db, confidence=AUTO_PROMOTE_CONFIDENCE_THRESHOLD - 1
+        )
         result = auto_promote_if_eligible(db, candidate=candidate)
         assert result is None
         assert candidate.status == "detected"

@@ -2018,7 +2018,7 @@
     },
     {
       "method": "GET",
-      "path": "/verify/{report_hash}",
+      "path": "/field-assessment/reports/verify/{report_hash}",
       "scopes": [],
       "source": "contract"
     }

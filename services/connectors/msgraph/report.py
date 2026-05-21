@@ -5,7 +5,7 @@ Derives a client-deliverable governance report from a verified msgraph ScanResul
 Report contract:
   - Deterministic: identical ScanResult → identical manifest_hash.
   - No PII: tenant_id_hash only; no display names, UPNs, or raw tenant IDs.
-  - Verifiable: manifest_hash is embedded as verification_url → GET /verify/{manifest_hash}.
+  - Verifiable: manifest_hash is embedded as verification_url → GET /field-assessment/reports/verify/{manifest_hash}.
   - Export-safe: all finding data is pre-sanitised by the connector layer.
   - Operator chain: receipt_hmac from the original scan is included for custody proof.
 

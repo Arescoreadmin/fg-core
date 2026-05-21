@@ -147,7 +147,9 @@ class TestUpsertCandidate:
 class TestCandidateQueries:
     def test_get_candidate_returns_row(self, db: Session) -> None:
         candidate, _ = _upsert(db)
-        fetched = get_candidate(db, tenant_id=_TENANT, candidate_id=candidate.candidate_id)
+        fetched = get_candidate(
+            db, tenant_id=_TENANT, candidate_id=candidate.candidate_id
+        )
         assert fetched is not None
         assert fetched.candidate_id == candidate.candidate_id
 

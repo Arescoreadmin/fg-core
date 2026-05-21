@@ -7631,7 +7631,7 @@
       "dependency_categories": [],
       "file": "api/connectors_msgraph_report.py",
       "method": "GET",
-      "path": "/verify/{report_hash}",
+      "path": "/field-assessment/reports/verify/{report_hash}",
       "plane": "unmapped",
       "plane_id": "unmapped",
       "scoped": false,

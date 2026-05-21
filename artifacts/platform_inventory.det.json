@@ -30,19 +30,12 @@
       "plane": "rbac",
       "suggested_fix": "Add SOC gate mapping entry for plane.",
       "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": [
-        "/verify/{report_hash}"
-      ],
-      "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
-      "type": "unexpected_route_prefixes"
     }
   ],
   "governance": {
     "contract_count": 337,
     "contract_only": [],
-    "runtime_count": 441,
+    "runtime_count": 448,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -64,6 +57,9 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
+      "GET /governance/candidates",
+      "GET /governance/candidates/inbox",
+      "GET /governance/candidates/{candidate_id}",
       "GET /metrics",
       "GET /ui/ai",
       "GET /ui/ai/experience",
@@ -133,6 +129,10 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
+      "POST /governance/candidates/promote-batch",
+      "POST /governance/candidates/{candidate_id}/promote",
+      "POST /governance/candidates/{candidate_id}/reject",
+      "POST /governance/candidates/{candidate_id}/review",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -148,7 +148,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "853aaa317d8e076cff936dec4fa823f33eb9ef1f76d35f0c5af3c2a2b02e4375",
+  "governance_fingerprint": "2d8cd2256e10a272bf3d9c604c344e8491923c57937bd89f6edb1a2340bc822a",
   "planes": [
     {
       "compat": {
@@ -463,6 +463,7 @@
       "GET /field-assessment/engagements/{engagement_id}/scan-results",
       "GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
       "GET /field-assessment/engagements/{engagement_id}/summary",
+      "GET /field-assessment/reports/verify/{report_hash}",
       "GET /governance/assets",
       "GET /governance/assets/shadow",
       "GET /governance/assets/summary",
@@ -476,6 +477,9 @@
       "GET /governance/assets/{asset_id}/versions",
       "GET /governance/assets/{asset_id}/versions/{version_hash}",
       "GET /governance/audit/chain/verify",
+      "GET /governance/candidates",
+      "GET /governance/candidates/inbox",
+      "GET /governance/candidates/{candidate_id}",
       "GET /governance/changes",
       "GET /governance/timeline",
       "GET /governance/timeline/{event_id}",
@@ -603,6 +607,10 @@
       "POST /governance/assets/{asset_id}/policies",
       "POST /governance/assets/{asset_id}/relationships",
       "POST /governance/assets/{asset_id}/risk/recompute",
+      "POST /governance/candidates/promote-batch",
+      "POST /governance/candidates/{candidate_id}/promote",
+      "POST /governance/candidates/{candidate_id}/reject",
+      "POST /governance/candidates/{candidate_id}/review",
       "POST /governance/changes",
       "POST /governance/changes/{change_id}/approve",
       "POST /internal/connectors/{connector_id}/ingest",

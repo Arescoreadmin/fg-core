@@ -3742,7 +3742,7 @@ Router scope-gated and tenant-isolated throughout. Ed25519 signing infrastructur
 
 **Change:** Added `/verify/` prefix to `PUBLIC_PATHS_PREFIX` in `api/security/public_paths.py`.
 
-**Reason:** The `GET /verify/{report_hash}` endpoint must be publicly accessible so clients can
+**Reason:** The `GET /field-assessment/reports/verify/{report_hash}` endpoint must be publicly accessible so clients can
 verify report authenticity without FrostGate API credentials. The endpoint is read-only and
 returns only report metadata (posture score, finding count, report type) derived from
 `manifest_hash` lookup — no PII, no raw findings, no tenant-identifying data beyond the
