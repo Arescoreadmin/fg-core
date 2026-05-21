@@ -187,8 +187,9 @@ def _wf_to_response(wf: Any) -> WorkflowResponse:
     response_model=list[TemplateResponse],
     dependencies=[Depends(require_scopes("governance:read"))],
 )
-def list_workflow_templates() -> list[TemplateResponse]:
+def list_workflow_templates(request: Request) -> list[TemplateResponse]:
     """List all available workflow templates."""
+    _resolve_caller_tenant(request)
     return [
         TemplateResponse(
             name=t.name,

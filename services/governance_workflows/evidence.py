@@ -23,9 +23,7 @@ from services.field_assessment.store import EvidenceLinkDuplicate, create_eviden
 
 log = logging.getLogger("frostgate.governance_workflows.evidence")
 
-VALID_EVIDENCE_TYPES = frozenset(
-    {"link", "text", "scan_result_ref", "finding_ref"}
-)
+VALID_EVIDENCE_TYPES = frozenset({"link", "text", "scan_result_ref", "finding_ref"})
 
 
 class WorkflowEvidenceDuplicate(ValueError):
@@ -112,7 +110,7 @@ def get_evidence_for_workflow(
     tenant_id: str,
     engagement_id: str,
 ) -> list[FaEvidenceLink]:
-    return (
+    rows = (
         db.execute(
             select(FaEvidenceLink)
             .where(
@@ -126,3 +124,4 @@ def get_evidence_for_workflow(
         .scalars()
         .all()
     )
+    return list(rows)

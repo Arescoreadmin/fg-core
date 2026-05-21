@@ -22,8 +22,9 @@ import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from api.db_models_field_assessment import FaEngagementAuditEvent
 
 from api.db_models_governance_workflows import GovernanceWorkflow
 from services.canonical import utc_iso8601_z_now
@@ -76,7 +77,11 @@ class UnknownTemplate(ValueError):
 
 
 def _workflow_id(
-    tenant_id: str, engagement_id: str, template_name: str, context_ref_id: str, now: str
+    tenant_id: str,
+    engagement_id: str,
+    template_name: str,
+    context_ref_id: str,
+    now: str,
 ) -> str:
     raw = f"{tenant_id}:{engagement_id}:{template_name}:{context_ref_id}:{now}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
@@ -246,9 +251,7 @@ def list_workflows(
     state: str | None = None,
     limit: int = 100,
 ) -> list[GovernanceWorkflow]:
-    stmt = select(GovernanceWorkflow).where(
-        GovernanceWorkflow.tenant_id == tenant_id
-    )
+    stmt = select(GovernanceWorkflow).where(GovernanceWorkflow.tenant_id == tenant_id)
     if engagement_id is not None:
         stmt = stmt.where(GovernanceWorkflow.engagement_id == engagement_id)
     if state is not None:
@@ -277,11 +280,9 @@ def get_workflow_audit(
     workflow_id: str,
     tenant_id: str,
     limit: int = 200,
-) -> list[dict]:
+) -> list[FaEngagementAuditEvent]:
     """Return transition events for a workflow from the engagement audit log."""
-    from api.db_models_field_assessment import FaEngagementAuditEvent
-
-    rows = (
+    rows: list[FaEngagementAuditEvent] = list(
         db.execute(
             select(FaEngagementAuditEvent)
             .where(
@@ -289,7 +290,8 @@ def get_workflow_audit(
                 FaEngagementAuditEvent.event_type.in_(
                     ["workflow.transition", "workflow.evidence"]
                 ),
-                func.json_extract(FaEngagementAuditEvent.payload, "$.workflow_id") == workflow_id,
+                func.json_extract(FaEngagementAuditEvent.payload, "$.workflow_id")
+                == workflow_id,
             )
             .order_by(FaEngagementAuditEvent.created_at.asc())
             .limit(limit)
@@ -297,7 +299,7 @@ def get_workflow_audit(
         .scalars()
         .all()
     )
-    return list(rows)
+    return rows
 
 
 def escalate_overdue(
