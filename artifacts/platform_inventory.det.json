@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 344,
+    "contract_count": 356,
     "contract_only": [],
-    "runtime_count": 456,
+    "runtime_count": 460,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -57,13 +57,6 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
-      "GET /governance/graph/anomalies",
-      "GET /governance/graph/coverage",
-      "GET /governance/graph/lineage/{node_id}",
-      "GET /governance/graph/nodes",
-      "GET /governance/graph/nodes/{node_id}",
-      "GET /governance/graph/stats",
-      "GET /governance/graph/traverse",
       "GET /metrics",
       "GET /ui/ai",
       "GET /ui/ai/experience",
@@ -133,7 +126,6 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
-      "POST /governance/graph/rebuild",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -149,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "9aa98c01ebe3518cdd97babd886b6ea5f128e4d13a48d07a6bccb9c6b0426148",
+  "governance_fingerprint": "0820bbbfb6ca0ae90f9177382a83bcc56b79502b58820992d059e3c5248f98fb",
   "planes": [
     {
       "compat": {
@@ -455,7 +447,9 @@
       "GET /field-assessment/engagements/{engagement_id}",
       "GET /field-assessment/engagements/{engagement_id}/audit-events",
       "GET /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}",
+      "GET /field-assessment/engagements/{engagement_id}/connector-schedules",
       "GET /field-assessment/engagements/{engagement_id}/document-analyses",
+      "GET /field-assessment/engagements/{engagement_id}/drift-report",
       "GET /field-assessment/engagements/{engagement_id}/evidence-links",
       "GET /field-assessment/engagements/{engagement_id}/execution-state",
       "GET /field-assessment/engagements/{engagement_id}/findings",
@@ -603,7 +597,9 @@
       "POST /exceptions/requests",
       "POST /exceptions/requests/{request_id}/approve",
       "POST /field-assessment/engagements",
+      "POST /field-assessment/engagements/{engagement_id}/baseline",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
+      "POST /field-assessment/engagements/{engagement_id}/connector-schedules",
       "POST /field-assessment/engagements/{engagement_id}/document-analyses",
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",
       "POST /field-assessment/engagements/{engagement_id}/observations",
