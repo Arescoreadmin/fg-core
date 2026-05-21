@@ -11377,3 +11377,8 @@ No migration was renumbered. No migration enforcement was weakened. No skip/xfai
 - Fresh Postgres: CREATE TABLE runs; ALTER TABLE is no-op (column already present)
 - Existing DB without finding_id: CREATE TABLE is no-op; ALTER TABLE adds column
 - Existing DB with finding_id: both are no-ops; indexes upserted safely
+
+**Supplemental — Docker Compose still failing after initial 0061 repair:**
+0062_governance_asset_provenance.sql had the identical root cause: governance_assets was also ORM-only (introduced PR 3.5) with no SQL migration. ALTER TABLE governance_assets ADD COLUMN on a non-existent table caused frostgate-migrate to exit 1. Applied the same CREATE TABLE IF NOT EXISTS + ALTER TABLE IF NOT EXISTS + IF NOT EXISTS indexes pattern to 0062. Validated:
+- `docker compose down -v && docker compose up --build --abort-on-container-exit frostgate-migrate` → migrations 0044–0063 applied, frostgate-migrate exited 0
+- `make fg-fast` → 398 passed, EXIT:0
