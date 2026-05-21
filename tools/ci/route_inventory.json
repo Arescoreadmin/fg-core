@@ -5062,6 +5062,18 @@
       "tenant_bound": true
     },
     {
+      "dependency_categories": [],
+      "file": "api/connectors_msgraph_report.py",
+      "method": "GET",
+      "path": "/field-assessment/reports/verify/{report_hash}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
       "dependency_categories": [
         "auth",
         "tenant"
@@ -5652,6 +5664,142 @@
       "scoped": true,
       "scopes": [
         "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "GET",
+      "path": "/governance/graph/anomalies",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "GET",
+      "path": "/governance/graph/coverage",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "GET",
+      "path": "/governance/graph/lineage/{node_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "GET",
+      "path": "/governance/graph/nodes",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "GET",
+      "path": "/governance/graph/nodes/{node_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "POST",
+      "path": "/governance/graph/rebuild",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "GET",
+      "path": "/governance/graph/stats",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "GET",
+      "path": "/governance/graph/traverse",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -7626,21 +7774,9 @@
       "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": false
-    },
-    {
-      "dependency_categories": [],
-      "file": "api/connectors_msgraph_report.py",
-      "method": "GET",
-      "path": "/field-assessment/reports/verify/{report_hash}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
-      "scoped": false,
-      "scopes": [],
-      "source": "runtime-ast",
-      "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-20T23:17:30.846794+00:00",
+  "generated_at": "2026-05-21T01:20:20.548655+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

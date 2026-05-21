@@ -3805,3 +3805,47 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `api/main.py` — governance_candidates_router registered
 - `tests/governance/test_candidates.py` (new — 22 tests)
 - `tests/governance/test_promotion.py` (new — 14 tests)
+
+## PR 5 — Governance Topology Graph (Backend) (2026-05-20)
+
+**Classification:** New service + API routes + DB schema (4 new tables). No auth path changes. No public paths. No CI changes.
+
+**SOC review:**
+- All 8 new routes are auth-gated: reads require `governance:read`, rebuild requires `governance:write`. No public exposure.
+- 4 new tables (`governance_graph_snapshots`, `governance_graph_nodes`, `governance_graph_edges`, `governance_graph_anomalies`) are all tenant-scoped; every query includes a `tenant_id` predicate.
+- `node_id` = SHA-256(`tenant_id:node_type:entity_id`) — deterministic, collision-resistant, no random UUIDs.
+- `edge_id` = SHA-256(`tenant_id:edge_type:source_node_id:target_node_id`) — same guarantee.
+- `anomaly_id` = SHA-256(`tenant_id:pattern_id:snapshot_id`) — idempotent upsert.
+- Graph is always derived data — delete_stale() cleans nodes not touched by the current rebuild, ensuring the graph stays consistent with source tables.
+- BFS traversal capped at max_depth=10 and 500 nodes — no unbounded graph walks.
+- All anomaly detectors are best-effort (exceptions logged, not raised) — import path always succeeds.
+- `_rebuild_graph_for_engagement()` in msgraph_bridge is best-effort and fail-silent — import always completes.
+- No PII beyond what already exists in governance_assets / field_assessment tables.
+
+**DB schema changes:**
+- NEW table: `governance_graph_snapshots` — snapshot_id (PK), tenant_id, snapshot_seq, upsert/delete counters, triggered_by, built_at.
+- NEW table: `governance_graph_nodes` — node_id (PK SHA-256), tenant_id, node_type, entity_id, label, properties, trust_score, degree_centrality, centrality_rank, source_ref.
+- NEW table: `governance_graph_edges` — edge_id (PK SHA-256), tenant_id, edge_type, source_node_id, target_node_id, weight, confidence, derived_at.
+- NEW table: `governance_graph_anomalies` — anomaly_id (PK SHA-256), tenant_id, pattern_id, severity, node_ids, edge_ids, snapshot_id, is_active.
+
+**Files touched:**
+- `api/db_models_governance_graph.py` (new — 4 ORM models)
+- `api/db.py` — GovernanceGraphSnapshot/Node/Edge/Anomaly registered in _ensure_models_imported()
+- `services/governance_graph/__init__.py` (new — empty)
+- `services/governance_graph/models.py` (new — frozen dataclasses, NodeType/EdgeType/EdgeDirection enums)
+- `services/governance_graph/registry.py` (new — VALID_EDGE_COMBINATIONS + validate_edge + get_valid_targets)
+- `services/governance_graph/mutations.py` (new — upsert_node, upsert_edge, upsert_anomaly, delete_stale, update_centrality)
+- `services/governance_graph/anomaly_patterns.py` (new — 5 structural detectors + run_all_patterns)
+- `services/governance_graph/builder.py` (new — build_graph, build_graph_for_engagement + 5 derivation steps)
+- `services/governance_graph/integrity.py` (new — detect_orphan_edges, recompute_trust_scores, validate_graph_invariants)
+- `services/governance_graph/queries.py` (new — get_node, list_nodes, get_neighbors, traverse, find_path, get_graph_stats, get_coverage, list_anomalies)
+- `services/governance_graph/lineage.py` (new — reconstruct_lineage with LINEAGE_EDGE_TYPES)
+- `services/governance_graph/audit.py` (new — emit_graph_audit_event wrapping FA audit infra)
+- `api/governance_graph.py` (new — 8 REST endpoints)
+- `api/main.py` — governance_graph_router registered in both build_app() call sites
+- `services/field_assessment/connectors/msgraph_bridge.py` — _rebuild_graph_for_engagement() added (best-effort)
+- `tests/governance_graph/__init__.py` (new)
+- `tests/governance_graph/test_models.py` (new — 15 tests)
+- `tests/governance_graph/test_mutations.py` (new — 12 tests)
+- `tests/governance_graph/test_queries.py` (new — 14 tests)
+- `tests/governance_graph/test_integrity.py` (new — 8 tests + 1 empty-tenant check)

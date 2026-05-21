@@ -11202,3 +11202,43 @@ Persistent governance asset candidate staging between connector detection and Ga
 **Tests:** 22 candidate unit tests + 14 promotion unit tests.
 
 **Gates passed:** route-inventory-generate, refresh_contract_authority, test_ci_soc_invariants, test_ci_security_guards, test_ci_route_lints, test_main_integrity, test_field_assessment_msgraph_bridge.
+
+---
+
+### 2026-05-20 — PR 5: Governance Topology Graph (Backend)
+
+**Branch:** `feat/governance-topology-graph-backend-pr5`
+
+**Area:** services/governance_graph/, api/governance_graph.py, api/db_models_governance_graph.py
+
+**Not standalone:** Derives from governance_assets (PR 3.5), field_assessment (PR 103), and governance_asset_candidates (PR 4.5). The graph is always derived data — never a source of truth.
+
+**What was built:**
+
+1. **4 ORM models** (`GovernanceGraphSnapshot`, `GovernanceGraphNode`, `GovernanceGraphEdge`, `GovernanceGraphAnomaly`) with deterministic SHA-256 primary keys and tenant-scoped indexes.
+
+2. **Pure dataclasses** (`models.py`) — `NodeType`, `EdgeType`, `EdgeDirection` enums; `GraphNode`, `GraphEdge`, `GraphBuildResult`, `GraphTraversalResult`, `LineageChain` frozen/mutable dataclasses.
+
+3. **Edge registry** (`registry.py`) — `VALID_EDGE_COMBINATIONS` dict mapping each `EdgeType` to valid `(source, target)` NodeType pairs. `validate_edge()` and `get_valid_targets()` helpers.
+
+4. **Idempotent mutations** (`mutations.py`) — `upsert_node`, `upsert_edge`, `upsert_anomaly` (deterministic PK prevents duplicates), `delete_stale` (removes nodes/edges older than rebuild_started_at), `update_centrality` (degree count + rank assignment).
+
+5. **5 anomaly detectors** (`anomaly_patterns.py`) — ungoverned_high_centrality, privileged_identity_to_shadow_ai, orphaned_finding, zero_trust_score_node, promoted_candidate_no_owner. All best-effort via `run_all_patterns()`.
+
+6. **Derivation engine** (`builder.py`) — `build_graph()` and `build_graph_for_engagement()`. Five `_derive_from_*()` steps (assets, candidates, findings, scans, engagements), each best-effort. Full rebuild cycle: snapshot creation → derivation → centrality → anomaly detection → stale deletion → snapshot update.
+
+7. **Integrity layer** (`integrity.py`) — `detect_orphan_edges`, `recompute_trust_scores` (checks source_ref still lives), `validate_graph_invariants` (orphans + self-loops + type validity).
+
+8. **Query layer** (`queries.py`) — `get_node`, `list_nodes`, `get_neighbors`, `traverse` (BFS capped at depth=10/500 nodes), `find_path` (BFS shortest path), `get_graph_stats`, `get_coverage` (NIST-AI-RMF hardcoded control list), `list_anomalies`.
+
+9. **Lineage reconstruction** (`lineage.py`) — `reconstruct_lineage()` traverses inbound LINEAGE_EDGE_TYPES backwards from a node, returning `LineageChain`.
+
+10. **Audit wrapper** (`audit.py`) — `emit_graph_audit_event()` delegates to `emit_engagement_audit_event` from FA audit infra.
+
+11. **8 REST endpoints** (`api/governance_graph.py`) — all auth-gated, no public paths. POST /rebuild returns 202 and commits.
+
+12. **Bridge wiring** — `_rebuild_graph_for_engagement()` added to `msgraph_bridge.py`, called after `_persist_candidates()`, best-effort (failures swallowed).
+
+**Tests:** 56 tests total — 15 model tests, 12 mutation tests, 14 query tests, 8 integrity tests (+ 7 existing bridge tests all still pass).
+
+**Gates passed:** ruff, mypy, pytest tests/governance_graph/ (56/56), pytest test_field_assessment_msgraph_bridge (7/7), route-inventory-generate, refresh_contract_authority, test_ci_soc_invariants, test_ci_security_guards, test_ci_route_lints, test_main_integrity.

@@ -99,22 +99,21 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 337,
+  "contract_count": 344,
   "contract_only": [],
   "plane_coverage": {
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 281,
+    "control": 290,
     "data": 52,
     "evidence": 23,
     "rbac": 5,
     "security": 6,
-    "ui": 47,
-    "unmapped": 1
+    "ui": 47
   },
   "removed": [],
-  "runtime_count": 448,
+  "runtime_count": 456,
   "runtime_only": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",
@@ -136,9 +135,13 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
-    "GET /governance/candidates",
-    "GET /governance/candidates/inbox",
-    "GET /governance/candidates/{candidate_id}",
+    "GET /governance/graph/anomalies",
+    "GET /governance/graph/coverage",
+    "GET /governance/graph/lineage/{node_id}",
+    "GET /governance/graph/nodes",
+    "GET /governance/graph/nodes/{node_id}",
+    "GET /governance/graph/stats",
+    "GET /governance/graph/traverse",
     "GET /metrics",
     "GET /ui/ai",
     "GET /ui/ai/experience",
@@ -208,10 +211,7 @@
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
-    "POST /governance/candidates/promote-batch",
-    "POST /governance/candidates/{candidate_id}/promote",
-    "POST /governance/candidates/{candidate_id}/reject",
-    "POST /governance/candidates/{candidate_id}/review",
+    "POST /governance/graph/rebuild",
     "POST /ui/ai/chat",
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
@@ -221,12 +221,13 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "unauthorized_runtime_only": [
-    "GET /governance/candidates",
-    "GET /governance/candidates/inbox",
-    "GET /governance/candidates/{candidate_id}",
-    "POST /governance/candidates/promote-batch",
-    "POST /governance/candidates/{candidate_id}/promote",
-    "POST /governance/candidates/{candidate_id}/reject",
-    "POST /governance/candidates/{candidate_id}/review"
+    "GET /governance/graph/anomalies",
+    "GET /governance/graph/coverage",
+    "GET /governance/graph/lineage/{node_id}",
+    "GET /governance/graph/nodes",
+    "GET /governance/graph/nodes/{node_id}",
+    "GET /governance/graph/stats",
+    "GET /governance/graph/traverse",
+    "POST /governance/graph/rebuild"
   ]
 }
