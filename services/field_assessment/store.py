@@ -514,6 +514,7 @@ def list_findings(
     severity_filter: str | None,
     status_filter: str | None,
     limit: int,
+    offset: int = 0,
 ) -> list[FaNormalizedFinding]:
     limit = min(limit, MAX_PAGE_SIZE)
     stmt = select(FaNormalizedFinding).where(
@@ -524,7 +525,14 @@ def list_findings(
         stmt = stmt.where(FaNormalizedFinding.severity == severity_filter)
     if status_filter:
         stmt = stmt.where(FaNormalizedFinding.status == status_filter)
-    stmt = stmt.order_by(FaNormalizedFinding.created_at.desc()).limit(limit)
+    stmt = (
+        stmt.order_by(
+            FaNormalizedFinding.created_at.asc(),
+            FaNormalizedFinding.id.asc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
     return list(db.execute(stmt).scalars().all())
 
 
