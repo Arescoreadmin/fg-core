@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from api.db_models_governance_promotion import GovernancePromotion
 from services.canonical import utc_iso8601_z_now
-from services.field_assessment.models import PromotionAlreadyExists, PromotionNotFound
+from services.field_assessment.models import PromotionAlreadyExists
 
 
 def _new_id() -> str:
