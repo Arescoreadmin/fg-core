@@ -5,24 +5,26 @@ schema objects. Any connector whose findings land in fa_normalized_findings gets
 drift detection for free.
 
 Delta classes:
-  new        — finding in current scan, absent from baseline, created after baseline
-  persisted  — finding in both current and baseline scans (severity unchanged)
-  resolved   — finding in baseline, absent from current scan
-  regressed  — finding in current scan, absent from baseline, created before baseline
-               (was present before, went away, came back)
-  escalated  — finding in both scans; severity is higher now than in baseline payload
-  de_escalated — finding in both scans; severity is lower now than in baseline payload
+  new          — finding in current scan, absent from all earlier scans
+  persisted    — finding in both current and baseline scans (severity unchanged)
+  resolved     — finding in baseline, absent from current scan
+  regressed    — finding in current scan, absent from baseline, but present in
+                 scans that predate the baseline (was present before, resolved, returned)
+  escalated    — finding in both scans; severity is higher now than at baseline
+  de_escalated — finding in both scans; severity is lower now than at baseline
 
-Regressed detection uses FaNormalizedFinding.created_at vs baseline scan collected_at:
-  if finding.created_at < baseline.collected_at → the finding predates the baseline
-  and was absent (resolved) at baseline time → now it has returned.
+Cross-scan matching uses a stable logical key derived from (finding_type, title) —
+NOT FaNormalizedFinding.id, which is scan-specific because the MS Graph import path
+includes scan.scan_id and manifest_hash in source_ref, producing a different row ID
+per scan for the same logical finding. Severity comparison reads directly from the
+baseline scan's FaNormalizedFinding row, not from the normalized_payload blob.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from dataclasses import dataclass, field
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -40,18 +42,29 @@ _SEVERITY_RANK: dict[str, int] = {
 }
 
 
+def _stable_key(finding_type: str, title: str) -> str:
+    """Content-stable cross-scan identifier for a logical finding.
+
+    Derived from (finding_type, title) — fields that are consistent across scan
+    runs for the same governance control failure. Does NOT include scan.scan_id,
+    manifest_hash, or source_ref, which change per run.
+    """
+    raw = f"{finding_type}:{title}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 @dataclass(frozen=True)
 class DriftFindingRecord:
     """Classification result for a single finding in a drift computation."""
 
-    finding_id: str          # FaNormalizedFinding.id (deterministic hash)
+    finding_id: str               # FaNormalizedFinding.id from the current scan row
     findings_hash: str
     title: str
-    severity: str            # current severity
-    baseline_severity: str | None  # None when not in baseline
-    delta_class: str         # new | persisted | resolved | regressed | escalated | de_escalated
+    severity: str                 # current severity
+    baseline_severity: str | None # None when not in baseline
+    delta_class: str              # new | persisted | resolved | regressed | escalated | de_escalated
     evidence_ref_ids: list[str]
-    rationale: str           # human-readable explanation of classification
+    rationale: str                # human-readable explanation of classification
 
 
 @dataclass
@@ -79,15 +92,19 @@ class DriftResult:
         )
 
 
-def _finding_ids_for_scan(
+def _findings_for_scan(
     db: Session,
     *,
     tenant_id: str,
     engagement_id: str,
     scan_id: str,
-) -> set[str]:
-    """Return FaNormalizedFinding.id values linked to scan_id via FaEvidenceLink."""
-    rows = db.execute(
+) -> dict[str, FaNormalizedFinding]:
+    """Return {stable_key: FaNormalizedFinding} for all findings linked to scan_id.
+
+    Uses (finding_type, title) as the stable key so the same logical finding
+    matches across scans regardless of per-run row ID variation.
+    """
+    link_ids = db.execute(
         select(FaEvidenceLink.source_entity_id).where(
             FaEvidenceLink.tenant_id == tenant_id,
             FaEvidenceLink.engagement_id == engagement_id,
@@ -96,52 +113,73 @@ def _finding_ids_for_scan(
             FaEvidenceLink.evidence_entity_id == scan_id,
         )
     ).scalars().all()
-    return set(rows)
+
+    if not link_ids:
+        return {}
+
+    rows = db.execute(
+        select(FaNormalizedFinding).where(
+            FaNormalizedFinding.tenant_id == tenant_id,
+            FaNormalizedFinding.engagement_id == engagement_id,
+            FaNormalizedFinding.id.in_(set(link_ids)),
+        )
+    ).scalars().all()
+
+    return {_stable_key(r.finding_type, r.title): r for r in rows}
 
 
-def _baseline_severity_map(
+def _stable_keys_in_earlier_scans(
     db: Session,
     *,
     tenant_id: str,
     engagement_id: str,
-    baseline_scan_id: str,
-    finding_ids: set[str],
-) -> dict[str, str]:
-    """Extract per-finding severity from the baseline scan's normalized_payload.
+    before_collected_at: str,
+    candidate_keys: set[str],
+) -> set[str]:
+    """Return which candidate_keys appeared in any scan collected before before_collected_at.
 
-    Falls back to the current DB severity when the payload is absent or unparseable.
-    Returns {finding_id: severity_at_baseline_time}.
+    Used for regressed detection: a finding is regressed (not new) if it existed
+    in a scan that predates the baseline scan.
     """
-    if not finding_ids:
-        return {}
+    if not candidate_keys:
+        return set()
 
-    scan_row = db.execute(
-        select(FaScanResult).where(
-            FaScanResult.id == baseline_scan_id,
+    earlier_scan_ids = db.execute(
+        select(FaScanResult.id).where(
             FaScanResult.tenant_id == tenant_id,
             FaScanResult.engagement_id == engagement_id,
+            FaScanResult.collected_at < before_collected_at,
         )
-    ).scalar_one_or_none()
+    ).scalars().all()
 
-    if scan_row is None or not scan_row.normalized_payload:
-        return {}
+    if not earlier_scan_ids:
+        return set()
 
-    payload = scan_row.normalized_payload
-    findings_list: list[Any] = []
-    if isinstance(payload, dict):
-        findings_list = payload.get("findings", [])
-    elif isinstance(payload, list):
-        findings_list = payload
+    earlier_finding_ids = set(
+        db.execute(
+            select(FaEvidenceLink.source_entity_id).where(
+                FaEvidenceLink.tenant_id == tenant_id,
+                FaEvidenceLink.engagement_id == engagement_id,
+                FaEvidenceLink.source_entity_type == "finding",
+                FaEvidenceLink.evidence_entity_type == "scan_result",
+                FaEvidenceLink.evidence_entity_id.in_(set(earlier_scan_ids)),
+            )
+        ).scalars().all()
+    )
 
-    result: dict[str, str] = {}
-    for f in findings_list:
-        if not isinstance(f, dict):
-            continue
-        fid = f.get("finding_id") or f.get("id")
-        sev = f.get("severity")
-        if fid and sev:
-            result[fid] = str(sev)
-    return result
+    if not earlier_finding_ids:
+        return set()
+
+    earlier_rows = db.execute(
+        select(FaNormalizedFinding).where(
+            FaNormalizedFinding.tenant_id == tenant_id,
+            FaNormalizedFinding.engagement_id == engagement_id,
+            FaNormalizedFinding.id.in_(earlier_finding_ids),
+        )
+    ).scalars().all()
+
+    earlier_keys = {_stable_key(r.finding_type, r.title) for r in earlier_rows}
+    return earlier_keys & candidate_keys
 
 
 def compute_drift(
@@ -177,15 +215,15 @@ def compute_drift(
     if current_scan is None:
         raise ValueError(f"current scan {current_scan_id!r} not found for engagement")
 
-    baseline_ids = _finding_ids_for_scan(
+    baseline_map = _findings_for_scan(
         db, tenant_id=tenant_id, engagement_id=engagement_id, scan_id=baseline_scan_id
     )
-    current_ids = _finding_ids_for_scan(
+    current_map = _findings_for_scan(
         db, tenant_id=tenant_id, engagement_id=engagement_id, scan_id=current_scan_id
     )
 
-    all_ids = baseline_ids | current_ids
-    if not all_ids:
+    all_keys = set(baseline_map) | set(current_map)
+    if not all_keys:
         return DriftResult(
             tenant_id=tenant_id,
             engagement_id=engagement_id,
@@ -193,50 +231,42 @@ def compute_drift(
             current_scan_id=current_scan_id,
         )
 
-    finding_rows = db.execute(
-        select(FaNormalizedFinding).where(
-            FaNormalizedFinding.tenant_id == tenant_id,
-            FaNormalizedFinding.engagement_id == engagement_id,
-            FaNormalizedFinding.id.in_(all_ids),
-        )
-    ).scalars().all()
-    finding_map = {r.id: r for r in finding_rows}
-
-    # Baseline severity lookup from stored payload (for escalated/de_escalated)
-    baseline_sev_map = _baseline_severity_map(
+    # For findings only in current scan, determine regressed vs new
+    only_in_current = set(current_map) - set(baseline_map)
+    regressed_keys = _stable_keys_in_earlier_scans(
         db,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
-        baseline_scan_id=baseline_scan_id,
-        finding_ids=baseline_ids,
+        before_collected_at=baseline_scan.collected_at,
+        candidate_keys=only_in_current,
     )
-
-    baseline_collected_at = baseline_scan.collected_at
 
     records: list[DriftFindingRecord] = []
 
-    for fid in all_ids:
-        row = finding_map.get(fid)
-        if row is None:
-            log.warning("finding %s in evidence links but not in findings table", fid)
-            continue
+    for key in all_keys:
+        in_baseline = key in baseline_map
+        in_current = key in current_map
 
-        in_baseline = fid in baseline_ids
-        in_current = fid in current_ids
-        current_sev = row.severity
-        baseline_sev: str | None = baseline_sev_map.get(fid) if in_baseline else None
+        # Use current row when available; fall back to baseline row for resolved findings
+        current_row = current_map.get(key)
+        baseline_row = baseline_map.get(key)
+        row = current_row or baseline_row
+        assert row is not None  # guaranteed by all_keys construction
+
+        current_sev = current_row.severity if current_row else (baseline_row.severity if baseline_row else "informational")
+        baseline_sev: str | None = baseline_row.severity if baseline_row else None
 
         if in_current and in_baseline:
-            # Check severity change
+            assert current_row is not None and baseline_row is not None
             cur_rank = _SEVERITY_RANK.get(current_sev, 0)
-            base_rank = _SEVERITY_RANK.get(baseline_sev or "", 0) if baseline_sev else 0
-            if baseline_sev and cur_rank > base_rank:
+            base_rank = _SEVERITY_RANK.get(baseline_sev or "", 0)
+            if cur_rank > base_rank:
                 delta = "escalated"
                 rationale = (
                     f"Finding persisted from baseline with severity increase: "
                     f"{baseline_sev} → {current_sev}."
                 )
-            elif baseline_sev and cur_rank < base_rank:
+            elif cur_rank < base_rank:
                 delta = "de_escalated"
                 rationale = (
                     f"Finding persisted from baseline with severity decrease: "
@@ -246,31 +276,32 @@ def compute_drift(
                 delta = "persisted"
                 rationale = "Finding present in both baseline and current scan."
         elif in_current and not in_baseline:
-            # New or regressed: compare creation time to baseline collection time
-            if row.created_at < baseline_collected_at:
+            if key in regressed_keys:
                 delta = "regressed"
                 rationale = (
-                    f"Finding predates baseline (created {row.created_at}) but was "
-                    f"absent from baseline scan ({baseline_collected_at}) — previously "
-                    "resolved and has returned."
+                    "Finding absent from baseline scan but present in earlier scans — "
+                    "previously resolved and has returned."
                 )
             else:
                 delta = "new"
                 rationale = "Finding not present in baseline — new attack surface."
         else:
-            # in_baseline and not in_current
             delta = "resolved"
             rationale = "Finding present in baseline but absent from current scan — resolved."
 
+        assert current_row is not None or baseline_row is not None
+        output_row = current_row if current_row is not None else baseline_row
+        assert output_row is not None
+
         records.append(
             DriftFindingRecord(
-                finding_id=fid,
-                findings_hash=row.findings_hash,
-                title=row.title,
+                finding_id=output_row.id,
+                findings_hash=output_row.findings_hash,
+                title=output_row.title,
                 severity=current_sev,
                 baseline_severity=baseline_sev,
                 delta_class=delta,
-                evidence_ref_ids=list(row.evidence_ref_ids or []),
+                evidence_ref_ids=list(output_row.evidence_ref_ids or []),
                 rationale=rationale,
             )
         )

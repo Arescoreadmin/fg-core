@@ -73,17 +73,24 @@ def create_or_refresh_alert(
     )
     now = utc_iso8601_z_now()
 
+    # Search for ANY row with this fingerprint (active or previously resolved).
+    # The uniqueness constraint on alert_fingerprint means only one row can exist;
+    # inserting a second would violate the constraint when the condition reoccurs
+    # after resolve_alert() marked the prior row inactive.
     existing = db.execute(
         select(FaDriftAlert).where(
             FaDriftAlert.tenant_id == tenant_id,
             FaDriftAlert.engagement_id == engagement_id,
             FaDriftAlert.alert_fingerprint == fp,
-            FaDriftAlert.is_active.is_(True),
         )
     ).scalar_one_or_none()
 
     if existing is not None:
         existing.last_seen_at = now
+        if not existing.is_active:
+            # Reopen a previously resolved alert rather than inserting a duplicate
+            existing.is_active = True
+            existing.resolved_at = None
         db.flush()
         return existing
 

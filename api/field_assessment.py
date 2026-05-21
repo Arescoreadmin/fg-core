@@ -1891,7 +1891,14 @@ def get_drift_report(
 
     # Collect open findings for GPS computation
     current_finding_ids_set = {f.finding_id for f in drift.findings if f.delta_class != "resolved"}
-    baseline_finding_ids_set = {f.finding_id for f in drift.findings if f.delta_class != "new"}
+    # Regressed findings were absent from the baseline by definition — exclude them.
+    # Only persisted/resolved/escalated/de_escalated represent findings that were
+    # actually in the baseline scan.
+    baseline_finding_ids_set = {
+        f.finding_id
+        for f in drift.findings
+        if f.delta_class in ("persisted", "resolved", "escalated", "de_escalated")
+    }
 
     current_rows = (
         db.execute(
@@ -1936,12 +1943,19 @@ def get_drift_report(
     current_collected_at = current_scan.collected_at if current_scan else utc_iso8601_z_now()
     baseline_collected_at = baseline_scan.collected_at if baseline_scan else None
 
-    # Scan signatures from integrity_manifest (verifiability chain)
+    # Scan signatures from stored manifest (verifiability chain).
+    # The MS Graph bridge stores manifest data under normalized_payload["manifest"],
+    # not "integrity_manifest". Try both keys for forward compatibility.
     def _extract_signature(scan: Any) -> str | None:
         if not scan:
             return None
-        manifest = (scan.normalized_payload or {}).get("integrity_manifest") or {}
-        return manifest.get("manifest_signature") or manifest.get("signature")
+        payload = scan.normalized_payload or {}
+        manifest = payload.get("manifest") or payload.get("integrity_manifest") or {}
+        return (
+            manifest.get("integrity_hash")
+            or manifest.get("manifest_hash")
+            or manifest.get("manifest_signature")
+        )
 
     posture = compute_posture_delta(
         drift,

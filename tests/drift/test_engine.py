@@ -164,39 +164,109 @@ class TestComputeDrift:
         assert result.counts.get("resolved") == 1
 
     def test_regressed_finding_classified(self, db: Session) -> None:
-        # Finding created BEFORE baseline (predates it) but not in baseline = regressed
-        _make_scan(db, "scan-base", "2026-01-10T00:00:00Z")
-        _make_scan(db, "scan-curr", "2026-02-01T00:00:00Z")
-        _make_finding(db, "f-regress", "critical", "2026-01-01T00:00:00Z")
-        # NOT in baseline
-        _link(db, "f-regress", "scan-curr")
+        # Regressed: finding appears in an early scan (before baseline), is absent
+        # from the baseline scan itself, then returns in the current scan.
+        # The engine detects regression by querying earlier scans, not by created_at.
+        _make_scan(db, "scan-early", "2025-12-01T00:00:00Z")
+        _make_scan(db, "scan-base-reg", "2026-01-10T00:00:00Z")
+        _make_scan(db, "scan-curr-reg", "2026-02-01T00:00:00Z")
+
+        # Row in early scan (same finding_type+title as current-scan row = same stable key)
+        _make_finding(db, "f-regress-early", "critical", "2025-12-01T00:00:00Z")
+        _link(db, "f-regress-early", "scan-early")
+
+        # Different row ID, same logical finding (same finding_type+title) in current scan
+        now = utc_iso8601_z_now()
+        from api.db_models_field_assessment import FaNormalizedFinding
+        curr_row = FaNormalizedFinding(
+            id="f-regress-curr",
+            tenant_id=_TENANT,
+            engagement_id=_ENGAGEMENT,
+            finding_type="ai_governance",        # same as f-regress-early
+            findings_hash="f-regress-curr-hash",
+            severity="critical",
+            status="open",
+            title="Finding f-regress-early",     # same title → same stable key
+            description="test",
+            source_attribution="microsoft_graph",
+            confidence_score=80,
+            framework_mappings=[],
+            nist_ai_rmf_mappings=[],
+            evidence_ref_ids=[],
+            schema_version="1.0",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(curr_row)
+        db.flush()
+        _link(db, "f-regress-curr", "scan-curr-reg")
+        # NOT linked to baseline scan
 
         result = compute_drift(
             db,
             tenant_id=_TENANT,
             engagement_id=_ENGAGEMENT,
-            baseline_scan_id="scan-base",
-            current_scan_id="scan-curr",
+            baseline_scan_id="scan-base-reg",
+            current_scan_id="scan-curr-reg",
         )
         assert result.counts.get("regressed") == 1
         assert result.has_critical_regression is True
 
     def test_escalated_finding_detected(self, db: Session) -> None:
-        _make_scan(
-            db,
-            "scan-esc-base",
-            "2026-01-01T00:00:00Z",
-        )
-        # Override normalized_payload with baseline severity
-        base_scan = db.get(FaScanResult, "scan-esc-base")
-        assert base_scan is not None
-        base_scan.normalized_payload = {
-            "findings": [{"finding_id": "f-esc", "severity": "medium"}]
-        }
+        # Escalated: same logical finding (same finding_type+title = same stable key)
+        # in both scans but with different severity. The engine reads severity directly
+        # from each scan's row — no normalized_payload injection needed.
+        _make_scan(db, "scan-esc-base", "2026-01-01T00:00:00Z")
         _make_scan(db, "scan-esc-curr", "2026-02-01T00:00:00Z")
-        _make_finding(db, "f-esc", "critical", "2025-12-01T00:00:00Z")
-        _link(db, "f-esc", "scan-esc-base")
-        _link(db, "f-esc", "scan-esc-curr")
+
+        now = utc_iso8601_z_now()
+        from api.db_models_field_assessment import FaNormalizedFinding
+
+        # Baseline row: severity=medium
+        base_row = FaNormalizedFinding(
+            id="f-esc-base",
+            tenant_id=_TENANT,
+            engagement_id=_ENGAGEMENT,
+            finding_type="ai_governance",
+            findings_hash="f-esc-base-hash",
+            severity="medium",
+            status="open",
+            title="Escalation Finding",
+            description="test",
+            source_attribution="microsoft_graph",
+            confidence_score=80,
+            framework_mappings=[],
+            nist_ai_rmf_mappings=[],
+            evidence_ref_ids=[],
+            schema_version="1.0",
+            created_at=now,
+            updated_at=now,
+        )
+        # Current row: same finding_type+title (same stable key), severity=critical
+        curr_row = FaNormalizedFinding(
+            id="f-esc-curr",
+            tenant_id=_TENANT,
+            engagement_id=_ENGAGEMENT,
+            finding_type="ai_governance",
+            findings_hash="f-esc-curr-hash",
+            severity="critical",
+            status="open",
+            title="Escalation Finding",  # same stable key
+            description="test",
+            source_attribution="microsoft_graph",
+            confidence_score=80,
+            framework_mappings=[],
+            nist_ai_rmf_mappings=[],
+            evidence_ref_ids=[],
+            schema_version="1.0",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(base_row)
+        db.add(curr_row)
+        db.flush()
+        _link(db, "f-esc-base", "scan-esc-base")
+        _link(db, "f-esc-curr", "scan-esc-curr")
 
         result = compute_drift(
             db,
@@ -206,21 +276,60 @@ class TestComputeDrift:
             current_scan_id="scan-esc-curr",
         )
         assert result.counts.get("escalated") == 1
-        escalated = next(f for f in result.findings if f.delta_class == "escalated")
-        assert escalated.baseline_severity == "medium"
-        assert escalated.severity == "critical"
+        rec = next(f for f in result.findings if f.delta_class == "escalated")
+        assert rec.baseline_severity == "medium"
+        assert rec.severity == "critical"
 
     def test_de_escalated_finding_detected(self, db: Session) -> None:
         _make_scan(db, "scan-de-base", "2026-01-01T00:00:00Z")
-        base_scan = db.get(FaScanResult, "scan-de-base")
-        assert base_scan is not None
-        base_scan.normalized_payload = {
-            "findings": [{"finding_id": "f-de", "severity": "critical"}]
-        }
         _make_scan(db, "scan-de-curr", "2026-02-01T00:00:00Z")
-        _make_finding(db, "f-de", "medium", "2025-12-01T00:00:00Z")
-        _link(db, "f-de", "scan-de-base")
-        _link(db, "f-de", "scan-de-curr")
+
+        now = utc_iso8601_z_now()
+        from api.db_models_field_assessment import FaNormalizedFinding
+
+        base_row = FaNormalizedFinding(
+            id="f-de-base",
+            tenant_id=_TENANT,
+            engagement_id=_ENGAGEMENT,
+            finding_type="ai_governance",
+            findings_hash="f-de-base-hash",
+            severity="critical",
+            status="open",
+            title="De-escalation Finding",
+            description="test",
+            source_attribution="microsoft_graph",
+            confidence_score=80,
+            framework_mappings=[],
+            nist_ai_rmf_mappings=[],
+            evidence_ref_ids=[],
+            schema_version="1.0",
+            created_at=now,
+            updated_at=now,
+        )
+        curr_row = FaNormalizedFinding(
+            id="f-de-curr",
+            tenant_id=_TENANT,
+            engagement_id=_ENGAGEMENT,
+            finding_type="ai_governance",
+            findings_hash="f-de-curr-hash",
+            severity="medium",
+            status="open",
+            title="De-escalation Finding",  # same stable key
+            description="test",
+            source_attribution="microsoft_graph",
+            confidence_score=80,
+            framework_mappings=[],
+            nist_ai_rmf_mappings=[],
+            evidence_ref_ids=[],
+            schema_version="1.0",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(base_row)
+        db.add(curr_row)
+        db.flush()
+        _link(db, "f-de-base", "scan-de-base")
+        _link(db, "f-de-curr", "scan-de-curr")
 
         result = compute_drift(
             db,
