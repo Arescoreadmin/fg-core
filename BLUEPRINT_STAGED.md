@@ -5,7 +5,7 @@ Title: FrostGate-Core Blueprint v2 (Staged, Strict)
 Blueprint Version: 2.x.x
 
 Contract Authority: contracts/core/openapi.json (prod)
-Contract-Authority-SHA256: 3b098407ddd0545e05b6de1aab79044cc4d8bf40cc423c44cb5d097fcdc0c348
+Contract-Authority-SHA256: 9b33c334b532b3195815ca59549a01cb99db9c5ffdcc8436bb9f00224a80e13a
 Single Source of Truth: The prod OpenAPI spec above is authoritative. Any conflicting requirements elsewhere are invalid.
 
 Enforced By: tools/align_score.py, tools/drift_check.py, CI job blueprint_gate

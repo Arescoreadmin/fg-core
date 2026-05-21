@@ -24,7 +24,9 @@ Schema:
     manifest_hash TEXT NOT NULL,
     report_json JSONB NOT NULL,
     generated_at TEXT NOT NULL,
-    is_finalized BOOLEAN DEFAULT FALSE
+    is_finalized BOOLEAN DEFAULT FALSE,
+    qa_approved_by TEXT,
+    qa_approved_at TEXT
   )
 """
 
@@ -62,6 +64,8 @@ class GovernanceReportRecord(Base):
     report_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     generated_at: Mapped[str] = mapped_column(String(64), nullable=False)
     is_finalized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    qa_approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    qa_approved_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         Index(

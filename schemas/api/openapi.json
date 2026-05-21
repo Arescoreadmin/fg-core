@@ -11882,6 +11882,29 @@
         "title": "ReplayResponse",
         "type": "object"
       },
+      "ReportQaApproveResponse": {
+        "properties": {
+          "qa_approved_at": {
+            "title": "Qa Approved At",
+            "type": "string"
+          },
+          "qa_approved_by": {
+            "title": "Qa Approved By",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "qa_approved_by",
+          "qa_approved_at"
+        ],
+        "title": "ReportQaApproveResponse",
+        "type": "object"
+      },
       "ReproduceRequest": {
         "properties": {
           "session_id": {
@@ -12585,6 +12608,11 @@
           "evidence_hash": {
             "title": "Evidence Hash",
             "type": "string"
+          },
+          "finding_count": {
+            "default": 0,
+            "title": "Finding Count",
+            "type": "integer"
           },
           "id": {
             "title": "Id",
@@ -32114,6 +32142,74 @@
           }
         },
         "summary": "Capture Observation Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-approve": {
+      "post": {
+        "description": "Mark a finalized report as QA-approved for client delivery.\n\nRequires the report to be finalized (is_finalized=True). Once approved,\nthe report.qa.approved readiness gate transitions to passed, unblocking\nthe engagement from transitioning to 'delivered'.",
+        "operationId": "qa_approve_report_route_field_assessment_engagements__engagement_id__reports__report_id__qa_approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportQaApproveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Qa Approve Report Route",
         "tags": [
           "field-assessment"
         ]

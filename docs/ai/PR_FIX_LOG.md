@@ -11305,3 +11305,24 @@ Persistent governance asset candidate staging between connector detection and Ga
 - Contract authority refreshed (`make contract-authority-refresh`, sha256=3b098407...)
 - Route inventory regenerated (9 new routes total)
 - SOC_EXECUTION_GATES updated
+
+---
+
+### 2026-05-21 — PR 7: Assessment Integrity
+
+**Branch:** `feat/assessment-integrity-pr7`
+
+**Area:** `services/field_assessment/`, `api/field_assessment.py`, `api/db_models_governance_report.py`
+
+**What was built:**
+- Gate enforcement: `transition_engagement_route` now calls `_evaluate_execution_state()` for gated statuses (`evidence_collected`, `report_generation`, `delivered`). Blocked transitions return 409 with `blocked_by_gate_ids` + `not_ready_reasons`. Allowed transitions include `gates_evaluated`, `gates_passed`, `readiness_score` in the audit event payload.
+- `services/field_assessment/normalizer.py` — new shared service: `normalize_scan_findings()` extracts `FaNormalizedFinding` rows from `normalized_payload["findings"]`, creates `FaEvidenceLink`, sets `finding_count`. Manual uploads now produce findings on par with connector imports.
+- `report.qa.approved` gate in `readiness.py` — blocks `delivered`; passes when any finalized report has `qa_approved_by` set. Gate includes `action.approve_report_qa` NextAction (safe_for_junior_assessor=False).
+- `POST /engagements/{id}/reports/{report_id}/qa-approve` — sets `qa_approved_by` + `qa_approved_at` on GovernanceReportRecord, emits audit event.
+- `ScanResultResponse` now includes `finding_count` field.
+- `_evaluate_execution_state()` helper extracted from GET /execution-state route, shared with transition route.
+
+**CI fixes:**
+- Contract authority refreshed (`make contract-authority-refresh`, sha256=9b33c334...)
+- Route inventory regenerated (1 new route: qa-approve)
+- SOC_EXECUTION_GATES updated

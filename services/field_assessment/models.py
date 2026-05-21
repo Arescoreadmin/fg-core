@@ -176,3 +176,15 @@ class ScanValidationError(FieldAssessmentError): ...
 
 
 class ScanQuarantinedError(FieldAssessmentError): ...
+
+
+class EngagementGateBlocked(FieldAssessmentError):
+    def __init__(
+        self,
+        message: str,
+        gate_ids: list[str],
+        not_ready_reasons: list[dict],
+    ) -> None:
+        self.gate_ids = gate_ids
+        self.not_ready_reasons = not_ready_reasons
+        super().__init__(message)
