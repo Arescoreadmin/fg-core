@@ -3922,3 +3922,35 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tests/drift/test_velocity.py` (new — 8 tests)
 - `tests/drift/test_correlation.py` (new — 6 tests)
 - `tests/drift/test_scheduler.py` — 5 new TestTriggerTypes tests added
+
+## PR 7 — Assessment Integrity: Enforced Gates, Evidence Pipeline Closure, Verifiable Transitions (2026-05-21)
+
+**Classification:** Enforcement hardening + new API route + schema change (2 new columns on existing table). No new tables. CI artifacts regenerated (contract_routes, route_inventory, topology.sha256).
+
+**SOC review:**
+- Readiness gates are now enforced (fail-closed) for gated status transitions: `evidence_collected`, `report_generation`, `delivered`. Previously advisory only.
+- Gate enforcement uses the same deterministic `build_execution_state()` path used by GET /execution-state — no new gate logic, just enforcement.
+- When a gated transition is blocked, the 409 response includes `blocked_by_gate_ids` and `not_ready_reasons` (derived from existing gate `missing_items`). No sensitive data in the error response.
+- When a gated transition succeeds, the audit event payload includes `gates_evaluated`, `gates_passed`, and `readiness_score` at transition time — cryptographically anchored in `fa_engagement_audit_events`.
+- `report.qa.approved` gate: blocks `delivered` unless a finalized report has `qa_approved_by` set. `POST /reports/{id}/qa-approve` requires `governance:write` scope. Only finalized reports can be approved (422 if not finalized).
+- Manual scan `normalized_payload["findings"]` normalization: findings are extracted via the same `create_finding()` + `create_evidence_link()` primitives used by the connector bridge. Malformed entries are skipped with a warning log, never raise. Idempotent.
+- `normalize_scan_findings()` sets `scan_result.finding_count` — consistent with connector-side behavior.
+- No new public paths. No auth path changes. No PII added to any new fields.
+- `qa_approved_by` stores the actor string (email/key ID from auth context) — same pattern as `created_by` throughout the platform. `qa_approved_at` stores ISO 8601 timestamp.
+
+**DB schema changes (must call out):**
+- NEW columns on `governance_reports`: `qa_approved_by` (TEXT nullable), `qa_approved_at` (TEXT nullable). No migration required (SQLite auto-adds; Postgres migration needed before prod deploy).
+
+**Files touched:**
+- `services/field_assessment/models.py` — EngagementGateBlocked exception
+- `services/field_assessment/normalizer.py` (new — normalize_scan_findings service)
+- `services/field_assessment/readiness.py` — reports parameter + _report_qa_gate() + _evaluate_execution_state helper
+- `api/db_models_governance_report.py` — qa_approved_by, qa_approved_at columns (**schema change**)
+- `api/field_assessment.py` — gate enforcement in transition route; normalizer in scan ingest; QA-approve route; finding_count in ScanResultResponse
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tests/test_field_assessment_gate_enforcement.py` (new — 11 tests)
+- `tests/test_field_assessment_normalizer.py` (new — 12 tests)
+- `tests/test_field_assessment_report_qa_gate.py` (new — 10 tests)

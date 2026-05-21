@@ -136,6 +136,7 @@ def build_execution_state(
     findings: Iterable[Any],
     evidence_links: Iterable[Any],
     generated_at: str,
+    reports: Iterable[Any] = (),
 ) -> ExecutionState:
     scans = sorted(
         scan_results, key=lambda row: (_str(row, "source_type"), _str(row, "id"))
@@ -158,6 +159,8 @@ def build_execution_state(
         ),
     )
 
+    report_list = list(reports)
+
     gate_builder = _ReadinessBuilder(
         engagement=engagement,
         playbook=playbook,
@@ -167,6 +170,7 @@ def build_execution_state(
         findings=finding_rows,
         evidence_links=links,
         generated_at=generated_at,
+        reports=report_list if report_list else None,
     )
     return gate_builder.build()
 
@@ -183,6 +187,7 @@ class _ReadinessBuilder:
         findings: list[Any],
         evidence_links: list[Any],
         generated_at: str,
+        reports: list[Any] | None = None,
     ) -> None:
         self.engagement = engagement
         self.playbook = playbook
@@ -192,6 +197,7 @@ class _ReadinessBuilder:
         self.findings = findings
         self.evidence_links = evidence_links
         self.generated_at = generated_at
+        self.reports: list[Any] = reports if reports is not None else []
         self.gates: list[ReadinessGate] = []
         self.actions: list[NextAction] = []
         self.escalations: list[EscalationItem] = []
@@ -205,6 +211,7 @@ class _ReadinessBuilder:
         self._observation_gates()
         self._evidence_link_gates()
         self._finding_gates()
+        self._report_qa_gate()
         self._asset_candidate_actions()
         self._continuity_opportunities()
 
@@ -994,6 +1001,98 @@ class _ReadinessBuilder:
                     must_block_progression=True,
                 )
             )
+
+    def _report_qa_gate(self) -> None:
+        approved = any(
+            _value(r, "qa_approved_by") and _value(r, "is_finalized")
+            for r in self.reports
+        )
+        if approved:
+            self.gates.append(
+                ReadinessGate(
+                    gate_id="report.qa.approved",
+                    gate_type="report_qa",
+                    readiness_category="report",
+                    severity="critical",
+                    priority=550,
+                    status="passed",
+                    title="Report QA approved",
+                    explanation="A finalized report has been QA-approved for client delivery.",
+                    why_it_matters=(
+                        "Client delivery requires a senior-reviewed, signed-off report. "
+                        "QA approval is the final check before handoff."
+                    ),
+                    evidence_required=["qa_approved_report"],
+                    evidence_present=[
+                        str(_value(r, "id"))
+                        for r in self.reports
+                        if _value(r, "qa_approved_by") and _value(r, "is_finalized")
+                    ],
+                    missing_items=[],
+                    related_entity_ids=[
+                        str(_value(r, "id"))
+                        for r in self.reports
+                        if _value(r, "is_finalized")
+                    ],
+                    blocks_status_transition=[],
+                    recommended_action_id=None,
+                )
+            )
+            return
+
+        self.gates.append(
+            ReadinessGate(
+                gate_id="report.qa.approved",
+                gate_type="report_qa",
+                readiness_category="report",
+                severity="critical",
+                priority=550,
+                status="blocked",
+                title="Report QA approved",
+                explanation=(
+                    "No QA-approved report found. A finalized report must be reviewed "
+                    "and approved before the engagement can be delivered."
+                ),
+                why_it_matters=(
+                    "Client delivery requires a senior-reviewed, signed-off report. "
+                    "QA approval is the final check before handoff."
+                ),
+                evidence_required=["qa_approved_report"],
+                evidence_present=[],
+                missing_items=["qa_approved_report"],
+                related_entity_ids=[
+                    str(_value(r, "id")) for r in self.reports if _value(r, "is_finalized")
+                ],
+                blocks_status_transition=["delivered"],
+                recommended_action_id="action.approve_report_qa",
+                confidence_impact=ConfidenceImpact(
+                    reason="no_qa_approved_report",
+                    delta=-20,
+                    affected_scope="report",
+                ),
+            )
+        )
+        self.actions.append(
+            NextAction(
+                action_id="action.approve_report_qa",
+                priority=550,
+                severity="critical",
+                title="Complete report QA review",
+                instruction=(
+                    "Have a senior assessor review the finalized report, then call "
+                    "POST /engagements/{id}/reports/{report_id}/qa-approve to record approval."
+                ),
+                why_it_matters=(
+                    "QA approval is the last gate before client delivery. It ensures "
+                    "the report is accurate, complete, and free of sensitive raw data."
+                ),
+                closes_gate_ids=["report.qa.approved"],
+                required_input_type="report_qa_approval",
+                target_ui_section="report",
+                expected_evidence=["qa_approved_report"],
+                safe_for_junior_assessor=False,
+            )
+        )
 
     def _asset_candidate_actions(self) -> None:
         for scan in self.scans:

@@ -38,9 +38,9 @@ from services.field_assessment.connectors.msgraph_bridge import (
 from services.field_assessment.models import (
     AssessmentType,
     DocumentClassification,
-    EvidenceLinkType,
     EngagementNotFound,
     EvidenceLinkDuplicate,
+    EvidenceLinkType,
     FindingNotFound,
     InvalidEngagementTransition,
     ObservationDomain,
@@ -86,6 +86,9 @@ from api.db_models_field_assessment import (
     FaScanResult,
 )
 
+from api.db_models_governance_report import GovernanceReportRecord
+from services.field_assessment.normalizer import normalize_scan_findings
+
 from api.db_models_drift import FaDriftBaseline
 from services.connectors.drift.engine import compute_drift
 from services.connectors.drift.scorer import compute_posture_delta
@@ -99,6 +102,12 @@ from services.connectors.drift.scheduler import (
 )
 
 log = logging.getLogger("frostgate.api.field_assessment")
+
+# Statuses whose transition requires all blocking readiness gates to be satisfied.
+# Ungated transitions (e.g. scheduled→pre_visit) skip the expensive gate evaluation.
+_GATED_STATUSES: frozenset[str] = frozenset(
+    {"evidence_collected", "report_generation", "delivered"}
+)
 
 router = APIRouter(
     prefix="/field-assessment",
@@ -290,6 +299,7 @@ class ScanResultResponse(BaseModel):
     raw_payload: dict[str, Any]
     normalized_payload: dict[str, Any] | None
     object_count: int
+    finding_count: int = 0
     created_at: str
 
 
@@ -560,6 +570,7 @@ def _scan_result_to_response(r: FaScanResult) -> ScanResultResponse:
         raw_payload=r.raw_payload or {},
         normalized_payload=r.normalized_payload,
         object_count=r.object_count,
+        finding_count=r.finding_count,
         created_at=r.created_at,
     )
 
@@ -761,6 +772,58 @@ def transition_engagement_route(
 ) -> EngagementResponse:
     tenant_id = _resolve_caller_tenant(request)
     actor = _actor_from_request(request)
+
+    # Resolve engagement first so gate evaluation has the eng object.
+    try:
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    # Gate enforcement: only run the expensive evaluation for statuses that have
+    # readiness gate requirements. Ungated transitions (e.g. scheduled→pre_visit)
+    # skip it entirely.
+    gate_snapshot: dict[str, Any] = {}
+    if body.new_status in _GATED_STATUSES:
+        execution_state = _evaluate_execution_state(db, eng=eng, tenant_id=tenant_id)
+        blockers = [
+            b
+            for b in execution_state.transition_blockers
+            if b.target_status == body.new_status
+        ]
+        if blockers:
+            blocker = blockers[0]
+            blocked_gate_ids = blocker.blocked_by_gate_ids
+            not_ready_reasons = [
+                {
+                    "gate_id": g.gate_id,
+                    "title": g.title,
+                    "missing_items": g.missing_items,
+                    "recommended_action_id": g.recommended_action_id,
+                }
+                for g in execution_state.gates
+                if g.gate_id in blocked_gate_ids and g.status == "blocked"
+            ]
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ENGAGEMENT_GATE_BLOCKED",
+                    "message": blocker.explanation,
+                    "blocked_by_gate_ids": blocked_gate_ids,
+                    "not_ready_reasons": not_ready_reasons,
+                    "readiness_score": execution_state.readiness_score,
+                },
+            )
+        # Snapshot of gate state at transition time — verifiable audit anchor.
+        gate_snapshot = {
+            "gates_evaluated": [g.gate_id for g in execution_state.gates],
+            "gates_passed": [
+                g.gate_id for g in execution_state.gates if g.status == "passed"
+            ],
+            "readiness_score": execution_state.readiness_score,
+        }
+
     try:
         eng = transition_engagement(
             db,
@@ -778,7 +841,12 @@ def transition_engagement_route(
             status_code=409,
             detail=api_error("INVALID_ENGAGEMENT_TRANSITION", exc.message),
         )
-    transition_payload = {"new_status": body.new_status, "reason": body.reason}
+
+    transition_payload: dict[str, Any] = {
+        "new_status": body.new_status,
+        "reason": body.reason,
+        **gate_snapshot,
+    }
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,
@@ -925,6 +993,22 @@ def ingest_scan_result_route(
         object_count=body.object_count,
         evidence_hash=original_hash,
     )
+
+    # If the caller provided a normalized_payload with a "findings" key, extract
+    # and persist FaNormalizedFinding rows now. This closes the evidence pipeline
+    # gap between manual uploads and connector-driven imports.
+    normalized_finding_count = 0
+    if body.normalized_payload and isinstance(body.normalized_payload, dict):
+        findings_from_payload = normalize_scan_findings(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result=result,
+            normalized_payload=body.normalized_payload,
+            source_attribution=f"manual_upload:{body.source_type.value}",
+        )
+        normalized_finding_count = len(findings_from_payload)
+
     scan_audit_payload: dict[str, Any] = {
         "scan_result_id": result.id,
         "source_type": body.source_type.value,
@@ -932,6 +1016,7 @@ def ingest_scan_result_route(
         "evidence_hash": result.evidence_hash,
         "redacted_field_count": redaction.redacted_count,
         "redacted_paths": redaction.redacted_paths,
+        "normalized_finding_count": normalized_finding_count,
     }
     if deprecation_notice:
         scan_audit_payload["schema_version_deprecation_notice"] = deprecation_notice
@@ -1479,28 +1564,17 @@ def get_engagement_summary_route(
 
 
 # ---------------------------------------------------------------------------
-# Route — Deterministic execution state
+# Internal helper — shared execution state evaluation
 # ---------------------------------------------------------------------------
 
 
-@router.get(
-    "/engagements/{engagement_id}/execution-state",
-    response_model=ExecutionStateResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
-)
-def get_engagement_execution_state_route(
-    engagement_id: str,
-    request: Request,
-    db: Session = Depends(auth_ctx_db_session),
-) -> ExecutionStateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    try:
-        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
-    except EngagementNotFound as exc:
-        raise HTTPException(
-            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
-        )
+def _evaluate_execution_state(db: Session, *, eng: Any, tenant_id: str) -> Any:
+    """Fetch all engagement evidence and build a deterministic ExecutionState.
 
+    Shared by the GET /execution-state route and the gate enforcement check in
+    PATCH /status. Queries are identical; the only difference is who uses the result.
+    """
+    engagement_id = eng.id
     scans = list_scan_results(
         db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
     )
@@ -1525,8 +1599,18 @@ def get_engagement_execution_state_route(
         source_entity_id=None,
         limit=100,
     )
+    reports = list(
+        db.execute(
+            select(GovernanceReportRecord).where(
+                GovernanceReportRecord.assessment_id == engagement_id,
+                GovernanceReportRecord.tenant_id == tenant_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
     playbook = get_playbook(eng.assessment_type)
-    execution_state = build_execution_state(
+    return build_execution_state(
         engagement=eng,
         playbook=playbook,
         scan_results=scans,
@@ -1535,7 +1619,33 @@ def get_engagement_execution_state_route(
         findings=findings,
         evidence_links=evidence_links,
         generated_at=utc_iso8601_z_now(),
+        reports=reports,
     )
+
+
+# ---------------------------------------------------------------------------
+# Route — Deterministic execution state
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/engagements/{engagement_id}/execution-state",
+    response_model=ExecutionStateResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_engagement_execution_state_route(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ExecutionStateResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    execution_state = _evaluate_execution_state(db, eng=eng, tenant_id=tenant_id)
     return ExecutionStateResponse(**execution_state.to_dict())
 
 
@@ -2312,4 +2422,94 @@ def get_drift_velocity(
         regression_rate=result.regression_rate,
         window_start=result.window_start,
         window_end=result.window_end,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Route — Report QA approval
+# ---------------------------------------------------------------------------
+
+
+class ReportQaApproveResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    report_id: str
+    qa_approved_by: str
+    qa_approved_at: str
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/qa-approve",
+    response_model=ReportQaApproveResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def qa_approve_report_route(
+    engagement_id: str,
+    report_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportQaApproveResponse:
+    """Mark a finalized report as QA-approved for client delivery.
+
+    Requires the report to be finalized (is_finalized=True). Once approved,
+    the report.qa.approved readiness gate transitions to passed, unblocking
+    the engagement from transitioning to 'delivered'.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    report = db.execute(
+        select(GovernanceReportRecord).where(
+            GovernanceReportRecord.id == report_id,
+            GovernanceReportRecord.assessment_id == engagement_id,
+            GovernanceReportRecord.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("REPORT_NOT_FOUND", f"report {report_id!r} not found"),
+        )
+
+    if not report.is_finalized:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REPORT_NOT_FINALIZED",
+                "Only finalized reports can be QA-approved.",
+            ),
+        )
+
+    now = utc_iso8601_z_now()
+    report.qa_approved_by = actor
+    report.qa_approved_at = now
+    db.flush()
+
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report.qa_approved",
+        actor=actor,
+        reason_code="REPORT_QA_APPROVED",
+        payload={
+            "report_id": report_id,
+            "qa_approved_by": actor,
+            "qa_approved_at": now,
+        },
+    )
+    db.commit()
+
+    return ReportQaApproveResponse(
+        report_id=report_id,
+        qa_approved_by=actor,
+        qa_approved_at=now,
     )
