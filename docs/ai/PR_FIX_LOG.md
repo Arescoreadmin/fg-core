@@ -11410,3 +11410,30 @@ No migration was renumbered. No migration enforcement was weakened. No skip/xfai
 **Validation:**
 - `pytest tests/test_field_assessment_promotion.py -q` → 16 passed
 - `make fg-fast` → all gates pass, EXIT:0
+
+---
+
+### 2026-05-21 — PR 10 CI Repair: corpus pagination + missing fix log
+
+**Branch:** `feat/governance-evidence-continuity-pr10`
+
+**Root cause (2 issues):**
+
+1. **Corpus feed ingested only one page** — `_feed_findings_to_corpus()` called `list_findings()` once with `limit=_MAX_FINDINGS`. Engagements with more than 100 findings silently skipped the remainder; `corpus_entries_added` under-reported; the advertised "one document per finding" guarantee was false for large engagements.
+
+2. **`docs/ai/PR_FIX_LOG.md` not updated** despite `services/field_assessment/promotion.py` and `tests/test_field_assessment_promotion.py` changing.
+
+**Fix:**
+
+- `services/field_assessment/store.py`: added `offset: int = 0` parameter to `list_findings`; sort changed to `(created_at ASC, id ASC)` for stable, deterministic pagination
+- `services/field_assessment/promotion.py`: `_feed_findings_to_corpus()` now paginates with `offset` until the returned page is shorter than `_MAX_FINDINGS`; `corpus_entries_added` reflects all findings
+- `tests/test_field_assessment_promotion.py`: 4 new tests — pagination beyond one page (via patched `_MAX_FINDINGS=3`), no-duplicate on retry, stable ordering verified against DB sort, tenant isolation of corpus feed
+
+**Security/integrity impact:**
+- `corpus_entries_added` is now truthful for engagements of any size
+- Tenant isolation preserved: `list_findings()` always scopes by `(tenant_id, engagement_id)` — cross-tenant findings cannot enter the corpus
+- No false partial-corpus promotions: all findings ingest in one atomic `ingest_corpus()` call per promotion
+
+**Validation:**
+- `pytest tests/test_field_assessment_promotion.py -q` → 25 passed
+- `make fg-fast` → all gates pass, EXIT:0

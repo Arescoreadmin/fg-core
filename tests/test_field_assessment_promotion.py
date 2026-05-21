@@ -700,3 +700,165 @@ class TestEvidenceContinuity:
             )
 
         assert promo.status == "completed"
+
+    def test_corpus_feed_paginates_beyond_max_findings(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "corp-pag")
+        for i in range(5):
+            _add_finding(db, eng.id, f"corp-pag-{i}")
+
+        with patch("services.field_assessment.promotion._MAX_FINDINGS", 3):
+            promo = promote_engagement_to_governance(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=eng.id,
+                gate_snapshot=_GATE_SNAPSHOT,
+                baseline_readiness_score=82,
+            )
+
+        db.refresh(promo)
+        assert promo.status == "completed"
+        assert promo.corpus_entries_added == 5
+
+    def test_corpus_feed_retry_does_not_duplicate(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "corp-retry")
+        _add_finding(db, eng.id, "corp-retry-1")
+        _add_finding(db, eng.id, "corp-retry-2")
+
+        p1 = promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=82,
+        )
+        db.refresh(p1)
+        assert p1.corpus_entries_added == 2
+
+        fail_promotion(db, promotion=p1, error_detail="forced")
+
+        p2 = promote_engagement_to_governance(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=eng.id,
+            gate_snapshot=_GATE_SNAPSHOT,
+            baseline_readiness_score=82,
+        )
+        db.refresh(p2)
+        assert p2.id == p1.id
+        assert p2.status == "completed"
+        assert p2.corpus_entries_added == 2
+
+    def test_corpus_feed_ordering_is_stable(self, db: Session) -> None:
+        from api.db_models_field_assessment import FaNormalizedFinding
+        from sqlalchemy import select as sa_select
+
+        eng = _make_delivered_engagement(db, "corp-ord")
+        for i in range(4):
+            _add_finding(db, eng.id, f"corp-ord-{i}")
+
+        # Determine the expected stable order (created_at ASC, id ASC)
+        rows = (
+            db.execute(
+                sa_select(FaNormalizedFinding)
+                .where(
+                    FaNormalizedFinding.engagement_id == eng.id,
+                    FaNormalizedFinding.tenant_id == _TENANT,
+                )
+                .order_by(
+                    FaNormalizedFinding.created_at.asc(), FaNormalizedFinding.id.asc()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        expected_ids = [f"fa:{eng.id}:finding:{f.id}" for f in rows]
+
+        seen_ids: list[str] = []
+        original_ingest = __import__(
+            "api.rag.ingest", fromlist=["ingest_corpus"]
+        ).ingest_corpus
+
+        def _capture_ingest(request, *, trusted_tenant_id):
+            for doc in request.documents:
+                seen_ids.append(doc.source_id)
+            return original_ingest(request, trusted_tenant_id=trusted_tenant_id)
+
+        with patch(
+            "services.field_assessment.promotion.ingest_corpus",
+            side_effect=_capture_ingest,
+        ):
+            promote_engagement_to_governance(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=eng.id,
+                gate_snapshot=_GATE_SNAPSHOT,
+                baseline_readiness_score=82,
+            )
+
+        assert seen_ids == expected_ids
+        assert len(seen_ids) == 4
+
+    def test_corpus_feed_excludes_other_tenant_findings(self, db: Session) -> None:
+        _TENANT_OTHER = "tenant-other-corp"
+        eng_a = _make_delivered_engagement(db, "corp-iso-a")
+
+        _add_finding(db, eng_a.id, "corp-iso-a1")
+
+        from api.db_models_field_assessment import FaNormalizedFinding
+
+        other_scan = create_scan_result(
+            db,
+            tenant_id=_TENANT_OTHER,
+            engagement_id="eng-other-xyz",
+            source_type="microsoft_graph",
+            schema_version="1.0",
+            collected_at=utc_iso8601_z_now(),
+            raw_payload={},
+            normalized_payload=None,
+            object_count=0,
+            evidence_hash="hash-iso-other",
+        )
+        other_finding = FaNormalizedFinding(
+            id="other-finding-id",
+            tenant_id=_TENANT_OTHER,
+            engagement_id=eng_a.id,
+            finding_type="ai_governance",
+            findings_hash="hash-other-xyz",
+            severity="low",
+            status="open",
+            title="Cross-tenant finding",
+            description="Should not appear in tenant-a corpus.",
+            source_attribution=other_scan.id,
+            confidence_score=80,
+            framework_mappings=[],
+            nist_ai_rmf_mappings=[],
+            evidence_ref_ids=[],
+            schema_version="1.0",
+            created_at=utc_iso8601_z_now(),
+            updated_at=utc_iso8601_z_now(),
+        )
+        db.add(other_finding)
+        db.flush()
+
+        ingested_source_ids: list[str] = []
+        original_ingest = __import__(
+            "api.rag.ingest", fromlist=["ingest_corpus"]
+        ).ingest_corpus
+
+        def _capture(request, *, trusted_tenant_id):
+            ingested_source_ids.extend(d.source_id for d in request.documents)
+            return original_ingest(request, trusted_tenant_id=trusted_tenant_id)
+
+        with patch(
+            "services.field_assessment.promotion.ingest_corpus", side_effect=_capture
+        ):
+            promote_engagement_to_governance(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=eng_a.id,
+                gate_snapshot=_GATE_SNAPSHOT,
+                baseline_readiness_score=82,
+            )
+
+        assert all(_TENANT_OTHER not in sid for sid in ingested_source_ids)
+        assert len(ingested_source_ids) == 1

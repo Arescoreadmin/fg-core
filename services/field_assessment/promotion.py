@@ -274,40 +274,49 @@ def _feed_findings_to_corpus(
     engagement_id: str,
     promotion: GovernancePromotion,
 ) -> None:
-    """Feed engagement findings into the RAG corpus. Failure-safe: never raises."""
-    try:
-        findings = list_findings(
-            db,
-            engagement_id=engagement_id,
-            tenant_id=tenant_id,
-            severity_filter=None,
-            status_filter=None,
-            limit=_MAX_FINDINGS,
-        )
-        if not findings:
-            return
+    """Feed all engagement findings into the RAG corpus. Failure-safe: never raises.
 
-        docs = [
-            CorpusDocument(
-                source_id=f"fa:{engagement_id}:finding:{f.id}",
-                content=f"{f.title}\n\n{f.description}".strip(),
-                metadata={
-                    "finding_id": f.id,
-                    "engagement_id": engagement_id,
-                    "severity": f.severity,
-                    "finding_type": f.finding_type,
-                },
+    Paginates through findings in stable (created_at ASC, id ASC) order until
+    exhausted, so corpus_entries_added always reflects the true finding count.
+    """
+    try:
+        docs: list[CorpusDocument] = []
+        offset = 0
+        while True:
+            page = list_findings(
+                db,
+                engagement_id=engagement_id,
+                tenant_id=tenant_id,
+                severity_filter=None,
+                status_filter=None,
+                limit=_MAX_FINDINGS,
+                offset=offset,
             )
-            for f in findings
-        ]
+            for f in page:
+                docs.append(
+                    CorpusDocument(
+                        source_id=f"fa:{engagement_id}:finding:{f.id}",
+                        content=f"{f.title}\n\n{f.description}".strip(),
+                        metadata={
+                            "finding_id": f.id,
+                            "engagement_id": engagement_id,
+                            "severity": f.severity,
+                            "finding_type": f.finding_type,
+                        },
+                    )
+                )
+            if len(page) < _MAX_FINDINGS:
+                break
+            offset += len(page)
+
+        if not docs:
+            return
 
         result = ingest_corpus(
             IngestRequest(documents=docs),
             trusted_tenant_id=tenant_id,
         )
-        count = sum(
-            1 for r in result.records if r.status == IngestStatus.SUCCESS
-        )
+        count = sum(1 for r in result.records if r.status == IngestStatus.SUCCESS)
         update_corpus_count(
             db,
             tenant_id=tenant_id,
