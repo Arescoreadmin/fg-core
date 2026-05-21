@@ -43,15 +43,6 @@ def _fingerprint(
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _family_fingerprint(
-    tenant_id: str,
-    engagement_id: str,
-    nist_function: str,
-) -> str:
-    raw = f"{tenant_id}:{engagement_id}:domain_cluster:{nist_function}"
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
 def _alert_id(fingerprint: str, now: str) -> str:
     return hashlib.sha256(f"{fingerprint}:{now}".encode()).hexdigest()[:32]
 
@@ -222,12 +213,13 @@ def emit_drift_alerts(
     # Family alerts for domains over threshold
     for nist_function, count in domain_counts.items():
         if count >= _FAMILY_THRESHOLD:
+            # Use nist_function as finding_id so each domain gets a distinct fingerprint
             alert = create_or_refresh_alert(
                 db,
                 tenant_id=tenant_id,
                 engagement_id=engagement_id,
                 pattern="drift.domain_cluster",
-                finding_id=None,
+                finding_id=nist_function,
                 severity="high",
                 title=f"[drift.domain_cluster] {count} drift events in NIST {nist_function}",
                 description=(

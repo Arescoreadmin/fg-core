@@ -20,6 +20,7 @@ from services.connectors.msgraph.schema.scan_result import (
     Finding,
     ScanResult,
 )
+from services.connectors.msgraph.delta import enrich_delta
 
 _DELTA_STATUS_MAP = {
     # (in_current, in_baseline) -> delta_status
@@ -71,8 +72,16 @@ def build_scan_result(
     manifest: SignedManifest,
     baseline_scan_id: str | None = None,
     baseline_finding_ids: set[str] | None = None,
+    baseline_findings: list[Finding] | None = None,
     scan_status: str = "completed",
 ) -> ScanResult:
+    """Build a complete ScanResult.
+
+    When baseline_findings (full Finding objects) are provided, uses the richer
+    enrich_delta() which adds escalated/de_escalated severity-change states.
+    When only baseline_finding_ids (a set of IDs) are provided, falls back to
+    the simpler _apply_delta() with new/persisted/resolved/regressed states.
+    """
     scan_completed_at = datetime.now(timezone.utc).isoformat()
 
     try:
@@ -83,7 +92,15 @@ def build_scan_result(
         duration = 0
 
     findings = all_findings
-    if baseline_scan_id and baseline_finding_ids is not None:
+    if baseline_scan_id and baseline_findings is not None:
+        # Full Finding objects available — use rich delta with severity comparison
+        findings = enrich_delta(
+            current_findings=findings,
+            baseline_findings=baseline_findings,
+            baseline_scan_id=baseline_scan_id,
+        )
+    elif baseline_scan_id and baseline_finding_ids is not None:
+        # Only IDs available — fall back to basic 4-state delta
         findings = _apply_delta(findings, baseline_finding_ids, baseline_scan_id)
     analyzer_payload = analyzer_outputs.model_dump()
     manifest = bind_manifest_content(
