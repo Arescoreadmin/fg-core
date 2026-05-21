@@ -90,6 +90,8 @@ from api.db_models_drift import FaDriftBaseline
 from services.connectors.drift.engine import compute_drift
 from services.connectors.drift.scorer import compute_posture_delta
 from services.connectors.drift.alerts import emit_drift_alerts
+from services.connectors.drift.correlation import find_root_cause_candidates
+from services.connectors.drift.velocity import compute_drift_velocity
 from services.connectors.drift.scheduler import (
     InvalidCronExpression,
     upsert_schedule,
@@ -2071,6 +2073,7 @@ def get_drift_report(
 class ConnectorScheduleBody(BaseModel):
     source_type: str = Field(..., min_length=1, max_length=64)
     cron_expression: str = Field(..., min_length=9, max_length=128)
+    trigger_type: str = Field("cron", min_length=1, max_length=64)
 
 
 class ConnectorScheduleResponse(BaseModel):
@@ -2079,6 +2082,7 @@ class ConnectorScheduleResponse(BaseModel):
     engagement_id: str
     source_type: str
     cron_expression: str
+    trigger_type: str
     created_by: str
     is_active: bool
     created_at: str
@@ -2111,6 +2115,8 @@ def create_connector_schedule(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
+    from services.connectors.drift.scheduler import InvalidTriggerType
+
     try:
         schedule, is_new = upsert_schedule(
             db,
@@ -2119,11 +2125,17 @@ def create_connector_schedule(
             source_type=body.source_type,
             cron_expression=body.cron_expression,
             created_by=actor,
+            trigger_type=body.trigger_type,
         )
     except InvalidCronExpression as exc:
         raise HTTPException(
             status_code=422,
             detail=api_error("INVALID_CRON_EXPRESSION", str(exc)),
+        )
+    except InvalidTriggerType as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error("INVALID_TRIGGER_TYPE", str(exc)),
         )
 
     db.commit()
@@ -2132,6 +2144,7 @@ def create_connector_schedule(
         engagement_id=schedule.engagement_id,
         source_type=schedule.source_type,
         cron_expression=schedule.cron_expression,
+        trigger_type=schedule.trigger_type,
         created_by=schedule.created_by,
         is_active=schedule.is_active,
         created_at=schedule.created_at,
@@ -2165,6 +2178,7 @@ def list_connector_schedules(
             engagement_id=r.engagement_id,
             source_type=r.source_type,
             cron_expression=r.cron_expression,
+            trigger_type=r.trigger_type,
             created_by=r.created_by,
             is_active=r.is_active,
             created_at=r.created_at,
@@ -2172,3 +2186,130 @@ def list_connector_schedules(
         )
         for r in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# Route — Drift root-cause correlation
+# ---------------------------------------------------------------------------
+
+
+class RootCauseCandidateOut(BaseModel):
+    edge_id: str
+    edge_type: str
+    source_node_id: str
+    target_node_id: str
+    rationale: str
+
+
+@router.get(
+    "/engagements/{engagement_id}/drift-report/correlation/{finding_id}",
+    response_model=list[RootCauseCandidateOut],
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_drift_correlation(
+    engagement_id: str,
+    finding_id: str,
+    request: Request,
+    baseline_collected_at: str = Query(
+        ..., description="collected_at of the baseline scan (ISO 8601)"
+    ),
+    current_collected_at: str = Query(
+        ..., description="collected_at of the current scan (ISO 8601)"
+    ),
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[RootCauseCandidateOut]:
+    """Return graph edges that correlate with a finding across a drift window.
+
+    Queries the governance topology graph for edges touching the finding's node
+    that were derived between baseline_collected_at and current_collected_at.
+    Returns empty list when no correlations are found — not an error.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    candidates = find_root_cause_candidates(
+        db,
+        tenant_id=tenant_id,
+        finding_id=finding_id,
+        baseline_collected_at=baseline_collected_at,
+        current_collected_at=current_collected_at,
+    )
+    return [
+        RootCauseCandidateOut(
+            edge_id=c.edge_id,
+            edge_type=c.edge_type,
+            source_node_id=c.source_node_id,
+            target_node_id=c.target_node_id,
+            rationale=c.rationale,
+        )
+        for c in candidates
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Route — Drift velocity
+# ---------------------------------------------------------------------------
+
+
+class DriftVelocityResponse(BaseModel):
+    tenant_id: str
+    engagement_id: str
+    scans_analyzed: int
+    new_per_day: float
+    mttr_days: float | None
+    regression_rate: float
+    window_start: str
+    window_end: str
+
+
+@router.get(
+    "/engagements/{engagement_id}/drift-velocity",
+    response_model=DriftVelocityResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_drift_velocity(
+    engagement_id: str,
+    request: Request,
+    n_scans: int = Query(10, ge=2, le=50, description="Max scan history to analyze"),
+    db: Session = Depends(auth_ctx_db_session),
+) -> DriftVelocityResponse:
+    """Compute drift velocity metrics over the last n_scans scan results.
+
+    Returns new_per_day rate, MTTR, and regression rate.
+    Returns 404 when fewer than 2 scans exist for the engagement.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    result = compute_drift_velocity(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        n_scans=n_scans,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "INSUFFICIENT_SCAN_HISTORY",
+                "At least 2 scans are required to compute drift velocity.",
+            ),
+        )
+    return DriftVelocityResponse(
+        tenant_id=result.tenant_id,
+        engagement_id=result.engagement_id,
+        scans_analyzed=result.scans_analyzed,
+        new_per_day=result.new_per_day,
+        mttr_days=result.mttr_days,
+        regression_rate=result.regression_rate,
+        window_start=result.window_start,
+        window_end=result.window_end,
+    )

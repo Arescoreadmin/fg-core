@@ -81,6 +81,7 @@ class FaScanResult(Base):
     raw_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     normalized_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     object_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    finding_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
 
     __table_args__ = (

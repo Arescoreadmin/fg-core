@@ -16,8 +16,10 @@ import api.db_models_drift  # noqa: F401
 
 from services.connectors.drift.scheduler import (
     InvalidCronExpression,
+    InvalidTriggerType,
     deactivate_schedule,
     list_schedules,
+    list_schedules_by_trigger,
     upsert_schedule,
     validate_cron_expression,
 )
@@ -190,3 +192,71 @@ class TestDeactivateSchedule:
             source_type="nonexistent",
         )
         assert result is False
+
+
+class TestTriggerTypes:
+    def test_default_trigger_type_is_cron(self, db: Session) -> None:
+        schedule, _ = upsert_schedule(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=_ENGAGEMENT,
+            source_type="okta",
+            cron_expression="0 6 * * 1",
+            created_by=_ACTOR,
+        )
+        assert schedule.trigger_type == "cron"
+
+    def test_event_trigger_skips_cron_validation(self, db: Session) -> None:
+        schedule, is_new = upsert_schedule(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=_ENGAGEMENT,
+            source_type="aws",
+            cron_expression="",
+            created_by=_ACTOR,
+            trigger_type="on_graph_rebuild",
+        )
+        assert is_new is True
+        assert schedule.trigger_type == "on_graph_rebuild"
+
+    def test_invalid_trigger_type_raises(self, db: Session) -> None:
+        with pytest.raises(InvalidTriggerType):
+            upsert_schedule(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=_ENGAGEMENT,
+                source_type="intune",
+                cron_expression="0 6 * * 1",
+                created_by=_ACTOR,
+                trigger_type="not_a_real_trigger",
+            )
+
+    def test_list_by_trigger_type(self, db: Session) -> None:
+        upsert_schedule(
+            db,
+            tenant_id=_TENANT,
+            engagement_id=_ENGAGEMENT,
+            source_type="google_workspace",
+            cron_expression="",
+            created_by=_ACTOR,
+            trigger_type="on_anomaly_detected",
+        )
+        rows = list_schedules_by_trigger(
+            db, tenant_id=_TENANT, trigger_type="on_anomaly_detected"
+        )
+        assert any(r.source_type == "google_workspace" for r in rows)
+
+    def test_list_by_trigger_excludes_other_types(self, db: Session) -> None:
+        upsert_schedule(
+            db,
+            tenant_id=_TENANT,
+            engagement_id="eng-trig-x",
+            source_type="microsoft_graph",
+            cron_expression="0 * * * *",
+            created_by=_ACTOR,
+            trigger_type="cron",
+        )
+        rows = list_schedules_by_trigger(
+            db, tenant_id=_TENANT, trigger_type="on_finding_import"
+        )
+        assert all(r.trigger_type == "on_finding_import" for r in rows)

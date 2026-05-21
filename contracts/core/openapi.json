@@ -1605,6 +1605,29 @@
         "title": "AssignRoleRequest",
         "type": "object"
       },
+      "AttachEvidenceBody": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "reference": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_type",
+          "reference"
+        ],
+        "title": "AttachEvidenceBody",
+        "type": "object"
+      },
       "AttachEvidenceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1775,54 +1798,6 @@
           "created_at"
         ],
         "title": "AttestationResponse",
-        "type": "object"
-      },
-      "AuditEventResponse": {
-        "properties": {
-          "actor": {
-            "title": "Actor",
-            "type": "string"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "engagement_id": {
-            "title": "Engagement Id",
-            "type": "string"
-          },
-          "event_type": {
-            "title": "Event Type",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "payload": {
-            "title": "Payload",
-            "type": "object"
-          },
-          "reason_code": {
-            "title": "Reason Code",
-            "type": "string"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "engagement_id",
-          "event_type",
-          "actor",
-          "reason_code",
-          "payload",
-          "schema_version",
-          "created_at"
-        ],
-        "title": "AuditEventResponse",
         "type": "object"
       },
       "BackupScope": {
@@ -2880,6 +2855,13 @@
             "minLength": 1,
             "title": "Source Type",
             "type": "string"
+          },
+          "trigger_type": {
+            "default": "cron",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Trigger Type",
+            "type": "string"
           }
         },
         "required": [
@@ -2919,6 +2901,10 @@
             "title": "Source Type",
             "type": "string"
           },
+          "trigger_type": {
+            "title": "Trigger Type",
+            "type": "string"
+          },
           "updated_at": {
             "title": "Updated At",
             "type": "string"
@@ -2929,6 +2915,7 @@
           "engagement_id",
           "source_type",
           "cron_expression",
+          "trigger_type",
           "created_by",
           "is_active",
           "created_at",
@@ -4105,6 +4092,74 @@
           "scoring_schema_version"
         ],
         "title": "CreateScoringContractRequest",
+        "type": "object"
+      },
+      "CreateWorkflowBody": {
+        "additionalProperties": false,
+        "properties": {
+          "context_ref_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Context Ref Id",
+            "type": "string"
+          },
+          "context_ref_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Context Ref Type",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "engagement_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "severity": {
+            "default": "medium",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Severity",
+            "type": "string"
+          },
+          "template_name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Template Name",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "engagement_id",
+          "template_name",
+          "context_ref_type",
+          "context_ref_id"
+        ],
+        "title": "CreateWorkflowBody",
         "type": "object"
       },
       "CreditNoteCreateRequest": {
@@ -5544,6 +5599,61 @@
         "title": "DriftReportResponse",
         "type": "object"
       },
+      "DriftVelocityResponse": {
+        "properties": {
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "mttr_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mttr Days"
+          },
+          "new_per_day": {
+            "title": "New Per Day",
+            "type": "number"
+          },
+          "regression_rate": {
+            "title": "Regression Rate",
+            "type": "number"
+          },
+          "scans_analyzed": {
+            "title": "Scans Analyzed",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "window_end": {
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "engagement_id",
+          "scans_analyzed",
+          "new_per_day",
+          "mttr_days",
+          "regression_rate",
+          "window_start",
+          "window_end"
+        ],
+        "title": "DriftVelocityResponse",
+        "type": "object"
+      },
       "EdgeResponse": {
         "properties": {
           "confidence": {
@@ -6302,6 +6412,44 @@
           "notes"
         ],
         "title": "EvidenceReferenceResponse",
+        "type": "object"
+      },
+      "EvidenceResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "submitted_by": {
+            "title": "Submitted By",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workflow_id",
+          "evidence_type",
+          "reference",
+          "submitted_by",
+          "created_at"
+        ],
+        "title": "EvidenceResponse",
         "type": "object"
       },
       "EvidenceRunRegisterRequest": {
@@ -12271,6 +12419,39 @@
         "title": "RoleDetail",
         "type": "object"
       },
+      "RootCauseCandidateOut": {
+        "properties": {
+          "edge_id": {
+            "title": "Edge Id",
+            "type": "string"
+          },
+          "edge_type": {
+            "title": "Edge Type",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "source_node_id": {
+            "title": "Source Node Id",
+            "type": "string"
+          },
+          "target_node_id": {
+            "title": "Target Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "edge_id",
+          "edge_type",
+          "source_node_id",
+          "target_node_id",
+          "rationale"
+        ],
+        "title": "RootCauseCandidateOut",
+        "type": "object"
+      },
       "RotateKeyRequest": {
         "description": "Request to rotate an API key.",
         "properties": {
@@ -13654,6 +13835,42 @@
         "title": "TelemetryInput",
         "type": "object"
       },
+      "TemplateResponse": {
+        "properties": {
+          "default_priority": {
+            "title": "Default Priority",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "escalation_after_days": {
+            "title": "Escalation After Days",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "required_evidence_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Evidence Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "required_evidence_types",
+          "default_priority",
+          "escalation_after_days"
+        ],
+        "title": "TemplateResponse",
+        "type": "object"
+      },
       "TenantControlStateUpsert": {
         "additionalProperties": false,
         "properties": {
@@ -14052,6 +14269,29 @@
           "explanation"
         ],
         "title": "TransitionBlockerResponse",
+        "type": "object"
+      },
+      "TransitionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "to_state": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "To State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to_state",
+          "reason"
+        ],
+        "title": "TransitionBody",
         "type": "object"
       },
       "TransitionEngagementRequest": {
@@ -14533,6 +14773,118 @@
         "title": "VersionFloorResponse",
         "type": "object"
       },
+      "WorkflowResponse": {
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "assigned_to_role": {
+            "title": "Assigned To Role",
+            "type": "string"
+          },
+          "context_ref_id": {
+            "title": "Context Ref Id",
+            "type": "string"
+          },
+          "context_ref_type": {
+            "title": "Context Ref Type",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "title": "Due At",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "template_name",
+          "title",
+          "description",
+          "state",
+          "priority",
+          "assigned_to_role",
+          "context_ref_type",
+          "context_ref_id",
+          "due_at",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "resolved_at",
+          "archived_at",
+          "schema_version"
+        ],
+        "title": "WorkflowResponse",
+        "type": "object"
+      },
       "api__deployment_manager__CreateEnvironmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -14559,6 +14911,92 @@
           "region"
         ],
         "title": "CreateEnvironmentRequest",
+        "type": "object"
+      },
+      "api__field_assessment__AuditEventResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "title": "Payload",
+            "type": "object"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "engagement_id",
+          "event_type",
+          "actor",
+          "reason_code",
+          "payload",
+          "schema_version",
+          "created_at"
+        ],
+        "title": "AuditEventResponse",
+        "type": "object"
+      },
+      "api__governance_workflows__AuditEventResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "title": "Payload",
+            "type": "object"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_type",
+          "actor",
+          "reason_code",
+          "payload",
+          "created_at"
+        ],
+        "title": "AuditEventResponse",
         "type": "object"
       },
       "api__ops_governance_manager__CreateEnvironmentRequest": {
@@ -30393,7 +30831,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/AuditEventResponse"
+                    "$ref": "#/components/schemas/api__field_assessment__AuditEventResponse"
                   },
                   "title": "Response List Audit Events Route Field Assessment Engagements  Engagement Id  Audit Events Get",
                   "type": "array"
@@ -30970,6 +31408,173 @@
           }
         },
         "summary": "Get Drift Report",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/drift-report/correlation/{finding_id}": {
+      "get": {
+        "description": "Return graph edges that correlate with a finding across a drift window.\n\nQueries the governance topology graph for edges touching the finding's node\nthat were derived between baseline_collected_at and current_collected_at.\nReturns empty list when no correlations are found \u2014 not an error.",
+        "operationId": "get_drift_correlation_field_assessment_engagements__engagement_id__drift_report_correlation__finding_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "collected_at of the baseline scan (ISO 8601)",
+            "in": "query",
+            "name": "baseline_collected_at",
+            "required": true,
+            "schema": {
+              "description": "collected_at of the baseline scan (ISO 8601)",
+              "title": "Baseline Collected At",
+              "type": "string"
+            }
+          },
+          {
+            "description": "collected_at of the current scan (ISO 8601)",
+            "in": "query",
+            "name": "current_collected_at",
+            "required": true,
+            "schema": {
+              "description": "collected_at of the current scan (ISO 8601)",
+              "title": "Current Collected At",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RootCauseCandidateOut"
+                  },
+                  "title": "Response Get Drift Correlation Field Assessment Engagements  Engagement Id  Drift Report Correlation  Finding Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Drift Correlation",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/drift-velocity": {
+      "get": {
+        "description": "Compute drift velocity metrics over the last n_scans scan results.\n\nReturns new_per_day rate, MTTR, and regression rate.\nReturns 404 when fewer than 2 scans exist for the engagement.",
+        "operationId": "get_drift_velocity_field_assessment_engagements__engagement_id__drift_velocity_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Max scan history to analyze",
+            "in": "query",
+            "name": "n_scans",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "description": "Max scan history to analyze",
+              "maximum": 50,
+              "minimum": 2,
+              "title": "N Scans",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftVelocityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Drift Velocity",
         "tags": [
           "field-assessment"
         ]
@@ -35142,6 +35747,490 @@
         "summary": "Get Timeline Event",
         "tags": [
           "governance-timeline"
+        ]
+      }
+    },
+    "/governance/workflows": {
+      "get": {
+        "description": "List governance workflows for the caller's tenant.",
+        "operationId": "list_workflows_governance_workflows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "engagement_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Engagement Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkflowResponse"
+                  },
+                  "title": "Response List Workflows Governance Workflows Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Workflows",
+        "tags": [
+          "governance-workflows"
+        ]
+      },
+      "post": {
+        "description": "Create a new governance workflow from a named template.",
+        "operationId": "create_workflow_governance_workflows_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkflowBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Workflow",
+        "tags": [
+          "governance-workflows"
+        ]
+      }
+    },
+    "/governance/workflows/templates": {
+      "get": {
+        "description": "List all available workflow templates.",
+        "operationId": "list_workflow_templates_governance_workflows_templates_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateResponse"
+                  },
+                  "title": "Response List Workflow Templates Governance Workflows Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Workflow Templates",
+        "tags": [
+          "governance-workflows"
+        ]
+      }
+    },
+    "/governance/workflows/{workflow_id}/audit": {
+      "get": {
+        "description": "Return the full audit trail for a workflow (transitions from FaEngagementAuditEvent).",
+        "operationId": "get_workflow_audit_governance_workflows__workflow_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/api__governance_workflows__AuditEventResponse"
+                  },
+                  "title": "Response Get Workflow Audit Governance Workflows  Workflow Id  Audit Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workflow Audit",
+        "tags": [
+          "governance-workflows"
+        ]
+      }
+    },
+    "/governance/workflows/{workflow_id}/evidence": {
+      "get": {
+        "description": "List all evidence attached to a workflow.",
+        "operationId": "get_evidence_governance_workflows__workflow_id__evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvidenceResponse"
+                  },
+                  "title": "Response Get Evidence Governance Workflows  Workflow Id  Evidence Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Evidence",
+        "tags": [
+          "governance-workflows"
+        ]
+      },
+      "post": {
+        "description": "Attach completion evidence to a workflow via FaEvidenceLink.",
+        "operationId": "attach_evidence_governance_workflows__workflow_id__evidence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachEvidenceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Evidence",
+        "tags": [
+          "governance-workflows"
+        ]
+      }
+    },
+    "/governance/workflows/{workflow_id}/transition": {
+      "patch": {
+        "description": "Advance a workflow's state through the state machine.",
+        "operationId": "transition_workflow_governance_workflows__workflow_id__transition_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Workflow",
+        "tags": [
+          "governance-workflows"
         ]
       }
     },

@@ -96,6 +96,9 @@ class FaConnectorSchedule(Base):
     engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
     cron_expression: Mapped[str] = mapped_column(String(128), nullable=False)
+    trigger_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="cron"
+    )
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)

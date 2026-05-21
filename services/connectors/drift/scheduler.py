@@ -8,6 +8,12 @@ cron_expression format: standard 5-field cron (min hour dom mon dow).
   "0 6 * * 1"  — every Monday at 06:00 UTC
   "0 */6 * * *" — every 6 hours
 
+trigger_type values (PR 6 add-in):
+  "cron"               — time-based; cron_expression is required and validated
+  "on_anomaly_detected" — fire when governance graph anomaly is detected
+  "on_graph_rebuild"   — fire after each governance graph rebuild completes
+  "on_finding_import"  — fire after findings are imported for the engagement
+
 Validation rejects expressions with wrong field count or non-printable characters.
 Full cron semantics (range, step, list) are not validated here — the scheduler
 runtime is responsible for interpreting the expression.
@@ -32,12 +38,25 @@ _VALID_SOURCE_TYPES = frozenset(
     {"microsoft_graph", "okta", "aws", "intune", "google_workspace"}
 )
 
+VALID_TRIGGER_TYPES = frozenset(
+    {
+        "cron",
+        "on_anomaly_detected",
+        "on_graph_rebuild",
+        "on_finding_import",
+    }
+)
+
 
 class InvalidCronExpression(ValueError):
     pass
 
 
 class UnsupportedSourceType(ValueError):
+    pass
+
+
+class InvalidTriggerType(ValueError):
     pass
 
 
@@ -68,13 +87,21 @@ def upsert_schedule(
     source_type: str,
     cron_expression: str,
     created_by: str,
+    trigger_type: str = "cron",
 ) -> tuple[FaConnectorSchedule, bool]:
     """Create or update a connector schedule for (engagement_id, source_type).
 
     Returns (schedule, is_new).
-    Raises InvalidCronExpression on bad cron syntax.
+    Raises InvalidCronExpression on bad cron syntax (only for trigger_type="cron").
+    Raises InvalidTriggerType for unknown trigger types.
     """
-    validate_cron_expression(cron_expression)
+    if trigger_type not in VALID_TRIGGER_TYPES:
+        raise InvalidTriggerType(
+            f"trigger_type must be one of {sorted(VALID_TRIGGER_TYPES)}, "
+            f"got {trigger_type!r}"
+        )
+    if trigger_type == "cron":
+        validate_cron_expression(cron_expression)
 
     now = utc_iso8601_z_now()
     existing = db.execute(
@@ -87,6 +114,7 @@ def upsert_schedule(
 
     if existing is not None:
         existing.cron_expression = cron_expression
+        existing.trigger_type = trigger_type
         existing.created_by = created_by
         existing.is_active = True
         existing.updated_at = now
@@ -99,6 +127,7 @@ def upsert_schedule(
         engagement_id=engagement_id,
         source_type=source_type,
         cron_expression=cron_expression,
+        trigger_type=trigger_type,
         created_by=created_by,
         is_active=True,
         created_at=now,
@@ -126,6 +155,26 @@ def list_schedules(
         .all()
     )
     return list(rows)
+
+
+def list_schedules_by_trigger(
+    db: Session,
+    *,
+    tenant_id: str,
+    trigger_type: str,
+    active_only: bool = True,
+) -> list[FaConnectorSchedule]:
+    """Return all schedules for a tenant with a specific trigger_type.
+
+    Used by the msgraph bridge and graph rebuilder to fire event-driven schedules.
+    """
+    stmt = select(FaConnectorSchedule).where(
+        FaConnectorSchedule.tenant_id == tenant_id,
+        FaConnectorSchedule.trigger_type == trigger_type,
+    )
+    if active_only:
+        stmt = stmt.where(FaConnectorSchedule.is_active.is_(True))
+    return list(db.execute(stmt).scalars().all())
 
 
 def deactivate_schedule(

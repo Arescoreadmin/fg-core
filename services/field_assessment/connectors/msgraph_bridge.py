@@ -216,6 +216,8 @@ def import_msgraph_scan_result(
         manifest_hash=manifest_hash,
         connector_import_id=connector_import_id,
     )
+    scan_record.finding_count = len(findings)
+    db.flush()
     links_imported = _link_findings_to_scan(
         db=db,
         tenant_id=tenant_id,

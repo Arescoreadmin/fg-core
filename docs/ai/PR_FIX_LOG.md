@@ -11270,3 +11270,38 @@ Persistent governance asset candidate staging between connector detection and Ga
 - Route inventory regenerated (4 new routes)
 - Contract authority refreshed (`make contract-authority-refresh`)
 - SOC_EXECUTION_GATES updated
+
+---
+
+### 2026-05-21 — PR 6: Autonomous Governance Workflow Engine
+
+**Branch:** `feat/autonomous-governance-engine-pr6`
+
+**Area:** `services/governance_workflows/`, `services/connectors/drift/`, `api/db_models_governance_workflows.py`, `api/governance_workflows.py`, `api/field_assessment.py`, `tools/ci/`
+
+**What was built:**
+- `services/governance_workflows/engine.py` — deterministic state machine (draft → active → escalated → resolved → archived); fail-closed: `resolved` requires all required evidence types present
+- `services/governance_workflows/templates.py` — 4 frozen WorkflowTemplate definitions (finding_remediation, attestation_renewal, asset_decommission, escalation)
+- `services/governance_workflows/routing.py` — severity-to-role routing; escalation path = (analyst, governance_admin, tenant_admin)
+- `services/governance_workflows/evidence.py` — evidence attached via FaEvidenceLink (source_entity_type="workflow"); completeness check is fail-closed
+- `services/connectors/drift/velocity.py` — `compute_drift_velocity()`: new_per_day from finding_count deltas, MTTR from stable-key presence matrix, regression_rate = regressed/ever_resolved
+- `services/connectors/drift/correlation.py` — `find_root_cause_candidates()`: on-demand root-cause via GovernanceGraphEdge drift window query
+- `services/connectors/drift/scheduler.py` — VALID_TRIGGER_TYPES, InvalidTriggerType, list_schedules_by_trigger; cron validation bypassed for event-driven triggers
+- `api/db_models_governance_workflows.py` — 1 new table (governance_workflows); ID = SHA-256[:32]
+- `api/db_models_drift.py` — trigger_type column on fa_connector_schedules
+- `api/db_models_field_assessment.py` — finding_count column on fa_scan_results
+- `api/governance_workflows.py` — 7 REST endpoints under /governance/workflows
+- `api/field_assessment.py` — trigger_type on schedule routes; /drift-velocity and /correlation/{finding_id} routes added
+
+**Bug fixes / design decisions:**
+- Evidence stored in FaEvidenceLink (not a separate table) — keeps the lineage feedback loop structural
+- Transitions stored in FaEngagementAuditEvent (event_type="workflow.transition") — unified audit trail, no extra table
+- finding_count added to FaScanResult — enables O(1) velocity computation instead of 6×(N-1) compute_drift() calls
+- Regression rate fix: gap-detected findings added to ever_resolved even when last seen = last_idx (was 0 bug)
+- GovernanceGraphNode fields: used derived_at (not rebuilt_at which doesn't exist)
+
+**CI fixes:**
+- governance_workflows_router registered in both build_app() and build_contract_app() (route inventory audit catches contract-only gap)
+- Contract authority refreshed (`make contract-authority-refresh`, sha256=3b098407...)
+- Route inventory regenerated (9 new routes total)
+- SOC_EXECUTION_GATES updated
