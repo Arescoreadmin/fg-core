@@ -318,14 +318,32 @@ class TestEscalateOverdue:
         assert refreshed is not None
         assert refreshed.state == "escalated"
 
-    def test_dry_run_does_not_change_state(self, db: Session) -> None:
+    def test_draft_overdue_not_escalated(self, db: Session) -> None:
+        # draft → escalated is not a valid transition; overdue drafts are skipped
         wf = _make_workflow(db, context_ref_id="esc-002")
+        wf.due_at = "2020-01-01T00:00:00Z"
+        db.flush()
+
+        escalated = wf_engine.escalate_overdue(db, tenant_id=_TENANT)
+        assert wf.id not in escalated
+        assert wf.state == "draft"
+
+    def test_dry_run_does_not_change_state(self, db: Session) -> None:
+        wf = _make_workflow(db, context_ref_id="esc-dry")
+        wf_engine.transition_workflow(
+            db,
+            workflow_id=wf.id,
+            tenant_id=_TENANT,
+            to_state="active",
+            actor="actor",
+            reason="start",
+        )
         wf.due_at = "2020-01-01T00:00:00Z"
         db.flush()
 
         escalated = wf_engine.escalate_overdue(db, tenant_id=_TENANT, dry_run=True)
         assert wf.id in escalated
-        assert wf.state == "draft"
+        assert wf.state == "active"
 
     def test_skips_non_overdue(self, db: Session) -> None:
         wf = _make_workflow(db, context_ref_id="esc-003")

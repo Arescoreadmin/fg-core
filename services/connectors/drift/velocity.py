@@ -84,12 +84,13 @@ def compute_drift_velocity(
                 FaScanResult.tenant_id == tenant_id,
                 FaScanResult.engagement_id == engagement_id,
             )
-            .order_by(FaScanResult.collected_at.asc())
+            .order_by(FaScanResult.collected_at.desc())
             .limit(max(n_scans, 2))
         )
         .scalars()
         .all()
     )
+    scans = list(reversed(scans))  # restore chronological order for delta/presence logic
 
     if len(scans) < 2:
         return None

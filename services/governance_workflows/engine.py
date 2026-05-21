@@ -22,7 +22,7 @@ import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from api.db_models_governance_workflows import GovernanceWorkflow
@@ -289,6 +289,7 @@ def get_workflow_audit(
                 FaEngagementAuditEvent.event_type.in_(
                     ["workflow.transition", "workflow.evidence"]
                 ),
+                func.json_extract(FaEngagementAuditEvent.payload, "$.workflow_id") == workflow_id,
             )
             .order_by(FaEngagementAuditEvent.created_at.asc())
             .limit(limit)
@@ -296,11 +297,7 @@ def get_workflow_audit(
         .scalars()
         .all()
     )
-    return [
-        r
-        for r in rows
-        if r.payload.get("workflow_id") == workflow_id
-    ]
+    return list(rows)
 
 
 def escalate_overdue(
@@ -309,7 +306,7 @@ def escalate_overdue(
     tenant_id: str,
     dry_run: bool = False,
 ) -> list[str]:
-    """Find active/draft workflows past due_at and transition them to escalated.
+    """Find active workflows past due_at and transition them to escalated.
 
     Returns list of workflow IDs that were (or would be, in dry_run) escalated.
     """
@@ -318,7 +315,7 @@ def escalate_overdue(
         db.execute(
             select(GovernanceWorkflow).where(
                 GovernanceWorkflow.tenant_id == tenant_id,
-                GovernanceWorkflow.state.in_(["draft", "active"]),
+                GovernanceWorkflow.state == "active",
                 GovernanceWorkflow.due_at < now,
             )
         )
