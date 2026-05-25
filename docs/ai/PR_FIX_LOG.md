@@ -6,6 +6,43 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-25 — PR 11: Cross-Engagement Readiness Drift Detector
+
+**Branch:** `feat/cross-engagement-readiness-drift-pr11`
+
+**Area:** services/field_assessment/, api/field_assessment.py, tests/
+
+**PR/context:** PR 11 — Cross-Engagement Readiness Drift Detector
+
+**Root cause / reason:**
+- `GovernancePromotion.baseline_readiness_score` was persisted at promotion time but never compared across completed promotions for the same tenant.
+- Tenants lacked longitudinal readiness regression/improvement signal across engagements.
+- The platform could not detect whether readiness improved, degraded, or stayed stable between successive governance promotions.
+
+**Files changed:**
+- `services/field_assessment/promotion_drift.py` (new) — `detect_readiness_drift()` with `ReadinessDriftResult` frozen dataclass; tenant-scoped; deterministic ordering (promoted_at DESC, id DESC); null/zero-score safe
+- `services/field_assessment/promotion.py` — added `_detect_and_emit_drift()` called after `_emit_promotion_timeline()` and `_feed_findings_to_corpus()`; failure-safe; emits `field_assessment.governance.readiness_drift_detected` timeline event for improved/degraded only
+- `api/field_assessment.py` — added `ReadinessDriftResponse` model and `GET /field-assessment/engagements/{engagement_id}/readiness-drift` route (governance:read scope, tenant-safe, 404 on cross-tenant)
+- `tests/test_cross_engagement_drift.py` (new) — 17 tests across 4 classes covering all required scenarios
+
+**Security/integrity impact:**
+- All DB queries scoped to tenant_id — cross-tenant historical leakage is impossible
+- `gate_snapshot_json` and raw evidence payloads are never returned from the service or route
+- Drift detection failure is logged with context (tenant_id, engagement_id, promotion_id, operation) and never marks promotion failed or blocks commits
+- Stable drift produces no timeline event (direction threshold: abs(delta) < 3)
+- Route uses existing `get_engagement(tenant_id=...)` for ownership verification — returns 404 for both missing and cross-tenant engagements
+
+**Validation:**
+- ruff check .
+- ruff format --check .
+- pytest tests/test_cross_engagement_drift.py -q
+- python tools/ci/check_plane_registry.py
+- pytest tests/test_plane_registry.py -q
+- make fg-fast
+- bash codex_gates.sh
+
+---
+
 ### 2026-05-20 — PR 4: Report Generation Engine
 
 **Branch:** `feat/timeline-export-replay-adapters-pr102`

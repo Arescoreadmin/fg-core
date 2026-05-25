@@ -1,3 +1,25 @@
+## 2026-05-25 — SOC-HIGH-002 — PR 11: Cross-Engagement Readiness Drift Detector route inventory update
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (tools/ci route inventory update)
+
+**Files changed:**
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json` — regenerated via `make route-inventory-generate` after adding the readiness drift route.
+- `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — regenerated as part of the same route/OpenAPI refresh.
+- `BLUEPRINT_STAGED.md` and mirrored contract authority metadata — refreshed via `make contract-authority-refresh`.
+
+**New route:**
+- `GET /field-assessment/engagements/{engagement_id}/readiness-drift` — tenant-scoped cross-engagement readiness drift comparison returning longitudinal improvement/degradation signal.
+
+**Security posture:**
+- Route requires `governance:read`.
+- Tenant is resolved from auth context only; never from the request body.
+- Engagement ownership verified via existing `get_engagement(tenant_id=...)` pattern — cross-tenant engagement IDs return 404 without leaking existence.
+- Response contains only safe deterministic fields: prior_engagement_id, prior_score, current_score, delta, pct_change, direction, detected_at.
+- `gate_snapshot_json`, raw scan payloads, credentials, UPNs, prompts, tokens, and provider output are never returned.
+- Route inventory shows `tenant_bound: true`, `scopes: ["governance:read"]`, `plane: control`.
+
+---
+
 ## 2026-05-20 — SOC-HIGH-002 — PR 368.5: Microsoft Graph Field Assessment bridge route
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (tools/ci route inventory update)

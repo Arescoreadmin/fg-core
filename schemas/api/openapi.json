@@ -10957,6 +10957,101 @@
         "title": "ReadinessBlockerResponse",
         "type": "object"
       },
+      "ReadinessDriftResponse": {
+        "properties": {
+          "current_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Score"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "detected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected At"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "improved",
+                  "degraded",
+                  "stable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "has_prior": {
+            "title": "Has Prior",
+            "type": "boolean"
+          },
+          "pct_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct Change"
+          },
+          "prior_engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Engagement Id"
+          },
+          "prior_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Score"
+          }
+        },
+        "required": [
+          "has_prior"
+        ],
+        "title": "ReadinessDriftResponse",
+        "type": "object"
+      },
       "ReadinessGapResponse": {
         "properties": {
           "affected_control_ids": {
@@ -32271,6 +32366,65 @@
           }
         },
         "summary": "Promote Engagement Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/readiness-drift": {
+      "get": {
+        "description": "Return cross-engagement readiness drift for an engagement.\n\nRequires governance:read scope. Tenant is resolved from auth context only.\nReturns 404 for unknown or cross-tenant engagements without leaking existence.\nReturns has_prior=false when this is the tenant's first completed promotion\nor when the current promotion is not yet complete.",
+        "operationId": "get_readiness_drift_route_field_assessment_engagements__engagement_id__readiness_drift_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessDriftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Readiness Drift Route",
         "tags": [
           "field-assessment"
         ]

@@ -136,6 +136,9 @@ def promote_engagement_to_governance(
         _feed_findings_to_corpus(
             db, tenant_id=tenant_id, engagement_id=engagement_id, promotion=promotion
         )
+        _detect_and_emit_drift(
+            db, tenant_id=tenant_id, engagement_id=engagement_id, promotion=promotion
+        )
 
     return promotion
 
@@ -263,6 +266,57 @@ def _emit_promotion_timeline(
         log.error(
             "Failed to emit promotion timeline event for engagement %s: %s",
             engagement_id,
+            exc,
+        )
+
+
+def _detect_and_emit_drift(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    promotion: GovernancePromotion,
+) -> None:
+    """Detect cross-engagement readiness drift and emit a timeline event if non-stable.
+
+    Failure-safe: never raises. Never marks the promotion failed or blocks commits.
+    Emits field_assessment.governance.readiness_drift_detected only when direction
+    is 'improved' or 'degraded'. Stable drift produces no event.
+    """
+    try:
+        from services.field_assessment.promotion_drift import detect_readiness_drift
+
+        drift = detect_readiness_drift(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            new_score=promotion.baseline_readiness_score,
+        )
+        if drift is None or drift.direction == "stable":
+            return
+        emit_fa_timeline_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="field_assessment.governance.readiness_drift_detected",
+            payload={
+                "prior_engagement_id": drift.prior_engagement_id,
+                "prior_score": drift.prior_score,
+                "new_score": drift.new_score,
+                "delta": drift.delta,
+                "pct_change": drift.pct_change,
+                "direction": drift.direction,
+                "baseline_readiness_score": promotion.baseline_readiness_score,
+            },
+            replay_eligible=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error(
+            "Readiness drift detection failed for engagement %s "
+            "(tenant %s, promotion_id %s, operation=readiness_drift_detection): %s",
+            engagement_id,
+            tenant_id,
+            promotion.id,
             exc,
         )
 

@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 367,
+    "contract_count": 368,
     "contract_only": [],
-    "runtime_count": 471,
+    "runtime_count": 472,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "5ae11d3c5bdbe3280c1b4cfbe1eb23173b049875b8497168b2a6e50d847df0c7",
+  "governance_fingerprint": "929f13b25f20b462b956664ca5fce0f9ca365a50c678ba3602d7ea7b1ac3144a",
   "planes": [
     {
       "compat": {
@@ -457,6 +457,7 @@
       "GET /field-assessment/engagements/{engagement_id}/findings",
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "GET /field-assessment/engagements/{engagement_id}/observations",
+      "GET /field-assessment/engagements/{engagement_id}/readiness-drift",
       "GET /field-assessment/engagements/{engagement_id}/scan-results",
       "GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
       "GET /field-assessment/engagements/{engagement_id}/summary",

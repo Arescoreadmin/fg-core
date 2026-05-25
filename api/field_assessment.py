@@ -2545,6 +2545,17 @@ class PromotionResponse(BaseModel):
     error_detail: str | None = None
 
 
+class ReadinessDriftResponse(BaseModel):
+    has_prior: bool
+    prior_engagement_id: str | None = None
+    prior_score: float | None = None
+    current_score: float | None = None
+    delta: float | None = None
+    pct_change: float | None = None
+    direction: Literal["improved", "degraded", "stable"] | None = None
+    detected_at: str | None = None
+
+
 def _promotion_to_response(p: GovernancePromotion) -> PromotionResponse:
     return PromotionResponse(
         id=p.id,
@@ -2619,3 +2630,61 @@ def promote_engagement_route(
     db.commit()
     db.refresh(promotion)
     return _promotion_to_response(promotion)
+
+
+# ---------------------------------------------------------------------------
+# Route — Readiness drift (cross-engagement longitudinal comparison)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/engagements/{engagement_id}/readiness-drift",
+    response_model=ReadinessDriftResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_readiness_drift_route(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReadinessDriftResponse:
+    """Return cross-engagement readiness drift for an engagement.
+
+    Requires governance:read scope. Tenant is resolved from auth context only.
+    Returns 404 for unknown or cross-tenant engagements without leaking existence.
+    Returns has_prior=false when this is the tenant's first completed promotion
+    or when the current promotion is not yet complete.
+    """
+    from services.field_assessment.promotion_drift import detect_readiness_drift
+
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    promotion = get_promotion(db, tenant_id=tenant_id, engagement_id=engagement_id)
+    if promotion is None or promotion.status != "completed":
+        return ReadinessDriftResponse(has_prior=False)
+
+    drift = detect_readiness_drift(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        new_score=promotion.baseline_readiness_score,
+    )
+    if drift is None:
+        return ReadinessDriftResponse(has_prior=False)
+
+    return ReadinessDriftResponse(
+        has_prior=True,
+        prior_engagement_id=drift.prior_engagement_id,
+        prior_score=drift.prior_score,
+        current_score=drift.new_score,
+        delta=drift.delta,
+        pct_change=drift.pct_change,
+        direction=drift.direction,
+        detected_at=drift.detected_at,
+    )
