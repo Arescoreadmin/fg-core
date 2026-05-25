@@ -6,6 +6,34 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-25 — PR 13: CI Budget Hardening (fg-fast 360s → 480s)
+
+**Branch:** `feat/ci-budget-hardening-pr13`
+
+**Area:** CI config and gate thresholds — Makefile, .github/workflows/ci.yml
+
+**PR/context:** PR 13 — CI budget hardening after PR 12b timing failure
+
+**Root cause / reason:**
+- PR 12b fg-fast ran 395s on GitHub ubuntu-latest, exceeding the 360s (`FG_FAST_MAX_SECONDS`) budget.
+- CI machines run ~2x slower than local dev. Local: ~192s. CI: 395s. Budget was set without CI headroom.
+- Test suite unchanged; machine variance caused overage.
+
+**Files changed:**
+- `Makefile` — `FG_FAST_MAX_SECONDS` 360→480 (~21% headroom above observed failure); `FG_FAST_WARN_SECONDS` 300→420
+- `.github/workflows/ci.yml` — Guard job `timeout-minutes` 15→20 (job ran 9m56s at 15min; 20min provides adequate buffer)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — SOC-HIGH-002 entry for CI config changes
+
+**Security/integrity impact:**
+- No tests removed; no gate coverage reduced; no auth changes.
+- Pure timing tolerance adjustment. Suite still fails if it actually regresses past 480s.
+
+**Validation:**
+- make fg-fast passes locally (192s, well under 480s)
+- bash codex_gates.sh
+
+---
+
 ### 2026-05-25 — PR 12b: FastAPI Certification 0.133.0 → 0.136.3
 
 **Branch:** `feat/fastapi-certification-pr12b`
