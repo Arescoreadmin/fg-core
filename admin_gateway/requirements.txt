@@ -1,5 +1,5 @@
 # Admin Gateway dependencies
-fastapi==0.133.0
+fastapi==0.136.3
 starlette==1.1.0
 uvicorn[standard]==0.30.0
 pydantic==2.9.0
