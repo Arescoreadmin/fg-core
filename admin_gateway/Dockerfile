@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for layer caching
+COPY requirements-shared.txt ./
 COPY admin_gateway/requirements.txt ./admin_gateway/
 COPY contracts/ ./contracts/
 

@@ -6,6 +6,24 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-25 — PR 14 follow-up: Dockerfile COPY + fg-required timeout fixes
+
+**Branch:** `feat/dep-authority-normalization-pr14`
+
+**Area:** admin_gateway/Dockerfile (infra), .github/workflows/fg-required.yml (CI config)
+
+**Root cause / reason:**
+1. `admin_gateway/Dockerfile` copied only `admin_gateway/requirements.txt` into `/app/admin_gateway/`. When pip processed `-r ../requirements-shared.txt`, it looked for `/app/requirements-shared.txt` which did not exist in the image — Docker build failed with "No such file or directory: /app/requirements-shared.txt". Build context is repo root so the file is available; just needed an explicit COPY.
+2. `fg-required.yml` job `timeout-minutes: 15` was always the binding constraint — the harness step allows 25 min and `--global-budget-seconds 1200` (20 min), but the 15-minute job cap killed every run before they completed. Raised to 35 min (3 min setup + 8 min fg-fast + 7 min fg-security + buffer).
+
+**Files changed:**
+- `admin_gateway/Dockerfile` — added `COPY requirements-shared.txt ./` before pip install (infra change, called out)
+- `.github/workflows/fg-required.yml` — job `timeout-minutes` 15→35 (CI config change, called out)
+
+**Validation:** Gates pass locally; Docker build fix is structural (resolves the missing file path).
+
+---
+
 ### 2026-05-25 — PR 14: Dependency Authority Normalization (shared base requirements)
 
 **Branch:** `feat/dep-authority-normalization-pr14`
