@@ -1,3 +1,21 @@
+## 2026-05-25 — SOC-HIGH-002 — PR 13: CI Budget Hardening (fg-fast 360s → 480s)
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (CI config and gate threshold changes)
+
+**Files changed:**
+- `Makefile` — `FG_FAST_MAX_SECONDS` 360→480, `FG_FAST_WARN_SECONDS` 300→420
+- `.github/workflows/ci.yml` — Guard job `timeout-minutes` 15→20
+
+**Rationale:**
+- PR 12b CI run: fg-fast suite took 395s on GitHub-hosted ubuntu-latest, exceeding the 360s budget (exit 2) causing Guard and fg-required to fail. Test suite is identical to main; CI machine variance caused the overage.
+- 480s gives ~21% headroom above the observed 395s failure case; consistent with the fg-required budget baseline previously established in PR 50 (480s → 1200s escalation).
+- Guard job raised 15→20min: job ran 9m56s at 15min cap, leaving only 5min headroom. 20min provides adequate buffer given the 480s (8min) pytest budget plus setup overhead.
+- No tests removed; no gates weakened; no coverage reduction. Pure timing tolerance adjustment.
+
+**Security posture:** No behavioral or auth changes. CI gate coverage unchanged.
+
+---
+
 ## 2026-05-25 — SOC-HIGH-002 — PR 12a: CVE Closure (Starlette PYSEC-2026-161) dependency governance update
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (tools/ci critical files updated)
