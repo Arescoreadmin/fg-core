@@ -6,6 +6,55 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-25 — PR 12b: FastAPI Certification 0.133.0 → 0.136.3
+
+**Branch:** `feat/fastapi-certification-pr12b`
+
+**Area:** Dependency governance — requirements.txt, admin_gateway/requirements.txt
+
+**PR/context:** PR 12b — FastAPI Certification (sequenced after PR 12a CVE closure)
+
+**Changelog certification (0.133.1 – 0.136.3):**
+
+| Version | Change | Repo surface | Impact |
+|---------|--------|--------------|--------|
+| 0.133.1 | FastAPI Agent Skill docs; Windows test fix | None | None |
+| 0.134.0 | Streaming JSON Lines/binary via `yield`; requires starlette >=0.46.0 | `api/feed.py`, `api/admin.py` use generator `StreamingResponse`. starlette==1.1.0 satisfies requirement | No change required |
+| 0.135.0 | SSE dedicated tutorial (additive) | `api/feed.py` uses existing generator SSE pattern | No change required |
+| 0.135.1 | Fix TaskGroup yielding in request async exit stacks | No `anyio.TaskGroup` usage in codebase | Not affected |
+| 0.135.2 | Pydantic minimum bumped to >=2.9.0 | `pydantic==2.9.0` exactly meets minimum | No change required |
+| 0.135.3/4 | `@app.vibe()` April Fools decorator added then removed | None | None |
+| 0.136.0 | Free-threaded Python 3.14t support | Running Python 3.12; no impact | None |
+| 0.136.1 | Pydantic v2 deprecation handling (internal fastapi fix); starlette bumped to 1.0.0 in fastapi's own pin floor | Already on starlette==1.1.0 | No change required |
+| 0.136.2 | SSE field validation (rejects malformed SSE data) | `api/feed.py` emits standard `data:` and `: ping\n\n` — valid SSE | No change required |
+| 0.136.3 | **Header underscore rejection**: `convert_underscores=True` (default) now rejects incoming headers with underscores in wire name | All `Header()` params use explicit `alias=` with hyphenated names (`X-API-Key`, `X-Tenant-Id`, `X-Assessment-Id`, `Idempotency-Key`, etc.). Alias bypasses underscore conversion entirely | **Not affected** |
+
+**Files changed:**
+- `requirements.txt` — fastapi 0.133.0→0.136.3
+- `admin_gateway/requirements.txt` — fastapi 0.133.0→0.136.3
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Contract drift:** Zero. fastapi 0.136.3 generates identical OpenAPI schema to 0.133.0 for this codebase.
+
+**Security/integrity impact:**
+- starlette==1.1.0 pin unchanged; no new CVEs introduced
+- No middleware ordering changes; no auth flow changes; no API behavioral changes
+- No Header() parameter changes required (all use explicit alias)
+- No streaming code changes required
+
+**Validation:**
+- fastapi==0.136.3, starlette==1.1.0 confirmed via pip show
+- pip check (no conflicts)
+- pip-audit (No known vulnerabilities found)
+- ruff check . / ruff format --check .
+- make fg-contract (zero drift; contracts/admin, contracts/core, schemas/api all match)
+- make fg-fast (398 passed, 2 skipped)
+- pytest tests/test_engine_contract_boundary.py tests/test_request_tracing_task72.py tests/test_request_propagation_task73.py tests/test_observability.py (90 passed)
+- pytest tests/security (873 passed, 1 skipped)
+- bash codex_gates.sh
+
+---
+
 ### 2026-05-25 — PR 12a: CVE Closure (Starlette PYSEC-2026-161)
 
 **Branch:** `feat/dependency-cve-closure-pr12a`
