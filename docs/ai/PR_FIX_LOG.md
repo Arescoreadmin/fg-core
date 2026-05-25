@@ -6,6 +6,49 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-25 — PR 14: Dependency Authority Normalization (shared base requirements)
+
+**Branch:** `feat/dep-authority-normalization-pr14`
+
+**Area:** Dependency governance — requirements.txt, admin_gateway/requirements.txt, Makefile, scripts/contract_toolchain_check.py
+
+**PR/context:** PR 14 — Enterprise dependency authority normalization
+
+**Root cause / reason:**
+Installing `admin_gateway/requirements.txt` after root `requirements.txt` caused three cross-service version conflicts:
+- PyJWT: root 2.12.1 vs admin 2.12.0 (downgrade)
+- Pygments: root 2.20.0 vs admin 2.19.2 (downgrade)
+- Alembic: root 1.11.1 vs admin >=1.13.0,<2.0.0 (upgrade to 1.18.4)
+
+Root cause: two independent requirement files with no shared authority — any bump in one silently diverged from the other.
+
+**Solution:**
+- Created `requirements-shared.txt` — single source of truth for packages common to both services (14 packages, exact pins)
+- `requirements.txt` opens with `-r requirements-shared.txt` + core-only additions
+- `admin_gateway/requirements.txt` opens with `-r ../requirements-shared.txt` + admin-only additions
+- Normalized diverging packages to shared exact pins: PyJWT[crypto]==2.12.1, pygments==2.20.0, alembic==1.18.4, httpx==0.27.2, sqlalchemy==2.0.20, psycopg[binary]==3.3.2
+- Alembic bumped from root's 1.11.1 to 1.18.4 (admin_gateway always required >=1.13.0; root pin was an undetected oversight)
+
+**Files changed:**
+- `requirements-shared.txt` — NEW: 14 shared exact pins
+- `requirements.txt` — restructured: `-r requirements-shared.txt` + 16 core-specific packages
+- `admin_gateway/requirements.txt` — restructured: `-r ../requirements-shared.txt` + 2 admin-specific packages
+- `Makefile` — added `requirements-shared.txt` to `DEPS_INPUTS` so stamp invalidates on shared-file changes
+- `scripts/contract_toolchain_check.py` — `_parse_pins()` now recursively resolves `-r` includes so toolchain check reads transitive pins correctly
+
+**Security/integrity impact:**
+- pip check: No broken requirements found
+- pip-audit: No known vulnerabilities found
+- Installing both requirements files in any order produces zero installs/uninstalls — full parity confirmed
+- alembic 1.11.1→1.18.4: no alembic API surface used outside of migrations; migration suite passes (5850 tests, 29 skipped)
+
+**Validation:**
+- pip check ✅ | pip-audit ✅
+- make fg-contract ✅ (zero drift)
+- bash codex_gates.sh ✅ (5850 passed, 29 skipped)
+
+---
+
 ### 2026-05-25 — PR 13: CI Budget Hardening (fg-fast 360s → 480s)
 
 **Branch:** `feat/ci-budget-hardening-pr13`

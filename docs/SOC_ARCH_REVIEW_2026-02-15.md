@@ -1,3 +1,22 @@
+## 2026-05-25 — SOC-HIGH-002 — PR 14: Dependency Authority Normalization
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (Makefile DEPS_INPUTS change; dependency structure change)
+
+**Files changed:**
+- `requirements-shared.txt` — NEW file: 14 shared exact pins (single source of truth)
+- `requirements.txt` — restructured to include shared base via `-r requirements-shared.txt`
+- `admin_gateway/requirements.txt` — restructured to include shared base via `-r ../requirements-shared.txt`
+- `Makefile` — `DEPS_INPUTS` updated to include `requirements-shared.txt`
+- `scripts/contract_toolchain_check.py` — `_parse_pins()` updated to resolve `-r` includes recursively
+
+**Security posture:**
+- Eliminates cross-service install-order downgrade (PyJWT, Pygments, Alembic were diverging)
+- Alembic 1.11.1→1.18.4 (root): admin_gateway always required >=1.13.0; root pin was an undetected oversight. Migration suite passes.
+- pip check and pip-audit clean; no new CVE surface
+- No auth, middleware, or API behavioral changes
+
+---
+
 ## 2026-05-25 — SOC-HIGH-002 — PR 13: CI Budget Hardening (fg-fast 360s → 480s)
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (CI config and gate threshold changes)

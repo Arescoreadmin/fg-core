@@ -23,7 +23,7 @@ RUFF := $(VENV)/bin/ruff
 PYTEST := $(VENV)/bin/pytest
 
 DEPS_STAMP := $(VENV_DIR)/.deps.stamp
-DEPS_INPUTS := requirements.txt requirements-dev.txt constraints.txt
+DEPS_INPUTS := requirements.txt requirements-shared.txt requirements-dev.txt constraints.txt
 
 export PYTHONPATH := .
 export PIP_DISABLE_PIP_VERSION_CHECK := 1
