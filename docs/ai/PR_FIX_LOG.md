@@ -6,6 +6,45 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-25 — PR 12a: CVE Closure (Starlette PYSEC-2026-161)
+
+**Branch:** `feat/dependency-cve-closure-pr12a`
+
+**Area:** Dependency governance — requirements.txt, admin_gateway/requirements.txt, generated contract artifacts
+
+**PR/context:** PR 12a — CVE Closure (Starlette / PYSEC-2026-161)
+
+**Root cause / reason:**
+- pip-audit resolves dependencies from requirements files with `-r` mode, not from the active venv
+- `fastapi==0.132.1` declares `starlette<1.0.0` — transitive resolution landed on starlette 0.49.1 in audit mode, which is vulnerable to PYSEC-2026-161
+- `prometheus-fastapi-instrumentator==7.1.0` also declared `starlette<1.0.0`, creating a second blocker
+- Dependency authority was non-deterministic: venv may resolve differently from what pip-audit sees
+
+**Files changed:**
+- `requirements.txt` — fastapi 0.132.1→0.133.0 (minimum version allowing starlette 1.x); explicit `starlette==1.1.0` pin added; `prometheus-fastapi-instrumentator==7.1.0` removed (confirmed unused: zero imports in application code; metrics endpoint uses prometheus_client directly)
+- `admin_gateway/requirements.txt` — fastapi 0.132.1→0.133.0; explicit `starlette==1.1.0` pin added (pfi was not present there)
+- `contracts/admin/openapi.json` — regenerated deterministically; fastapi 0.133.0 adds `ctx` and `input` fields to the `ValidationError` schema
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` — regenerated deterministically by contract toolchain
+- `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — regenerated deterministically
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — SOC-HIGH-002 entry added
+
+**Security/integrity impact:**
+- Closes PYSEC-2026-161: explicit starlette==1.1.0 floor pin eliminates vulnerable transitive resolution
+- No middleware ordering changes; no auth flow changes; no API behavioral changes
+- `ValidationError` schema gains `ctx` and `input` fields (additive, non-breaking for existing clients)
+- No cross-tenant behavioral changes
+- No observability removal: prometheus_client stack remains intact; only the unused instrumentator wrapper was removed
+
+**Validation:**
+- pip check (no conflicts)
+- pip-audit (PYSEC-2026-161 resolved)
+- ruff check . / ruff format --check .
+- make fg-contract (passes; contracts regenerated deterministically)
+- make fg-fast (398 passed, 2 skipped)
+- bash codex_gates.sh
+
+---
+
 ### 2026-05-25 — PR 11: Cross-Engagement Readiness Drift Detector
 
 **Branch:** `feat/cross-engagement-readiness-drift-pr11`

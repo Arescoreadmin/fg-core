@@ -21,7 +21,7 @@ def test_bind_tenant_sets_db_session_context(pg_engine, monkeypatch) -> None:
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 12345),
     }
-    request = Request(scope)
+    request: Request = Request(scope)
 
     # Force auth tenant resolution so bind_tenant_id applies DB context.
     monkeypatch.setattr(

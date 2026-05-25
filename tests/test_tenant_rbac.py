@@ -87,7 +87,7 @@ def _make_request(
 ) -> Request:
     """Create a minimal mock Request with auth state."""
     scope = {"type": "http", "method": "GET", "path": "/test", "headers": []}
-    req = Request(scope)
+    req: Request = Request(scope)
     req.state.auth = SimpleNamespace(
         key_prefix=key_prefix, tenant_id=tenant_id, key_db_id=key_db_id
     )

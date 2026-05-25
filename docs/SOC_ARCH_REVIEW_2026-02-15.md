@@ -1,3 +1,22 @@
+## 2026-05-25 — SOC-HIGH-002 — PR 12a: CVE Closure (Starlette PYSEC-2026-161) dependency governance update
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (tools/ci critical files updated)
+
+**Files changed:**
+- `requirements.txt` — fastapi 0.132.1→0.133.0 (minimum required to permit starlette 1.x); added explicit starlette==1.1.0 pin; removed unused prometheus-fastapi-instrumentator==7.1.0
+- `admin_gateway/requirements.txt` — same fastapi and starlette changes; no pfi present there
+- `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — regenerated deterministically by contract toolchain after fastapi version change
+- `contracts/admin/openapi.json`, `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` — regenerated deterministically; fastapi 0.133.0 adds `ctx` and `input` fields to `ValidationError` schema
+
+**Security posture:**
+- Closes PYSEC-2026-161: starlette==1.1.0 explicit floor pin eliminates transitive vulnerable starlette 0.x resolution in pip-audit -r mode
+- prometheus-fastapi-instrumentator removal confirmed safe: zero imports in application code; metrics endpoint uses prometheus_client directly
+- fastapi 0.132.1 declares starlette<1.0.0 — hard incompatibility proven; 0.133.0 is the minimum version permitting starlette 1.x
+- No middleware ordering changes; no auth flow changes; no API behavioral changes
+- All generated artifacts are deterministic: identical inputs produce identical contract output
+
+---
+
 ## 2026-05-25 — SOC-HIGH-002 — PR 11: Cross-Engagement Readiness Drift Detector route inventory update
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (tools/ci route inventory update)
