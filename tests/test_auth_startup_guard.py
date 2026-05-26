@@ -46,7 +46,9 @@ def test_missing_pepper_is_error() -> None:
     }
     report = _run_auth_store_check(env)
 
-    error_names = {r.name for r in report.results if not r.passed and r.severity == "error"}
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
     assert "auth_store_pepper_missing" in error_names
     assert report.has_errors
 
@@ -60,7 +62,9 @@ def test_missing_sqlite_path_is_error() -> None:
     }
     report = _run_auth_store_check(env)
 
-    error_names = {r.name for r in report.results if not r.passed and r.severity == "error"}
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
     assert "auth_store_path_missing" in error_names
     assert report.has_errors
 
@@ -75,7 +79,8 @@ def test_both_set_no_auth_store_errors() -> None:
     report = _run_auth_store_check(env)
 
     auth_errors = [
-        r for r in report.results
+        r
+        for r in report.results
         if r.name.startswith("auth_store_") and not r.passed and r.severity == "error"
     ]
     assert auth_errors == [], f"Unexpected auth_store errors: {auth_errors}"
@@ -128,10 +133,19 @@ def test_missing_pepper_is_error_in_dev_not_just_production() -> None:
 # uses. Testing directly avoids coupling to the full app lifespan while still
 # proving the logic that runs in production.
 
-_REQUIRED_AUTH_COLS = frozenset({
-    "prefix", "key_hash", "key_lookup", "hash_alg",
-    "hash_params", "scopes_csv", "enabled", "tenant_id", "expires_at",
-})
+_REQUIRED_AUTH_COLS = frozenset(
+    {
+        "prefix",
+        "key_hash",
+        "key_lookup",
+        "hash_alg",
+        "hash_params",
+        "scopes_csv",
+        "enabled",
+        "tenant_id",
+        "expires_at",
+    }
+)
 
 
 def _present_cols(db_path: str) -> set[str]:
@@ -196,9 +210,7 @@ def test_readiness_schema_check_accepts_full_schema() -> None:
         _make_auth_db(path, with_required_cols=True)
         present = _present_cols(path)
         missing = _REQUIRED_AUTH_COLS - present
-        assert not missing, (
-            f"Unexpected missing columns in full schema: {missing}"
-        )
+        assert not missing, f"Unexpected missing columns in full schema: {missing}"
     finally:
         os.unlink(path)
 

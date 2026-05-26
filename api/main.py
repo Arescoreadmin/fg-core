@@ -725,15 +725,22 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if bool(app.state.auth_enabled):
             import sqlite3 as _sqlite3
 
-            _REQUIRED_AUTH_COLS = frozenset({
-                "prefix", "key_hash", "key_lookup", "hash_alg",
-                "hash_params", "scopes_csv", "enabled", "tenant_id", "expires_at",
-            })
+            _REQUIRED_AUTH_COLS = frozenset(
+                {
+                    "prefix",
+                    "key_hash",
+                    "key_lookup",
+                    "hash_alg",
+                    "hash_params",
+                    "scopes_csv",
+                    "enabled",
+                    "tenant_id",
+                    "expires_at",
+                }
+            )
             _auth_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
             if not _auth_path:
-                raise HTTPException(
-                    status_code=503, detail="auth_store_path_missing"
-                )
+                raise HTTPException(status_code=503, detail="auth_store_path_missing")
             if not os.path.exists(_auth_path):
                 raise HTTPException(
                     status_code=503,
@@ -758,9 +765,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 try:
                     _present = {
                         r[1]
-                        for r in _acon.execute(
-                            "PRAGMA table_info(api_keys)"
-                        ).fetchall()
+                        for r in _acon.execute("PRAGMA table_info(api_keys)").fetchall()
                     }
                     _missing = _REQUIRED_AUTH_COLS - _present
                     if _missing:

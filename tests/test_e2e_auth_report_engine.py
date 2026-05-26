@@ -360,7 +360,9 @@ def test_e2e_report_cross_tenant_returns_404() -> None:
             "assessment_type": "ai_governance",
         },
     )
-    assert r.status_code == 201, f"setup: create engagement: {r.status_code} {r.text[:200]}"
+    assert r.status_code == 201, (
+        f"setup: create engagement: {r.status_code} {r.text[:200]}"
+    )
     engagement_id = (_json_or_fail(r, "iso setup")).get("engagement_id") or (
         _json_or_fail(r, "iso setup")
     ).get("id")
