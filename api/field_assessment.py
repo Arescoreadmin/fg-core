@@ -86,11 +86,16 @@ from api.db_models_field_assessment import (
     FaScanResult,
 )
 
+from api.db_models_governance_asset_candidates import GaAssetCandidate
+from api.db_models_governance_assets import GaAsset
 from api.db_models_governance_promotion import GovernancePromotion
 from api.db_models_governance_report import GovernanceReportRecord
 from services.field_assessment.normalizer import normalize_scan_findings
 from services.field_assessment.promotion import promote_engagement_to_governance
 from services.field_assessment.promotion_store import get_promotion
+from services.governance_asset_registry.promotion import (
+    promote_candidate_to_asset as _promote_candidate,
+)
 
 from api.db_models_drift import FaDriftBaseline
 from services.connectors.drift.engine import compute_drift
@@ -1772,6 +1777,139 @@ def import_msgraph_connector_run_route(
         ) from exc
     db.commit()
     return ConnectorImportResponse(**result.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Route — Connector-run asset promotion
+# ---------------------------------------------------------------------------
+
+
+class PromoteConnectorAssetsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = False
+
+
+class PromoteConnectorAssetsResponse(BaseModel):
+    promoted: int
+    updated: int
+    skipped: int
+    assets: list[dict[str, Any]]
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
+    response_model=PromoteConnectorAssetsResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def promote_connector_run_assets(
+    engagement_id: str,
+    run_id: str,
+    body: PromoteConnectorAssetsRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> PromoteConnectorAssetsResponse:
+    """Promote connector-detected candidates from a specific run to governed assets.
+
+    Idempotent: repeated calls return promoted=0 once all candidates are promoted.
+    dry_run=true performs no writes and returns the projected outcome.
+    Tenant isolation: only candidates belonging to the caller's tenant are processed.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    candidates = (
+        db.execute(
+            select(GaAssetCandidate).where(
+                GaAssetCandidate.tenant_id == tenant_id,
+                GaAssetCandidate.engagement_id == engagement_id,
+                GaAssetCandidate.scan_result_id == run_id,
+                GaAssetCandidate.status == "detected",
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    if body.dry_run:
+        projected: list[dict[str, Any]] = []
+        for c in candidates:
+            external_id = f"{c.source_type}:{c.risk_signal}"
+            existing = db.execute(
+                select(GaAsset).where(
+                    GaAsset.tenant_id == tenant_id,
+                    GaAsset.external_id == external_id,
+                )
+            ).scalar_one_or_none()
+            projected.append(
+                {
+                    "id": c.candidate_id,
+                    "type": c.suggested_asset_type,
+                    "action": "updated" if existing else "promoted",
+                }
+            )
+        n_promoted = sum(1 for a in projected if a["action"] == "promoted")
+        n_updated = sum(1 for a in projected if a["action"] == "updated")
+        return PromoteConnectorAssetsResponse(
+            promoted=n_promoted,
+            updated=n_updated,
+            skipped=0,
+            assets=projected,
+        )
+
+    n_promoted = n_updated = n_skipped = 0
+    assets_out: list[dict[str, Any]] = []
+
+    for c in candidates:
+        external_id = f"{c.source_type}:{c.risk_signal}"
+        existing = db.execute(
+            select(GaAsset).where(
+                GaAsset.tenant_id == tenant_id,
+                GaAsset.external_id == external_id,
+            )
+        ).scalar_one_or_none()
+
+        try:
+            asset = _promote_candidate(
+                db, candidate=c, actor_email=actor, auto_promoted=False
+            )
+        except Exception as exc:
+            log.warning(
+                "promote_connector_assets.skip candidate_id=%s error=%s",
+                c.candidate_id,
+                exc,
+            )
+            n_skipped += 1
+            continue
+
+        action = "updated" if existing is not None else "promoted"
+        if action == "promoted":
+            n_promoted += 1
+        else:
+            n_updated += 1
+
+        assets_out.append(
+            {
+                "id": asset.asset_id,
+                "type": asset.asset_type,
+                "action": action,
+            }
+        )
+
+    db.commit()
+    return PromoteConnectorAssetsResponse(
+        promoted=n_promoted,
+        updated=n_updated,
+        skipped=n_skipped,
+        assets=assets_out,
+    )
 
 
 # ---------------------------------------------------------------------------

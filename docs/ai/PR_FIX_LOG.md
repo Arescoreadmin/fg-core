@@ -11850,3 +11850,54 @@ No migration was renumbered. No migration enforcement was weakened. No skip/xfai
 **Validation:**
 - `pytest tests/test_field_assessment_promotion.py -q` → 25 passed
 - `make fg-fast` → all gates pass, EXIT:0
+
+---
+
+### 2026-05-26 — PR 18: Asset Continuity Service
+
+**Branch:** `feat/asset-continuity-service-pr18`
+
+**Purpose:**
+Operational bridge between the Field Assessment Layer, Governance Asset Registry, and future Governance Automation Layer. Provides the authoritative source for governance health, attestation health, coverage gaps, asset freshness, and governance operational debt.
+
+**Files Changed:**
+- `services/governance_asset_registry/continuity.py` (new) — `AttestationHealthReport`, `ContinuityGap` dataclasses; `attestation_health()`, `continuity_gaps()`, `due_soon()` service functions
+- `api/governance_assets.py` — `GET /governance/assets/attestation-health`, `GET /governance/assets/continuity-gaps` routes; `AttestationHealthResponse`, `ContinuityGapResponse`, `ContinuityGapsResponse` models
+- `api/field_assessment.py` — `POST /field-assessment/engagements/{id}/connector-runs/{run_id}/promote-assets` route; `PromoteConnectorAssetsRequest/Response` models; imports for `GaAssetCandidate`, `GaAsset`, `_promote_candidate`
+- `migrations/postgres/0066_governance_continuity_candidate_index.sql` (new) — idempotent composite index for connector-run query pattern
+- `tests/test_asset_continuity.py` (new) — 20 tests covering all 15 spec requirements
+- `BLUEPRINT_STAGED.md` — contract authority marker refreshed
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 18 SOC entry
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Security Impact:**
+- All new routes enforce `tenant_id` from auth context only — never from request body.
+- No cross-tenant reads: all queries filter by `tenant_id`.
+- No raw payloads, credentials, tokens, or provider metadata in any response.
+- `promote-assets` route is idempotent: repeated calls cannot create duplicate assets.
+- `dry_run=true` performs zero DB writes.
+
+**Tenant Isolation Impact:**
+- `attestation_health()` and `continuity_gaps()` both enforce `WHERE tenant_id = ?` at the asset and owner query level.
+- No aggregate ever mixes tenants. health_pct reflects only the caller's tenant.
+
+**Governance Impact:**
+- Governance health is now measurable and tenant-isolated.
+- Governance continuity gaps are measurable, sorted by automation priority (risk_tier → staleness → days_overdue).
+- Connector-discovered candidates can now become governed assets via the promote-assets route.
+- Governance inventory transitions from static to operational.
+
+**Future Automation Impact:**
+- `continuity_gaps()` returns sorted by canonical automation priority order: risk_tier > staleness_index > days_overdue.
+- `AttestationHealthReport` fields are designed for future Governance Workflow Engine, Drift Detector, and Executive Dashboard consumption.
+- `due_soon()` provides the input for future SLA enforcement and governance renewal alerts.
+
+**Validation Results:**
+- `pytest tests/test_asset_continuity.py -q` → 20 passed
+- `ruff check` → all checks passed
+- `ruff format` → 2 files reformatted, all clean
+- `make route-inventory-generate` → route inventory written
+- `make contract-authority-refresh` → authority markers refreshed
+- `make fg-fast` → 398 passed, 2 skipped, all gates pass, EXIT:0
+- `bash codex_gates.sh` → all gates pass

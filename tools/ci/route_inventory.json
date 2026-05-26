@@ -4846,6 +4846,23 @@
         "tenant"
       ],
       "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/connector-schedules",
       "plane": "control",
@@ -5392,6 +5409,40 @@
       "scoped": true,
       "scopes": [
         "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/attestation-health",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/continuity-gaps",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -8133,7 +8184,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-26T00:30:27.652753+00:00",
+  "generated_at": "2026-05-26T18:09:20.845774+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
