@@ -711,12 +711,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             deps_status["db"] = "sqlite"
 
         # Auth store schema check — separate from the app DB.
-        # Runs whenever FG_AUTH_ENABLED=true (the scoped key resolver uses this file).
-        # Catches post-startup issues: volume unmounted, schema migration not applied.
-        _auth_enabled_raw = (
-            (os.getenv("FG_AUTH_ENABLED", "true") or "true").strip().lower()
-        )
-        if _auth_enabled_raw in _TRUE:
+        # Uses the resolved auth state from build_app() rather than re-reading env,
+        # so test harnesses with auth_enabled=False and FG_API_KEY-fallback contexts
+        # are handled correctly.
+        if bool(app.state.auth_enabled):
             import sqlite3 as _sqlite3
 
             _REQUIRED_AUTH_COLS = frozenset({
