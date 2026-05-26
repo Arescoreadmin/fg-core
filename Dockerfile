@@ -19,7 +19,7 @@ RUN apt-get update && \
 
 # Install Python deps
 # Adjust if you’re using poetry/uv; this assumes requirements.txt in repo root.
-COPY requirements.txt .
+COPY requirements-shared.txt requirements.txt ./
 RUN pip install --prefix=/install -r requirements.txt
 
 ########################################

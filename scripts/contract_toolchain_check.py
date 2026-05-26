@@ -20,6 +20,10 @@ def _parse_pins(requirements_path: Path) -> dict[str, str]:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
+        if line.startswith("-r "):
+            included = (requirements_path.parent / line[3:].strip()).resolve()
+            pins.update(_parse_pins(included))
+            continue
         if "==" not in line or line.startswith("-"):
             continue
         name_part, version = line.split("==", 1)
