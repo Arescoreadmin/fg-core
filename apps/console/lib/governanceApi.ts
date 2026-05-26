@@ -174,13 +174,13 @@ export async function traverse(
   fromNode: string,
   options?: { max_depth?: number; edge_types?: string; direction?: string },
 ): Promise<TraversalResponse> {
-  const q = buildQuery({ from_node: fromNode, ...(options ?? {}) });
+  const q = buildQuery({ from: fromNode, ...(options ?? {}) });
   return request<TraversalResponse>(`/traverse${q}`);
 }
 
 export async function getLineage(nodeId: string, maxDepth?: number): Promise<LineageResponse> {
   const q = buildQuery({ max_depth: maxDepth });
-  return request<LineageResponse>(`/nodes/${nodeId}/lineage${q}`);
+  return request<LineageResponse>(`/lineage/${nodeId}${q}`);
 }
 
 export async function getStats(): Promise<GraphStats> {
@@ -210,12 +210,12 @@ export async function findPath(
   toNode: string,
   maxDepth?: number,
 ): Promise<PathResponse> {
-  const q = buildQuery({ from_node: fromNode, to_node: toNode, max_depth: maxDepth });
+  const q = buildQuery({ from: fromNode, to: toNode, max_depth: maxDepth });
   return request<PathResponse>(`/path${q}`);
 }
 
 export async function rebuildGraph(triggeredBy?: string): Promise<GraphBuildResult> {
-  return request<GraphBuildResult>('/build', {
+  return request<GraphBuildResult>('/rebuild', {
     method: 'POST',
     body: JSON.stringify({ triggered_by: triggeredBy ?? 'ui' }),
   });
