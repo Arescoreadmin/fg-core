@@ -393,3 +393,65 @@ def test_insert_key_row_no_raw_secret_in_params() -> None:
     # Verify the raw_secret is not present in any execute() call arguments
     all_calls_str = str(mock_conn.execute.call_args_list)
     assert raw_secret not in all_calls_str
+
+
+# ---------------------------------------------------------------------------
+# 11. Null tenant_id in token payload falls back to "unknown" hint
+# ---------------------------------------------------------------------------
+
+
+def test_null_tenant_id_in_payload_uses_unknown_hint() -> None:
+    """token_payload with tenant_id=null must resolve to hint 'unknown', not None.
+
+    Migrated keys have tenant_id='unknown' in Postgres (migration script writes
+    'unknown' for NULL SQLite rows). If the hint resolves to None the RLS path
+    skips the DB entirely and the key is always rejected as key_not_found.
+    """
+    import sys
+
+    # Remove cached module so patch.dict env takes effect on import
+    for mod in list(sys.modules.keys()):
+        if "api.auth_scopes.resolution" in mod:
+            del sys.modules[mod]
+
+    fake_row = {
+        "id": 1,
+        "prefix": "fgk",
+        "key_hash": "deadbeef",
+        "key_lookup": None,
+        "hash_alg": "argon2id",
+        "hash_params": None,
+        "scopes_csv": "read",
+        "enabled": True,
+        "tenant_id": "unknown",
+        "expires_at": None,
+        "last_used_at": None,
+        "use_count": 0,
+        "created_at": datetime.now(tz=timezone.utc),
+        "version": 1,
+    }
+
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value.mappings.return_value.first.return_value = fake_row
+    mock_ctx = MagicMock()
+    mock_ctx.__enter__ = MagicMock(return_value=mock_conn)
+    mock_ctx.__exit__ = MagicMock(return_value=False)
+    mock_engine = MagicMock()
+    mock_engine.begin.return_value = mock_ctx
+
+    with patch.dict(os.environ, {"FG_DB_BACKEND": "postgres"}, clear=False):
+        with patch("api.auth_scopes.store._pg_engine", return_value=mock_engine):
+            from api.auth_scopes.store import get_key_row
+
+            # tenant_id_hint="unknown" (what resolution.py now sends for null claims)
+            row, identifier_col, _ = get_key_row(
+                prefix="fgk",
+                lookup_hash=None,
+                legacy_hash="deadbeef",
+                tenant_id_hint="unknown",
+            )
+
+    assert row is not None, (
+        "Key with tenant_id='unknown' must be found when hint is 'unknown'"
+    )
+    assert identifier_col == "key_hash"
