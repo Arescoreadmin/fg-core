@@ -37,7 +37,7 @@ Schema:
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Index, Integer, String, Text
+from sqlalchemy import Boolean, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -103,5 +103,15 @@ class GovernanceReportRecord(Base):
             "tenant_id",
             "engagement_id",
             "is_finalized",
+        ),
+        # Prevents duplicate version numbers from concurrent generation requests.
+        # sqlite_where is ignored by SQLite (no partial index support in SA DDL),
+        # but SQLite's NULL != NULL semantics achieve the same result: two rows
+        # with engagement_id=NULL are never considered duplicates.
+        UniqueConstraint(
+            "tenant_id",
+            "engagement_id",
+            "version",
+            name="uq_governance_reports_engagement_version",
         ),
     )

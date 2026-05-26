@@ -2925,6 +2925,8 @@ def create_engagement_report_route(
     import json
     import uuid
 
+    from sqlalchemy.exc import IntegrityError
+
     from services.governance.report.signing import ReportSigningKeyError, sign_report
     from services.governance.report.versioning import get_next_version
 
@@ -2969,34 +2971,52 @@ def create_engagement_report_route(
             detail=api_error("REPORT_SIGNING_KEY_MISSING", str(exc)),
         )
 
-    version = get_next_version(db, tenant_id=tenant_id, engagement_id=engagement_id)
-    report_json["version"] = version
     now = report_json.get("generated_at", "")
+    record: GovernanceReportRecord | None = None
+    _MAX_VERSION_RETRIES = 5
 
-    record_id = (
-        uuid.uuid4().hex[:16]
-        + hashlib.sha256(f"{tenant_id}:{engagement_id}:{version}".encode()).hexdigest()[
-            :16
-        ]
-    )
+    for _attempt in range(_MAX_VERSION_RETRIES):
+        version = get_next_version(db, tenant_id=tenant_id, engagement_id=engagement_id)
+        report_json["version"] = version
+        record_id = (
+            uuid.uuid4().hex[:16]
+            + hashlib.sha256(
+                f"{tenant_id}:{engagement_id}:{version}:{_attempt}".encode()
+            ).hexdigest()[:16]
+        )
+        record = GovernanceReportRecord(
+            id=record_id,
+            assessment_id=engagement_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            version=version,
+            schema_version="1.0",
+            report_type=body.report_type,
+            compiled_by=actor,
+            manifest_hash=manifest_hash,
+            report_json=report_json,
+            section_hashes=section_hashes,
+            signature=signature,
+            generated_at=now,
+            is_finalized=True,
+        )
+        db.add(record)
+        try:
+            db.flush()
+            break
+        except IntegrityError:
+            db.rollback()
+            record = None
+            continue
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_error(
+                "REPORT_VERSION_CONFLICT",
+                "Unable to assign a unique report version after concurrent requests. Retry.",
+            ),
+        )
 
-    record = GovernanceReportRecord(
-        id=record_id,
-        assessment_id=engagement_id,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        version=version,
-        schema_version="1.0",
-        report_type=body.report_type,
-        compiled_by=actor,
-        manifest_hash=manifest_hash,
-        report_json=report_json,
-        section_hashes=section_hashes,
-        signature=signature,
-        generated_at=now,
-        is_finalized=True,
-    )
-    db.add(record)
     db.commit()
     db.refresh(record)
 

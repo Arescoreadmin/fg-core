@@ -582,3 +582,63 @@ def test_get_next_version_increments(build_app, monkeypatch) -> None:
     assert r2.status_code == 201
     assert r1.json()["version"] == 1
     assert r2.json()["version"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Test 18: Concurrent version requests produce distinct versions (no duplicates)
+# ---------------------------------------------------------------------------
+
+
+def test_concurrent_report_versions_are_unique(build_app, monkeypatch) -> None:
+    """Simulate two sequential requests racing for the same version slot.
+
+    This test patches get_next_version to return the same value twice, forcing
+    the unique-constraint retry path, and verifies that both requests ultimately
+    receive distinct versions.
+    """
+    import threading
+
+    monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
+    app = build_app(auth_enabled=True)
+    from api.auth_scopes import mint_key
+
+    tc = TestClient(
+        app,
+        headers={
+            "X-API-Key": mint_key(
+                "governance:read", "governance:write", tenant_id="t-concurrent"
+            )
+        },
+    )
+
+    eid_resp = tc.post("/field-assessment/engagements", json=_ENGAGEMENT_BODY)
+    assert eid_resp.status_code == 201
+    eid = eid_resp.json()["id"]
+
+    results: list[dict] = []
+    errors: list[Exception] = []
+
+    def _post() -> None:
+        try:
+            resp = tc.post(
+                f"/field-assessment/engagements/{eid}/reports",
+                json={"report_type": "full_assessment"},
+            )
+            results.append({"status": resp.status_code, "body": resp.json()})
+        except Exception as exc:
+            errors.append(exc)
+
+    t1 = threading.Thread(target=_post)
+    t2 = threading.Thread(target=_post)
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert not errors, f"threads raised: {errors}"
+    successful = [r for r in results if r["status"] == 201]
+    assert len(successful) == 2, f"Expected 2 successful creates, got: {results}"
+    versions = {r["body"]["version"] for r in successful}
+    assert len(versions) == 2, (
+        f"Duplicate versions assigned under concurrency: {versions}"
+    )
