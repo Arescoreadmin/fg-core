@@ -270,15 +270,19 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         try:
             _auth_sqlite_path = _sqlite_path_from_env()
-            if _auth_sqlite_path:
-                Path(_auth_sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+            _db_backend = (os.getenv("FG_DB_BACKEND") or "").strip().lower()
+
+            if _db_backend != "postgres":
+                # SQLite mode: ensure parent directory and auth store file.
+                if _auth_sqlite_path:
+                    Path(_auth_sqlite_path).parent.mkdir(parents=True, exist_ok=True)
 
             init_db()
 
-            # init_db() only runs _ensure_api_keys_sqlite in SQLite mode.
-            # When the app DB is Postgres, initialize the auth store file here
-            # so the readiness probe finds it on the first health check.
-            if resolved_auth_enabled and (os.getenv("FG_DB_URL") or "").strip():
+            # In Postgres mode, _ensure_api_keys_sqlite must not run.
+            # In SQLite mode, initialize the auth store file so the readiness
+            # probe finds it on the first health check.
+            if resolved_auth_enabled and _db_backend != "postgres":
                 if _auth_sqlite_path:
                     _ensure_api_keys_sqlite(_auth_sqlite_path)
 
@@ -718,75 +722,98 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 )
             deps_status["db"] = "sqlite"
 
-        # Auth store schema check — separate from the app DB.
-        # Uses the resolved auth state from build_app() rather than re-reading env,
-        # so test harnesses with auth_enabled=False and FG_API_KEY-fallback contexts
-        # are handled correctly.
+        # Auth store readiness check — backend-aware.
+        # Uses the resolved auth state from build_app() so test harnesses with
+        # auth_enabled=False and FG_API_KEY-fallback contexts are handled correctly.
         if bool(app.state.auth_enabled):
-            import sqlite3 as _sqlite3
+            _ready_db_backend = (os.getenv("FG_DB_BACKEND") or "").strip().lower()
 
-            _REQUIRED_AUTH_COLS = frozenset(
-                {
-                    "prefix",
-                    "key_hash",
-                    "key_lookup",
-                    "hash_alg",
-                    "hash_params",
-                    "scopes_csv",
-                    "enabled",
-                    "tenant_id",
-                    "expires_at",
-                }
-            )
-            _auth_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
-            if not _auth_path:
-                raise HTTPException(status_code=503, detail="auth_store_path_missing")
-            if not os.path.exists(_auth_path):
-                raise HTTPException(
-                    status_code=503,
-                    detail="auth_store_unreachable: path does not exist",
-                )
-            # Verify the parent directory is writable. The container runs
-            # read_only: true; only volume-mounted paths are writable. If the
-            # SQLite file exists on a read-only path, key verification works for
-            # existing keys but mint_key() fails silently — a degraded state that
-            # should surface here rather than at the first minting attempt.
-            _auth_parent = os.path.dirname(_auth_path) or "."
-            if not os.access(_auth_parent, os.W_OK):
-                raise HTTPException(
-                    status_code=503,
-                    detail=(
-                        "auth_store_dir_not_writable: key minting will fail. "
-                        "Ensure FG_SQLITE_PATH is on a writable volume mount."
-                    ),
-                )
-            try:
-                _acon = _sqlite3.connect(_auth_path, timeout=1.0)
+            if _ready_db_backend == "postgres":
+                # Postgres mode: probe api_keys table via the shared engine.
                 try:
-                    _present = {
-                        r[1]
-                        for r in _acon.execute("PRAGMA table_info(api_keys)").fetchall()
+                    from api.auth_scopes.store import probe_auth_store
+
+                    _pg_ok, _pg_reason = probe_auth_store()
+                    if not _pg_ok:
+                        raise HTTPException(status_code=503, detail=_pg_reason)
+                    deps_status["auth_store"] = "ok"
+                except HTTPException:
+                    raise
+                except Exception as exc:
+                    log.warning(
+                        "auth_store_readiness_check_failed: %s", type(exc).__name__
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"auth_store_backend_error:{type(exc).__name__}",
+                    )
+            else:
+                # SQLite mode: existing file/schema/writable-dir checks (PR 16).
+                import sqlite3 as _sqlite3
+
+                _REQUIRED_AUTH_COLS = frozenset(
+                    {
+                        "prefix",
+                        "key_hash",
+                        "key_lookup",
+                        "hash_alg",
+                        "hash_params",
+                        "scopes_csv",
+                        "enabled",
+                        "tenant_id",
+                        "expires_at",
                     }
-                    _missing = _REQUIRED_AUTH_COLS - _present
-                    if _missing:
-                        raise HTTPException(
-                            status_code=503,
-                            detail=(
-                                f"auth_store_schema_incomplete: "
-                                f"missing columns {sorted(_missing)}"
-                            ),
-                        )
-                finally:
-                    _acon.close()
-            except HTTPException:
-                raise
-            except (_sqlite3.Error, OSError) as exc:
-                log.warning("auth_store_readiness_check_failed: %s", exc)
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"auth_store_unreachable: {type(exc).__name__}",
                 )
-            deps_status["auth_store"] = "ok"
+                _auth_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
+                if not _auth_path:
+                    raise HTTPException(
+                        status_code=503, detail="auth_store_path_missing"
+                    )
+                if not os.path.exists(_auth_path):
+                    raise HTTPException(
+                        status_code=503,
+                        detail="auth_store_unreachable: path does not exist",
+                    )
+                # Verify the parent directory is writable. The container runs
+                # read_only: true; only volume-mounted paths are writable.
+                _auth_parent = os.path.dirname(_auth_path) or "."
+                if not os.access(_auth_parent, os.W_OK):
+                    raise HTTPException(
+                        status_code=503,
+                        detail=(
+                            "auth_store_dir_not_writable: key minting will fail. "
+                            "Ensure FG_SQLITE_PATH is on a writable volume mount."
+                        ),
+                    )
+                try:
+                    _acon = _sqlite3.connect(_auth_path, timeout=1.0)
+                    try:
+                        _present = {
+                            r[1]
+                            for r in _acon.execute(
+                                "PRAGMA table_info(api_keys)"
+                            ).fetchall()
+                        }
+                        _missing = _REQUIRED_AUTH_COLS - _present
+                        if _missing:
+                            raise HTTPException(
+                                status_code=503,
+                                detail=(
+                                    f"auth_store_schema_incomplete: "
+                                    f"missing columns {sorted(_missing)}"
+                                ),
+                            )
+                    finally:
+                        _acon.close()
+                except HTTPException:
+                    raise
+                except (_sqlite3.Error, OSError) as exc:
+                    log.warning("auth_store_readiness_check_failed: %s", exc)
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"auth_store_unreachable: {type(exc).__name__}",
+                    )
+                deps_status["auth_store"] = "ok"
 
         checker = None
         try:

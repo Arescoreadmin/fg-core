@@ -6,6 +6,106 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-26 — PR 17: Postgres Auth Authority Migration
+
+**Branch:** `claude/wizardly-cannon-VJxAm`
+
+**PR/context:** PR 17 — Postgres Auth Authority Migration
+
+**Area:** Auth / Database Backend / HA Readiness
+
+**Root cause:**
+Auth path (`resolution.py`, `mapping.py`) was hardwired to
+`sqlite3.connect(FG_SQLITE_PATH)` regardless of `FG_DB_BACKEND`. In Postgres /
+HA / Kubernetes multi-replica deployments, keys minted on one node did not
+reach other nodes — each instance had an isolated SQLite file. The Postgres
+`api_keys` table (created by migration 0001) was unused by the live auth
+resolver.
+
+**Files changed:**
+- `api/auth_scopes/store.py` (new) — Backend-dispatch key store. Provides
+  `get_key_row()`, `insert_key_row()`, `update_key_enabled()`,
+  `update_key_usage()`, `list_key_rows()`, `probe_auth_store()`. Postgres
+  path uses SQLAlchemy `text()` parameterized queries; no PRAGMA logic. Sets
+  `app.tenant_id` via `set_config()` before each query to satisfy RLS.
+- `api/auth_scopes/resolution.py` — `verify_api_key_detailed()` dispatches
+  `_row_for()` by backend. Postgres path calls `store.get_key_row()` with
+  `tenant_id_hint` from token payload (for RLS context). DB expiration check
+  inline for Postgres (uses `expires_at` from row). Legacy hash upgrade is
+  SQLite-only. `_update_key_usage()` signature extended with `tenant_id`.
+- `api/auth_scopes/mapping.py` — `mint_key()` dispatches to
+  `_mint_key_postgres()` / `_mint_key_sqlite()`. `revoke_api_key()`,
+  `rotate_api_key_by_prefix()`, `list_api_keys()` dispatch through store.
+  `_update_key_usage()` dispatches to `store.update_key_usage()` in Postgres
+  mode.
+- `api/config/startup_validation.py` — `_check_auth_store()` extended:
+  Postgres mode requires `FG_DB_URL` and probes `api_keys` connectivity;
+  SQLite mode unchanged (PR 16 behavior).
+- `api/main.py` — `health_ready()` dispatches auth store check by backend:
+  Postgres probes via `store.probe_auth_store()`; SQLite uses existing
+  file/schema/writable-dir checks. Startup no longer calls
+  `_ensure_api_keys_sqlite()` in Postgres mode.
+- `deploy/frostgate-core/values.yaml` — Added `FG_DB_BACKEND: "postgres"` and
+  a comment for `FG_KEY_PEPPER` secret reference.
+- `tools/scripts/migrate_auth_sqlite_to_postgres.py` (new) — One-shot
+  idempotent migration script. Converts INTEGER timestamps → UTC TIMESTAMPTZ,
+  TEXT JSON hash_params → dict, 1/0 enabled → bool, NULL name → "default",
+  NULL tenant_id → "unknown". INSERT ON CONFLICT (key_hash) DO NOTHING.
+  Supports `--dry-run`. Exits non-zero on missing env or file.
+- `tests/test_auth_postgres_store.py` (new) — 10+ tests: backend dispatch,
+  Postgres get/insert/update behavior, timestamp/JSONB conversion, tenant_id
+  requirement, no raw secret in SQL params.
+- `tests/test_auth_startup_guard.py` — Extended with 7 Postgres-mode tests:
+  pepper missing, FG_DB_URL missing, FG_SQLITE_PATH not required in Postgres
+  mode, connectivity failure, connectivity success, sqlite mode pepper/path.
+- `tests/test_auth_sqlite_to_postgres_migration.py` (new) — 9 tests:
+  dry-run, NULL name → "default", NULL tenant_id → "unknown", timestamp
+  conversion, hash_params JSON → dict, missing env exits non-zero.
+- `docs/security/AUTH_AUTHORITY_ROADMAP.md` — PR 17 marked complete. PR 16
+  marked complete. Operational migration steps documented. PR 18 future
+  deprecation noted.
+- `docs/ai/PR_FIX_LOG.md` — This entry.
+
+**Security/integrity impact:**
+- Postgres deployments now use Postgres as the sole auth authority when
+  `FG_DB_BACKEND=postgres`; no split-brain between app data and auth data.
+- `FG_KEY_PEPPER` remains mandatory in all auth-enabled modes (not demoted to
+  SQLite-only).
+- Tenant RLS satisfied via `set_config('app.tenant_id', ...)` before every
+  Postgres auth query; tenant isolation preserved.
+- No raw secrets, peppers, hashes, or lookup hashes in logs or SQL parameters.
+- No silent fallback from Postgres to SQLite in Postgres mode.
+- No fail-open added.
+
+**Tenant isolation impact:**
+Postgres auth queries set `app.tenant_id` in the transaction context to
+satisfy the `api_keys_tenant_isolation` RLS policy. For auth lookups, the
+tenant_id is extracted from the token payload (available before DB lookup);
+cryptographic verification via Argon2id/HMAC is the actual security gate.
+Writes (mint, revoke, rotate) require tenant_id explicitly.
+
+**Migration strategy:**
+Run `tools/scripts/migrate_auth_sqlite_to_postgres.py --dry-run` then live,
+then set `FG_DB_BACKEND=postgres`, verify `/health/ready`, run E2E smoke.
+See `docs/security/AUTH_AUTHORITY_ROADMAP.md` for full steps.
+
+**Dependency:** PR 16 (auth runtime guard, persistent SQLite key store).
+
+**PR 18 future note:** SQLite auth support is retained for dev/test. PR 18
+may deprecate/remove the SQLite auth path once all deployments are confirmed
+on Postgres.
+
+**Validation:**
+- `ruff check .` — passed
+- `ruff format --check .` — passed
+- `pytest tests/test_auth_postgres_store.py -q` — passed
+- `pytest tests/test_auth_startup_guard.py -q` — passed
+- `pytest tests/test_auth_sqlite_to_postgres_migration.py -q` — passed
+- `make fg-fast` — passed
+- `bash codex_gates.sh` — passed
+
+---
+
 ### 2026-05-26 — PR 16: Auth Runtime Guard and Persistent SQLite Key Store
 
 **Branch:** `feat/auth-runtime-guard-pr16`

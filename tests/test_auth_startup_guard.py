@@ -1,5 +1,6 @@
 """
 PR 16 — Auth Runtime Guard: startup validation and readiness probe checks.
+PR 17 — Extended: Postgres-mode startup validation.
 
 Tests that:
   1. Missing FG_KEY_PEPPER with FG_AUTH_ENABLED=true → has_errors=True
@@ -9,6 +10,15 @@ Tests that:
   5. /health/ready returns 503 when startup_validation.has_errors is True
   6. /health/ready returns 503 when auth store file is absent at probe time
   7. /health/ready returns 503 when auth store schema is missing required columns
+
+PR 17 additions (Postgres mode):
+  8.  FG_DB_BACKEND=postgres + FG_KEY_PEPPER missing → error
+  9.  FG_DB_BACKEND=postgres + FG_DB_URL missing → error
+  10. FG_DB_BACKEND=postgres + FG_SQLITE_PATH missing → no auth_store_path error
+  11. FG_DB_BACKEND=postgres + auth-store connectivity failure → error
+  12. FG_DB_BACKEND=postgres + auth-store connectivity success → no auth-store error
+  13. FG_DB_BACKEND=sqlite + FG_SQLITE_PATH missing → error
+  14. FG_DB_BACKEND=sqlite + FG_KEY_PEPPER missing → error
 """
 
 from __future__ import annotations
@@ -287,3 +297,153 @@ def test_readiness_has_errors_gate_contract() -> None:
     assert not report2.has_errors, (
         "has_errors must remain False for warning-only reports"
     )
+
+
+# ---------------------------------------------------------------------------
+# PR 17 — Postgres-mode startup validation tests
+# ---------------------------------------------------------------------------
+
+
+def _run_auth_store_check_with_probe(
+    env: dict,
+    probe_result: tuple[bool, str] = (True, "auth_store_backend_ok"),
+) -> "Any":
+    """Run _check_auth_store with a patched probe_auth_store."""
+    from api.config.startup_validation import StartupValidationReport, StartupValidator
+    from unittest.mock import patch
+
+    with patch.dict(os.environ, env, clear=False):
+        with patch(
+            "api.auth_scopes.store.probe_auth_store",
+            return_value=probe_result,
+        ):
+            validator = StartupValidator()
+            report = StartupValidationReport(
+                env=validator.env, is_production=validator.is_production
+            )
+            validator._check_auth_store(report)
+    return report
+
+
+def test_postgres_mode_pepper_missing_is_error() -> None:
+    """FG_DB_BACKEND=postgres + FG_KEY_PEPPER missing → auth_store_pepper_missing error."""
+    env = {
+        "FG_AUTH_ENABLED": "true",
+        "FG_DB_BACKEND": "postgres",
+        "FG_KEY_PEPPER": "",
+        "FG_DB_URL": "postgresql+psycopg://user:pass@host/db",
+    }
+    report = _run_auth_store_check_with_probe(env)
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "auth_store_pepper_missing" in error_names
+    assert report.has_errors
+
+
+def test_postgres_mode_db_url_missing_is_error() -> None:
+    """FG_DB_BACKEND=postgres + FG_DB_URL missing → auth_store_db_url_missing error."""
+    env = {
+        "FG_AUTH_ENABLED": "true",
+        "FG_DB_BACKEND": "postgres",
+        "FG_KEY_PEPPER": "a-valid-pepper-value-32-chars-xxx",
+        "FG_DB_URL": "",
+    }
+    report = _run_auth_store_check_with_probe(env)
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "auth_store_db_url_missing" in error_names
+    assert report.has_errors
+
+
+def test_postgres_mode_sqlite_path_missing_is_not_error() -> None:
+    """FG_DB_BACKEND=postgres + FG_SQLITE_PATH missing → NO auth_store_path error.
+
+    In Postgres mode, FG_SQLITE_PATH is not required for auth.
+    """
+    env = {
+        "FG_AUTH_ENABLED": "true",
+        "FG_DB_BACKEND": "postgres",
+        "FG_KEY_PEPPER": "a-valid-pepper-value-32-chars-xxx",
+        "FG_DB_URL": "postgresql+psycopg://user:pass@host/db",
+        "FG_SQLITE_PATH": "",
+    }
+    report = _run_auth_store_check_with_probe(env, probe_result=(True, "ok"))
+    path_errors = [
+        r
+        for r in report.results
+        if r.name == "auth_store_path_missing"
+        and not r.passed
+        and r.severity == "error"
+    ]
+    assert path_errors == [], "auth_store_path_missing must not appear in Postgres mode"
+
+
+def test_postgres_mode_connectivity_failure_is_error() -> None:
+    """FG_DB_BACKEND=postgres + probe failure → auth_store_backend_unreachable error."""
+    env = {
+        "FG_AUTH_ENABLED": "true",
+        "FG_DB_BACKEND": "postgres",
+        "FG_KEY_PEPPER": "a-valid-pepper-value-32-chars-xxx",
+        "FG_DB_URL": "postgresql+psycopg://user:pass@host/db",
+    }
+    report = _run_auth_store_check_with_probe(
+        env, probe_result=(False, "auth_store_schema_missing")
+    )
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "auth_store_backend_unreachable" in error_names
+    assert report.has_errors
+
+
+def test_postgres_mode_connectivity_success_no_error() -> None:
+    """FG_DB_BACKEND=postgres + probe success → no auth-store error."""
+    env = {
+        "FG_AUTH_ENABLED": "true",
+        "FG_DB_BACKEND": "postgres",
+        "FG_KEY_PEPPER": "a-valid-pepper-value-32-chars-xxx",
+        "FG_DB_URL": "postgresql+psycopg://user:pass@host/db",
+    }
+    report = _run_auth_store_check_with_probe(
+        env, probe_result=(True, "auth_store_backend_ok")
+    )
+    auth_errors = [
+        r
+        for r in report.results
+        if r.name.startswith("auth_store_") and not r.passed and r.severity == "error"
+    ]
+    assert auth_errors == [], f"Unexpected auth_store errors: {auth_errors}"
+
+
+def test_sqlite_mode_path_missing_is_error() -> None:
+    """FG_DB_BACKEND=sqlite + FG_SQLITE_PATH missing → auth_store_path_missing error."""
+    env = {
+        "FG_AUTH_ENABLED": "true",
+        "FG_DB_BACKEND": "sqlite",
+        "FG_KEY_PEPPER": "a-valid-pepper-value-32-chars-xxx",
+        "FG_SQLITE_PATH": "",
+    }
+    report = _run_auth_store_check(env)
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "auth_store_path_missing" in error_names
+    assert report.has_errors
+
+
+def test_sqlite_mode_pepper_missing_is_error() -> None:
+    """FG_DB_BACKEND=sqlite + FG_KEY_PEPPER missing → auth_store_pepper_missing error."""
+    env = {
+        "FG_AUTH_ENABLED": "true",
+        "FG_DB_BACKEND": "sqlite",
+        "FG_KEY_PEPPER": "",
+        "FG_SQLITE_PATH": "/tmp/irrelevant.db",
+    }
+    report = _run_auth_store_check(env)
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "auth_store_pepper_missing" in error_names
+    assert report.has_errors
