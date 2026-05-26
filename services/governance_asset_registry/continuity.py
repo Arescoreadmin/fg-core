@@ -164,7 +164,25 @@ def continuity_gaps(
     staleness_index (highest first), days_overdue (highest first).
 
     Excludes compliant and due-soon assets.
+
+    SQL pre-filter: only assets with a stored next_attestation_due_at < now are
+    loaded into Python, using the ix_ga_owners_tenant_due index.  Python then
+    re-classifies each row authoritatively via compute_next_due_at() so that
+    stale stored values never produce incorrect results.
     """
+    now_str = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+    # Pre-filter: asset_ids that have at least one owner whose stored due date
+    # has already passed.  Uses ix_ga_owners_tenant_due to avoid a full scan.
+    overdue_prefilter = (
+        select(GaAssetOwner.asset_id)
+        .where(
+            GaAssetOwner.tenant_id == tenant_id,
+            GaAssetOwner.next_attestation_due_at < now_str,
+        )
+        .distinct()
+    )
+
     latest = _latest_attestation_subquery(db, tenant_id=tenant_id)
 
     stmt = (
@@ -179,6 +197,7 @@ def continuity_gaps(
         .where(
             GaAsset.tenant_id == tenant_id,
             GaAsset.status == "active",
+            GaAsset.asset_id.in_(overdue_prefilter),
         )
     )
 

@@ -24,6 +24,7 @@ import api.db_models_field_assessment  # noqa: F401
 
 from api.db_models_governance_asset_candidates import GaAssetCandidate
 from api.db_models_governance_assets import GaAsset, GaAssetOwner
+from services.governance_asset_registry.attestation import compute_next_due_at
 from services.governance_asset_registry.continuity import (
     attestation_health,
     continuity_gaps,
@@ -103,6 +104,7 @@ def _make_owner(
     ownership_id: str,
     asset_id: str,
     tenant_id: str = _TENANT,
+    risk_tier: str = "low",
     last_attested_at: str | None = None,
 ) -> GaAssetOwner:
     now = _now_str()
@@ -114,7 +116,7 @@ def _make_owner(
         owner_role="primary",
         attestation_interval_days=90,
         last_attested_at=last_attested_at,
-        next_attestation_due_at=None,
+        next_attestation_due_at=compute_next_due_at(risk_tier, last_attested_at),
         assigned_at=now,
         assigned_by_email="admin@example.com",
     )
@@ -290,6 +292,7 @@ class TestContinuityGaps:
             db,
             ownership_id="ord-lo",
             asset_id="ord-low",
+            risk_tier="low",
             last_attested_at=_days_ago(100),
         )
 
@@ -298,6 +301,7 @@ class TestContinuityGaps:
             db,
             ownership_id="ord-cr",
             asset_id="ord-critical",
+            risk_tier="critical",
             last_attested_at=_days_ago(35),
         )
 
@@ -306,6 +310,7 @@ class TestContinuityGaps:
             db,
             ownership_id="ord-hi",
             asset_id="ord-high",
+            risk_tier="high",
             last_attested_at=_days_ago(70),
         )
 
@@ -343,14 +348,29 @@ class TestContinuityGaps:
 
     def test_risk_tier_filtering(self, db: Session) -> None:
         _make_asset(db, asset_id="f-critical", risk_tier="critical")
-        # no owner → overdue immediately (critical interval = 30 days)
+        _make_owner(
+            db,
+            ownership_id="of-cr",
+            asset_id="f-critical",
+            risk_tier="critical",
+            last_attested_at=_days_ago(35),
+        )
         _make_asset(db, asset_id="f-low", risk_tier="low")
+        _make_owner(
+            db,
+            ownership_id="of-lo",
+            asset_id="f-low",
+            risk_tier="low",
+            last_attested_at=_days_ago(100),
+        )
 
         gaps_critical = continuity_gaps(db, tenant_id=_TENANT, risk_tier="critical")
         gaps_low = continuity_gaps(db, tenant_id=_TENANT, risk_tier="low")
 
-        assert all(g.risk_tier == "critical" for g in gaps_critical)
-        assert all(g.risk_tier == "low" for g in gaps_low)
+        assert len(gaps_critical) == 1
+        assert gaps_critical[0].asset_id == "f-critical"
+        assert len(gaps_low) == 1
+        assert gaps_low[0].asset_id == "f-low"
 
     def test_days_overdue_min_filter(self, db: Session) -> None:
         _make_asset(db, asset_id="g-barely", risk_tier="low")

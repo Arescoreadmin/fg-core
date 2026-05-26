@@ -1842,12 +1842,18 @@ def promote_connector_run_assets(
         projected: list[dict[str, Any]] = []
         for c in candidates:
             external_id = f"{c.source_type}:{c.risk_signal}"
-            existing = db.execute(
-                select(GaAsset).where(
-                    GaAsset.tenant_id == tenant_id,
-                    GaAsset.external_id == external_id,
+            existing = (
+                db.execute(
+                    select(GaAsset)
+                    .where(
+                        GaAsset.tenant_id == tenant_id,
+                        GaAsset.external_id == external_id,
+                    )
+                    .limit(1)
                 )
-            ).scalar_one_or_none()
+                .scalars()
+                .first()
+            )
             projected.append(
                 {
                     "id": c.candidate_id,
@@ -1869,12 +1875,18 @@ def promote_connector_run_assets(
 
     for c in candidates:
         external_id = f"{c.source_type}:{c.risk_signal}"
-        existing = db.execute(
-            select(GaAsset).where(
-                GaAsset.tenant_id == tenant_id,
-                GaAsset.external_id == external_id,
+        existing = (
+            db.execute(
+                select(GaAsset)
+                .where(
+                    GaAsset.tenant_id == tenant_id,
+                    GaAsset.external_id == external_id,
+                )
+                .limit(1)
             )
-        ).scalar_one_or_none()
+            .scalars()
+            .first()
+        )
 
         try:
             asset = _promote_candidate(
