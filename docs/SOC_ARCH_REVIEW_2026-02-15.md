@@ -1,3 +1,31 @@
+## 2026-05-26 — SOC-HIGH-002 — PR 17: Postgres Auth Authority Migration
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (auth subsystem changes: `api/auth_scopes/`)
+
+**Files changed:**
+- `api/auth_scopes/store.py` — NEW: Backend-dispatch key store; Postgres implementation for `get_key_row`, `insert_key_row`, `update_key_enabled`, `update_key_usage`, `list_key_rows`, `probe_auth_store`. Documents coexistence with `api/db/api_keys_store.py`.
+- `api/auth_scopes/mapping.py` — `mint_key()` dispatches to `_mint_key_postgres()` or `_mint_key_sqlite()` based on `FG_DB_BACKEND`. `revoke_api_key()`, `rotate_api_key_by_prefix()`, `list_api_keys()`, `_update_key_usage()` extended with Postgres dispatch.
+- `api/auth_scopes/resolution.py` — `verify_api_key_detailed()` dispatches lookup/expiry/usage-update to Postgres when `FG_DB_BACKEND=postgres`. SQLite path preserved unchanged.
+- `api/config/startup_validation.py` — `_check_auth_store()` updated: `FG_KEY_PEPPER` required in both backends; Postgres path validates `FG_DB_URL` and probes `api_keys` table connectivity.
+- `api/main.py` — SQLite init guards wrapped in `_db_backend != "postgres"` checks; `health_ready()` dispatches to `probe_auth_store()` in Postgres mode.
+- `deploy/frostgate-core/values.yaml` — `FG_DB_BACKEND: "postgres"` added to env section with `FG_KEY_PEPPER` Secret reference comment.
+- `tools/scripts/migrate_auth_sqlite_to_postgres.py` — NEW: One-shot migration CLI; reads SQLite `api_keys`, transforms rows (`name=NULL→"default"`, `tenant_id=NULL→"unknown"`, INTEGER epoch→TIMESTAMPTZ, hash_params TEXT→JSONB), inserts with `ON CONFLICT (key_hash) DO NOTHING`. Supports `--dry-run`.
+
+**Security invariants:**
+- All Postgres key-lookup queries use parameterized `text()` — no f-string SQL with user-controlled values.
+- All Postgres writes require `tenant_id` (NOT NULL constraint + RLS). `insert_key_row` and `_mint_key_postgres` raise `ValueError` on missing/empty `tenant_id`.
+- RLS context set via `set_config('app.tenant_id', :tid, true)` before every tenant-scoped query. Without a valid hint the RLS policy filters all rows; `get_key_row` returns `(None, None, col_set)`.
+- `tenant_id_hint` is extracted from the token payload before DB lookup. Cryptographic verification (key_hash/key_lookup HMAC) is the real security gate; RLS prevents cross-tenant row leakage.
+- `FG_KEY_PEPPER` is required in **both** SQLite and Postgres modes. No pepper → startup validation error, no fail-open.
+- No raw keys, peppers, hashes, lookup hashes, or key material appear in logs.
+- SQLite path is fully preserved; no existing behavior removed.
+- `probe_auth_store()` runs `SELECT 1 FROM api_keys LIMIT 1` without setting `app.tenant_id`: returns 0 rows under RLS but confirms table existence without raising exceptions.
+- Migration script never silently overwrites existing rows (`ON CONFLICT DO NOTHING`); exits non-zero on missing env.
+
+**No new API routes.** No middleware changes. No auth gate weakening.
+
+---
+
 ## 2026-05-25 — SOC-HIGH-002 — PR 14: Dependency Authority Normalization
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (Makefile DEPS_INPUTS change; dependency structure change)
