@@ -37,7 +37,7 @@ Schema:
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -104,14 +104,12 @@ class GovernanceReportRecord(Base):
             "engagement_id",
             "is_finalized",
         ),
-        # Prevents duplicate version numbers from concurrent generation requests.
-        # sqlite_where is ignored by SQLite (no partial index support in SA DDL),
-        # but SQLite's NULL != NULL semantics achieve the same result: two rows
-        # with engagement_id=NULL are never considered duplicates.
-        UniqueConstraint(
-            "tenant_id",
-            "engagement_id",
-            "version",
-            name="uq_governance_reports_engagement_version",
-        ),
+        # Version uniqueness for engagement-scoped reports is enforced in PostgreSQL
+        # via migration 0065 (partial unique index WHERE engagement_id IS NOT NULL).
+        # A full ORM UniqueConstraint is deliberately omitted: in SQLite, NULL=NULL
+        # for UNIQUE evaluation, so a non-partial constraint would incorrectly
+        # conflict between legacy assessment-scoped records (engagement_id=NULL)
+        # that share the same (tenant_id, version=1) pair.
+        # The application-layer retry loop in create_engagement_report_route
+        # handles the rare race on any backend.
     )
