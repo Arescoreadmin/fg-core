@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
@@ -83,6 +83,7 @@ export default function EngagementWorkspacePage() {
   const [reportDoc, setReportDoc] = useState<ReportDocument | null>(null);
   const [reportDocLoading, setReportDocLoading] = useState(false);
   const [reportDocError, setReportDocError] = useState<string | null>(null);
+  const loadReportDocSeqRef = useRef(0);
 
   const loadEngagement = useCallback(async () => {
     setEngLoading(true);
@@ -163,14 +164,18 @@ export default function EngagementWorkspacePage() {
   }, [engagementId]);
 
   const loadReportDoc = useCallback(async (version: number) => {
+    const seq = ++loadReportDocSeqRef.current;
     setReportDocLoading(true);
     setReportDocError(null);
     try {
       const doc = await fieldAssessmentApi.getReport(engagementId, version);
+      if (seq !== loadReportDocSeqRef.current) return;
       setReportDoc(doc);
     } catch {
+      if (seq !== loadReportDocSeqRef.current) return;
       setReportDocError('Failed to load report.');
     } finally {
+      if (seq !== loadReportDocSeqRef.current) return;
       setReportDocLoading(false);
     }
   }, [engagementId]);

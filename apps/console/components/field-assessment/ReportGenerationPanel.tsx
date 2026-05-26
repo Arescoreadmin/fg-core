@@ -66,8 +66,13 @@ export function ReportGenerationPanel({ engagementId, onGenerated }: Props) {
       while (attempts < MAX_POLL) {
         await new Promise<void>((r) => setTimeout(r, POLL_MS));
         if (!mountedRef.current) return;
-        const list = await fieldAssessmentApi.listReports(engagementId, { limit: 10 });
-        const item = list.items.find((r) => r.version === result.version);
+        // Target the exact version directly using its 1-based offset in the
+        // ascending list — avoids missing it when >10 reports exist.
+        const list = await fieldAssessmentApi.listReports(engagementId, {
+          limit: 1,
+          offset: result.version - 1,
+        });
+        const item = list.items[0]?.version === result.version ? list.items[0] : undefined;
         if (item && item.status !== 'generating') {
           if (mountedRef.current) {
             setSuccessVersion(result.version);

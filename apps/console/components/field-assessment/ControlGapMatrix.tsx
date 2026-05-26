@@ -38,7 +38,8 @@ interface Props {
 }
 
 export function ControlGapMatrix({ data }: Props) {
-  if (!data || Object.keys(data).length === 0) return null;
+  // Render known frameworks as "gap" rows even when data is empty — only skip if no data at all.
+  if (data == null) return null;
 
   // Build the union of frameworks: known ones + any extras from backend
   const backendFrameworks = Object.keys(data);
