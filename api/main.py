@@ -710,6 +710,59 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 )
             deps_status["db"] = "sqlite"
 
+        # Auth store schema check — separate from the app DB.
+        # Runs whenever FG_AUTH_ENABLED=true (the scoped key resolver uses this file).
+        # Catches post-startup issues: volume unmounted, schema migration not applied.
+        _auth_enabled_raw = (
+            (os.getenv("FG_AUTH_ENABLED", "true") or "true").strip().lower()
+        )
+        if _auth_enabled_raw in _TRUE:
+            import sqlite3 as _sqlite3
+
+            _REQUIRED_AUTH_COLS = frozenset({
+                "prefix", "key_hash", "key_lookup", "hash_alg",
+                "hash_params", "scopes_csv", "enabled", "tenant_id", "expires_at",
+            })
+            _auth_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
+            if not _auth_path:
+                raise HTTPException(
+                    status_code=503, detail="auth_store_path_missing"
+                )
+            if not os.path.exists(_auth_path):
+                raise HTTPException(
+                    status_code=503,
+                    detail="auth_store_unreachable: path does not exist",
+                )
+            try:
+                _acon = _sqlite3.connect(_auth_path, timeout=1.0)
+                try:
+                    _present = {
+                        r[1]
+                        for r in _acon.execute(
+                            "PRAGMA table_info(api_keys)"
+                        ).fetchall()
+                    }
+                    _missing = _REQUIRED_AUTH_COLS - _present
+                    if _missing:
+                        raise HTTPException(
+                            status_code=503,
+                            detail=(
+                                f"auth_store_schema_incomplete: "
+                                f"missing columns {sorted(_missing)}"
+                            ),
+                        )
+                finally:
+                    _acon.close()
+            except HTTPException:
+                raise
+            except (_sqlite3.Error, OSError) as exc:
+                log.warning("auth_store_readiness_check_failed: %s", exc)
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"auth_store_unreachable: {type(exc).__name__}",
+                )
+            deps_status["auth_store"] = "ok"
+
         checker = None
         try:
             checker = get_health_checker()

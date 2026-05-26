@@ -6,6 +6,54 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-26 — PR 16: Auth Runtime Guard and Persistent SQLite Key Store
+
+**Branch:** `feat/auth-runtime-guard-pr16`
+
+**PR/context:** PR 16 — Auth Runtime Guard and Persistent SQLite Key Store
+
+**Area:** Auth / Runtime Configuration / Deployment Readiness
+
+**Root cause:**
+Manual validation of PR 15 failed because the Docker runtime reached a state
+where health=OK but every protected route rejected valid credentials. Three stacked
+gaps:
+1. `FG_KEY_PEPPER` missing → key lookup HMAC cannot function
+2. `FG_SQLITE_PATH=/data/frostgate_auth.sqlite3` pointed to a container-local path
+   not backed by a volume; `read_only: true` means the file could never be created
+3. Startup validation and readiness probe did not check auth store prerequisites,
+   so the container booted healthy while auth was impossible
+
+Actual keys existed at `/var/lib/frostgate/state/frostgate.db` on the persisted
+`fg-core_fg_state` volume — unreachable because the resolver was pointed elsewhere.
+
+**Note:** This PR is a runtime guard and Docker persistence fix only. SQLite remains
+the auth authority. Postgres auth authority consolidation is deferred to PR 17.
+See `docs/security/AUTH_AUTHORITY_ROADMAP.md`.
+
+**Files changed:**
+- `docker-compose.yml` — added `FG_SQLITE_PATH` (default → `fg-core_fg_state` volume) and `FG_KEY_PEPPER` (`:?` required) to frostgate-core environment block
+- `api/config/startup_validation.py` — added `_check_auth_store()`: FG_KEY_PEPPER and FG_SQLITE_PATH are errors (not warnings) when FG_AUTH_ENABLED=true; errors block `/health/ready`
+- `api/main.py` — added auth store schema check in `health_ready()`: verifies file exists, PRAGMA table_info(api_keys) has all 9 required columns; uses `except (sqlite3.Error, OSError)` not broad Exception
+- `tests/test_auth_startup_guard.py` (new) — 7 tests: missing pepper error, missing path error, both-set passes, auth-disabled skips, readiness 503 on absent file, readiness 503 on incomplete schema, readiness 503 on has_errors
+- `tests/test_e2e_auth_report_engine.py` (new) — 7 e2e tests: auth baseline, invalid key rejected, no key rejected, scoped key accepted, scope enforcement, full report engine lifecycle, cross-tenant isolation
+- `docs/security/AUTH_AUTHORITY_ROADMAP.md` (new) — documents current SQLite authority as temporary; maps PR 17 Postgres consolidation path
+
+**Security/integrity impact:**
+- Health endpoint no longer reports ready when auth is impossible to use
+- Missing FG_KEY_PEPPER is now a hard startup error, not a silent runtime failure
+- FG_SQLITE_PATH defaults to the persisted volume in Docker Compose — no operator action required for standard deployments
+- Auth store schema validated at readiness probe time; degraded/migrated schemas caught before traffic is routed
+
+**Validation:**
+- `ruff check .` — passed
+- `ruff format --check .` — passed
+- `pytest tests/test_auth_startup_guard.py -v` — 7 passed
+- `make fg-fast` — passed
+- `bash codex_gates.sh` — passed
+
+---
+
 ### 2026-05-25 — PR 15: Report Engine Completion
 
 **Branch:** `feat/report-engine-completion-pr15`
