@@ -23,7 +23,7 @@ from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
 )
-from api.db import get_engine, init_db
+from api.db import _ensure_api_keys_sqlite, get_engine, init_db
 from api.attestation import router as attestation_router
 from api.audit import router as audit_router
 from api.auth_federation import router as auth_federation_router
@@ -269,11 +269,19 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 raise
 
         try:
-            if not (os.getenv("FG_DB_URL") or "").strip():
-                sqlite_path = _sqlite_path_from_env()
-                Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+            _auth_sqlite_path = _sqlite_path_from_env()
+            if _auth_sqlite_path:
+                Path(_auth_sqlite_path).parent.mkdir(parents=True, exist_ok=True)
 
             init_db()
+
+            # init_db() only runs _ensure_api_keys_sqlite in SQLite mode.
+            # When the app DB is Postgres, initialize the auth store file here
+            # so the readiness probe finds it on the first health check.
+            if resolved_auth_enabled and (os.getenv("FG_DB_URL") or "").strip():
+                if _auth_sqlite_path:
+                    _ensure_api_keys_sqlite(_auth_sqlite_path)
+
             app.state.db_init_ok = True
             app.state.db_init_error = None
         except Exception as exc:
