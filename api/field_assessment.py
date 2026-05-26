@@ -2957,27 +2957,29 @@ def create_engagement_report_route(
         db=db,
     )
 
-    # Deterministic canonical form for manifest and signing
-    canonical_str = json.dumps(
-        report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    )
-    manifest_hash = hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
-
-    try:
-        signature = sign_report(canonical_str)
-    except ReportSigningKeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=api_error("REPORT_SIGNING_KEY_MISSING", str(exc)),
-        )
-
     now = report_json.get("generated_at", "")
     record: GovernanceReportRecord | None = None
     _MAX_VERSION_RETRIES = 5
 
     for _attempt in range(_MAX_VERSION_RETRIES):
+        # Version must be stamped into report_json before canonical serialization
+        # and signing — the stored payload and the signed payload must be identical.
         version = get_next_version(db, tenant_id=tenant_id, engagement_id=engagement_id)
         report_json["version"] = version
+
+        canonical_str = json.dumps(
+            report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        manifest_hash = hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
+        try:
+            signature = sign_report(canonical_str)
+        except ReportSigningKeyError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=api_error("REPORT_SIGNING_KEY_MISSING", str(exc)),
+            )
+
         record_id = (
             uuid.uuid4().hex[:16]
             + hashlib.sha256(

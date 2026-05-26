@@ -1,6 +1,8 @@
--- PR 15: Add report_type, version (already exists), compiled_by, section_hashes, signature
+-- PR 15: Add engagement_id, report_type, compiled_by, section_hashes, signature
 -- to governance_reports. All changes are idempotent.
+-- engagement_id must be added before the indexes that reference it.
 
+ALTER TABLE governance_reports ADD COLUMN IF NOT EXISTS engagement_id TEXT;
 ALTER TABLE governance_reports ADD COLUMN IF NOT EXISTS report_type TEXT;
 ALTER TABLE governance_reports ADD COLUMN IF NOT EXISTS compiled_by TEXT;
 ALTER TABLE governance_reports ADD COLUMN IF NOT EXISTS section_hashes JSONB;

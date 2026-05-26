@@ -208,6 +208,20 @@ def test_valid_report_verifies(client: TestClient) -> None:
     assert data["verified_at"]
 
 
+def test_regenerated_report_verifies(client: TestClient) -> None:
+    """Version > 1 must verify — signature is over the JSON that includes the real version."""
+    eid = _make_engagement(client)
+    _make_report(client, eid)  # version 1
+    r2 = _make_report(client, eid)  # version 2
+    assert r2["version"] == 2
+
+    resp = client.post(f"/field-assessment/engagements/{eid}/reports/2/verify")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["valid"] is True, (
+        "v2 signature must verify against stored report_json"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Test 6: Tampered report_json fails verification
 # ---------------------------------------------------------------------------
