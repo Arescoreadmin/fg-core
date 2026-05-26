@@ -4075,3 +4075,19 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/topology.sha256` — regenerated
 - `docs/ai/PR_FIX_LOG.md` — updated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
+### 2026-05-26 — PR 18 fix: supply FG_KEY_PEPPER for fg-required compose validation
+
+**Change:** CI fix — `FG_KEY_PEPPER` was not available in the `fg-required` workflow environment, causing `docker compose config` (called by `prod-profile-check`) to fail with "required variable FG_KEY_PEPPER is missing a value" before any tests ran.
+
+**SOC review:**
+- `scripts/prod_profile_check.py`: added `FG_KEY_PEPPER: ci-test-pepper` to `_COMPOSE_PLACEHOLDER_ENV`. This dict already provides CI placeholder values for all other required compose vars (POSTGRES_PASSWORD, REDIS_PASSWORD, FG_API_KEY, etc.). `FG_KEY_PEPPER` was the only missing entry. The value is a non-secret CI placeholder used only for `docker compose config` validation (not a running container).
+- `.github/workflows/fg-required.yml`: added `FG_KEY_PEPPER: ci-test-pepper` to the job `env:` block as belt-and-suspenders documentation. Value is not a secret — it is a CI pepper placeholder, not a production credential.
+- No logic changes. No new routes, scopes, or auth paths. No schema or migration changes.
+- No privilege escalation. The workflow already had `contents: read` and `actions: read` only.
+
+**Files touched:**
+- `scripts/prod_profile_check.py` — add FG_KEY_PEPPER to CI placeholder env dict
+- `.github/workflows/fg-required.yml` — add FG_KEY_PEPPER to job env block

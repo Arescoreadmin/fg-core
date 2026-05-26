@@ -39,6 +39,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PIP_NO_PYTHON_VERSION_WARNING: "1"
+      FG_KEY_PEPPER: "ci-test-pepper"
 
     steps:
       - name: Checkout

@@ -53,6 +53,7 @@ class ProductionProfileChecker:
         "DATABASE_URL": "postgresql://ci-user:ci-pass@localhost:5432/ci-db",
         "FG_SIGNING_SECRET": "ci-signing-secret-32-bytes-minimum",
         "FG_INTERNAL_AUTH_SECRET": "ci-internal-auth-secret-32-bytes",
+        "FG_KEY_PEPPER": "ci-test-pepper",
     }
 
     def __init__(
