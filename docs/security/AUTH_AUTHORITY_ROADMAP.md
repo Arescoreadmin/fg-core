@@ -1,6 +1,11 @@
 # Auth Authority Roadmap
 
-## Current state (PR 16)
+## Current state (PR 16) — temporary architecture, not recommended for regulated deployments
+
+> **This is an interim state.** SQLite as the auth authority is appropriate for
+> single-node development and staging environments only. It is **not** the
+> recommended architecture for regulated, HA, or multi-replica deployments.
+> See [Target state (PR 17)](#target-state-pr-17) for the path to Postgres.
 
 FrostGate Core uses **SQLite as the auth authority** for API key storage,
 verification, and minting. The SQLite file is located at:

@@ -210,6 +210,39 @@ def test_readiness_file_absent_is_detectable() -> None:
     )
 
 
+def test_readiness_writable_dir_check_passes_for_tmpdir() -> None:
+    """os.access(parent, W_OK) passes for a writable temp directory.
+
+    This mirrors the happy path: FG_SQLITE_PATH on a volume-mounted directory
+    that the container process can write to (mint_key() will succeed).
+    """
+    with tempfile.TemporaryDirectory() as d:
+        auth_path = os.path.join(d, "auth.db")
+        parent = os.path.dirname(auth_path)
+        assert os.access(parent, os.W_OK), (
+            f"Expected writable temp dir {parent} to pass W_OK check"
+        )
+
+
+def test_readiness_writable_dir_check_detects_read_only(tmp_path: "Any") -> None:
+    """os.access(parent, W_OK) detects a read-only directory.
+
+    This mirrors the failure case: container read_only=true with FG_SQLITE_PATH
+    on the container filesystem (not a volume). The file may exist (from a
+    previous container run baked into the image) but mint_key() will fail.
+    """
+    ro_dir = tmp_path / "ro"
+    ro_dir.mkdir()
+    ro_dir.chmod(0o555)  # read + execute, no write
+
+    try:
+        assert not os.access(str(ro_dir), os.W_OK), (
+            "Expected read-only dir to fail W_OK check"
+        )
+    finally:
+        ro_dir.chmod(0o755)  # restore so tmp_path cleanup can delete it
+
+
 def test_readiness_has_errors_gate_contract() -> None:
     """StartupValidationReport.has_errors=True is the gate used by health_ready().
 

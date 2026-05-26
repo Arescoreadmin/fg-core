@@ -733,6 +733,20 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                     status_code=503,
                     detail="auth_store_unreachable: path does not exist",
                 )
+            # Verify the parent directory is writable. The container runs
+            # read_only: true; only volume-mounted paths are writable. If the
+            # SQLite file exists on a read-only path, key verification works for
+            # existing keys but mint_key() fails silently — a degraded state that
+            # should surface here rather than at the first minting attempt.
+            _auth_parent = os.path.dirname(_auth_path) or "."
+            if not os.access(_auth_parent, os.W_OK):
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "auth_store_dir_not_writable: key minting will fail. "
+                        "Ensure FG_SQLITE_PATH is on a writable volume mount."
+                    ),
+                )
             try:
                 _acon = _sqlite3.connect(_auth_path, timeout=1.0)
                 try:
