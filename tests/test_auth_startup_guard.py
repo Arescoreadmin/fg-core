@@ -29,6 +29,8 @@ import tempfile
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # StartupValidator unit tests
 # ---------------------------------------------------------------------------
@@ -246,6 +248,7 @@ def test_readiness_writable_dir_check_passes_for_tmpdir() -> None:
         )
 
 
+@pytest.mark.skipif(os.getuid() == 0, reason="root bypasses filesystem permission bits")
 def test_readiness_writable_dir_check_detects_read_only(tmp_path: "Any") -> None:
     """os.access(parent, W_OK) detects a read-only directory.
 
