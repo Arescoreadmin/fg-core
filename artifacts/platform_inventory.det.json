@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 368,
+    "contract_count": 373,
     "contract_only": [],
-    "runtime_count": 472,
+    "runtime_count": 477,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "929f13b25f20b462b956664ca5fce0f9ca365a50c678ba3602d7ea7b1ac3144a",
+  "governance_fingerprint": "da47e1462af993972269c701e3a5d2a227c1e2b02d1d353ff2968e94a04a2301",
   "planes": [
     {
       "compat": {
@@ -458,6 +458,9 @@
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "GET /field-assessment/engagements/{engagement_id}/observations",
       "GET /field-assessment/engagements/{engagement_id}/readiness-drift",
+      "GET /field-assessment/engagements/{engagement_id}/reports",
+      "GET /field-assessment/engagements/{engagement_id}/reports/{version}",
+      "GET /field-assessment/engagements/{engagement_id}/reports/{version}/export",
       "GET /field-assessment/engagements/{engagement_id}/scan-results",
       "GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
       "GET /field-assessment/engagements/{engagement_id}/summary",
@@ -612,7 +615,9 @@
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",
       "POST /field-assessment/engagements/{engagement_id}/observations",
       "POST /field-assessment/engagements/{engagement_id}/promote",
+      "POST /field-assessment/engagements/{engagement_id}/reports",
       "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-approve",
+      "POST /field-assessment/engagements/{engagement_id}/reports/{version}/verify",
       "POST /field-assessment/engagements/{engagement_id}/scan-results",
       "POST /governance/assets",
       "POST /governance/assets/{asset_id}/attestations",

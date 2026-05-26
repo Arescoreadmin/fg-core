@@ -3984,3 +3984,42 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/route_inventory.json` — regenerated
 - `tools/ci/route_inventory_summary.json` — regenerated
 - `tests/test_field_assessment_promotion.py` (new — 11 tests)
+
+---
+
+## PR 15 — Report Engine Completion
+
+**Date:** 2026-05-25
+**Branch:** feat/report-engine-completion-pr15
+**Classification:** New engagement-scoped report routes + Ed25519 signing + versioning service + SQL migration. Touches: `api/field_assessment.py`, `api/db_models_governance_report.py`, `services/governance/report/signing.py`, `services/governance/report/versioning.py`, `migrations/postgres/0064_governance_report_columns.sql`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`. No CI workflow changes. No auth logic changes.
+
+**SOC review:**
+- 5 new routes under `/field-assessment/engagements/{engagement_id}/reports/`:
+  - `POST .../reports` — requires `governance:write` scope. Creates signed, versioned GovernanceReportRecord. Fails loudly (503) if FG_REPORT_SIGNING_KEY is missing.
+  - `GET .../reports` — requires `governance:read` scope. Paginated version summary list. Tenant-scoped.
+  - `GET .../reports/{version}` — requires `governance:read` scope. Full report document. Tenant-scoped.
+  - `GET .../reports/{version}/export` — requires `governance:read` scope. json or pdf export. pdf returns 501 if reportlab not installed.
+  - `POST .../reports/{version}/verify` — requires `governance:read` scope. Ed25519 signature verification. Missing sig returns valid=false.
+- All routes enforce `tenant_id` predicate via `_resolve_caller_tenant()`. Cross-tenant access returns 404 without leaking existence.
+- No raw scan payloads, credentials, UPNs, tokens, or provider responses in any client-visible response.
+- Signing: Ed25519 over canonical JSON (SHA-256 digest). Key from FG_REPORT_SIGNING_KEY (hex-encoded 32-byte seed). Missing key raises ReportSigningKeyError — never silently no-ops.
+- Private key material is never logged, never included in any response or test fixture.
+- section_hashes: SHA-256 per included section — deterministic, moat-building.
+- Migration 0064 is idempotent (ADD COLUMN IF NOT EXISTS + CREATE INDEX IF NOT EXISTS).
+- No new auth paths. No new admin routes. No PII added to new fields.
+
+**DB schema changes:** ADD COLUMN IF NOT EXISTS report_type, compiled_by, section_hashes, signature, engagement_id to governance_reports. Migration 0064 is idempotent.
+
+**Files touched:**
+- `api/db_models_governance_report.py` — new columns: engagement_id, report_type, compiled_by, section_hashes, signature
+- `api/field_assessment.py` — 5 new report routes + request/response models
+- `services/governance/report/signing.py` (new — Ed25519 sign/verify)
+- `services/governance/report/versioning.py` (new — engagement-scoped version management)
+- `migrations/postgres/0064_governance_report_columns.sql` (new — idempotent)
+- `tests/test_field_assessment_reports.py` (new — 23 tests)
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `docs/ai/PR_FIX_LOG.md` — updated

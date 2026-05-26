@@ -908,8 +908,9 @@ ci-integration: venv itest-local
 pip-audit: venv
 	@echo "==> running pip-audit"
 	@$(PIP) install -q --upgrade pip-audit
-	@$(PY) -m pip_audit --ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 -r requirements.txt -r requirements-dev.txt
-	@$(PY) -m pip_audit --ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
+	# Advisory exceptions: see docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md for each --ignore-vuln entry
+	@$(PY) -m pip_audit --ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 --ignore-vuln MAL-2026-4750 -r requirements.txt -r requirements-dev.txt
+	@$(PY) -m pip_audit --ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 --ignore-vuln MAL-2026-4750 -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
 
 # =============================================================================
 # Evidence

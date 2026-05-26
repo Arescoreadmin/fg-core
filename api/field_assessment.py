@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -2687,4 +2687,628 @@ def get_readiness_drift_route(
         pct_change=drift.pct_change,
         direction=drift.direction,
         detected_at=drift.detected_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Report engine — engagement-scoped (PR 15)
+# ---------------------------------------------------------------------------
+
+_VALID_REPORT_TYPES: frozenset[str] = frozenset(
+    {"full_assessment", "executive_summary", "findings_register", "control_gap"}
+)
+
+_ALL_SECTIONS: list[str] = [
+    "findings",
+    "remediations",
+    "evidence_appendix",
+    "framework_summary",
+    "confidence",
+    "normalized_findings",
+]
+
+
+class CreateEngagementReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_type: str
+    include_sections: list[str] | None = None
+
+
+class EngagementReportSummary(BaseModel):
+    report_id: str
+    version: int
+    status: str
+    compiled_at: str
+    compiled_by: str | None
+    report_type: str | None
+
+
+class EngagementReportListResponse(BaseModel):
+    items: list[EngagementReportSummary]
+    limit: int
+    offset: int
+    total: int
+
+
+class EngagementReportVerifyResponse(BaseModel):
+    valid: bool
+    manifest_hash: str
+    signature: str | None
+    verified_at: str
+
+
+def _compute_section_hashes(sections: dict[str, Any]) -> dict[str, str]:
+    import hashlib
+    import json
+
+    result: dict[str, str] = {}
+    for name, content in sections.items():
+        canonical = json.dumps(
+            content, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        result[name] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return result
+
+
+def _safe_finding_dict(f: FaNormalizedFinding) -> dict[str, Any]:
+    return {
+        "id": f.id,
+        "finding_type": f.finding_type,
+        "severity": f.severity,
+        "status": f.status,
+        "title": f.title,
+        "description": f.description,
+        "source_attribution": f.source_attribution,
+        "confidence_score": f.confidence_score,
+        "framework_mappings": f.framework_mappings or [],
+        "nist_ai_rmf_mappings": f.nist_ai_rmf_mappings or [],
+        "evidence_ref_ids": f.evidence_ref_ids or [],
+        "schema_version": f.schema_version,
+        "created_at": f.created_at,
+    }
+
+
+def _build_engagement_report_json(
+    *,
+    engagement_id: str,
+    tenant_id: str,
+    report_type: str,
+    include_sections: list[str] | None,
+    db: Session,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    from services.governance.report import (
+        GovernanceReportEngine,
+        EvidenceRef,
+        ValidationState,
+    )
+    from services.governance.report.serialization import (
+        _serialize_finding,
+        _serialize_remediation,
+        _serialize_evidence_ref,
+        _serialize_confidence,
+    )
+
+    active_sections = set(include_sections) if include_sections else set(_ALL_SECTIONS)
+
+    # Collect normalized findings (safe: no raw scan payloads)
+    all_findings: list[FaNormalizedFinding] = []
+    offset = 0
+    while True:
+        batch = list_findings(
+            db,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+            severity_filter=None,
+            status_filter=None,
+            limit=100,
+            offset=offset,
+        )
+        all_findings.extend(batch)
+        if len(batch) < 100:
+            break
+        offset += 100
+
+    # Derive synthetic domain scores from normalized findings
+    # Maps confidence_score (0-100, higher=better) → domain score
+    domain_scores: dict[str, list[float]] = {}
+    for f in all_findings:
+        mappings = f.framework_mappings or []
+        if mappings:
+            domain_key = str(
+                mappings[0].get("domain", "data_governance")
+                if isinstance(mappings[0], dict)
+                else "data_governance"
+            )
+        else:
+            domain_key = "data_governance"
+        domain_scores.setdefault(domain_key, []).append(float(f.confidence_score))
+
+    scores: dict[str, float] = {}
+    for domain, values in domain_scores.items():
+        scores[domain] = sum(values) / len(values)
+
+    # Ensure engine has at least one domain to work with
+    if not scores:
+        scores = {"data_governance": 80.0}
+
+    # Build evidence refs from scan results (metadata only, no raw payloads)
+    scan_rows = list_scan_results(
+        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
+    )
+    evidence_refs: list[EvidenceRef] = [
+        EvidenceRef(
+            evidence_id=sr.id,
+            source=sr.source_type,
+            validation_state=ValidationState.VALIDATED,
+            classification="scan_result",
+            provenance=f"engagement:{engagement_id}",
+            freshness_days=None,
+        )
+        for sr in scan_rows
+    ]
+
+    engine = GovernanceReportEngine()
+    report = engine.generate(
+        assessment_id=engagement_id,
+        tenant_id=tenant_id,
+        scores=scores,
+        responses={},
+        evidence_refs=evidence_refs,
+        reviewer_validated=False,
+        version=1,
+    )
+
+    # Build section content map
+    section_content: dict[str, Any] = {}
+    if "findings" in active_sections:
+        section_content["findings"] = [_serialize_finding(f) for f in report.findings]
+    if "remediations" in active_sections:
+        section_content["remediations"] = [
+            _serialize_remediation(r) for r in report.remediations
+        ]
+    if "evidence_appendix" in active_sections:
+        section_content["evidence_appendix"] = [
+            _serialize_evidence_ref(r) for r in report.evidence_appendix
+        ]
+    if "framework_summary" in active_sections:
+        section_content["framework_summary"] = {
+            k: sorted(v) for k, v in sorted(report.framework_summary.items())
+        }
+    if "confidence" in active_sections:
+        section_content["confidence"] = _serialize_confidence(report.confidence)
+    if "normalized_findings" in active_sections and report_type in (
+        "findings_register",
+        "full_assessment",
+    ):
+        section_content["normalized_findings"] = [
+            _safe_finding_dict(f) for f in all_findings
+        ]
+
+    section_hashes = _compute_section_hashes(section_content)
+
+    report_json: dict[str, Any] = {
+        "report_id": report.report_id,
+        "assessment_id": report.assessment_id,
+        "tenant_id": report.tenant_id,
+        "engagement_id": engagement_id,
+        "report_type": report_type,
+        "version": report.version,
+        "schema_version": report.schema_version,
+        "manifest_hash": report.manifest_hash,
+        "generated_at": report.generated_at,
+        **section_content,
+    }
+    return report_json, section_hashes
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports",
+    status_code=201,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def create_engagement_report_route(
+    engagement_id: str,
+    body: CreateEngagementReportRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Generate a signed, versioned governance report for a field assessment engagement.
+
+    This module is NOT standalone. It is a component of the Field Assessment
+    Engagement Substrate and Governance Platform.
+
+    Requires governance:write scope. Tenant is resolved from auth context only.
+    Returns 422 for invalid report_type. Returns 404 for unknown or cross-tenant engagements.
+    """
+    import hashlib
+    import json
+    import uuid
+
+    from sqlalchemy.exc import IntegrityError
+
+    from services.governance.report.signing import ReportSigningKeyError, sign_report
+    from services.governance.report.versioning import get_next_version
+
+    if body.report_type not in _VALID_REPORT_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "INVALID_REPORT_TYPE",
+                f"report_type must be one of: {sorted(_VALID_REPORT_TYPES)}",
+            ),
+        )
+
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    report_json, section_hashes = _build_engagement_report_json(
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+        report_type=body.report_type,
+        include_sections=body.include_sections,
+        db=db,
+    )
+
+    now = report_json.get("generated_at", "")
+    record: GovernanceReportRecord | None = None
+    _MAX_VERSION_RETRIES = 5
+
+    for _attempt in range(_MAX_VERSION_RETRIES):
+        # Version must be stamped into report_json before canonical serialization
+        # and signing — the stored payload and the signed payload must be identical.
+        version = get_next_version(db, tenant_id=tenant_id, engagement_id=engagement_id)
+        report_json["version"] = version
+
+        canonical_str = json.dumps(
+            report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        manifest_hash = hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
+        try:
+            signature = sign_report(canonical_str)
+        except ReportSigningKeyError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=api_error("REPORT_SIGNING_KEY_MISSING", str(exc)),
+            )
+
+        record_id = (
+            uuid.uuid4().hex[:16]
+            + hashlib.sha256(
+                f"{tenant_id}:{engagement_id}:{version}:{_attempt}".encode()
+            ).hexdigest()[:16]
+        )
+        record = GovernanceReportRecord(
+            id=record_id,
+            assessment_id=engagement_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            version=version,
+            schema_version="1.0",
+            report_type=body.report_type,
+            compiled_by=actor,
+            manifest_hash=manifest_hash,
+            report_json=report_json,
+            section_hashes=section_hashes,
+            signature=signature,
+            generated_at=now,
+            is_finalized=True,
+        )
+        db.add(record)
+        try:
+            db.flush()
+            break
+        except IntegrityError:
+            db.rollback()
+            record = None
+            continue
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_error(
+                "REPORT_VERSION_CONFLICT",
+                "Unable to assign a unique report version after concurrent requests. Retry.",
+            ),
+        )
+
+    db.commit()
+    db.refresh(record)
+
+    emit_engagement_audit_event(
+        db,
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+        event_type="engagement_report_created",
+        actor=actor,
+        reason_code="report_created",
+        payload={
+            "report_id": record.id,
+            "version": version,
+            "report_type": body.report_type,
+            "manifest_hash": manifest_hash,
+        },
+    )
+
+    return {
+        "report_id": record.id,
+        "version": version,
+        "status": "finalized",
+        "compiled_at": now,
+    }
+
+
+@router.get(
+    "/engagements/{engagement_id}/reports",
+    response_model=EngagementReportListResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_engagement_reports_route(
+    engagement_id: str,
+    request: Request,
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(auth_ctx_db_session),
+) -> EngagementReportListResponse:
+    """List report version summaries for a field assessment engagement.
+
+    This module is NOT standalone. It is a component of the Field Assessment
+    Engagement Substrate and Governance Platform.
+
+    Requires governance:read scope. Tenant-scoped; returns 404 for unknown engagements.
+    """
+    from services.governance.report.versioning import list_versions
+
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    versions = list_versions(db, tenant_id=tenant_id, engagement_id=engagement_id)
+    total = len(versions)
+    page = versions[offset : offset + limit]
+
+    items = [
+        EngagementReportSummary(
+            report_id=r.id,
+            version=r.version,
+            status="finalized" if r.is_finalized else "draft",
+            compiled_at=r.generated_at,
+            compiled_by=r.compiled_by,
+            report_type=r.report_type,
+        )
+        for r in page
+    ]
+    return EngagementReportListResponse(
+        items=items,
+        limit=limit,
+        offset=offset,
+        total=total,
+    )
+
+
+@router.get(
+    "/engagements/{engagement_id}/reports/{version}",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_engagement_report_route(
+    engagement_id: str,
+    version: int,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Return the full report document for a specific version.
+
+    This module is NOT standalone. It is a component of the Field Assessment
+    Engagement Substrate and Governance Platform.
+
+    Requires governance:read scope. Returns 404 for unknown, cross-tenant, or
+    out-of-range version without leaking existence.
+    """
+    from services.governance.report.versioning import get_version
+
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    record = get_version(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, version=version
+    )
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("REPORT_VERSION_NOT_FOUND", "Report version not found."),
+        )
+
+    return {
+        "report_id": record.id,
+        "version": record.version,
+        "report_type": record.report_type,
+        "compiled_by": record.compiled_by,
+        "manifest_hash": record.manifest_hash,
+        "section_hashes": record.section_hashes or {},
+        "signature": record.signature,
+        "generated_at": record.generated_at,
+        "schema_version": record.schema_version,
+        "report": record.report_json,
+    }
+
+
+@router.get(
+    "/engagements/{engagement_id}/reports/{version}/export",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def export_engagement_report_route(
+    engagement_id: str,
+    version: int,
+    request: Request,
+    format: str = Query("json", pattern="^(json|pdf)$"),
+    db: Session = Depends(auth_ctx_db_session),
+) -> Any:
+    """Export a report version as JSON or PDF.
+
+    This module is NOT standalone. It is a component of the Field Assessment
+    Engagement Substrate and Governance Platform.
+
+    Requires governance:read scope. format=pdf returns 501 if reportlab is not available.
+    """
+    from services.governance.report.versioning import get_version
+    from services.governance.report import (
+        ExportUnavailableError,
+        deserialize_report,
+        export_pdf_bytes,
+    )
+
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    record = get_version(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, version=version
+    )
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("REPORT_VERSION_NOT_FOUND", "Report version not found."),
+        )
+
+    if format == "json":
+        return {
+            "report_id": record.id,
+            "version": record.version,
+            "report_type": record.report_type,
+            "manifest_hash": record.manifest_hash,
+            "signature": record.signature,
+            "schema_version": record.schema_version,
+            "report": record.report_json,
+        }
+
+    # format == "pdf"
+    report_data = record.report_json or {}
+    try:
+        gov_report = deserialize_report(report_data)
+    except (ValueError, KeyError):
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REPORT_DESERIALIZE_ERROR",
+                "Stored report cannot be deserialized for PDF export.",
+            ),
+        )
+
+    try:
+        pdf_bytes = export_pdf_bytes(gov_report)
+    except ExportUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=api_error(
+                "PDF_EXPORT_UNAVAILABLE",
+                "PDF export requires reportlab. Install it with: pip install reportlab",
+            ),
+        )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="report-{engagement_id}-v{version}.pdf"',
+            "X-Manifest-Hash": record.manifest_hash,
+        },
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{version}/verify",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def verify_engagement_report_route(
+    engagement_id: str,
+    version: int,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> EngagementReportVerifyResponse:
+    """Verify the Ed25519 signature of a stored report version.
+
+    This module is NOT standalone. It is a component of the Field Assessment
+    Engagement Substrate and Governance Platform.
+
+    Requires governance:read scope. Returns 404 for unknown or cross-tenant reports.
+    Missing signature returns valid=False without leaking existence.
+    """
+    import json
+
+    from services.governance.report.versioning import get_version
+    from services.governance.report.signing import ReportSigningKeyError, verify_report
+
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    record = get_version(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, version=version
+    )
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("REPORT_VERSION_NOT_FOUND", "Report version not found."),
+        )
+
+    now = __import__(
+        "services.canonical", fromlist=["utc_iso8601_z_now"]
+    ).utc_iso8601_z_now()
+
+    if not record.signature:
+        return EngagementReportVerifyResponse(
+            valid=False,
+            manifest_hash=record.manifest_hash,
+            signature=None,
+            verified_at=now,
+        )
+
+    canonical_str = json.dumps(
+        record.report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+
+    try:
+        valid = verify_report(canonical_str, record.signature)
+    except ReportSigningKeyError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=api_error(
+                "REPORT_SIGNING_KEY_MISSING",
+                "Signing key unavailable for verification.",
+            ),
+        )
+
+    return EngagementReportVerifyResponse(
+        valid=valid,
+        manifest_hash=record.manifest_hash,
+        signature=record.signature,
+        verified_at=now,
     )

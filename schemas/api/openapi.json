@@ -3509,6 +3509,34 @@
         "title": "CreateDomainRequest",
         "type": "object"
       },
+      "CreateEngagementReportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "include_sections": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Sections"
+          },
+          "report_type": {
+            "title": "Report Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_type"
+        ],
+        "title": "CreateEngagementReportRequest",
+        "type": "object"
+      },
       "CreateEngagementRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5767,6 +5795,124 @@
           "total_count"
         ],
         "title": "EngagementListResponse",
+        "type": "object"
+      },
+      "EngagementReportListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EngagementReportSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "EngagementReportListResponse",
+        "type": "object"
+      },
+      "EngagementReportSummary": {
+        "properties": {
+          "compiled_at": {
+            "title": "Compiled At",
+            "type": "string"
+          },
+          "compiled_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compiled By"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "report_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Type"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "report_id",
+          "version",
+          "status",
+          "compiled_at",
+          "compiled_by",
+          "report_type"
+        ],
+        "title": "EngagementReportSummary",
+        "type": "object"
+      },
+      "EngagementReportVerifyResponse": {
+        "properties": {
+          "manifest_hash": {
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          },
+          "verified_at": {
+            "title": "Verified At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "valid",
+          "manifest_hash",
+          "signature",
+          "verified_at"
+        ],
+        "title": "EngagementReportVerifyResponse",
         "type": "object"
       },
       "EngagementResponse": {
@@ -32437,6 +32583,156 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/reports": {
+      "get": {
+        "description": "List report version summaries for a field assessment engagement.\n\nThis module is NOT standalone. It is a component of the Field Assessment\nEngagement Substrate and Governance Platform.\n\nRequires governance:read scope. Tenant-scoped; returns 404 for unknown engagements.",
+        "operationId": "list_engagement_reports_route_field_assessment_engagements__engagement_id__reports_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementReportListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Engagement Reports Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "description": "Generate a signed, versioned governance report for a field assessment engagement.\n\nThis module is NOT standalone. It is a component of the Field Assessment\nEngagement Substrate and Governance Platform.\n\nRequires governance:write scope. Tenant is resolved from auth context only.\nReturns 422 for invalid report_type. Returns 404 for unknown or cross-tenant engagements.",
+        "operationId": "create_engagement_report_route_field_assessment_engagements__engagement_id__reports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEngagementReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Engagement Report Route Field Assessment Engagements  Engagement Id  Reports Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Engagement Report Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-approve": {
       "post": {
         "description": "Mark a finalized report as QA-approved for client delivery.\n\nRequires the report to be finalized (is_finalized=True). Once approved,\nthe report.qa.approved readiness gate transitions to passed, unblocking\nthe engagement from transitioning to 'delivered'.",
@@ -32500,6 +32796,222 @@
           }
         },
         "summary": "Qa Approve Report Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{version}": {
+      "get": {
+        "description": "Return the full report document for a specific version.\n\nThis module is NOT standalone. It is a component of the Field Assessment\nEngagement Substrate and Governance Platform.\n\nRequires governance:read scope. Returns 404 for unknown, cross-tenant, or\nout-of-range version without leaking existence.",
+        "operationId": "get_engagement_report_route_field_assessment_engagements__engagement_id__reports__version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Engagement Report Route Field Assessment Engagements  Engagement Id  Reports  Version  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Engagement Report Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{version}/export": {
+      "get": {
+        "description": "Export a report version as JSON or PDF.\n\nThis module is NOT standalone. It is a component of the Field Assessment\nEngagement Substrate and Governance Platform.\n\nRequires governance:read scope. format=pdf returns 501 if reportlab is not available.",
+        "operationId": "export_engagement_report_route_field_assessment_engagements__engagement_id__reports__version__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "pattern": "^(json|pdf)$",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Export Engagement Report Route Field Assessment Engagements  Engagement Id  Reports  Version  Export Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Engagement Report Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{version}/verify": {
+      "post": {
+        "description": "Verify the Ed25519 signature of a stored report version.\n\nThis module is NOT standalone. It is a component of the Field Assessment\nEngagement Substrate and Governance Platform.\n\nRequires governance:read scope. Returns 404 for unknown or cross-tenant reports.\nMissing signature returns valid=False without leaking existence.",
+        "operationId": "verify_engagement_report_route_field_assessment_engagements__engagement_id__reports__version__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementReportVerifyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Engagement Report Route",
         "tags": [
           "field-assessment"
         ]
