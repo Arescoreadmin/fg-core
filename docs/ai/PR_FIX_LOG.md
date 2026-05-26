@@ -11901,3 +11901,67 @@ Operational bridge between the Field Assessment Layer, Governance Asset Registry
 - `make contract-authority-refresh` → authority markers refreshed
 - `make fg-fast` → 398 passed, 2 skipped, all gates pass, EXIT:0
 - `bash codex_gates.sh` → all gates pass
+
+---
+
+### 2026-05-26 — PR 19: Report UI + Engagement Detail Reports Tab
+
+**Branch:** `feat/report-ui-pr19`
+
+**PR/context:** PR 19 — Report UI: Reports tab on field assessment engagement detail page.
+
+**Area:** Frontend / Console UI / Governance Report Surface
+
+**Behavior added:**
+- 9th tab "Reports" on the engagement detail workspace page.
+- `ReportGenerationPanel` — type selector (full_assessment, executive_summary, findings_register, control_gap), generate button, bounded polling (≤10 attempts / 2s) for async generation path, success/error messaging.
+- `ReportVersionHistory` — paginated list (10/page) of report versions with status badges, compiled_at, compiled_by, click-to-select.
+- `ReportViewer` — accordion section display of findings, findings register, remediations, evidence lineage, framework summary, confidence, section hashes. Safe React rendering only, no dangerouslySetInnerHTML.
+- `ReportExportBar` — Export JSON (GET /export?format=json), Export PDF (GET /export?format=pdf), Verify Signature (POST /verify). Deterministic filenames: `frostgate-report-{engagementId}-v{version}.{format}`.
+- `ControlGapMatrix` — accessible table rendering `framework_summary` from report JSON. Known frameworks (NIST-AI-RMF, HIPAA, CMMC, SOC2) shown as "gap" if absent from backend data.
+
+**Security constraints enforced:**
+- No dangerouslySetInnerHTML anywhere.
+- No client-side signature verification. Verification calls POST /verify; displays `valid` flag from backend response only.
+- No client-side PDF/report generation. All exports are backend-generated blobs.
+- No raw report JSON printed to console. No raw error bodies exposed to UI.
+- tenant_id never in request bodies (server-side BFF injection only).
+- No localStorage/sessionStorage for report state.
+- Polling is bounded (MAX_POLL=10) and cleans up on component unmount via mountedRef.
+- `compiled_by` displayed only from API response — never from browser state.
+- `ReportViewer` excludes `tenant_id` from rendered fields (not in display path).
+
+**Backend routes consumed:**
+- `POST /field-assessment/engagements/{id}/reports`
+- `GET /field-assessment/engagements/{id}/reports`
+- `GET /field-assessment/engagements/{id}/reports/{version}`
+- `GET /field-assessment/engagements/{id}/reports/{version}/export?format=json|pdf`
+- `POST /field-assessment/engagements/{id}/reports/{version}/verify`
+
+**Files changed:**
+- `apps/console/lib/fieldAssessmentApi.ts` — added 6 types, `requestBlob` helper, 5 report API methods
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` — added Reports tab trigger + content, 5 imports, 4 state vars, `loadReportDoc` callback
+- `apps/console/components/field-assessment/ReportGenerationPanel.tsx` (new)
+- `apps/console/components/field-assessment/ReportVersionHistory.tsx` (new)
+- `apps/console/components/field-assessment/ReportViewer.tsx` (new)
+- `apps/console/components/field-assessment/ReportExportBar.tsx` (new)
+- `apps/console/components/field-assessment/ControlGapMatrix.tsx` (new)
+- `apps/console/tests/report-ui.test.js` (new — 57 static-analysis tests)
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Validation:**
+- `npm run build` → ✓ Compiled, 0 errors, 0 warnings (after a11y fix)
+- `npm test` → 1019 passed, 0 failed
+- `make fg-fast` → 398 passed, 2 skipped, all gates pass, EXIT:0
+
+**Known limitations:**
+- ControlGapMatrix only shows "covered" or "gap" for whole frameworks — no per-control granularity unless backend evolves `framework_summary` to include that detail.
+- PDF export silently returns HTTP 501 if reportlab is not installed server-side. UI shows safe error message.
+- No optimistic UI for report generation — user sees success only after backend confirms.
+
+**Future roadmap:**
+- Report comparison (diff between versions)
+- Report review workflow (reviewer signature UX)
+- Legal/compliance review mode with redaction controls
+- Executive export workspace (branded PDF templates)
+- Per-control gap detail as backend framework coverage evolves

@@ -15,6 +15,11 @@ import { InterviewForm } from '@/components/field-assessment/InterviewForm';
 import { EvidenceLinkPanel } from '@/components/field-assessment/EvidenceLinkPanel';
 import { FindingPreviewPanel } from '@/components/field-assessment/FindingPreviewPanel';
 import { EngagementSummaryPanel } from '@/components/field-assessment/EngagementSummaryPanel';
+import { ReportGenerationPanel } from '@/components/field-assessment/ReportGenerationPanel';
+import { ReportVersionHistory } from '@/components/field-assessment/ReportVersionHistory';
+import { ReportViewer } from '@/components/field-assessment/ReportViewer';
+import { ReportExportBar } from '@/components/field-assessment/ReportExportBar';
+import { ControlGapMatrix } from '@/components/field-assessment/ControlGapMatrix';
 import {
   fieldAssessmentApi,
   type Engagement,
@@ -27,6 +32,7 @@ import {
   type EvidenceLink,
   type AuditEvent,
   type ExecutionState,
+  type ReportDocument,
 } from '@/lib/fieldAssessmentApi';
 
 const TAB_SECTIONS: Record<string, string> = {
@@ -71,6 +77,12 @@ export default function EngagementWorkspacePage() {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedObsId, setExpandedObsId] = useState<string | null>(null);
+
+  const [reportsRefreshKey, setReportsRefreshKey] = useState(0);
+  const [selectedReportVersion, setSelectedReportVersion] = useState<number | null>(null);
+  const [reportDoc, setReportDoc] = useState<ReportDocument | null>(null);
+  const [reportDocLoading, setReportDocLoading] = useState(false);
+  const [reportDocError, setReportDocError] = useState<string | null>(null);
 
   const loadEngagement = useCallback(async () => {
     setEngLoading(true);
@@ -150,6 +162,19 @@ export default function EngagementWorkspacePage() {
     }
   }, [engagementId]);
 
+  const loadReportDoc = useCallback(async (version: number) => {
+    setReportDocLoading(true);
+    setReportDocError(null);
+    try {
+      const doc = await fieldAssessmentApi.getReport(engagementId, version);
+      setReportDoc(doc);
+    } catch {
+      setReportDocError('Failed to load report.');
+    } finally {
+      setReportDocLoading(false);
+    }
+  }, [engagementId]);
+
   useEffect(() => {
     loadEngagement();
     loadSummary();
@@ -161,6 +186,12 @@ export default function EngagementWorkspacePage() {
     if (activeTab === 'findings') loadFindings();
     if (activeTab === 'history') loadAuditEvents();
   }, [activeTab, loadFindings, loadAuditEvents]);
+
+  useEffect(() => {
+    if (selectedReportVersion !== null) {
+      loadReportDoc(selectedReportVersion);
+    }
+  }, [selectedReportVersion, loadReportDoc]);
 
   async function handleTransition(newStatus: EngagementStatus, reason: string) {
     const updated = await fieldAssessmentApi.transitionEngagement(engagementId, { new_status: newStatus, reason });
@@ -291,6 +322,7 @@ export default function EngagementWorkspacePage() {
                 <TabsTrigger value="evidence">Evidence Links ({evidenceLinks.length})</TabsTrigger>
                 <TabsTrigger value="findings">Findings</TabsTrigger>
                 <TabsTrigger value="history">History</TabsTrigger>
+                <TabsTrigger value="reports">Reports</TabsTrigger>
               </TabsList>
 
               {/* Overview */}
@@ -591,6 +623,59 @@ export default function EngagementWorkspacePage() {
                   </CardContent>
                 </Card>
               </TabsContent>
+              {/* Reports */}
+              <TabsContent value="reports">
+                <div className="space-y-4">
+                  <Card className="border-border">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm">Generate Report</CardTitle>
+                      <p className="text-xs text-muted mt-0.5">
+                        Signed, versioned governance deliverables — all generation is backend-authoritative
+                      </p>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4">
+                      <ReportGenerationPanel
+                        engagementId={engagementId}
+                        onGenerated={() => {
+                          setReportsRefreshKey((k) => k + 1);
+                          setSelectedReportVersion(null);
+                          setReportDoc(null);
+                        }}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  <ReportVersionHistory
+                    engagementId={engagementId}
+                    refreshKey={reportsRefreshKey}
+                    selectedVersion={selectedReportVersion}
+                    onSelectVersion={setSelectedReportVersion}
+                  />
+
+                  {selectedReportVersion !== null && (
+                    <>
+                      <ReportExportBar
+                        engagementId={engagementId}
+                        version={selectedReportVersion}
+                        reportType={reportDoc?.report_type ?? null}
+                      />
+                      <ReportViewer
+                        document={reportDoc}
+                        loading={reportDocLoading}
+                        error={reportDocError}
+                      />
+                      <ControlGapMatrix
+                        data={
+                          reportDoc
+                            ? (reportDoc.report?.framework_summary as Record<string, string[]> | null)
+                            : null
+                        }
+                      />
+                    </>
+                  )}
+                </div>
+              </TabsContent>
+
             </Tabs>
           </main>
         </div>
