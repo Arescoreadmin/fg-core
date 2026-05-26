@@ -89,6 +89,7 @@ jobs:
           print(f"REDIS_PASSWORD={tok(24)}")
           print(f"POSTGRES_PASSWORD={tok(24)}")
           print(f"NATS_AUTH_TOKEN={tok(24)}")
+          print(f"FG_KEY_PEPPER={tok(32)}")
           PY
 
       - name: Verify required env vars are set
@@ -106,7 +107,8 @@ jobs:
             FG_SESSION_SECRET \
             REDIS_PASSWORD \
             POSTGRES_PASSWORD \
-            NATS_AUTH_TOKEN
+            NATS_AUTH_TOKEN \
+            FG_KEY_PEPPER
           do
             if [ -n "${!var:-}" ]; then
               echo "${var}=set"
@@ -264,6 +266,7 @@ jobs:
 
           FG_SIGNING_SECRET=ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET=ci-internal-auth-secret-32-bytes
+          FG_KEY_PEPPER=${FG_KEY_PEPPER}
           STRIPE_SECRET_KEY=ci-stripe-secret-key-32-bytes-minimum-
           STRIPE_WEBHOOK_SECRET=ci-stripe-webhook-secret-32-bytes--
           FG_ANTHROPIC_API_KEY=ci-anthropic-api-key-32-bytes-min--
