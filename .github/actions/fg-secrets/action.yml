@@ -36,4 +36,5 @@ runs:
           echo "POSTGRES_PASSWORD=$(gen | cut -c1-32)"
           echo "FG_AGENT_API_KEY=$(gen)"
           echo "FG_WEBHOOK_SECRET=$(gen)"
+          echo "FG_KEY_PEPPER=$(gen)"
         } >> "$GITHUB_ENV"

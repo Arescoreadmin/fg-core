@@ -265,6 +265,7 @@ class StartupValidator:
         self._check_cors(report)
         self._check_security_headers(report)
         self._check_auth_enabled(report)
+        self._check_auth_store(report)
         self._check_key_ttl(report)
         self._check_brute_force_protection(report)
         self._check_audit_logging(report)
@@ -677,6 +678,65 @@ class StartupValidator:
                 name="auth_enabled",
                 passed=True,
                 message="Authentication is enabled.",
+                severity="info",
+            )
+
+    def _check_auth_store(self, report: StartupValidationReport) -> None:
+        """Validate auth store prerequisites when FG_AUTH_ENABLED=true.
+
+        Runs at every environment level — missing pepper or path makes auth
+        impossible regardless of dev/prod distinction. Both are errors, not warnings.
+        """
+        auth_enabled_str = os.getenv("FG_AUTH_ENABLED")
+        api_key = _env_str("FG_API_KEY", "")
+        if auth_enabled_str is not None:
+            auth_enabled = _env_bool("FG_AUTH_ENABLED", False)
+        else:
+            auth_enabled = bool(api_key)
+
+        if not auth_enabled:
+            return
+
+        pepper = _env_str("FG_KEY_PEPPER", "")
+        if not pepper:
+            report.add(
+                name="auth_store_pepper_missing",
+                passed=False,
+                message=(
+                    "FG_KEY_PEPPER is required when FG_AUTH_ENABLED=true. "
+                    "Key lookup HMAC cannot function without it — all scoped key "
+                    "verification will fail. Set FG_KEY_PEPPER to a random string "
+                    "of at least 32 characters."
+                ),
+                severity="error",
+            )
+        else:
+            report.add(
+                name="auth_store_pepper",
+                passed=True,
+                message="FG_KEY_PEPPER is set.",
+                severity="info",
+            )
+
+        sqlite_path = _env_str("FG_SQLITE_PATH", "")
+        if not sqlite_path:
+            report.add(
+                name="auth_store_path_missing",
+                passed=False,
+                message=(
+                    "FG_SQLITE_PATH is required when FG_AUTH_ENABLED=true. "
+                    "The auth resolver has no database to query — all API key "
+                    "verification will fail. "
+                    "Set FG_SQLITE_PATH=/var/lib/frostgate/state/frostgate.db "
+                    "pointing to a persisted volume."
+                ),
+                severity="error",
+            )
+        else:
+            report.add(
+                name="auth_store_path",
+                passed=True,
+                message=f"FG_SQLITE_PATH is set: {sqlite_path}",
                 severity="info",
             )
 

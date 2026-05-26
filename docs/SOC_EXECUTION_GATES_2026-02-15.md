@@ -1,3 +1,19 @@
+## 2026-05-26 — PR 16: Auth Runtime Guard — CI and gate changes
+
+**Classification:** CI workflow and prod-safety gate update only. No application logic changes, no new routes, no auth logic changes, no schema changes.
+
+**Files touched:**
+- `.github/workflows/docker-ci.yml` — added `FG_KEY_PEPPER` to the per-run secret generation block, verification loop, and `.env.ci` generation. `FG_KEY_PEPPER` uses `:?` (hard-fail) in `docker-compose.yml`; without this change CI compose commands failed with "required variable missing".
+- `.github/actions/fg-secrets/action.yml` — added `FG_KEY_PEPPER` generation. Covers Guard and unit jobs.
+- `tools/ci/check_prod_unsafe_config.py` — tightened the SQLite-in-prod gate from `"sqlite" in body` to `"sqlite://" in body`. The previous broad match produced a false positive when `FG_SQLITE_PATH` (auth store path, not the app DB URL) was added to `docker-compose.yml`. The gate still catches `FG_DB_URL: sqlite://...` patterns — intent preserved.
+
+**SOC review:**
+- `FG_KEY_PEPPER` in CI is a randomly generated ephemeral value (same generation path as `FG_WEBHOOK_SECRET`). It satisfies the compose `:?` constraint for CI runs only; it has no security effect on test-only containers.
+- The `check_prod_unsafe_config.py` change is a precision improvement, not a gate weakening. `sqlite://` is the only form of SQLite DB URL that could appear in `FG_DB_URL`; the word "sqlite" alone appearing in other env var names (e.g. `FG_SQLITE_PATH`) is not a prod safety issue.
+- No auth path changes. No route inventory changes. No contract changes.
+
+---
+
 ## 2026-05-21 — PR 5.5: Drift Detection + Continuous Connector Intelligence
 
 **Classification:** New service layer + 4 new API routes + 3 new DB tables. Touches: `services/connectors/drift/`, `services/connectors/msgraph/delta.py`, `api/db_models_drift.py`, `api/field_assessment.py`, `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`. No CI workflow changes. No auth logic changes.

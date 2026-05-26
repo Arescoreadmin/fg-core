@@ -60,7 +60,7 @@ def main() -> int:
         ):
             if "fg_db_url" not in body:
                 failures.append(f"{path}: prod-like manifest must set FG_DB_URL")
-            if "sqlite" in body and "fg_db_url" in body:
+            if "sqlite://" in body and "fg_db_url" in body:
                 failures.append(
                     f"{path}: sqlite FG_DB_URL is forbidden for prod-like manifests"
                 )

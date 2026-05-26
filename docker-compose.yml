@@ -289,6 +289,8 @@ services:
       FG_OPA_URL: ${FG_OPA_URL:-http://opa:8181}
       AG_CORE_BASE_URL: http://frostgate-core:8080
       FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
+      FG_SQLITE_PATH: ${FG_SQLITE_PATH:-/var/lib/frostgate/state/frostgate.db}
+      FG_KEY_PEPPER: ${FG_KEY_PEPPER:?FG_KEY_PEPPER must be set in .env or env/prod.env}
       FG_RL_FAIL_OPEN: ${FG_RL_FAIL_OPEN:-false}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_APP_DB}
       FG_SIGNING_SECRET: ${FG_SIGNING_SECRET:?set FG_SIGNING_SECRET in .env or env/prod.env}
