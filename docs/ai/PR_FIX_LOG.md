@@ -30,7 +30,8 @@ Report engine core and GovernanceReportRecord ORM existed, but the engagement-sc
 - `tools/ci/route_inventory_summary.json` — regenerated
 - `tools/ci/topology.sha256` — regenerated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 15 SOC entry added
-- `Makefile` — pip-audit: added `--ignore-vuln MAL-2026-4750` to both invocations (no fix version available; `MAL-` advisory against fastapi 0.136.3 certified in PR 12b; pending upstream resolution)
+- `Makefile` — pip-audit: added `--ignore-vuln MAL-2026-4750` to both invocations; see `docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md` EXC-DEP-001 for full exception record
+- `docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md` (new) — structured exception registry; EXC-DEP-001: MAL-2026-4750, fastapi==0.136.3, no fix version, prior cert PR 12b, removal condition + review cadence documented
 
 **Security/integrity impact:**
 - Ed25519 signed report artifacts (FG_REPORT_SIGNING_KEY; hex 32-byte seed)
