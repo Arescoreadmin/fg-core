@@ -78,6 +78,12 @@ def _read_sqlite_rows(sqlite_path: str) -> list[dict]:
 
 
 def _build_pg_row(row: dict) -> dict:
+    # Keys with NULL tenant_id are stored under "unknown" so the row can be
+    # inserted (tenant_id is NOT NULL in Postgres). However, those keys cannot
+    # be authenticated after migration: the auth resolver requires a tenant_id
+    # claim in the token payload to satisfy RLS, and legacy tokens carry none.
+    # Operators must re-issue these keys after migration. Use --dry-run to
+    # identify affected rows before running the migration.
     return {
         "name": row.get("name") or "default",
         "prefix": row["prefix"],
@@ -121,6 +127,18 @@ def run(dry_run: bool) -> None:
         sys.exit(1)
 
     print(f"Rows read: {len(rows)}")
+
+    null_tenant_rows = [r for r in rows if not r.get("tenant_id")]
+    if null_tenant_rows:
+        print(
+            f"WARNING: {len(null_tenant_rows)} row(s) have NULL tenant_id and will be "
+            f"stored under tenant_id='unknown'. These keys CANNOT be authenticated "
+            f"after migration because their tokens carry no tenant_id claim. "
+            f"Re-issue these keys after migration:",
+            file=sys.stderr,
+        )
+        for r in null_tenant_rows:
+            print(f"  prefix={r.get('prefix', '?')!r}", file=sys.stderr)
 
     if dry_run:
         print("[dry-run] Would attempt to insert the following rows into Postgres:")

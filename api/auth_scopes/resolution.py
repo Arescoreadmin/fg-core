@@ -523,7 +523,7 @@ def verify_api_key_detailed(
 
         _tid_hint = (
             (token_payload.get("tenant_id") or "") if token_payload else ""
-        ) or "unknown"
+        ) or None
         row, identifier_col, col_names = _row_for(
             key_prefix, key_lookup, key_hash, tenant_id_hint=_tid_hint
         )

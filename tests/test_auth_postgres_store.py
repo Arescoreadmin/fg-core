@@ -396,62 +396,31 @@ def test_insert_key_row_no_raw_secret_in_params() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 11. Null tenant_id in token payload falls back to "unknown" hint
+# 11. Null tenant_id hint returns (None, None) — no DB query attempted
 # ---------------------------------------------------------------------------
 
 
-def test_null_tenant_id_in_payload_uses_unknown_hint() -> None:
-    """token_payload with tenant_id=null must resolve to hint 'unknown', not None.
+def test_get_key_row_postgres_returns_none_for_null_tenant_hint() -> None:
+    """get_key_row with tenant_id_hint=None returns (None, None) without querying.
 
-    Migrated keys have tenant_id='unknown' in Postgres (migration script writes
-    'unknown' for NULL SQLite rows). If the hint resolves to None the RLS path
-    skips the DB entirely and the key is always rejected as key_not_found.
+    Keys whose token payload carries no tenant_id cannot be looked up under RLS.
+    Migrated null-tenant keys must be re-issued with a proper tenant_id — the
+    migration script warns operators about this. Falling back to a synthetic
+    tenant like 'unknown' would let null-tenant claims probe arbitrary tenant
+    keyspaces and is blocked by the security regression gate.
     """
-    import sys
-
-    # Remove cached module so patch.dict env takes effect on import
-    for mod in list(sys.modules.keys()):
-        if "api.auth_scopes.resolution" in mod:
-            del sys.modules[mod]
-
-    fake_row = {
-        "id": 1,
-        "prefix": "fgk",
-        "key_hash": "deadbeef",
-        "key_lookup": None,
-        "hash_alg": "argon2id",
-        "hash_params": None,
-        "scopes_csv": "read",
-        "enabled": True,
-        "tenant_id": "unknown",
-        "expires_at": None,
-        "last_used_at": None,
-        "use_count": 0,
-        "created_at": datetime.now(tz=timezone.utc),
-        "version": 1,
-    }
-
-    mock_conn = MagicMock()
-    mock_conn.execute.return_value.mappings.return_value.first.return_value = fake_row
-    mock_ctx = MagicMock()
-    mock_ctx.__enter__ = MagicMock(return_value=mock_conn)
-    mock_ctx.__exit__ = MagicMock(return_value=False)
-    mock_engine = MagicMock()
-    mock_engine.begin.return_value = mock_ctx
-
     with patch.dict(os.environ, {"FG_DB_BACKEND": "postgres"}, clear=False):
-        with patch("api.auth_scopes.store._pg_engine", return_value=mock_engine):
+        with patch("api.auth_scopes.store._pg_engine") as mock_engine:
             from api.auth_scopes.store import get_key_row
 
-            # tenant_id_hint="unknown" (what resolution.py now sends for null claims)
-            row, identifier_col, _ = get_key_row(
+            row, identifier_col, col_names = get_key_row(
                 prefix="fgk",
-                lookup_hash=None,
-                legacy_hash="deadbeef",
-                tenant_id_hint="unknown",
+                lookup_hash="abc",
+                legacy_hash="def",
+                tenant_id_hint=None,
             )
 
-    assert row is not None, (
-        "Key with tenant_id='unknown' must be found when hint is 'unknown'"
-    )
-    assert identifier_col == "key_hash"
+    assert row is None
+    assert identifier_col is None
+    # Engine.begin() must NOT have been called — no DB query should have occurred
+    mock_engine.return_value.begin.assert_not_called()
