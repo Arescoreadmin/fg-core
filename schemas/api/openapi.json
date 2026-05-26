@@ -1689,6 +1689,44 @@
         "title": "AttachEvidenceRequest",
         "type": "object"
       },
+      "AttestationHealthResponse": {
+        "properties": {
+          "compliant": {
+            "title": "Compliant",
+            "type": "integer"
+          },
+          "due_soon": {
+            "title": "Due Soon",
+            "type": "integer"
+          },
+          "health_pct": {
+            "title": "Health Pct",
+            "type": "number"
+          },
+          "never_attested": {
+            "title": "Never Attested",
+            "type": "integer"
+          },
+          "overdue": {
+            "title": "Overdue",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "compliant",
+          "due_soon",
+          "overdue",
+          "never_attested",
+          "total",
+          "health_pct"
+        ],
+        "title": "AttestationHealthResponse",
+        "type": "object"
+      },
       "AttestationResponse": {
         "properties": {
           "asset_id": {
@@ -2922,6 +2960,87 @@
           "updated_at"
         ],
         "title": "ConnectorScheduleResponse",
+        "type": "object"
+      },
+      "ContinuityGapResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "asset_name": {
+            "title": "Asset Name",
+            "type": "string"
+          },
+          "asset_type": {
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "days_overdue": {
+            "title": "Days Overdue",
+            "type": "integer"
+          },
+          "last_attested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attested At"
+          },
+          "risk_tier": {
+            "title": "Risk Tier",
+            "type": "string"
+          },
+          "staleness_index": {
+            "title": "Staleness Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset_id",
+          "asset_type",
+          "asset_name",
+          "risk_tier",
+          "days_overdue",
+          "staleness_index",
+          "last_attested_at"
+        ],
+        "title": "ContinuityGapResponse",
+        "type": "object"
+      },
+      "ContinuityGapsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContinuityGapResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "ContinuityGapsResponse",
         "type": "object"
       },
       "ContinuityOpportunityResponse": {
@@ -10890,6 +11009,49 @@
           "rollout_pct"
         ],
         "title": "PolicyStageRequest",
+        "type": "object"
+      },
+      "PromoteConnectorAssetsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          }
+        },
+        "title": "PromoteConnectorAssetsRequest",
+        "type": "object"
+      },
+      "PromoteConnectorAssetsResponse": {
+        "properties": {
+          "assets": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "promoted": {
+            "title": "Promoted",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "promoted",
+          "updated",
+          "skipped",
+          "assets"
+        ],
+        "title": "PromoteConnectorAssetsResponse",
         "type": "object"
       },
       "PromoteRequest": {
@@ -31407,6 +31569,84 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets": {
+      "post": {
+        "description": "Promote connector-detected candidates from a specific run to governed assets.\n\nIdempotent: repeated calls return promoted=0 once all candidates are promoted.\ndry_run=true performs no writes and returns the projected outcome.\nTenant isolation: only candidates belonging to the caller's tenant are processed.",
+        "operationId": "promote_connector_run_assets_field_assessment_engagements__engagement_id__connector_runs__run_id__promote_assets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoteConnectorAssetsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteConnectorAssetsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Connector Run Assets",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/connector-schedules": {
       "get": {
         "description": "List all connector schedules for an engagement.",
@@ -33812,6 +34052,154 @@
           }
         },
         "summary": "Create Asset",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/attestation-health": {
+      "get": {
+        "operationId": "get_attestation_health_governance_assets_attestation_health_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttestationHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Attestation Health",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/continuity-gaps": {
+      "get": {
+        "operationId": "list_continuity_gaps_governance_assets_continuity_gaps_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "risk_tier",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Risk Tier"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days_overdue_min",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Days Overdue Min",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContinuityGapsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Continuity Gaps",
         "tags": [
           "governance-assets"
         ]

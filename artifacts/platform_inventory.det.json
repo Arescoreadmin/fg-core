@@ -35,7 +35,7 @@
   "governance": {
     "contract_count": 373,
     "contract_only": [],
-    "runtime_count": 477,
+    "runtime_count": 480,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -57,6 +57,8 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
+      "GET /governance/assets/attestation-health",
+      "GET /governance/assets/continuity-gaps",
       "GET /metrics",
       "GET /ui/ai",
       "GET /ui/ai/experience",
@@ -126,6 +128,7 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -141,7 +144,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "da47e1462af993972269c701e3a5d2a227c1e2b02d1d353ff2968e94a04a2301",
+  "governance_fingerprint": "93a5cbaabfa4d873077707889f96519d4db953034427d14c024b85cde45ab1e3",
   "planes": [
     {
       "compat": {
@@ -466,6 +469,8 @@
       "GET /field-assessment/engagements/{engagement_id}/summary",
       "GET /field-assessment/reports/verify/{report_hash}",
       "GET /governance/assets",
+      "GET /governance/assets/attestation-health",
+      "GET /governance/assets/continuity-gaps",
       "GET /governance/assets/shadow",
       "GET /governance/assets/summary",
       "GET /governance/assets/{asset_id}",
@@ -610,6 +615,7 @@
       "POST /field-assessment/engagements",
       "POST /field-assessment/engagements/{engagement_id}/baseline",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
       "POST /field-assessment/engagements/{engagement_id}/connector-schedules",
       "POST /field-assessment/engagements/{engagement_id}/document-analyses",
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",

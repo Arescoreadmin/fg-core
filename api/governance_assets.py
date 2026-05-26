@@ -26,6 +26,10 @@ from api.auth_scopes.resolution import require_scopes
 from api.deps import auth_ctx_db_session
 from services.governance_asset_registry import registry
 from services.governance_asset_registry.audit import verify_asset_audit_chain
+from services.governance_asset_registry.continuity import (
+    attestation_health,
+    continuity_gaps,
+)
 from services.governance_asset_registry.graph import blast_radius
 from services.governance_asset_registry.shadow_detector import detect_shadow_assets
 
@@ -248,6 +252,32 @@ class PolicyBindingResponse(BaseModel):
     effective_until: str | None
 
 
+class AttestationHealthResponse(BaseModel):
+    compliant: int
+    due_soon: int
+    overdue: int
+    never_attested: int
+    total: int
+    health_pct: float
+
+
+class ContinuityGapResponse(BaseModel):
+    asset_id: str
+    asset_type: str
+    asset_name: str
+    risk_tier: str
+    days_overdue: int
+    staleness_index: int
+    last_attested_at: str | None
+
+
+class ContinuityGapsResponse(BaseModel):
+    items: list[ContinuityGapResponse]
+    total: int
+    page: int
+    page_size: int
+
+
 # ---------------------------------------------------------------------------
 # Serialisers
 # ---------------------------------------------------------------------------
@@ -404,6 +434,69 @@ def list_shadow_assets(
         "shadow_asset_count": len(candidates),
         "items": candidates,
     }
+
+
+@router.get(
+    "/attestation-health",
+    response_model=AttestationHealthResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_attestation_health(
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> AttestationHealthResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    report = attestation_health(db, tenant_id=tenant_id)
+    return AttestationHealthResponse(
+        compliant=report.compliant,
+        due_soon=report.due_soon,
+        overdue=report.overdue,
+        never_attested=report.never_attested,
+        total=report.total,
+        health_pct=report.health_pct,
+    )
+
+
+@router.get(
+    "/continuity-gaps",
+    response_model=ContinuityGapsResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_continuity_gaps(
+    request: Request,
+    risk_tier: str | None = Query(default=None),
+    days_overdue_min: int = Query(default=0, ge=0),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ContinuityGapsResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    all_gaps = continuity_gaps(
+        db,
+        tenant_id=tenant_id,
+        risk_tier=risk_tier,
+        days_overdue_min=days_overdue_min,
+    )
+    total = len(all_gaps)
+    offset = (page - 1) * page_size
+    page_items = all_gaps[offset : offset + page_size]
+    return ContinuityGapsResponse(
+        items=[
+            ContinuityGapResponse(
+                asset_id=g.asset_id,
+                asset_type=g.asset_type,
+                asset_name=g.asset_name,
+                risk_tier=g.risk_tier,
+                days_overdue=g.days_overdue,
+                staleness_index=g.staleness_index,
+                last_attested_at=g.last_attested_at,
+            )
+            for g in page_items
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 # ---------------------------------------------------------------------------

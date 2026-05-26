@@ -88,7 +88,7 @@ def get_key_row(
     lookup_hash: Optional[str],
     legacy_hash: Optional[str],
     tenant_id_hint: Optional[str] = None,
-) -> tuple[dict | None, str | None, set[str]]:
+) -> tuple[dict | None, str | None, frozenset[str]]:
     """Look up an api_keys row by prefix + lookup_hash or legacy_hash.
 
     Returns (row_dict or None, identifier_col used, available_col_names).
@@ -120,7 +120,7 @@ def _get_key_row_postgres(
     lookup_hash: Optional[str],
     legacy_hash: Optional[str],
     tenant_id_hint: Optional[str],
-) -> tuple[dict | None, str | None, set[str]]:
+) -> tuple[dict | None, str | None, frozenset[str]]:
     if not tenant_id_hint:
         # Cannot set RLS context without tenant_id; return not-found.
         return None, None, _POSTGRES_STATIC_COLS

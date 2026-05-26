@@ -4039,3 +4039,55 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/route_inventory_summary.json` — regenerated
 - `tools/ci/topology.sha256` — regenerated
 - `docs/ai/PR_FIX_LOG.md` — updated
+
+---
+
+### 2026-05-26 — PR 18: Asset Continuity Service
+
+**Branch:** `feat/asset-continuity-service-pr18`
+
+**SOC review:**
+- 3 new routes added:
+  - `GET /governance/assets/attestation-health` — requires `governance:read` scope. Returns tenant-scoped health counts. No cross-tenant aggregation. health_pct is deterministic: (compliant/total)*100.
+  - `GET /governance/assets/continuity-gaps` — requires `governance:read` scope. Paginated list of overdue assets. Tenant-isolated. No unbounded result sets (page_size max 200).
+  - `POST /field-assessment/engagements/{id}/connector-runs/{run_id}/promote-assets` — requires `governance:write` scope. Promotes detected candidates to governed assets. Idempotent: second call returns promoted=0 (all candidates moved to promoted status). dry_run=true performs no DB writes.
+- All routes enforce `tenant_id` from auth context only — never from request body.
+- Tenant isolation enforced: continuity service filters all queries by `tenant_id`. No cross-tenant reads or writes.
+- No raw payloads, credentials, tokens, or provider metadata in any response.
+- No fail-open governance behavior: health_pct correctly reflects missing/overdue attestations. Never inflated.
+- No asset duplication: `promote_candidate_to_asset()` is idempotent via external_id deduplication.
+- `api/auth_scopes/store.py` — pre-existing uncommitted modification, not part of PR 18 changes.
+- Migration 0066 is idempotent (CREATE INDEX IF NOT EXISTS only, no new tables).
+- `tools/ci/` artifacts regenerated as part of route-inventory-generate and contract-authority-refresh.
+
+**DB schema changes:** No new tables. New index: `ix_ga_candidates_tenant_engagement_scan_status` on `ga_asset_candidates(tenant_id, engagement_id, scan_result_id, status)`.
+
+**Files touched:**
+- `services/governance_asset_registry/continuity.py` (new — attestation_health, continuity_gaps, due_soon)
+- `api/governance_assets.py` — 2 new routes + response models
+- `api/field_assessment.py` — 1 new route + request/response models + imports
+- `migrations/postgres/0066_governance_continuity_candidate_index.sql` (new — idempotent)
+- `tests/test_asset_continuity.py` (new — 20 tests)
+- `BLUEPRINT_STAGED.md` — contract authority marker refreshed
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `docs/ai/PR_FIX_LOG.md` — updated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
+### 2026-05-26 — PR 18 fix: supply FG_KEY_PEPPER for fg-required compose validation
+
+**Change:** CI fix — `FG_KEY_PEPPER` was not available in the `fg-required` workflow environment, causing `docker compose config` (called by `prod-profile-check`) to fail with "required variable FG_KEY_PEPPER is missing a value" before any tests ran.
+
+**SOC review:**
+- `scripts/prod_profile_check.py`: added `FG_KEY_PEPPER: ci-test-pepper` to `_COMPOSE_PLACEHOLDER_ENV`. This dict already provides CI placeholder values for all other required compose vars (POSTGRES_PASSWORD, REDIS_PASSWORD, FG_API_KEY, etc.). `FG_KEY_PEPPER` was the only missing entry. The value is a non-secret CI placeholder used only for `docker compose config` validation (not a running container).
+- `.github/workflows/fg-required.yml`: added `FG_KEY_PEPPER: ci-test-pepper` to the job `env:` block as belt-and-suspenders documentation. Value is not a secret — it is a CI pepper placeholder, not a production credential.
+- No logic changes. No new routes, scopes, or auth paths. No schema or migration changes.
+- No privilege escalation. The workflow already had `contents: read` and `actions: read` only.
+
+**Files touched:**
+- `scripts/prod_profile_check.py` — add FG_KEY_PEPPER to CI placeholder env dict
+- `.github/workflows/fg-required.yml` — add FG_KEY_PEPPER to job env block
