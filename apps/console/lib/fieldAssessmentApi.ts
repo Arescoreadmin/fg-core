@@ -347,6 +347,60 @@ export interface ExecutionState {
 }
 
 // ---------------------------------------------------------------------------
+// Report types
+// ---------------------------------------------------------------------------
+
+export type ReportType = 'full_assessment' | 'executive_summary' | 'findings_register' | 'control_gap';
+
+export interface ReportVersionSummary {
+  report_id: string;
+  version: number;
+  status: string;
+  compiled_at: string;
+  compiled_by: string | null;
+  report_type: string | null;
+}
+
+export interface ReportVersionList {
+  items: ReportVersionSummary[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
+export interface ReportDocument {
+  report_id: string;
+  version: number;
+  report_type: string | null;
+  compiled_by: string | null;
+  manifest_hash: string;
+  section_hashes: Record<string, string>;
+  signature: string | null;
+  generated_at: string;
+  schema_version: string;
+  report: Record<string, unknown>;
+}
+
+export interface ReportVerifyResult {
+  valid: boolean;
+  manifest_hash: string;
+  signature: string | null;
+  verified_at: string;
+}
+
+export interface GenerateReportPayload {
+  report_type: ReportType;
+  include_sections?: string[];
+}
+
+export interface GenerateReportResponse {
+  report_id: string;
+  version: number;
+  status: string;
+  compiled_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Request shapes
 // ---------------------------------------------------------------------------
 
@@ -439,6 +493,19 @@ async function request<T>(
     throw new FieldAssessmentApiError(res.status, code, `Field assessment API error ${res.status}`);
   }
   return res.json() as Promise<T>;
+}
+
+async function requestBlob(path: string): Promise<Blob> {
+  const res = await fetch(`${BASE}${path}`, { cache: 'no-store' });
+  if (!res.ok) {
+    let code = `HTTP_${res.status}`;
+    try {
+      const body = await res.json();
+      code = body?.detail?.code ?? body?.code ?? code;
+    } catch { /* noop */ }
+    throw new FieldAssessmentApiError(res.status, code, `Field assessment API error ${res.status}`);
+  }
+  return res.blob();
 }
 
 // ---------------------------------------------------------------------------
@@ -557,5 +624,35 @@ export const fieldAssessmentApi = {
   // Audit events (read-only — append-only server-side)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/engagements/${engagementId}/audit-events`);
+  },
+
+  // Reports — signed, versioned governance deliverables
+  generateReport(engagementId: string, payload: GenerateReportPayload): Promise<GenerateReportResponse> {
+    return request(`/engagements/${engagementId}/reports`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listReports(engagementId: string, params?: { limit?: number; offset?: number }): Promise<ReportVersionList> {
+    const q = new URLSearchParams();
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.offset != null) q.set('offset', String(params.offset));
+    const qs = q.toString() ? `?${q}` : '';
+    return request(`/engagements/${engagementId}/reports${qs}`);
+  },
+
+  getReport(engagementId: string, version: number): Promise<ReportDocument> {
+    return request(`/engagements/${engagementId}/reports/${version}`);
+  },
+
+  exportReport(engagementId: string, version: number, format: 'json' | 'pdf'): Promise<Blob> {
+    return requestBlob(`/engagements/${engagementId}/reports/${version}/export?format=${format}`);
+  },
+
+  verifyReport(engagementId: string, version: number): Promise<ReportVerifyResult> {
+    return request(`/engagements/${engagementId}/reports/${version}/verify`, {
+      method: 'POST',
+    });
   },
 };
