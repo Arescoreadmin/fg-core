@@ -6,6 +6,54 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-25 — PR 15: Report Engine Completion
+
+**Branch:** `feat/report-engine-completion-pr15`
+
+**PR/context:** PR 15 — Report Engine Completion
+
+**Area:** Governance report engine — engagement-scoped report lifecycle (signing, versioning, report_type, section_hashes, verification)
+
+**Root cause / reason:**
+Report engine core and GovernanceReportRecord ORM existed, but the engagement-scoped enterprise report lifecycle was missing: no Ed25519 signing, no explicit engagement_id-scoped versioning, no report_type enum semantics, no section_hashes, no field-assessment-scoped report creation/retrieval/export/verification routes.
+
+**Files changed:**
+- `services/governance/report/signing.py` (new) — Ed25519 sign/verify over canonical report JSON; key from FG_REPORT_SIGNING_KEY; fails loudly on missing/invalid key
+- `services/governance/report/versioning.py` (new) — engagement-scoped version management: get_next_version, list_versions, get_version; every query includes tenant_id + engagement_id
+- `migrations/postgres/0064_governance_report_columns.sql` (new) — idempotent ADD COLUMN IF NOT EXISTS for report_type, compiled_by, section_hashes, signature; idempotent CREATE INDEX IF NOT EXISTS for tenant+engagement composite indexes
+- `api/db_models_governance_report.py` — added: engagement_id, report_type, compiled_by, section_hashes, signature columns; added composite indexes for tenant+engagement query paths
+- `api/field_assessment.py` — 5 new routes: POST/GET .../reports, GET .../reports/{version}, GET .../reports/{version}/export, POST .../reports/{version}/verify; request/response models; section_hashes computation helper
+- `tests/test_field_assessment_reports.py` (new) — 23 tests covering all 17 spec requirements
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 15 SOC entry added
+
+**Security/integrity impact:**
+- Ed25519 signed report artifacts (FG_REPORT_SIGNING_KEY; hex 32-byte seed)
+- Deterministic report versioning scoped to tenant+engagement
+- Tenant-scoped report lifecycle — all 5 routes enforce tenant_id predicate
+- No cross-tenant report leakage — cross-tenant access returns 404 without existence disclosure
+- No raw scan payloads, credentials, tokens, UPNs, or provider responses in client-visible output
+- Signing key never logged or included in any response
+- Missing signing key fails creation loudly (503 REPORT_SIGNING_KEY_MISSING)
+- Verification failure is explicit (valid=false) but safe
+- section_hashes: SHA-256 per included report section — supports partial verification and future evidence graph anchoring
+
+**Validation:**
+- `ruff check .` — passed
+- `ruff format --check .` — passed
+- `.venv/bin/pytest tests/test_field_assessment_reports.py -q` — 23 passed
+- `python tools/ci/check_plane_registry.py` — OK
+- `.venv/bin/pytest tests/test_plane_registry.py -q` — 3 passed
+- `make fg-contract` — passed
+- `make fg-fast` — passed
+- `bash codex_gates.sh` — passed
+
+---
+
 ### 2026-05-25 — PR 14 follow-up: Dockerfile COPY + fg-required timeout fixes
 
 **Branch:** `feat/dep-authority-normalization-pr14`
