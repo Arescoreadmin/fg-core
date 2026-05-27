@@ -1,8 +1,18 @@
 'use client';
 
-import type { ExecutionState } from '@/lib/fieldAssessmentApi';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  fieldAssessmentApi,
+  type ExecutionState,
+  type PlaybookProgress,
+  type PlaybookNextAction,
+} from '@/lib/fieldAssessmentApi';
+
+const REFRESH_INTERVAL_MS = 30_000;
 
 interface GuidedExecutionPanelProps {
+  engagementId: string;
   executionState: ExecutionState | null;
   loading?: boolean;
   error?: string | null;
@@ -35,12 +45,121 @@ function label(value: string) {
   return value.replace(/_/g, ' ');
 }
 
+function ProgressBar({ pct }: { pct: number }) {
+  const barColor =
+    pct >= 80 ? 'bg-emerald-400' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted">Completion</span>
+        <span className="font-semibold text-foreground">{pct.toFixed(0)}%</span>
+      </div>
+      <div
+        className="w-full h-1.5 rounded-full bg-surface-3 overflow-hidden"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Playbook completion"
+      >
+        <div
+          className={`h-full rounded-full transition-all ${barColor}`}
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({
+  action,
+  onSectionClick,
+}: {
+  action: PlaybookNextAction;
+  onSectionClick?: (section: string) => void;
+}) {
+  const router = useRouter();
+
+  function handleClick() {
+    if (onSectionClick) {
+      onSectionClick(action.target_ui_section);
+    } else if (action.deep_link) {
+      router.push(action.deep_link);
+    }
+  }
+
+  return (
+    <div
+      className={`rounded border bg-surface-1 p-2 space-y-1 ${
+        action.blocking
+          ? 'border-red-500/30'
+          : 'border-border'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2 text-xs">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          {action.blocking && (
+            <span className="inline-flex items-center rounded px-1 py-0.5 text-[10px] border border-red-500/30 bg-red-500/10 text-red-300 shrink-0">
+              blocking
+            </span>
+          )}
+          <span className="font-medium text-foreground">{action.title}</span>
+        </div>
+        <span className={`shrink-0 ${SEVERITY_CLASS[action.severity] ?? 'text-muted'}`}>
+          {action.priority}
+        </span>
+      </div>
+      <p className="text-xs text-muted">{action.instruction}</p>
+      {action.expected_evidence.length > 0 && (
+        <p className="text-[11px] text-muted">
+          Evidence: {action.expected_evidence.join(', ')}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={handleClick}
+        className="text-[11px] text-primary hover:underline focus:outline-none"
+      >
+        Fix this →
+      </button>
+    </div>
+  );
+}
+
 export function GuidedExecutionPanel({
+  engagementId,
   executionState,
   loading = false,
   error = null,
   onSectionClick,
 }: GuidedExecutionPanelProps) {
+  const [progress, setProgress] = useState<PlaybookProgress | null>(null);
+  const [progressError, setProgressError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchProgress = useCallback(async () => {
+    try {
+      const result = await fieldAssessmentApi.getNextActions(engagementId);
+      if (!mountedRef.current) return;
+      setProgress(result);
+      setProgressError(null);
+    } catch {
+      if (!mountedRef.current) return;
+      setProgressError(null); // silent — degrade to executionState display
+    }
+  }, [engagementId]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    fetchProgress();
+    intervalRef.current = setInterval(fetchProgress, REFRESH_INTERVAL_MS);
+    return () => {
+      mountedRef.current = false;
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [fetchProgress]);
+
   if (loading) {
     return (
       <div className="space-y-3" aria-busy="true">
@@ -67,10 +186,13 @@ export function GuidedExecutionPanel({
     );
   }
 
+  // Prefer progress.actions (enriched, blocking flag + deep links) when available;
+  // fall back to executionState.next_actions for degraded display.
+  const actions = progress?.actions ?? null;
+  const categories = Object.entries(executionState.readiness_categories);
   const blockingGates = executionState.gates.filter((gate) => gate.status === 'blocked');
   const warningGates = executionState.gates.filter((gate) => gate.status === 'warning');
   const visibleGates = [...blockingGates, ...warningGates].slice(0, 5);
-  const categories = Object.entries(executionState.readiness_categories);
 
   return (
     <section className="space-y-4" aria-label="Guided execution state">
@@ -87,6 +209,11 @@ export function GuidedExecutionPanel({
             <p className="text-[11px] text-muted">readiness</p>
           </div>
         </div>
+
+        {progress != null && (
+          <ProgressBar pct={progress.completion_pct} />
+        )}
+
         <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
           <div className="rounded border border-red-500/30 bg-red-500/10 px-2 py-1">
             <span className="block text-sm font-semibold text-red-200">{executionState.blocking_gate_count}</span>
@@ -118,27 +245,52 @@ export function GuidedExecutionPanel({
       )}
 
       <div className="space-y-2">
-        <p className="text-xs font-medium text-muted">Next best actions</p>
-        {executionState.next_actions.length === 0 ? (
-          <p className="rounded border border-border bg-surface-2 p-2 text-xs text-muted">
-            No next actions are open.
-          </p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-muted">Next best actions</p>
+          {progress != null && progress.blocking_count > 0 && (
+            <span className="text-[11px] text-red-300">
+              {progress.blocking_count} blocking
+            </span>
+          )}
+        </div>
+
+        {actions !== null ? (
+          actions.length === 0 ? (
+            <p className="rounded border border-border bg-surface-2 p-2 text-xs text-muted">
+              No next actions are open.
+            </p>
+          ) : (
+            actions.slice(0, 4).map((action) => (
+              <ActionButton
+                key={action.action_id}
+                action={action}
+                onSectionClick={onSectionClick}
+              />
+            ))
+          )
         ) : (
-          executionState.next_actions.slice(0, 4).map((action) => (
-            <button
-              key={action.action_id}
-              type="button"
-              onClick={() => onSectionClick?.(action.target_ui_section)}
-              className="w-full rounded border border-border bg-surface-1 p-2 text-left transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              <span className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-medium text-foreground">{action.title}</span>
-                <span className={SEVERITY_CLASS[action.severity] ?? 'text-muted'}>{action.priority}</span>
-              </span>
-              <span className="mt-1 block text-xs text-muted">{action.instruction}</span>
-              <span className="mt-1 block text-[11px] text-muted">Evidence: {action.expected_evidence.join(', ')}</span>
-            </button>
-          ))
+          // Fallback to executionState.next_actions without deep links
+          executionState.next_actions.length === 0 ? (
+            <p className="rounded border border-border bg-surface-2 p-2 text-xs text-muted">
+              No next actions are open.
+            </p>
+          ) : (
+            executionState.next_actions.slice(0, 4).map((action) => (
+              <button
+                key={action.action_id}
+                type="button"
+                onClick={() => onSectionClick?.(action.target_ui_section)}
+                className="w-full rounded border border-border bg-surface-1 p-2 text-left transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <span className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-medium text-foreground">{action.title}</span>
+                  <span className={SEVERITY_CLASS[action.severity] ?? 'text-muted'}>{action.priority}</span>
+                </span>
+                <span className="mt-1 block text-xs text-muted">{action.instruction}</span>
+                <span className="mt-1 block text-[11px] text-muted">Evidence: {action.expected_evidence.join(', ')}</span>
+              </button>
+            ))
+          )
         )}
       </div>
 
@@ -200,6 +352,10 @@ export function GuidedExecutionPanel({
             </button>
           ))}
         </div>
+      )}
+
+      {progressError && (
+        <p className="text-[11px] text-muted">{progressError}</p>
       )}
     </section>
   );

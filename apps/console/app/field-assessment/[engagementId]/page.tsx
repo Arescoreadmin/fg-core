@@ -181,6 +181,11 @@ export default function EngagementWorkspacePage() {
   }, [engagementId]);
 
   useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab) setActiveTab(tab);
+  }, []);
+
+  useEffect(() => {
     loadEngagement();
     loadSummary();
     loadCollections();
@@ -291,6 +296,7 @@ export default function EngagementWorkspacePage() {
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 <GuidedExecutionPanel
+                  engagementId={engagementId}
                   executionState={executionState}
                   loading={executionLoading}
                   error={executionError}

@@ -10524,6 +10524,138 @@
         "title": "PinBaselineResponse",
         "type": "object"
       },
+      "PlaybookNextActionResponse": {
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "action_type": {
+            "title": "Action Type",
+            "type": "string"
+          },
+          "blocking": {
+            "title": "Blocking",
+            "type": "boolean"
+          },
+          "closes_gate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Closes Gate Ids",
+            "type": "array"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "expected_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Evidence",
+            "type": "array"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "required_input_type": {
+            "title": "Required Input Type",
+            "type": "string"
+          },
+          "safe_for_junior_assessor": {
+            "title": "Safe For Junior Assessor",
+            "type": "boolean"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "target_ui_section": {
+            "title": "Target Ui Section",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "why_it_matters": {
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_id",
+          "priority",
+          "title",
+          "instruction",
+          "why_it_matters",
+          "closes_gate_ids",
+          "required_input_type",
+          "target_ui_section",
+          "expected_evidence",
+          "safe_for_junior_assessor",
+          "severity",
+          "blocking",
+          "action_type",
+          "deep_link"
+        ],
+        "title": "PlaybookNextActionResponse",
+        "type": "object"
+      },
+      "PlaybookProgressResponse": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/PlaybookNextActionResponse"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blocking_count": {
+            "title": "Blocking Count",
+            "type": "integer"
+          },
+          "completion_pct": {
+            "title": "Completion Pct",
+            "type": "number"
+          },
+          "current_status": {
+            "title": "Current Status",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engagement_id",
+          "current_status",
+          "completion_pct",
+          "blocking_count",
+          "actions",
+          "generated_at"
+        ],
+        "title": "PlaybookProgressResponse",
+        "type": "object"
+      },
       "PlaybookTriggerRequest": {
         "additionalProperties": false,
         "properties": {
@@ -32544,6 +32676,64 @@
           }
         },
         "summary": "Get Finding Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/next-actions": {
+      "get": {
+        "operationId": "get_engagement_next_actions_route_field_assessment_engagements__engagement_id__next_actions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybookProgressResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Engagement Next Actions Route",
         "tags": [
           "field-assessment"
         ]
