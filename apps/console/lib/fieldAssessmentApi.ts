@@ -299,6 +299,38 @@ export interface ConnectorImportPayload {
   scan_result: Record<string, unknown>;
 }
 
+export interface MsgraphScanInitiatePayload {
+  azure_tenant_id: string;
+  operator_name?: string;
+  operator_org?: string;
+  client_org_name?: string;
+}
+
+export interface MsgraphScanInitiated {
+  run_id: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  message: string;
+}
+
+export type MsgraphRunStatus =
+  | 'pending_auth'
+  | 'authenticating'
+  | 'scanning'
+  | 'importing'
+  | 'complete'
+  | 'failed';
+
+export interface MsgraphRunStatusResult {
+  run_id: string;
+  status: MsgraphRunStatus;
+  user_code: string | null;
+  verification_uri: string | null;
+  error: string | null;
+  scan_result_id: string | null;
+}
+
 export interface ConnectorImportResult {
   engagement_id: string;
   scan_result_id: string;
@@ -742,6 +774,17 @@ export const fieldAssessmentApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  initiateMsgraphScan(engagementId: string, payload: MsgraphScanInitiatePayload): Promise<MsgraphScanInitiated> {
+    return request(`/engagements/${engagementId}/connector-runs/msgraph/initiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getMsgraphRunStatus(engagementId: string, runId: string): Promise<MsgraphRunStatusResult> {
+    return request(`/engagements/${engagementId}/connector-runs/${runId}/status`);
   },
 
   // Audit events (read-only — append-only server-side)
