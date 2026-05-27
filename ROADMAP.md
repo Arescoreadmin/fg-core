@@ -61,7 +61,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 
 | # | Item | Owner | PR | Status |
 |---|------|-------|----|--------|
-| 1 | **Portal authentication** — `middleware.ts` login gate; portal currently has no auth | — | — | ⬜ not started |
+| 1 | **Portal authentication** — `middleware.ts` login gate; portal currently has no auth | — | PR 24 | ✅ done — HMAC-SHA256 session cookies, `/login` page, `PORTAL_PASSWORD` + `PORTAL_SESSION_SECRET` |
 | 2 | **Scan trigger UI** — operator needs to initiate MS Graph device-code scan from console without running CLI | — | — | ⬜ not started |
 | 3 | **NIST AI RMF questionnaire** — structured per-control manual evidence input; `FaFieldObservation` has no questionnaire schema | — | — | ⬜ not started |
 | 4 | **Fix `VERIFY_BASE_URL`** — hardcoded as `"https://verify.fieldguide.io/report"` in `services/connectors/msgraph/report.py` | — | PR 23 | ✅ done — reads `FG_REPORT_VERIFY_URL`, defaults to `localhost:3001/verify` |

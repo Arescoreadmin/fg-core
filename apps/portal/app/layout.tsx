@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { LogoutButton } from '@/components/LogoutButton';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -37,6 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </Link>
                   </li>
                 ))}
+                <li>
+                  <LogoutButton />
+                </li>
               </ul>
             </nav>
           </div>
