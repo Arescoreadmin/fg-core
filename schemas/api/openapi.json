@@ -36299,6 +36299,64 @@
         ]
       }
     },
+    "/governance/graph/anomalies/{anomaly_id}/resolve": {
+      "post": {
+        "operationId": "resolve_anomaly_governance_graph_anomalies__anomaly_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "anomaly_id",
+            "required": true,
+            "schema": {
+              "title": "Anomaly Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnomalyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Anomaly",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
     "/governance/graph/coverage": {
       "get": {
         "description": "Return framework coverage based on control nodes in the graph.",
@@ -36357,6 +36415,136 @@
           }
         },
         "summary": "Get Coverage",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
+    "/governance/graph/edges": {
+      "get": {
+        "operationId": "list_edges_governance_graph_edges_get",
+        "parameters": [
+          {
+            "description": "Filter by edge type",
+            "in": "query",
+            "name": "edge_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by edge type",
+              "title": "Edge Type"
+            }
+          },
+          {
+            "description": "Filter by source node",
+            "in": "query",
+            "name": "source_node_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by source node",
+              "title": "Source Node Id"
+            }
+          },
+          {
+            "description": "Filter by target node",
+            "in": "query",
+            "name": "target_node_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by target node",
+              "title": "Target Node Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EdgeResponse"
+                  },
+                  "title": "Response List Edges Governance Graph Edges Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Edges",
         "tags": [
           "governance-graph"
         ]
@@ -36607,6 +36795,90 @@
           }
         },
         "summary": "Get Node",
+        "tags": [
+          "governance-graph"
+        ]
+      }
+    },
+    "/governance/graph/path": {
+      "get": {
+        "operationId": "find_graph_path_governance_graph_path_get",
+        "parameters": [
+          {
+            "description": "Source node ID",
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "description": "Source node ID",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Target node ID",
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "description": "Target node ID",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_depth",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Max Depth",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Find Graph Path Governance Graph Path Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Find Graph Path",
         "tags": [
           "governance-graph"
         ]

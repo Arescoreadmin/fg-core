@@ -440,12 +440,20 @@ def rebuild_graph(
     )
 
 
-@router.get("/edges", dependencies=[Depends(require_scopes("governance:read"))], response_model=list[EdgeResponse])
+@router.get(
+    "/edges",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=list[EdgeResponse],
+)
 def list_edges(
     request: Request,
     edge_type: str | None = Query(default=None, description="Filter by edge type"),
-    source_node_id: str | None = Query(default=None, description="Filter by source node"),
-    target_node_id: str | None = Query(default=None, description="Filter by target node"),
+    source_node_id: str | None = Query(
+        default=None, description="Filter by source node"
+    ),
+    target_node_id: str | None = Query(
+        default=None, description="Filter by target node"
+    ),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
@@ -500,7 +508,11 @@ def find_graph_path(
     return {"found": True, "nodes": [_node_to_response(n).model_dump() for n in result]}
 
 
-@router.post("/anomalies/{anomaly_id}/resolve", dependencies=[Depends(require_scopes("governance:write"))], response_model=AnomalyResponse)
+@router.post(
+    "/anomalies/{anomaly_id}/resolve",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=AnomalyResponse,
+)
 def resolve_anomaly(
     anomaly_id: str,
     request: Request,
@@ -509,9 +521,15 @@ def resolve_anomaly(
     tenant_id = _resolve_caller_tenant(request)
     anomaly = db.get(GovernanceGraphAnomaly, anomaly_id)
     if anomaly is None or anomaly.tenant_id != tenant_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=api_error("ANOMALY_NOT_FOUND", f"Anomaly {anomaly_id} not found"))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=api_error("ANOMALY_NOT_FOUND", f"Anomaly {anomaly_id} not found"),
+        )
     if not anomaly.is_active:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=api_error("ANOMALY_ALREADY_RESOLVED", "Anomaly is already resolved"))
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_error("ANOMALY_ALREADY_RESOLVED", "Anomaly is already resolved"),
+        )
     anomaly.is_active = False
     anomaly.resolved_at = datetime.utcnow().isoformat()
     db.commit()

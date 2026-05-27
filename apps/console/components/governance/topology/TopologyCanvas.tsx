@@ -98,8 +98,7 @@ export function TopologyCanvas({
   highlightMode,
 }: TopologyCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cyRef = useRef<any>(null);
+  const cyRef = useRef<any>(null); // cytoscape Core has no exported TS type suitable for refs
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -110,7 +109,7 @@ export function TopologyCanvas({
       const cytoscape = mod.default;
       cy = cytoscape({
         container: containerRef.current,
-        style: CY_STYLE as Parameters<typeof cytoscape>[0]['style'],
+        style: CY_STYLE as any,
         layout: { name: 'cose' },
         elements: [],
       });
