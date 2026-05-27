@@ -26,13 +26,16 @@ Scopes:
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes.resolution import require_scopes
+from api.db_models_governance_graph import GovernanceGraphAnomaly, GovernanceGraphEdge
 from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
 from services.governance_graph import builder, lineage as lineage_svc, queries
@@ -434,4 +437,113 @@ def rebuild_graph(
         anomalies_detected=result.anomalies_detected,
         triggered_by=result.triggered_by,
         built_at=result.built_at,
+    )
+
+
+@router.get(
+    "/edges",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=list[EdgeResponse],
+)
+def list_edges(
+    request: Request,
+    edge_type: str | None = Query(default=None, description="Filter by edge type"),
+    source_node_id: str | None = Query(
+        default=None, description="Filter by source node"
+    ),
+    target_node_id: str | None = Query(
+        default=None, description="Filter by target node"
+    ),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[EdgeResponse]:
+    tenant_id = _resolve_caller_tenant(request)
+    stmt = select(GovernanceGraphEdge).where(GovernanceGraphEdge.tenant_id == tenant_id)
+    if edge_type is not None:
+        stmt = stmt.where(GovernanceGraphEdge.edge_type == edge_type)
+    if source_node_id is not None:
+        stmt = stmt.where(GovernanceGraphEdge.source_node_id == source_node_id)
+    if target_node_id is not None:
+        stmt = stmt.where(GovernanceGraphEdge.target_node_id == target_node_id)
+    stmt = stmt.offset(offset).limit(limit)
+    edges = db.execute(stmt).scalars().all()
+    return [
+        EdgeResponse(
+            edge_id=e.edge_id,
+            tenant_id=e.tenant_id,
+            edge_type=e.edge_type,
+            source_node_id=e.source_node_id,
+            target_node_id=e.target_node_id,
+            weight=e.weight,
+            confidence=e.confidence,
+            properties=e.properties or {},
+            source_ref=e.source_ref,
+            engagement_id=e.engagement_id,
+            snapshot_id=e.snapshot_id,
+            derived_at=e.derived_at,
+        )
+        for e in edges
+    ]
+
+
+@router.get("/path", dependencies=[Depends(require_scopes("governance:read"))])
+def find_graph_path(
+    request: Request,
+    from_node: str = Query(alias="from", description="Source node ID"),
+    to_node: str = Query(alias="to", description="Target node ID"),
+    max_depth: int = Query(default=8, ge=1, le=10),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    tenant_id = _resolve_caller_tenant(request)
+    result = queries.find_path(
+        db,
+        tenant_id=tenant_id,
+        source_node_id=from_node,
+        target_node_id=to_node,
+        max_depth=max_depth,
+    )
+    if result is None:
+        return {"found": False, "nodes": []}
+    return {"found": True, "nodes": [_node_to_response(n).model_dump() for n in result]}
+
+
+@router.post(
+    "/anomalies/{anomaly_id}/resolve",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=AnomalyResponse,
+)
+def resolve_anomaly(
+    anomaly_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> AnomalyResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    anomaly = db.get(GovernanceGraphAnomaly, anomaly_id)
+    if anomaly is None or anomaly.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=api_error("ANOMALY_NOT_FOUND", f"Anomaly {anomaly_id} not found"),
+        )
+    if not anomaly.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_error("ANOMALY_ALREADY_RESOLVED", "Anomaly is already resolved"),
+        )
+    anomaly.is_active = False
+    anomaly.resolved_at = datetime.utcnow().isoformat()
+    db.commit()
+    db.refresh(anomaly)
+    return AnomalyResponse(
+        anomaly_id=anomaly.anomaly_id,
+        tenant_id=anomaly.tenant_id,
+        pattern_id=anomaly.pattern_id,
+        description=anomaly.description,
+        severity=anomaly.severity,
+        node_ids=anomaly.node_ids or [],
+        edge_ids=anomaly.edge_ids or [],
+        snapshot_id=anomaly.snapshot_id,
+        detected_at=anomaly.detected_at,
+        resolved_at=anomaly.resolved_at,
+        is_active=anomaly.is_active,
     )
