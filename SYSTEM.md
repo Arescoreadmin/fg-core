@@ -1,10 +1,10 @@
 # FrostGate — Unified System Document
 
-**Version:** 1.0  
-**Last updated:** 2026-05-05  
-**Branch:** `claude/merge-frontend-fg-core-6fjVg`  
+**Version:** 1.1  
+**Last updated:** 2026-05-27  
+**Branch:** `main`  
 **Author:** Jason Cosat  
-**Status:** Active Development — Stage 1 complete, Stage 2 in progress
+**Status:** Active Development — Infrastructure + Field Assessment (PRs 1–22) complete; client readiness in progress
 
 ---
 
@@ -707,6 +707,8 @@ Never "certified" or "compliant with" until formal certification is obtained.
 
 ## 14. Build status — what is done
 
+> For PR-level detail see `ROADMAP.md`.
+
 ### Infrastructure ✅
 - [x] FastAPI backend with all middleware (auth, CORS, DoS guard, logging, resilience)
 - [x] PostgreSQL with RLS, append-only triggers, HMAC audit chain
@@ -715,6 +717,7 @@ Never "certified" or "compliant with" until formal certification is obtained.
 - [x] CI/CD pipelines (GitHub Actions)
 - [x] Device agent (enrollment, telemetry, phase 2 enterprise)
 - [x] Migrations 0001–0033 (33 total)
+- [x] Postgres auth authority (persistent key store, multi-worker safe)
 
 ### Customer-facing (Tier 1) ✅
 - [x] Marketing landing page with pricing tiers and CTAs
@@ -724,6 +727,18 @@ Never "certified" or "compliant with" until formal certification is obtained.
 - [x] AI advisory report generation (Claude, BackgroundTask, polling)
 - [x] Report viewer (executive summary, strengths/gaps, roadmap, framework alignment)
 - [x] Assessment and report tables (migrations 0032 + 0033)
+
+### Field Assessment Layer ✅ (PRs 1–22)
+- [x] Engagement substrate — engagements, scan results, findings, evidence, field observations
+- [x] Playbook engine — AI governance, HIPAA (comprehensive fallback), readiness gates
+- [x] Connector framework — registry, driver interface, scan dispatch
+- [x] MS Graph connector — MSAL device-code flow, 39 NIST AI RMF control checks
+- [x] Governance asset registry — assets, attestations, continuity tracking
+- [x] Report engine — normalized findings, section hashes, manifest signing, PDF/JSON export
+- [x] Drift detection — config baseline snapshots, delta alerts
+- [x] Finding explainer — plain-language explanations, LRU cache, provenance manifest, framework impact
+- [x] Console UI — engagement list, finding list, report viewer, governance assets, attestation
+- [x] Portal (client-facing) — engagements, findings, attestation, continuity gaps, report viewer
 
 ### Dashboard / internal ✅
 - [x] Recharts dashboard (domain radar, request volume area chart)
@@ -745,7 +760,20 @@ Never "certified" or "compliant with" until formal certification is obtained.
 
 ## 15. What needs to be built next
 
-### Stage 1 — Complete the customer funnel (immediate)
+> For full roadmap with PR tracking see `ROADMAP.md`.
+
+### Field Assessment — Client readiness (target: 2026-06-27)
+
+- [ ] **Portal authentication** — `middleware.ts` login gate; portal currently has no auth
+- [ ] **Scan trigger UI** — operator-initiated MS Graph scan from console (currently CLI-only)
+- [ ] **NIST AI RMF questionnaire** — structured per-control manual evidence input
+- [ ] **Fix `VERIFY_BASE_URL`** — hardcoded wrong domain in `services/connectors/msgraph/report.py`
+- [ ] **`.env.example`** — document all required env vars (`FG_MSAL_CLIENT_ID`, `FG_ACKNOWLEDGMENT_KEY`, etc.)
+- [ ] **Executive summary in report** — narrative opening section for client delivery
+- [ ] **NIST control coverage matrix** — portal view: which controls have evidence vs. gaps
+- [ ] **HIPAA playbook** — dedicated HIPAA gates (currently falls back to comprehensive)
+
+### Tier 1 — Complete the customer funnel
 
 - [ ] **Stripe checkout** — $299/$599/$999 tiers wired to `/onboarding` final step
   - Add `stripe_session_id` to `assessments` table (migration 0034)
@@ -762,12 +790,6 @@ Never "certified" or "compliant with" until formal certification is obtained.
   - Apply migrations 0001–0033
   - Set `FG_ENV=production`, `FG_AUTH_ENABLED=1`
   - Configure domain + TLS
-
-- [ ] **Profile-specific question banks** — Currently 35 base questions for all profiles
-  - Add 60-question midmarket bank (migration 0034)
-  - Add 110-question regulated bank (migration 0034)
-  - Add 130-question govcon bank (migration 0034)
-  - `GET /assessment/assessments/{id}/questions` already serves from schema table — no code change
 
 - [ ] **PDF export** — Currently returns a stub
   - WeasyPrint or Playwright → PDF from report content
@@ -914,18 +936,28 @@ fg-core/
 ├── api/
 │   ├── main.py                    FastAPI app, all router registration, middleware
 │   ├── db.py                      SQLAlchemy engine, session, tenant context
-│   ├── db_models.py               All ORM models (54 existing + 5 new assessment models)
+│   ├── db_models.py               All ORM models
 │   ├── deps.py                    FastAPI dependencies (get_db, tenant_db_required)
-│   ├── assessments.py             ★ NEW — assessment engine (org, questions, scoring)
-│   ├── reports_engine.py          ★ NEW — report generation (Anthropic, BackgroundTask)
+│   ├── field_assessment.py        Field assessment API (engagements, findings, reports, explain)
+│   ├── governance_assets.py       Governance asset registry + attestations
+│   ├── assessments.py             Assessment engine (org, questions, scoring)
+│   ├── reports_engine.py          Report generation (Anthropic, BackgroundTask)
 │   ├── decisions.py               Decision pipeline
 │   ├── audit.py                   Audit chain endpoints
 │   ├── compliance.py              Compliance registry
 │   ├── governance.py              Change approval workflow
 │   ├── ai_plane_extension.py      AI policy enforcement endpoints
-│   └── [28 other modules]
+│   └── [other modules]
 │
 ├── services/
+│   ├── field_assessment/
+│   │   ├── finding_explainer.py   Plain-language finding explanations (LRU cache, provenance)
+│   │   ├── playbooks.py           AI governance, HIPAA (comprehensive fallback), readiness gates
+│   │   └── [engagement, evidence, drift modules]
+│   ├── connectors/
+│   │   ├── msgraph/               MS Graph MSAL device-code connector (39 NIST AI RMF checks)
+│   │   ├── registry.py            Connector registry + driver interface
+│   │   └── runner.py              Scan dispatch
 │   ├── ai/
 │   │   ├── dispatch.py            call_provider() — single AI call boundary
 │   │   └── providers/
@@ -933,6 +965,7 @@ fg-core/
 │   │       ├── azure_openai_provider.py
 │   │       └── simulated_provider.py   Dev/test fallback
 │   ├── ai_plane_extension/        AI quota, policy, RAG context
+│   ├── governance/                Governance workflow services
 │   └── phi_classifier/            PII/PHI detection (Presidio-based)
 │
 ├── engine/
@@ -941,40 +974,43 @@ fg-core/
 │   └── types.py                   Core type definitions
 │
 ├── migrations/postgres/
-│   ├── 0001–0031_*.sql            Existing migrations (do not modify)
-│   ├── 0032_assessment_and_reports.sql  ★ NEW — assessment schema
-│   └── 0033_seed_assessment_data.sql    ★ NEW — question bank + prompts
+│   ├── 0001–0033_*.sql            Infrastructure + assessment schema migrations
+│   └── [FA layer migrations added per PR]
 │
 ├── policy/rego/
 │   ├── default.rego               Base OPA policy
 │   └── govcon.rego                CUI/ITAR overlay
 │
-├── console/
-│   ├── app/
-│   │   ├── page.tsx               ★ NEW — Landing page
-│   │   ├── layout.tsx             Root layout + QueryClientProvider
-│   │   ├── globals.css            Tailwind + CSS vars
-│   │   ├── onboarding/page.tsx    ★ NEW — Onboarding wizard
-│   │   ├── assessment/page.tsx    ★ NEW — Assessment wizard
-│   │   ├── reports/[reportId]/page.tsx  ★ NEW — Report viewer
-│   │   └── dashboard/
-│   │       ├── layout.tsx         ★ UPGRADED — Sidebar layout
-│   │       ├── page.tsx           ★ UPGRADED — Charts + stats
-│   │       └── [alignment, control-tower, decisions, forensics]/
+├── apps/
+│   ├── console/                   Operator-facing Next.js app
+│   │   ├── app/
+│   │   │   ├── field-assessment/  Engagement list, finding list, report viewer
+│   │   │   ├── governance/        Asset registry, attestation, continuity
+│   │   │   └── dashboard/         Charts, stats, control tower, decisions, forensics
+│   │   ├── components/field-assessment/  ReportViewer, StatusBadge, FindingRow
+│   │   └── lib/fieldAssessmentApi.ts     Typed BFF client
 │   │
-│   ├── components/
-│   │   ├── ui/                    ★ NEW — button, card, badge, progress, input,
-│   │   │                                   label, select, checkbox
-│   │   ├── layout/                ★ NEW — Sidebar, TopBar
-│   │   └── dashboard/             ★ NEW — DomainScores (Radar), RequestsChart (Area)
-│   │
-│   ├── lib/
-│   │   ├── assessmentApi.ts       ★ NEW — typed client → /api/core/assessment/*
-│   │   ├── reportApi.ts           ★ NEW — typed client → /api/core/assessment/reports/*
-│   │   ├── store.ts               ★ NEW — Zustand onboarding + assessment stores
-│   │   ├── providers.tsx          ★ NEW — QueryClientProvider
-│   │   └── cn.ts                  ★ NEW — clsx + tailwind-merge
-│   │
+│   └── portal/                    Client-facing Next.js app (per-tenant)
+│       ├── app/
+│       │   ├── api/core/[...path]/ BFF proxy (injects X-Tenant-ID server-side)
+│       │   ├── engagements/        Client engagement list
+│       │   ├── findings/           Client finding list + explain panel
+│       │   ├── reports/            Client report viewer + verify
+│       │   ├── attestation/        Attestation submit + health
+│       │   └── continuity/         Continuity gap view
+│       └── lib/portalApi.ts        Typed portal BFF client
+│
+├── packages/ui/                   Shared design system (Card, Badge, Alert, etc.)
+│
+├── console/                       Legacy console (pre-FA; dashboard, onboarding, assessment wizard)
+│
+├── SYSTEM.md                      ★ THIS FILE — unified system reference
+├── ROADMAP.md                     ★ Living PR tracker — update on every merge
+├── CLAUDE.md                      Repo rules (do not modify without calling it out)
+├── BLUEPRINT_STAGED.md            Governance compliance gates (authoritative)
+├── CODEX.md                       AI coding standards (authoritative)
+└── docker-compose.yml             PostgreSQL, Redis, NATS, MinIO, OPA
+│
 │   ├── tailwind.config.ts         ★ NEW — FrostGate brand tokens
 │   ├── postcss.config.js          ★ NEW
 │   └── package.json               ★ UPGRADED — added Tailwind, Radix, Zustand, Recharts, etc.

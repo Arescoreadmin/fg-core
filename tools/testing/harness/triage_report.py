@@ -54,7 +54,7 @@ _RULES: tuple[TriageRule, ...] = (
             "tools/testing/policy/ownership_map.yaml",
             "services/plane_registry/registry.py",
         ),
-        ("SPINE_INVARIANTS.md",),
+        ("BLUEPRINT_STAGED.md",),
     ),
     TriageRule(
         TriageCategory.AUTH_SCOPE_MISMATCH,
@@ -63,7 +63,7 @@ _RULES: tuple[TriageRule, ...] = (
         "Auth scope mismatch or missing permission.",
         ("pytest -q tests/security/test_scope_enforcement.py",),
         ("api/auth_scopes.py", "tests/security/test_scope_enforcement.py"),
-        ("HARDENING_PLAN.md",),
+        ("BLUEPRINT_STAGED.md",),
     ),
     TriageRule(
         TriageCategory.TENANT_ISOLATION_BREACH,
@@ -72,7 +72,7 @@ _RULES: tuple[TriageRule, ...] = (
         "Potential cross-tenant isolation breach.",
         ("pytest -q tests/security/test_tenant_binding_global.py",),
         ("api/control_plane.py", "tests/security/test_tenant_binding_global.py"),
-        ("SPINE_INVARIANTS.md",),
+        ("BLUEPRINT_STAGED.md",),
     ),
     TriageRule(
         TriageCategory.RLS_MISSING_OR_WEAK,
@@ -81,7 +81,7 @@ _RULES: tuple[TriageRule, ...] = (
         "RLS policy missing or weak.",
         ("python tools/ci/check_agent_phase2_rls.py",),
         ("migrations/", "api/db.py"),
-        ("HARDENING_PLAN.md",),
+        ("BLUEPRINT_STAGED.md",),
     ),
     TriageRule(
         TriageCategory.SSRF_GUARD_FAILURE,
@@ -90,7 +90,7 @@ _RULES: tuple[TriageRule, ...] = (
         "SSRF guard failed or missing coverage.",
         ("pytest -q tests/security -k ssrf",),
         ("api/middleware/", "security/"),
-        ("MOAT_STRATEGY.md",),
+        ("SYSTEM.md",),
     ),
     TriageRule(
         TriageCategory.MIGRATION_RISK,
@@ -99,7 +99,7 @@ _RULES: tuple[TriageRule, ...] = (
         "Migration safety regression detected.",
         ("make test-pg-migrations-replay",),
         ("migrations/", "tools/testing/integration/smoke_suite.py"),
-        ("DRIFT_LEDGER.md",),
+        ("BLUEPRINT_STAGED.md",),
     ),
     TriageRule(
         TriageCategory.TIME_BUDGET_EXCEEDED,

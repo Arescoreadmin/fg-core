@@ -46,8 +46,8 @@ EXEMPT_PATHS: Tuple[str, ...] = (
     "CODEX.md",
     "CLAUDE.md",
     "codex_definitions.md",
-    "claude_commands.md",
-    "claude_pr_review.md",
+    "ROADMAP.md",
+    "SYSTEM.md",
 )
 
 # If any of these paths change, we *always* require PR_FIX_LOG unless explicitly overridden.
