@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 373,
+    "contract_count": 380,
     "contract_only": [],
-    "runtime_count": 480,
+    "runtime_count": 485,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -57,8 +57,7 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
-      "GET /governance/assets/attestation-health",
-      "GET /governance/assets/continuity-gaps",
+      "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain",
       "GET /metrics",
       "GET /ui/ai",
       "GET /ui/ai/experience",
@@ -128,7 +127,6 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
-      "POST /field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -144,7 +142,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "93a5cbaabfa4d873077707889f96519d4db953034427d14c024b85cde45ab1e3",
+  "governance_fingerprint": "2c6b7ed0a7d329bb94f7c041bc98d1baf166d5199c55abe6c51b5a208f6eec40",
   "planes": [
     {
       "compat": {
@@ -459,6 +457,8 @@
       "GET /field-assessment/engagements/{engagement_id}/execution-state",
       "GET /field-assessment/engagements/{engagement_id}/findings",
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
+      "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain",
+      "GET /field-assessment/engagements/{engagement_id}/next-actions",
       "GET /field-assessment/engagements/{engagement_id}/observations",
       "GET /field-assessment/engagements/{engagement_id}/readiness-drift",
       "GET /field-assessment/engagements/{engagement_id}/reports",
@@ -489,9 +489,11 @@
       "GET /governance/changes",
       "GET /governance/graph/anomalies",
       "GET /governance/graph/coverage",
+      "GET /governance/graph/edges",
       "GET /governance/graph/lineage/{node_id}",
       "GET /governance/graph/nodes",
       "GET /governance/graph/nodes/{node_id}",
+      "GET /governance/graph/path",
       "GET /governance/graph/stats",
       "GET /governance/graph/traverse",
       "GET /governance/timeline",
@@ -638,6 +640,7 @@
       "POST /governance/candidates/{candidate_id}/review",
       "POST /governance/changes",
       "POST /governance/changes/{change_id}/approve",
+      "POST /governance/graph/anomalies/{anomaly_id}/resolve",
       "POST /governance/graph/rebuild",
       "POST /governance/workflows",
       "POST /governance/workflows/{workflow_id}/evidence",

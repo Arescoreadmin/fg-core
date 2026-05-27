@@ -14,9 +14,21 @@ Security invariants:
 from __future__ import annotations
 
 import logging
+import os
+import threading
+import uuid as _uuid_module
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -110,8 +122,22 @@ from services.connectors.drift.scheduler import (
     upsert_schedule,
     list_schedules,
 )
+from services.connectors.msgraph.acknowledgment import (
+    generate_receipt as _generate_msgraph_receipt,
+)
+from services.connectors.msgraph.manifest import (
+    AUTHORIZED_SCOPES as _MSGRAPH_AUTHORIZED_SCOPES,
+    AcknowledgmentVerificationError as _MsgraphAcknowledgmentError,
+)
+from services.connectors.msgraph.runner import run_scan as _run_msgraph_scan
+from services.connectors.msgraph.schema.scan_result import (
+    AcknowledgmentReceipt as _MsgraphReceipt,
+)
 
 log = logging.getLogger("frostgate.api.field_assessment")
+
+_MSGRAPH_RUNS: dict[str, dict[str, Any]] = {}
+_MSGRAPH_RUNS_LOCK = threading.Lock()
 
 # Statuses whose transition requires all blocking readiness gates to be satisfied.
 # Ungated transitions (e.g. scheduled→pre_visit) skip the expensive gate evaluation.
@@ -1888,6 +1914,225 @@ def import_msgraph_connector_run_route(
         ) from exc
     db.commit()
     return ConnectorImportResponse(**result.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Route — MS Graph live scan trigger (device-code flow)
+# ---------------------------------------------------------------------------
+
+
+class MsgraphScanInitiateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    azure_tenant_id: str
+    operator_name: str = "operator"
+    operator_org: str = "FrostGate"
+    client_org_name: str = ""
+
+
+class MsgraphScanInitiateResponse(BaseModel):
+    run_id: str
+    user_code: str
+    verification_uri: str
+    expires_in: int
+    message: str
+
+
+class MsgraphRunStatusResponse(BaseModel):
+    run_id: str
+    status: Literal[
+        "pending_auth", "authenticating", "scanning", "importing", "complete", "failed"
+    ]
+    user_code: str | None = None
+    verification_uri: str | None = None
+    error: str | None = None
+    scan_result_id: str | None = None
+
+
+def _msgraph_scan_background(
+    *,
+    run_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    receipt: _MsgraphReceipt,
+    msal_app: Any,
+    flow: dict[str, Any],
+    actor: str,
+) -> None:
+    def _set(**kw: Any) -> None:
+        with _MSGRAPH_RUNS_LOCK:
+            _MSGRAPH_RUNS[run_id].update(kw)
+
+    try:
+        _set(status="authenticating")
+        token_result = msal_app.acquire_token_by_device_flow(flow)
+        if "access_token" not in token_result:
+            _set(
+                status="failed",
+                error=token_result.get("error_description", "Token acquisition failed"),
+            )
+            return
+
+        _set(status="scanning")
+        scan_result = _run_msgraph_scan(
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            receipt=receipt,
+            _test_token=token_result["access_token"],
+        )
+
+        _set(status="importing")
+        from api.db import get_sessionmaker
+
+        SessionLocal = get_sessionmaker()
+        db = SessionLocal()
+        try:
+            envelope = ConnectorImportEnvelope.model_validate(
+                {
+                    "connector_type": "microsoft_graph",
+                    "connector_run_id": run_id,
+                    "import_review_status": "imported",
+                    "scan_result": scan_result.model_dump(mode="json"),
+                }
+            )
+            import_result = import_msgraph_scan_result(
+                db=db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                envelope=envelope,
+                actor=actor,
+            )
+            db.commit()
+            _set(status="complete", scan_result_id=import_result.scan_result_id)
+        except Exception as exc:
+            log.error("msgraph_background: import failed — %s", exc)
+            db.rollback()
+            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
+        finally:
+            db.close()
+    except Exception as exc:
+        log.error("msgraph_background: scan failed — %s", exc)
+        _set(status="failed", error=str(exc)[:200])
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/msgraph/initiate",
+    response_model=MsgraphScanInitiateResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def initiate_msgraph_scan(
+    engagement_id: str,
+    request: Request,
+    body: MsgraphScanInitiateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth_ctx_db_session),
+) -> MsgraphScanInitiateResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    if not client_id:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+        )
+
+    try:
+        receipt = _generate_msgraph_receipt(
+            operator_name=body.operator_name,
+            operator_org=body.operator_org,
+            client_org_name=body.client_org_name or eng.client_name,
+            scan_authorized_at=utc_iso8601_z_now(),
+            engagement_id=engagement_id,
+        )
+    except _MsgraphAcknowledgmentError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error("ACKNOWLEDGMENT_KEY_MISSING", str(exc)),
+        )
+
+    try:
+        import msal  # type: ignore[import-untyped]
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error("MSAL_NOT_INSTALLED", "msal package is not installed"),
+        )
+
+    authority = f"https://login.microsoftonline.com/{body.azure_tenant_id}"
+    msal_app = msal.PublicClientApplication(client_id, authority=authority)
+    flow = msal_app.initiate_device_flow(scopes=list(_MSGRAPH_AUTHORIZED_SCOPES))
+    if "user_code" not in flow:
+        raise HTTPException(
+            status_code=502,
+            detail=api_error(
+                "DEVICE_FLOW_FAILED",
+                flow.get("error_description", "Device flow initiation failed"),
+            ),
+        )
+
+    run_id = str(_uuid_module.uuid4())
+    with _MSGRAPH_RUNS_LOCK:
+        _MSGRAPH_RUNS[run_id] = {
+            "status": "pending_auth",
+            "user_code": flow["user_code"],
+            "verification_uri": flow["verification_uri"],
+            "error": None,
+            "scan_result_id": None,
+        }
+
+    background_tasks.add_task(
+        _msgraph_scan_background,
+        run_id=run_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        receipt=receipt,
+        msal_app=msal_app,
+        flow=flow,
+        actor=actor,
+    )
+
+    return MsgraphScanInitiateResponse(
+        run_id=run_id,
+        user_code=flow["user_code"],
+        verification_uri=flow["verification_uri"],
+        expires_in=flow.get("expires_in", 900),
+        message=flow.get("message", ""),
+    )
+
+
+@router.get(
+    "/engagements/{engagement_id}/connector-runs/{run_id}/status",
+    response_model=MsgraphRunStatusResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def get_msgraph_run_status(
+    engagement_id: str,
+    run_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> MsgraphRunStatusResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    with _MSGRAPH_RUNS_LOCK:
+        state = _MSGRAPH_RUNS.get(run_id)
+    if state is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("RUN_NOT_FOUND", f"No active run found for id {run_id}"),
+        )
+    return MsgraphRunStatusResponse(run_id=run_id, **state)
 
 
 # ---------------------------------------------------------------------------

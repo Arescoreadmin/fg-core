@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/field-assessment/StatusBadge';
 import { StatusTransitionBar } from '@/components/field-assessment/StatusTransitionBar';
 import { GuidedExecutionPanel } from '@/components/field-assessment/GuidedExecutionPanel';
 import { ScanImportPanel } from '@/components/field-assessment/ScanImportPanel';
+import { MsgraphScanPanel } from '@/components/field-assessment/MsgraphScanPanel';
 import { DocumentRegistrationPanel } from '@/components/field-assessment/DocumentRegistrationPanel';
 import { ObservationForm } from '@/components/field-assessment/ObservationForm';
 import { InterviewForm } from '@/components/field-assessment/InterviewForm';
@@ -366,9 +367,30 @@ export default function EngagementWorkspacePage() {
 
               {/* Scans */}
               <TabsContent value="scans">
+                <Card className="border-border mb-4">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run MS Graph Scan</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Device-code flow — authenticate in browser, scan runs automatically
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <MsgraphScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
                 <Card className="border-border">
                   <CardHeader className="pb-2 pt-4 px-4">
                     <CardTitle className="text-sm">Import Scan Result</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Paste a previously-exported scan result JSON
+                    </p>
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
                     <ScanImportPanel
