@@ -64,8 +64,8 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | 1 | **Portal authentication** — `middleware.ts` login gate; portal currently has no auth | — | — | ⬜ not started |
 | 2 | **Scan trigger UI** — operator needs to initiate MS Graph device-code scan from console without running CLI | — | — | ⬜ not started |
 | 3 | **NIST AI RMF questionnaire** — structured per-control manual evidence input; `FaFieldObservation` has no questionnaire schema | — | — | ⬜ not started |
-| 4 | **Fix `VERIFY_BASE_URL`** — hardcoded as `"https://verify.fieldguide.io/report"` in `services/connectors/msgraph/report.py` | — | — | ⬜ not started |
-| 5 | **`.env.example`** — document `FG_MSAL_CLIENT_ID`, `FG_ACKNOWLEDGMENT_KEY`, `FG_CORE_TENANT_ID`, all required vars | — | — | ⬜ not started |
+| 4 | **Fix `VERIFY_BASE_URL`** — hardcoded as `"https://verify.fieldguide.io/report"` in `services/connectors/msgraph/report.py` | — | PR 23 | ✅ done — reads `FG_REPORT_VERIFY_URL`, defaults to `localhost:3001/verify` |
+| 5 | **`.env.example`** — document `FG_MSAL_CLIENT_ID`, `FG_ACKNOWLEDGMENT_KEY`, `FG_CORE_TENANT_ID`, all required vars | — | PR 23 | ✅ done — all vars documented with descriptions and generation instructions |
 
 ### P1 — High-value for first client (ship before or during engagement)
 
