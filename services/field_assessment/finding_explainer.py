@@ -35,7 +35,7 @@ _MSGRAPH_REGISTRY: dict[str, Any]
 
 try:
     from services.connectors.msgraph.findings.registry import (
-        REGISTRY as _MSGRAPH_REGISTRY,
+        REGISTRY as _IMPORTED_MSGRAPH_REGISTRY,
     )
 except ImportError:
     _MSGRAPH_REGISTRY = {}
