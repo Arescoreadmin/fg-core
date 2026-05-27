@@ -1375,6 +1375,12 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/connector-schedules",
       "scopes": [],
@@ -1574,6 +1580,18 @@
     },
     {
       "method": "GET",
+      "path": "/governance/assets/attestation-health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/continuity-gaps",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/governance/assets/shadow",
       "scopes": [],
       "source": "contract"
@@ -1759,8 +1777,20 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/governance/graph/anomalies/{anomaly_id}/resolve",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/governance/graph/coverage",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/edges",
       "scopes": [],
       "source": "contract"
     },
@@ -1779,6 +1809,12 @@
     {
       "method": "GET",
       "path": "/governance/graph/nodes/{node_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/path",
       "scopes": [],
       "source": "contract"
     },
@@ -2239,7 +2275,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-26T00:30:27.661409+00:00",
+  "generated_at": "2026-05-26T23:57:36.303420+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
