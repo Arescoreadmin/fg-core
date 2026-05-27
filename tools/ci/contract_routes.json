@@ -1777,8 +1777,20 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/governance/graph/anomalies/{anomaly_id}/resolve",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/governance/graph/coverage",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/edges",
       "scopes": [],
       "source": "contract"
     },
@@ -1797,6 +1809,12 @@
     {
       "method": "GET",
       "path": "/governance/graph/nodes/{node_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/path",
       "scopes": [],
       "source": "contract"
     },

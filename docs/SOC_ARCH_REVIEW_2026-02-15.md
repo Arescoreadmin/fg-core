@@ -1,3 +1,23 @@
+## 2026-05-27 — PR 20: Governance Topology Workspace UI
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (UI surface + read/write-gated graph query routes; no auth subsystem changes, no schema migrations)
+
+**New routes (`api/governance_graph.py`):**
+- `GET /governance/graph/edges` — `governance:read` scope. Queries `governance_graph_edges` with optional edge_type/source/target filters. Tenant isolated (WHERE tenant_id = caller). No writes.
+- `GET /governance/graph/path` — `governance:read` scope. Calls existing `find_path()` service (BFS, max_depth ≤ 10). Returns node chain or `{"found": false}`. No writes.
+- `POST /governance/graph/anomalies/{id}/resolve` — `governance:write` scope. Sets `is_active=False`, `resolved_at=utcnow()`. 404 if tenant mismatch. 409 if already resolved. No cascade effects.
+
+**UI security invariants verified:**
+- No `dangerouslySetInnerHTML` in any new component.
+- `tenant_id` not rendered in any operator panel.
+- Cytoscape.js is browser-only; loaded via dynamic `import()` inside `useEffect`. No SSR execution.
+- All graph topology data fetched from backend API; no client-side graph computation.
+- BFF proxy rules for `governance/graph` and `governance/assets` are allowlisted; server-side scope enforcement is unchanged.
+
+**No security regressions:** No new auth paths. No new privilege escalation. No new tenant boundary crossings. No raw credential exposure. Route inventory and contract authority artifacts regenerated via `make route-inventory-generate` and `make contract-authority-refresh`.
+
+---
+
 ## 2026-05-26 — SOC-HIGH-002 — PR 17: Postgres Auth Authority Migration
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (auth subsystem changes: `api/auth_scopes/`)

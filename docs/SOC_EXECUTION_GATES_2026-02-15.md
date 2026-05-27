@@ -1,3 +1,34 @@
+## 2026-05-27 — PR 20: Governance Topology Workspace UI
+
+**Classification:** New read-only UI surface + 3 additive backend routes. No schema migrations. No auth logic changes. No new DB tables. Touches: `api/governance_graph.py`, `apps/console/` (new files only), `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`.
+
+**SOC review:**
+- 3 new routes in `api/governance_graph.py`: `GET /governance/graph/edges` (governance:read), `GET /governance/graph/path` (governance:read), `POST /governance/graph/anomalies/{id}/resolve` (governance:write). All routes resolve tenant from auth context only — never from request body or query params.
+- `GET /edges` and `GET /path` are read-only queries on already-existing tables (`governance_graph_edges`, `governance_graph_nodes`). No new write paths.
+- `POST /anomalies/{id}/resolve` sets `is_active=False` and `resolved_at` on a single anomaly row. Requires `governance:write`. Tenant isolation enforced: 404 if anomaly.tenant_id != caller tenant. 409 if already resolved (idempotent-safe). No cascade deletes.
+- BFF proxy rules added for `governance/graph` (GET, POST, HEAD) and `governance/assets` (GET, HEAD). Both are already auth-gated server-side by scopes; the BFF adds no new privilege escalation.
+- All UI components: no `dangerouslySetInnerHTML`, no client-side graph computation, no UPNs or raw credentials rendered. `tenant_id` is not exposed in any operator-facing panel.
+- Cytoscape.js loads via `import()` inside `useEffect` — SSR-safe, no server-side execution.
+- `cytoscape@3.33.4` is a pure browser graph rendering library with no server-side execution path and no network calls.
+
+**Files touched:**
+- `api/governance_graph.py` — 3 new routes appended
+- `apps/console/app/api/core/[...path]/route.ts` — 2 new proxy rule entries
+- `apps/console/lib/governanceApi.ts` — new typed API client
+- `apps/console/app/governance/topology/page.tsx` — new workspace page
+- `apps/console/components/governance/topology/` — 11 new components
+- `apps/console/package.json` — cytoscape dependency added
+- `tools/ci/route_inventory.json` — regenerated (3 new routes)
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `contracts/core/openapi.json`, `schemas/api/openapi.json` — contract authority refreshed via `make contract-authority-refresh`
+- `docs/ai/PR_FIX_LOG.md` — updated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
 ## 2026-05-26 — PR 16: Auth Runtime Guard — CI and gate changes
 
 **Classification:** CI workflow and prod-safety gate update only. No application logic changes, no new routes, no auth logic changes, no schema changes.

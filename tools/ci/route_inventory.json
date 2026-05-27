@@ -5997,8 +5997,42 @@
         "tenant"
       ],
       "file": "api/governance_graph.py",
+      "method": "POST",
+      "path": "/governance/graph/anomalies/{anomaly_id}/resolve",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
       "method": "GET",
       "path": "/governance/graph/coverage",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "GET",
+      "path": "/governance/graph/edges",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -6050,6 +6084,23 @@
       "file": "api/governance_graph.py",
       "method": "GET",
       "path": "/governance/graph/nodes/{node_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_graph.py",
+      "method": "GET",
+      "path": "/governance/graph/path",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
