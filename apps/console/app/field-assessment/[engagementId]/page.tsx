@@ -181,6 +181,11 @@ export default function EngagementWorkspacePage() {
   }, [engagementId]);
 
   useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab) setActiveTab(tab);
+  }, []);
+
+  useEffect(() => {
     loadEngagement();
     loadSummary();
     loadCollections();

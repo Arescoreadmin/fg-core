@@ -81,10 +81,10 @@ function ActionButton({
   const router = useRouter();
 
   function handleClick() {
-    if (action.deep_link) {
+    if (onSectionClick) {
+      onSectionClick(action.target_ui_section);
+    } else if (action.deep_link) {
       router.push(action.deep_link);
-    } else {
-      onSectionClick?.(action.target_ui_section);
     }
   }
 
