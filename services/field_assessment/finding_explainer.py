@@ -37,6 +37,14 @@ try:
 except ImportError:
     _MSGRAPH_REGISTRY: dict[str, Any] = {}
 
+# Connector-imported findings store finding_type as "msgraph.{control_id}" where
+# control_id is a NIST control string (e.g. "NIST-AI-RMF-GOVERN-1.2"), not the
+# registry code (e.g. "MFA-001"). Titles are 1-to-1 with FindingDef entries, so
+# this secondary index resolves the correct def from the persisted finding title.
+_MSGRAPH_REGISTRY_BY_TITLE: dict[str, Any] = {
+    d.title: d for d in _MSGRAPH_REGISTRY.values()
+}
+
 _TTL_SECONDS = 300
 _CACHE_MAX = 1000
 _CACHE: OrderedDict[tuple[str, str], tuple[float, "FindingExplanation"]] = OrderedDict()
@@ -121,14 +129,17 @@ def explain_finding(
         tenant_id=tenant_id,
     )
 
-    # Strip "msgraph." namespace prefix to get the registry code.
+    # Strip "msgraph." namespace prefix then resolve the FindingDef.
+    # Two persisted shapes exist:
+    #   1. "msgraph.MFA-001"  — direct code key (tests, manual ingest)
+    #   2. "msgraph.NIST-AI-RMF-GOVERN-1.2" — control_id from connector import
+    # For shape 2 the code lookup misses; fall back to the title index which is
+    # 1-to-1 across all 39 registry entries.
     raw_type = finding.finding_type or ""
-    if raw_type.startswith("msgraph."):
-        code = raw_type[len("msgraph."):]
-    else:
-        code = raw_type
-
-    finding_def = _MSGRAPH_REGISTRY.get(code)
+    code = raw_type[len("msgraph."):] if raw_type.startswith("msgraph.") else raw_type
+    finding_def = _MSGRAPH_REGISTRY.get(code) or _MSGRAPH_REGISTRY_BY_TITLE.get(
+        finding.title or ""
+    )
 
     # Load linked scan results (evidence_entity_type = "scan_result").
     evidence_links = list_evidence_links(
@@ -170,7 +181,10 @@ def explain_finding(
             if isinstance(data, dict):
                 merged_summary.setdefault(section, {}).update(data)
 
-    prefix = code.split("-")[0] if "-" in code else ""
+    # Use the registry code (e.g. "MFA-001") for prefix dispatch, not the
+    # potentially NIST-control-style stored code.
+    dispatch_code = finding_def.code if finding_def else code
+    prefix = dispatch_code.split("-")[0] if "-" in dispatch_code else ""
     dispatch: dict[str, Any] = {
         "MFA": _explain_mfa,
         "CA": _explain_ca,

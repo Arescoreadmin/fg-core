@@ -182,6 +182,44 @@ def test_generic_fallback_uses_finding_title() -> None:
     assert signals == []
 
 
+def test_connector_imported_nist_control_id_resolves_correct_template() -> None:
+    """Connector-imported findings store finding_type as msgraph.{control_id}
+    (e.g. msgraph.NIST-AI-RMF-GOVERN-1.2). The title-based fallback must
+    resolve the right FindingDef and dispatch to the typed template, not generic.
+    """
+    finding = _make_finding(
+        finding_type="msgraph.NIST-AI-RMF-GOVERN-1.2",
+        title="Admin account(s) with no MFA registered",
+    )
+    scan = _make_scan(
+        summary={
+            "mfa": {
+                "admin_no_mfa": 3,
+                "total_enabled_users": 40,
+                "coverage_pct": 92.5,
+                "no_mfa": 3,
+                "weak_mfa_only": 0,
+            }
+        }
+    )
+    link = _make_link(scan.id)
+    db = MagicMock()
+
+    with (
+        patch.object(_mod, "get_finding", return_value=finding),
+        patch.object(_mod, "list_evidence_links", return_value=[link]),
+        patch.object(_mod, "get_scan_result", return_value=scan),
+    ):
+        result = explain_finding(
+            db, tenant_id=_TENANT, engagement_id="eng-x", finding_id="find-nist"
+        )
+
+    assert result.template == "MFA", f"expected MFA template, got {result.template!r}"
+    assert "3" in result.plain_summary
+    assert result.explanation_confidence >= 0.7, "should not fall back to generic 0.4"
+    assert "mfa.admin_no_mfa" in result.signals_used
+
+
 # ─── Unit tests — explain_finding with mocked DB ─────────────────────────────
 
 
