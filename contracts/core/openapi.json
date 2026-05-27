@@ -11538,6 +11538,241 @@
         "title": "PromotionResponse",
         "type": "object"
       },
+      "QuestionnaireCoverageResponse": {
+        "properties": {
+          "assessed_count": {
+            "title": "Assessed Count",
+            "type": "integer"
+          },
+          "by_category": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "By Category",
+            "type": "object"
+          },
+          "coverage_pct": {
+            "title": "Coverage Pct",
+            "type": "number"
+          },
+          "implemented_count": {
+            "title": "Implemented Count",
+            "type": "integer"
+          },
+          "not_applicable_count": {
+            "title": "Not Applicable Count",
+            "type": "integer"
+          },
+          "not_assessed_count": {
+            "title": "Not Assessed Count",
+            "type": "integer"
+          },
+          "not_implemented_count": {
+            "title": "Not Implemented Count",
+            "type": "integer"
+          },
+          "partial_count": {
+            "title": "Partial Count",
+            "type": "integer"
+          },
+          "questionnaire_id": {
+            "title": "Questionnaire Id",
+            "type": "string"
+          },
+          "total_controls": {
+            "title": "Total Controls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "questionnaire_id",
+          "total_controls",
+          "assessed_count",
+          "not_assessed_count",
+          "implemented_count",
+          "partial_count",
+          "not_implemented_count",
+          "not_applicable_count",
+          "coverage_pct",
+          "by_category"
+        ],
+        "title": "QuestionnaireCoverageResponse",
+        "type": "object"
+      },
+      "QuestionnaireInitRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "framework": {
+            "default": "nist_ai_rmf",
+            "title": "Framework",
+            "type": "string"
+          }
+        },
+        "title": "QuestionnaireInitRequest",
+        "type": "object"
+      },
+      "QuestionnaireResponse": {
+        "properties": {
+          "already_existed": {
+            "default": false,
+            "title": "Already Existed",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "responses": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QuestionnaireResponseItem"
+            },
+            "title": "Responses",
+            "type": "array"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "submitted_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted By"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "engagement_id",
+          "framework",
+          "framework_version",
+          "status",
+          "submitted_at",
+          "submitted_by",
+          "schema_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "QuestionnaireResponse",
+        "type": "object"
+      },
+      "QuestionnaireResponseItem": {
+        "properties": {
+          "assessor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessor Id"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "control_name": {
+            "title": "Control Name",
+            "type": "string"
+          },
+          "evidence_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Text"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "response_status": {
+            "title": "Response Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "control_id",
+          "category",
+          "control_name",
+          "response_status",
+          "evidence_text",
+          "confidence_score",
+          "assessor_id",
+          "updated_at"
+        ],
+        "title": "QuestionnaireResponseItem",
+        "type": "object"
+      },
       "ROEEvaluationRequest": {
         "properties": {
           "classification": {
@@ -15488,6 +15723,94 @@
           "status"
         ],
         "title": "UpdateReportRequest",
+        "type": "object"
+      },
+      "UpdateResponseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "evidence_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Text"
+          },
+          "response_status": {
+            "title": "Response Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_status"
+        ],
+        "title": "UpdateResponseRequest",
+        "type": "object"
+      },
+      "UpdateResponseResponse": {
+        "properties": {
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "evidence_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Text"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "response_status": {
+            "title": "Response Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "control_id",
+          "response_status",
+          "evidence_text",
+          "confidence_score",
+          "updated_at"
+        ],
+        "title": "UpdateResponseResponse",
         "type": "object"
       },
       "ValidationError": {
@@ -33417,6 +33740,363 @@
           }
         },
         "summary": "Promote Engagement Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/questionnaires": {
+      "post": {
+        "description": "Idempotent questionnaire initialization.\n\nCreates a new questionnaire pre-seeded with all framework controls.\nIf one already exists for this engagement+framework, returns it unchanged.",
+        "operationId": "create_or_get_questionnaire_field_assessment_engagements__engagement_id__questionnaires_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionnaireInitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionnaireResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Or Get Questionnaire",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}": {
+      "get": {
+        "operationId": "get_questionnaire_route_field_assessment_engagements__engagement_id__questionnaires__questionnaire_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "questionnaire_id",
+            "required": true,
+            "schema": {
+              "title": "Questionnaire Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionnaireResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Questionnaire Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/coverage": {
+      "get": {
+        "operationId": "get_questionnaire_coverage_field_assessment_engagements__engagement_id__questionnaires__questionnaire_id__coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "questionnaire_id",
+            "required": true,
+            "schema": {
+              "title": "Questionnaire Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionnaireCoverageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Questionnaire Coverage",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/responses/{control_id}": {
+      "patch": {
+        "operationId": "patch_questionnaire_response_field_assessment_engagements__engagement_id__questionnaires__questionnaire_id__responses__control_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "questionnaire_id",
+            "required": true,
+            "schema": {
+              "title": "Questionnaire Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "control_id",
+            "required": true,
+            "schema": {
+              "title": "Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateResponseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateResponseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Questionnaire Response",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/submit": {
+      "post": {
+        "description": "Finalize questionnaire and create evidence links to matching findings.",
+        "operationId": "submit_questionnaire_route_field_assessment_engagements__engagement_id__questionnaires__questionnaire_id__submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "questionnaire_id",
+            "required": true,
+            "schema": {
+              "title": "Questionnaire Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionnaireResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Questionnaire Route",
         "tags": [
           "field-assessment"
         ]

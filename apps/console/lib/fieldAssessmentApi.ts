@@ -75,7 +75,7 @@ export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
 export type FindingStatus = 'open' | 'acknowledged' | 'remediated' | 'accepted_risk' | 'closed';
 
-export type EvidenceEntityType = 'scan_result' | 'document_analysis' | 'field_observation' | 'attestation';
+export type EvidenceEntityType = 'scan_result' | 'document_analysis' | 'field_observation' | 'attestation' | 'questionnaire_response';
 
 // Allowed transitions — mirrors backend VALID_ENGAGEMENT_TRANSITIONS
 export const VALID_TRANSITIONS: Record<EngagementStatus, EngagementStatus[]> = {
@@ -543,6 +543,76 @@ export interface CreateEvidenceLinkPayload {
 }
 
 // ---------------------------------------------------------------------------
+// Questionnaire types
+// ---------------------------------------------------------------------------
+
+export type QuestionnaireStatus = 'draft' | 'submitted' | 'finalized';
+
+export type ResponseStatus =
+  | 'not_assessed'
+  | 'implemented'
+  | 'partial'
+  | 'not_implemented'
+  | 'not_applicable';
+
+export type QuestionnaireCategory = 'GOVERN' | 'MAP' | 'MEASURE' | 'MANAGE';
+
+export interface QuestionnaireResponseItem {
+  id: string;
+  control_id: string;
+  category: QuestionnaireCategory;
+  control_name: string;
+  response_status: ResponseStatus;
+  evidence_text: string | null;
+  confidence_score: number | null;
+  assessor_id: string | null;
+  updated_at: string;
+}
+
+export interface Questionnaire {
+  id: string;
+  engagement_id: string;
+  framework: string;
+  framework_version: string;
+  status: QuestionnaireStatus;
+  submitted_at: string | null;
+  submitted_by: string | null;
+  schema_version: string;
+  created_at: string;
+  updated_at: string;
+  responses: QuestionnaireResponseItem[];
+  already_existed: boolean;
+}
+
+export interface PatchResponsePayload {
+  response_status: ResponseStatus;
+  evidence_text?: string | null;
+  confidence_score?: number | null;
+}
+
+export interface QuestionnaireResponseUpdate {
+  id: string;
+  control_id: string;
+  response_status: ResponseStatus;
+  evidence_text: string | null;
+  confidence_score: number | null;
+  updated_at: string;
+}
+
+export interface QuestionnaireCoverage {
+  questionnaire_id: string;
+  total_controls: number;
+  assessed_count: number;
+  not_assessed_count: number;
+  implemented_count: number;
+  partial_count: number;
+  not_implemented_count: number;
+  not_applicable_count: number;
+  coverage_pct: number;
+  by_category: Record<string, Record<string, number>>;
+}
+
+// ---------------------------------------------------------------------------
 // API error
 // ---------------------------------------------------------------------------
 
@@ -758,5 +828,40 @@ export const fieldAssessmentApi = {
 
   explainFinding(engagementId: string, findingId: string): Promise<FindingExplanation> {
     return request(`/engagements/${engagementId}/findings/${findingId}/explain`);
+  },
+
+  // Questionnaire — NIST AI RMF structured per-control evidence capture
+  initQuestionnaire(engagementId: string, framework = 'nist_ai_rmf'): Promise<Questionnaire> {
+    return request(`/engagements/${engagementId}/questionnaires`, {
+      method: 'POST',
+      body: JSON.stringify({ framework }),
+    });
+  },
+
+  getQuestionnaire(engagementId: string, questionnaireId: string): Promise<Questionnaire> {
+    return request(`/engagements/${engagementId}/questionnaires/${questionnaireId}`);
+  },
+
+  patchResponse(
+    engagementId: string,
+    questionnaireId: string,
+    controlId: string,
+    payload: PatchResponsePayload,
+  ): Promise<QuestionnaireResponseUpdate> {
+    return request(
+      `/engagements/${engagementId}/questionnaires/${questionnaireId}/responses/${controlId}`,
+      { method: 'PATCH', body: JSON.stringify(payload) },
+    );
+  },
+
+  submitQuestionnaire(engagementId: string, questionnaireId: string): Promise<Questionnaire> {
+    return request(
+      `/engagements/${engagementId}/questionnaires/${questionnaireId}/submit`,
+      { method: 'POST' },
+    );
+  },
+
+  getQuestionnaireCoverage(engagementId: string, questionnaireId: string): Promise<QuestionnaireCoverage> {
+    return request(`/engagements/${engagementId}/questionnaires/${questionnaireId}/coverage`);
   },
 };

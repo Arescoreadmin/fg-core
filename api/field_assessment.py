@@ -3886,3 +3886,350 @@ def get_finding_explanation_route(
         generated_at=exp.generated_at,
         schema_version=exp.schema_version,
     )
+
+
+# ---------------------------------------------------------------------------
+# Routes — NIST AI RMF Questionnaire
+# ---------------------------------------------------------------------------
+
+from api.db_models_questionnaire import FaQuestionnaire, FaQuestionnaireResponse  # noqa: E402
+from services.field_assessment.questionnaire_store import (  # noqa: E402
+    ControlNotFound,
+    VALID_RESPONSE_STATUSES,
+    QuestionnaireAlreadySubmitted,
+    QuestionnaireNotFound,
+    get_coverage,
+    get_or_create_questionnaire,
+    get_questionnaire,
+    list_responses,
+    normalize_nist_control,  # noqa: F401 — exported for test access
+    submit_questionnaire,
+    update_response,
+)
+
+
+class QuestionnaireInitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    framework: str = "nist_ai_rmf"
+
+
+class QuestionnaireResponseItem(BaseModel):
+    id: str
+    control_id: str
+    category: str
+    control_name: str
+    response_status: str
+    evidence_text: str | None
+    confidence_score: float | None
+    assessor_id: str | None
+    updated_at: str
+
+
+class QuestionnaireResponse(BaseModel):
+    id: str
+    engagement_id: str
+    framework: str
+    framework_version: str
+    status: str
+    submitted_at: str | None
+    submitted_by: str | None
+    schema_version: str
+    created_at: str
+    updated_at: str
+    responses: list[QuestionnaireResponseItem] = []
+    already_existed: bool = False
+
+
+class UpdateResponseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    response_status: str
+    evidence_text: str | None = None
+    confidence_score: float | None = None
+
+
+class UpdateResponseResponse(BaseModel):
+    id: str
+    control_id: str
+    response_status: str
+    evidence_text: str | None
+    confidence_score: float | None
+    updated_at: str
+
+
+class QuestionnaireCoverageResponse(BaseModel):
+    questionnaire_id: str
+    total_controls: int
+    assessed_count: int
+    not_assessed_count: int
+    implemented_count: int
+    partial_count: int
+    not_implemented_count: int
+    not_applicable_count: int
+    coverage_pct: float
+    by_category: dict[str, dict[str, int]]
+
+
+def _questionnaire_to_response(
+    q: FaQuestionnaire,
+    responses: list[FaQuestionnaireResponse],
+    *,
+    already_existed: bool = False,
+) -> QuestionnaireResponse:
+    return QuestionnaireResponse(
+        id=q.id,
+        engagement_id=q.engagement_id,
+        framework=q.framework,
+        framework_version=q.framework_version,
+        status=q.status,
+        submitted_at=q.submitted_at,
+        submitted_by=q.submitted_by,
+        schema_version=q.schema_version,
+        created_at=q.created_at,
+        updated_at=q.updated_at,
+        responses=[
+            QuestionnaireResponseItem(
+                id=r.id,
+                control_id=r.control_id,
+                category=r.category,
+                control_name=r.control_name,
+                response_status=r.response_status,
+                evidence_text=r.evidence_text,
+                confidence_score=r.confidence_score,
+                assessor_id=r.assessor_id,
+                updated_at=r.updated_at,
+            )
+            for r in responses
+        ],
+        already_existed=already_existed,
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/questionnaires",
+    response_model=QuestionnaireResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def create_or_get_questionnaire(
+    engagement_id: str,
+    request: Request,
+    body: QuestionnaireInitRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> QuestionnaireResponse:
+    """Idempotent questionnaire initialization.
+
+    Creates a new questionnaire pre-seeded with all framework controls.
+    If one already exists for this engagement+framework, returns it unchanged.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    q, created = get_or_create_questionnaire(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        assessor_id=actor,
+        framework=body.framework,
+    )
+    if created:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="questionnaire.created",
+            actor=actor,
+            reason_code="QUESTIONNAIRE_INIT",
+            payload={"questionnaire_id": q.id, "framework": body.framework},
+        )
+    db.commit()
+    responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
+    return _questionnaire_to_response(q, responses, already_existed=not created)
+
+
+@router.get(
+    "/engagements/{engagement_id}/questionnaires/{questionnaire_id}",
+    response_model=QuestionnaireResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def get_questionnaire_route(
+    engagement_id: str,
+    questionnaire_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> QuestionnaireResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    try:
+        q = get_questionnaire(
+            db,
+            questionnaire_id=questionnaire_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+        )
+    except QuestionnaireNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("QUESTIONNAIRE_NOT_FOUND", "Questionnaire not found"),
+        )
+    responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
+    return _questionnaire_to_response(q, responses)
+
+
+@router.patch(
+    "/engagements/{engagement_id}/questionnaires/{questionnaire_id}/responses/{control_id}",
+    response_model=UpdateResponseResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def patch_questionnaire_response(
+    engagement_id: str,
+    questionnaire_id: str,
+    control_id: str,
+    request: Request,
+    body: UpdateResponseRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> UpdateResponseResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    if body.response_status not in VALID_RESPONSE_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "INVALID_RESPONSE_STATUS",
+                f"response_status must be one of: {', '.join(sorted(VALID_RESPONSE_STATUSES))}",
+            ),
+        )
+    try:
+        r = update_response(
+            db,
+            questionnaire_id=questionnaire_id,
+            control_id=control_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            response_status=body.response_status,
+            evidence_text=body.evidence_text,
+            confidence_score=body.confidence_score,
+            assessor_id=actor,
+        )
+    except QuestionnaireNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("QUESTIONNAIRE_NOT_FOUND", "Questionnaire not found"),
+        )
+    except QuestionnaireAlreadySubmitted as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("QUESTIONNAIRE_ALREADY_SUBMITTED", exc.message),
+        )
+    except ControlNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("CONTROL_NOT_FOUND", exc.message)
+        )
+    db.commit()
+    return UpdateResponseResponse(
+        id=r.id,
+        control_id=r.control_id,
+        response_status=r.response_status,
+        evidence_text=r.evidence_text,
+        confidence_score=r.confidence_score,
+        updated_at=r.updated_at,
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/questionnaires/{questionnaire_id}/submit",
+    response_model=QuestionnaireResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def submit_questionnaire_route(
+    engagement_id: str,
+    questionnaire_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> QuestionnaireResponse:
+    """Finalize questionnaire and create evidence links to matching findings."""
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    try:
+        q = submit_questionnaire(
+            db,
+            questionnaire_id=questionnaire_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            actor=actor,
+        )
+    except QuestionnaireNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("QUESTIONNAIRE_NOT_FOUND", "Questionnaire not found"),
+        )
+    # Audit against q.engagement_id (verified from DB), not the route path param.
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=q.engagement_id,
+        event_type="questionnaire.submitted",
+        actor=actor,
+        reason_code="QUESTIONNAIRE_SUBMIT",
+        payload={"questionnaire_id": q.id, "framework": q.framework},
+    )
+    db.commit()
+    responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
+    return _questionnaire_to_response(q, responses)
+
+
+@router.get(
+    "/engagements/{engagement_id}/questionnaires/{questionnaire_id}/coverage",
+    response_model=QuestionnaireCoverageResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def get_questionnaire_coverage(
+    engagement_id: str,
+    questionnaire_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> QuestionnaireCoverageResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    try:
+        get_questionnaire(
+            db,
+            questionnaire_id=questionnaire_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+        )
+    except QuestionnaireNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("QUESTIONNAIRE_NOT_FOUND", "Questionnaire not found"),
+        )
+    cov = get_coverage(db, questionnaire_id=questionnaire_id, tenant_id=tenant_id)
+    return QuestionnaireCoverageResponse(questionnaire_id=questionnaire_id, **cov)
