@@ -30,7 +30,9 @@ from services.connectors.msgraph.schema.scan_result import Finding, ScanResult
 
 REPORT_SCHEMA_VERSION = "1.0"
 REPORT_TYPE = "msgraph_governance_v1"
-VERIFY_BASE_URL = os.getenv("FG_REPORT_VERIFY_URL", "http://localhost:3001/verify").rstrip("/")
+VERIFY_BASE_URL = os.getenv(
+    "FG_REPORT_VERIFY_URL", "http://localhost:3001/verify"
+).rstrip("/")
 
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
 

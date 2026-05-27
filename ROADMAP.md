@@ -62,7 +62,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | # | Item | Owner | PR | Status |
 |---|------|-------|----|--------|
 | 1 | **Portal authentication** — `middleware.ts` login gate; portal currently has no auth | — | PR 24 | ✅ done — HMAC-SHA256 session cookies, `/login` page, `PORTAL_PASSWORD` + `PORTAL_SESSION_SECRET` |
-| 2 | **Scan trigger UI** — operator needs to initiate MS Graph device-code scan from console without running CLI | — | — | ⬜ not started |
+| 2 | **Scan trigger UI** — operator needs to initiate MS Graph device-code scan from console without running CLI | — | PR 25 | ✅ done — device-code flow panel in console Scans tab; backend initiate + status poll routes; auto-import on auth |
 | 3 | **NIST AI RMF questionnaire** — structured per-control manual evidence input; `FaFieldObservation` has no questionnaire schema | — | — | ⬜ not started |
 | 4 | **Fix `VERIFY_BASE_URL`** — hardcoded as `"https://verify.fieldguide.io/report"` in `services/connectors/msgraph/report.py` | — | PR 23 | ✅ done — reads `FG_REPORT_VERIFY_URL`, defaults to `localhost:3001/verify` |
 | 5 | **`.env.example`** — document `FG_MSAL_CLIENT_ID`, `FG_ACKNOWLEDGMENT_KEY`, `FG_CORE_TENANT_ID`, all required vars | — | PR 23 | ✅ done — all vars documented with descriptions and generation instructions |
@@ -76,7 +76,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | 8 | **HIPAA playbook** — `services/field_assessment/playbooks.py` HIPAA falls back to `comprehensive`; banking clients need dedicated gates | — | — | ⬜ not started |
 | 9 | **Portal engagement selector UI** — findings page currently requires engagement ID in URL, no picker | — | — | ⬜ not started |
 | 10 | **Remediation roadmap in portal** — sequenced, owned remediation steps with priority ordering | — | — | ⬜ not started |
-| 11 | **Azure AD app pre-registration guide** — required API scopes + admin consent walkthrough for MS Graph scan setup | — | — | ⬜ not started |
+| 11 | **Azure AD app pre-registration guide** — required API scopes + admin consent walkthrough for MS Graph scan setup | — | PR 25 | ✅ done — `docs/operators/azure_ad_app_setup.md`: create app, 7 delegated permissions, public client flow, scan walkthrough, troubleshooting |
 
 ### P2 — Post-first-client (backlog)
 
