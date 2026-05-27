@@ -193,6 +193,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_promotion"
     )  # PR 8: governance promotion record
+    importlib.import_module(
+        "api.db_models_questionnaire"
+    )  # PR 26: NIST AI RMF questionnaire
 
 
 def _get_base():

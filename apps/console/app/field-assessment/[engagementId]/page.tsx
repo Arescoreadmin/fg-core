@@ -20,6 +20,7 @@ import { ReportVersionHistory } from '@/components/field-assessment/ReportVersio
 import { ReportViewer } from '@/components/field-assessment/ReportViewer';
 import { ReportExportBar } from '@/components/field-assessment/ReportExportBar';
 import { ControlGapMatrix } from '@/components/field-assessment/ControlGapMatrix';
+import { QuestionnairePanel } from '@/components/field-assessment/QuestionnairePanel';
 import {
   fieldAssessmentApi,
   type Engagement,
@@ -332,6 +333,7 @@ export default function EngagementWorkspacePage() {
                 <TabsTrigger value="interviews">Interviews</TabsTrigger>
                 <TabsTrigger value="evidence">Evidence Links ({evidenceLinks.length})</TabsTrigger>
                 <TabsTrigger value="findings">Findings</TabsTrigger>
+                <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>
                 <TabsTrigger value="history">History</TabsTrigger>
                 <TabsTrigger value="reports">Reports</TabsTrigger>
               </TabsList>
@@ -577,6 +579,27 @@ export default function EngagementWorkspacePage() {
                       findings={findings}
                       loading={findingsLoading}
                       error={findingsError}
+                    />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* NIST AI RMF Questionnaire */}
+              <TabsContent value="questionnaire">
+                <Card className="border-border">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">NIST AI RMF Questionnaire</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Structured per-control evidence capture — 69 subcategories across GOVERN, MAP, MEASURE, MANAGE
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <QuestionnairePanel
+                      engagementId={engagementId}
+                      onSubmitted={() => {
+                        loadSummary();
+                        loadExecutionState();
+                      }}
                     />
                   </CardContent>
                 </Card>
