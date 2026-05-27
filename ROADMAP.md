@@ -76,7 +76,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | 8 | **HIPAA playbook** — `services/field_assessment/playbooks.py` HIPAA falls back to `comprehensive`; banking clients need dedicated gates | — | — | ⬜ not started |
 | 9 | **Portal engagement selector UI** — findings page currently requires engagement ID in URL, no picker | — | — | ⬜ not started |
 | 10 | **Remediation roadmap in portal** — sequenced, owned remediation steps with priority ordering | — | — | ⬜ not started |
-| 11 | **Azure AD app pre-registration guide** — required API scopes + admin consent walkthrough for MS Graph scan setup | — | — | ⬜ not started |
+| 11 | **Azure AD app pre-registration guide** — required API scopes + admin consent walkthrough for MS Graph scan setup | — | PR 25 | ✅ done — `docs/operators/azure_ad_app_setup.md`: create app, 7 delegated permissions, public client flow, scan walkthrough, troubleshooting |
 
 ### P2 — Post-first-client (backlog)
 

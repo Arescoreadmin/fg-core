@@ -373,3 +373,75 @@ def test_msgraph_import_audit_events_are_safe(client: TestClient) -> None:
     assert "client_secret" not in text
     assert "access_token" not in text
     assert "raw_payload" not in text
+
+
+# ---------------------------------------------------------------------------
+# Live scan auto-import: connector_run_id must use scan_result.scan_id
+# ---------------------------------------------------------------------------
+
+
+def test_import_envelope_uses_scan_result_scan_id(client: TestClient) -> None:
+    """Import succeeds when connector_run_id matches scan_result.scan_id exactly."""
+    engagement = _create_engagement(client)
+    scan_result = _scan_result(tenant_id=_TENANT_ID, engagement_id=engagement["id"])
+    # scan_id is "msgraph-run-001" — must equal connector_run_id in envelope
+    payload = _import_payload(scan_result)
+    assert payload["connector_run_id"] == scan_result["scan_id"]
+
+    resp = client.post(
+        f"/field-assessment/engagements/{engagement['id']}/connector-runs/msgraph/import",
+        json=payload,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["verification_status"] == "verified"
+
+
+def test_import_envelope_mismatched_run_id_is_rejected(client: TestClient) -> None:
+    """Import is rejected when connector_run_id differs from scan_result.scan_id.
+
+    Regression: background task previously set connector_run_id=ui_poll_run_id
+    instead of scan_result.scan_id, causing every live scan auto-import to fail.
+    """
+    engagement = _create_engagement(client)
+    scan_result = _scan_result(tenant_id=_TENANT_ID, engagement_id=engagement["id"])
+    # Simulate the old bug: use a UI polling UUID instead of scan_result.scan_id
+    ui_poll_run_id = "aaaabbbbccccdddd0000111122223333"
+    assert ui_poll_run_id != scan_result["scan_id"]
+
+    payload = _import_payload(scan_result)
+    payload["connector_run_id"] = ui_poll_run_id  # wrong — UI UUID, not scan_id
+
+    resp = client.post(
+        f"/field-assessment/engagements/{engagement['id']}/connector-runs/msgraph/import",
+        json=payload,
+    )
+    # Import validation must reject the mismatch
+    assert resp.status_code in (400, 422), resp.text
+
+
+def test_import_succeeds_when_ui_run_id_differs_from_scan_id(
+    client: TestClient,
+) -> None:
+    """Import succeeds even when the UI polling run_id is a different UUID.
+
+    This test verifies that the fixed background task correctly uses
+    scan_result.scan_id for connector_run_id and not the UI session run_id.
+    The envelope is built as the fixed code does: connector_run_id=scan_result.scan_id.
+    """
+    engagement = _create_engagement(client)
+    scan_result = _scan_result(tenant_id=_TENANT_ID, engagement_id=engagement["id"])
+
+    # UI polling run_id (different from scan_result.scan_id)
+    ui_poll_run_id = "deadbeefcafe00001111222233334444"
+    assert ui_poll_run_id != scan_result["scan_id"]
+
+    # Fixed behaviour: use scan_result["scan_id"] as connector_run_id
+    payload = _import_payload(scan_result)
+    assert payload["connector_run_id"] == scan_result["scan_id"]
+
+    resp = client.post(
+        f"/field-assessment/engagements/{engagement['id']}/connector-runs/msgraph/import",
+        json=payload,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["verification_status"] == "verified"

@@ -1369,6 +1369,12 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}",
       "scopes": [],
@@ -1377,6 +1383,12 @@
     {
       "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/status",
       "scopes": [],
       "source": "contract"
     },
@@ -2317,7 +2329,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-27T19:49:49.363332+00:00",
+  "generated_at": "2026-05-27T20:39:28.905661+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

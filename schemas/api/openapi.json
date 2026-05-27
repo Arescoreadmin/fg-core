@@ -10091,6 +10091,138 @@
         "title": "MsgraphReportResponse",
         "type": "object"
       },
+      "MsgraphRunStatusResponse": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scan_result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scan Result Id"
+          },
+          "status": {
+            "enum": [
+              "pending_auth",
+              "authenticating",
+              "scanning",
+              "importing",
+              "complete",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Code"
+          },
+          "verification_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Uri"
+          }
+        },
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "MsgraphRunStatusResponse",
+        "type": "object"
+      },
+      "MsgraphScanInitiateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "azure_tenant_id": {
+            "title": "Azure Tenant Id",
+            "type": "string"
+          },
+          "client_org_name": {
+            "default": "",
+            "title": "Client Org Name",
+            "type": "string"
+          },
+          "operator_name": {
+            "default": "operator",
+            "title": "Operator Name",
+            "type": "string"
+          },
+          "operator_org": {
+            "default": "FrostGate",
+            "title": "Operator Org",
+            "type": "string"
+          }
+        },
+        "required": [
+          "azure_tenant_id"
+        ],
+        "title": "MsgraphScanInitiateRequest",
+        "type": "object"
+      },
+      "MsgraphScanInitiateResponse": {
+        "properties": {
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "user_code": {
+            "title": "User Code",
+            "type": "string"
+          },
+          "verification_uri": {
+            "title": "Verification Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "user_code",
+          "verification_uri",
+          "expires_in",
+          "message"
+        ],
+        "title": "MsgraphScanInitiateResponse",
+        "type": "object"
+      },
       "NextActionResponse": {
         "properties": {
           "action_id": {
@@ -32090,6 +32222,74 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/initiate": {
+      "post": {
+        "operationId": "initiate_msgraph_scan_field_assessment_engagements__engagement_id__connector_runs_msgraph_initiate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MsgraphScanInitiateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MsgraphScanInitiateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Initiate Msgraph Scan",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}": {
       "get": {
         "operationId": "get_msgraph_report_field_assessment_engagements__engagement_id__connector_runs_msgraph_reports__report_id__get",
@@ -32230,6 +32430,73 @@
           }
         },
         "summary": "Promote Connector Run Assets",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/status": {
+      "get": {
+        "operationId": "get_msgraph_run_status_field_assessment_engagements__engagement_id__connector_runs__run_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MsgraphRunStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Msgraph Run Status",
         "tags": [
           "field-assessment"
         ]

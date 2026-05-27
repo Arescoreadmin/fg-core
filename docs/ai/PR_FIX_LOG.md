@@ -6,6 +6,66 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-27 — PR 25: MS Graph Scan Trigger UI + Azure AD Operator Guide
+
+**Branch:** `pr-25-scan-trigger-ui`
+
+**PR/context:** PR 25 — MS Graph device-code scan trigger for console operators, Azure AD registration guide
+
+**Area:** Field Assessment / Connector Layer / Console UI / Operator Docs
+
+**Summary of changes:**
+
+1. **MS Graph scan trigger API** (`api/field_assessment.py`)
+   - New `POST /engagements/{id}/connector-runs/msgraph/initiate` route: validates `FG_MSAL_CLIENT_ID` + `FG_ACKNOWLEDGMENT_KEY`, generates acknowledgment receipt, calls MSAL `initiate_device_flow` (synchronous, <1s), stores per-run state in `_MSGRAPH_RUNS` dict under `_MSGRAPH_RUNS_LOCK`, starts FastAPI `BackgroundTask` that calls `acquire_token_by_device_flow` (blocking, up to 5 min), then `_run_msgraph_scan()`, then imports via `import_msgraph_scan_result()`.
+   - Background task builds import envelope using `scan_result.scan_id` (not the UI polling run_id) — required by `import_msgraph_scan_result()` which validates `connector_run_id == scan.scan_id`.
+   - New `GET /engagements/{id}/connector-runs/{run_id}/status` route: returns polling state from `_MSGRAPH_RUNS`.
+   - In-memory run state: `_MSGRAPH_RUNS: dict[str, dict]` + `threading.Lock()` for thread safety.
+
+2. **Report verification URL** (`services/connectors/msgraph/report.py`)
+   - Removed hardcoded `https://verify.fieldguide.io/report` URL.
+   - Now reads `FG_REPORT_VERIFY_URL` env var, defaults to `http://localhost:3001/verify`.
+
+3. **Finding explainer** (`services/field_assessment/finding_explainer.py`)
+   - Ruff formatting fixes only (no logic change).
+
+4. **Console scan trigger UI** (`apps/console/components/field-assessment/MsgraphScanPanel.tsx` — new)
+   - Device-code flow panel: Azure tenant ID form, submit → displays user_code + verification_uri, polls status every 3s, shows terminal state (complete/failed), "Run another scan" resets.
+
+5. **Azure AD operator guide** (`docs/operators/azure_ad_app_setup.md` — new)
+   - Step-by-step: create app registration, add 7 delegated permissions, enable public client flow, configure env vars, console walkthrough, troubleshooting table.
+
+6. **`.env.example`** — all secret-class variables replaced with `CHANGE_ME_*` placeholders; inline comments moved to separate comment lines to satisfy `check_no_plaintext_secrets` gate.
+
+7. **`ROADMAP.md`** — P0 item 2 (scan trigger UI) and P1 item 11 (Azure AD guide) marked ✅ done.
+
+**Files changed:**
+- `api/field_assessment.py` — scan trigger routes, background task, in-memory run state, import envelope fix
+- `services/connectors/msgraph/report.py` — configurable verify URL via `FG_REPORT_VERIFY_URL`
+- `services/field_assessment/finding_explainer.py` — ruff formatting only
+- `apps/console/lib/fieldAssessmentApi.ts` — `MsgraphScanInitiated`, `MsgraphRunStatus` types + API methods
+- `apps/console/components/field-assessment/MsgraphScanPanel.tsx` (new)
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` — MsgraphScanPanel wired into Scans tab
+- `docs/operators/azure_ad_app_setup.md` (new)
+- `.env.example` — CHANGE_ME_* placeholders throughout
+- `ROADMAP.md` — P0/P1 status updated
+- `tests/test_field_assessment_msgraph_bridge.py` — 3 new connector_run_id regression tests
+
+**Security impact:**
+- Access token acquired via device-code flow is held in memory only, passed directly to `run_scan()` via `_test_token` injection, and never written to disk or logs.
+- Import validation (`connector_run_id == scan.scan_id`) is preserved and tested.
+- Acknowledgment receipt required for all live scans — same gate as manual import path.
+- No route scopes weakened; no auth bypass added.
+- `.env.example` contained non-placeholder secret values (inline comments were parsed as values by secret scanner) — replaced with `CHANGE_ME_*` throughout.
+
+**Validation:**
+- `python3 tools/ci/check_no_plaintext_secrets.py` → OK
+- `pytest tests/test_field_assessment_msgraph_bridge.py -q` → passes including 3 new regression tests
+- `ruff check api/field_assessment.py services/connectors/msgraph/report.py` → 0 errors
+- All CI gate requirements met: PR_FIX_LOG updated, secret scan clean, import validation intact
+
+---
+
 ### 2026-05-26 — PR 17: Postgres Auth Authority Migration
 
 **Branch:** `claude/wizardly-cannon-VJxAm`

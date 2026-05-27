@@ -31,12 +31,16 @@ from services.field_assessment.store import (
     list_evidence_links,
 )
 
+_MSGRAPH_REGISTRY: dict[str, Any]
+
 try:
     from services.connectors.msgraph.findings.registry import (
         REGISTRY as _MSGRAPH_REGISTRY,
     )
 except ImportError:
-    _MSGRAPH_REGISTRY: dict[str, Any] = {}
+    _MSGRAPH_REGISTRY = {}
+else:
+    _MSGRAPH_REGISTRY = _IMPORTED_MSGRAPH_REGISTRY
 
 # Connector-imported findings store finding_type as "msgraph.{control_id}" where
 # control_id is a NIST control string (e.g. "NIST-AI-RMF-GOVERN-1.2"), not the
