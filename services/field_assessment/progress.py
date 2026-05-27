@@ -105,16 +105,16 @@ def compute_next_actions(
         PlaybookProgress with enriched actions and computed completion_pct.
     """
     blocked_gate_ids: set[str] = {
-        gate.gate_id
-        for gate in execution_state.gates
-        if gate.status == "blocked"
+        gate.gate_id for gate in execution_state.gates if gate.status == "blocked"
     }
 
     enriched: list[PlaybookNextAction] = []
     for action in execution_state.next_actions:
         closes = set(action.closes_gate_ids)
         blocking = bool(closes & blocked_gate_ids)
-        action_type = _ACTION_TYPE_MAP.get(action.required_input_type, action.required_input_type)
+        action_type = _ACTION_TYPE_MAP.get(
+            action.required_input_type, action.required_input_type
+        )
         tab = _TAB_MAP.get(action.target_ui_section, action.target_ui_section)
         deep_link = _DEEP_LINK_TEMPLATE.format(
             engagement_id=engagement_id,
@@ -145,9 +145,7 @@ def compute_next_actions(
         + execution_state.blocking_gate_count
         + execution_state.warning_gate_count,
     )
-    completion_pct = round(
-        execution_state.completed_gate_count / total_gates * 100, 1
-    )
+    completion_pct = round(execution_state.completed_gate_count / total_gates * 100, 1)
     blocking_count = sum(1 for a in enriched if a.blocking)
 
     return PlaybookProgress(

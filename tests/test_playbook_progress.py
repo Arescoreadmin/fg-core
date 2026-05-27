@@ -44,12 +44,12 @@ def _minimal_engagement(
 
 def _build_state(
     engagement_id: str = "eng-prog-1",
-    scans: list = None,
-    documents: list = None,
-    observations: list = None,
-    findings: list = None,
-    evidence_links: list = None,
-    reports: list = None,
+    scans: list[Any] | None = None,
+    documents: list[Any] | None = None,
+    observations: list[Any] | None = None,
+    findings: list[Any] | None = None,
+    evidence_links: list[Any] | None = None,
+    reports: list[Any] | None = None,
     status: str = "setup",
 ) -> Any:
     eng = _minimal_engagement(engagement_id=engagement_id, status=status)
