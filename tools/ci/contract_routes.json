@@ -1454,6 +1454,12 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/next-actions",
       "scopes": [],
       "source": "contract"
@@ -1473,6 +1479,36 @@
     {
       "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/promote",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/coverage",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/responses/{control_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/submit",
       "scopes": [],
       "source": "contract"
     },
@@ -2281,7 +2317,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-27T12:58:53.397582+00:00",
+  "generated_at": "2026-05-27T19:49:49.363332+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

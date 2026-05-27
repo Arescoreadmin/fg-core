@@ -12072,3 +12072,42 @@ New `finding_explainer.py` service resolves scan evidence for a normalized findi
 **Validation:**
 - `pytest tests/test_finding_explainer.py` → 14 passed
 - `make fg-fast` → pending
+
+---
+
+## PR 26 — NIST AI RMF Questionnaire Framework (hardening, CI repair, evidence linking, engagement isolation)
+
+**Branch:** `pr-26-nist-questionnaire`
+**Date:** 2026-05-27
+
+**What was fixed:**
+
+1. **NIST mapping normalization** — `normalize_nist_control()` added to `questionnaire_store.py`. Handles all three stored shapes: raw string `"NIST-AI-RMF-GOVERN-1.2"`, dict `{"control_id": "NIST-AI-RMF-GOVERN-1.2"}`, and MS Graph bridge shape `{"function": "GOVERN", "category": "GOVERN-1.2", "description": "..."}`. Without this, evidence links were silently never created for MS Graph scan findings.
+
+2. **Engagement isolation** — `get_questionnaire()` now scopes by `(questionnaire_id, tenant_id, engagement_id)`. Previously only `(questionnaire_id, tenant_id)` was checked, allowing cross-engagement access within the same tenant.
+
+3. **Deterministic evidence lineage** — `FaEvidenceLink.link_metadata` now includes `source_type`, `source_question_id`, `source_response_id`, `matched_control_id`, `link_reason`, `questionnaire_id`, and `response_status` for full audit replay.
+
+4. **Secret scan** — `.env.example` inline comments moved to separate lines; placeholder values replaced with `CHANGE_ME_*` pattern.
+
+5. **Contract authority** — `BLUEPRINT_STAGED.md` and `CONTRACT.md` updated to SHA `3b5d34a2d961772fb01e642ca4aec97a13b3a1d5c19c9b111f13149ffb8ac0df` (questionnaire routes added to spec).
+
+6. **Route inventory** — regenerated via `make route-inventory-generate` after 5 questionnaire routes were added.
+
+**Security impact:**
+- Engagement isolation gap was a P0 security fix: without it, a tenant actor with a valid questionnaire ID from one engagement could read/modify questionnaire data belonging to a different engagement within the same tenant.
+- Evidence link normalization is correctness-only: no auth bypass possible from missing links.
+
+**Files touched:**
+- `services/field_assessment/questionnaire_store.py` — `normalize_nist_control()`, engagement-scoped `get_questionnaire()`, richer `link_metadata`
+- `api/field_assessment.py` — thread `engagement_id` through 4 questionnaire route handlers
+- `tests/test_questionnaire.py` (new — 20 tests: 10 unit normalization, 4 evidence-linking integration, 4 engagement-isolation, 1 lineage determinism, 1 end-to-end MS Graph)
+- `.env.example` — secret scan fix
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
+- `tools/ci/route_inventory.json` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 26 entry added
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Validation:**
+- `pytest tests/test_questionnaire.py` → 20 passed
+- `make fg-fast` → all gates green

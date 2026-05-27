@@ -1,10 +1,12 @@
 """Store layer for NIST AI RMF questionnaire — CRUD and evidence linking.
 
 Security invariants:
-  - All queries scope by (questionnaire_id, tenant_id) or (engagement_id, tenant_id).
+  - All queries scope by (questionnaire_id, tenant_id, engagement_id) or
+    (engagement_id, tenant_id).
   - Status transitions are one-way: draft → submitted → finalized.
   - On submit: FaEvidenceLink records created for each assessed response that
     matches a finding's nist_ai_rmf_mappings. Duplicate links are silently ignored.
+  - get_questionnaire() enforces engagement_id, preventing cross-engagement access.
 """
 
 from __future__ import annotations
@@ -75,6 +77,48 @@ ASSESSED_STATUSES: frozenset[str] = frozenset(
 
 def _new_id() -> str:
     return uuid.uuid4().hex
+
+
+# ---------------------------------------------------------------------------
+# NIST mapping normalization
+# ---------------------------------------------------------------------------
+
+_NIST_PREFIX = "NIST-AI-RMF-"
+
+
+def normalize_nist_control(mapping: Any) -> str | None:
+    """Normalize a NIST AI RMF mapping to its short canonical control_id.
+
+    Supported input forms:
+      - String:  "NIST-AI-RMF-GOVERN-1.2"  →  "GOVERN-1.2"
+      - String:  "GOVERN-1.2"               →  "GOVERN-1.2"
+      - Dict:    {"control_id": "NIST-AI-RMF-GOVERN-1.2"}  →  "GOVERN-1.2"
+      - Dict:    {"control_id": "GOVERN-1.2"}               →  "GOVERN-1.2"
+      - Dict:    {"function": "GOVERN", "category": "GOVERN-1.2", ...}  →  "GOVERN-1.2"
+
+    Returns None for unrecognized shapes so callers can skip without crashing.
+    """
+    if isinstance(mapping, str):
+        raw = mapping.strip()
+        if raw.startswith(_NIST_PREFIX):
+            return raw[len(_NIST_PREFIX):]
+        return raw or None
+
+    if isinstance(mapping, dict):
+        # {"function": "GOVERN", "category": "GOVERN-1.2", ...}
+        if "category" in mapping:
+            cat = mapping["category"]
+            if isinstance(cat, str) and cat.strip():
+                return cat.strip()
+
+        # {"control_id": "NIST-AI-RMF-GOVERN-1.2"} or {"control_id": "GOVERN-1.2"}
+        if "control_id" in mapping:
+            raw = mapping["control_id"]
+            if isinstance(raw, str) and raw.strip():
+                s = raw.strip()
+                return s[len(_NIST_PREFIX):] if s.startswith(_NIST_PREFIX) else s
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -193,11 +237,19 @@ def get_questionnaire(
     *,
     questionnaire_id: str,
     tenant_id: str,
+    engagement_id: str,
 ) -> FaQuestionnaire:
+    """Load questionnaire scoped to (questionnaire_id, tenant_id, engagement_id).
+
+    Enforces engagement isolation: a questionnaire from a different engagement
+    within the same tenant is indistinguishable from a missing questionnaire —
+    both raise QuestionnaireNotFound (404).
+    """
     q = db.scalar(
         select(FaQuestionnaire).where(
             FaQuestionnaire.id == questionnaire_id,
             FaQuestionnaire.tenant_id == tenant_id,
+            FaQuestionnaire.engagement_id == engagement_id,
         )
     )
     if q is None:
@@ -232,13 +284,19 @@ def update_response(
     questionnaire_id: str,
     control_id: str,
     tenant_id: str,
+    engagement_id: str,
     response_status: str,
     evidence_text: str | None,
     confidence_score: float | None,
     assessor_id: str | None,
 ) -> FaQuestionnaireResponse:
     """Update a single control response. Raises QuestionnaireAlreadySubmitted if finalized."""
-    q = get_questionnaire(db, questionnaire_id=questionnaire_id, tenant_id=tenant_id)
+    q = get_questionnaire(
+        db,
+        questionnaire_id=questionnaire_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+    )
     if q.status in ("submitted", "finalized"):
         raise QuestionnaireAlreadySubmitted()
 
@@ -273,14 +331,21 @@ def submit_questionnaire(
     *,
     questionnaire_id: str,
     tenant_id: str,
+    engagement_id: str,
     actor: str,
 ) -> FaQuestionnaire:
     """Transition questionnaire to 'submitted' and create evidence links.
 
     Idempotent: if already submitted, returns the existing questionnaire.
     Links each assessed response to findings sharing the same nist_ai_rmf control ID.
+    Audit events must be written against q.engagement_id (verified from DB).
     """
-    q = get_questionnaire(db, questionnaire_id=questionnaire_id, tenant_id=tenant_id)
+    q = get_questionnaire(
+        db,
+        questionnaire_id=questionnaire_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+    )
     if q.status in ("submitted", "finalized"):
         return q
 
@@ -301,7 +366,17 @@ def _link_responses_to_findings(
     questionnaire: FaQuestionnaire,
     tenant_id: str,
 ) -> None:
-    """Create FaEvidenceLink records between assessed responses and matching findings."""
+    """Create FaEvidenceLink records between assessed responses and matching findings.
+
+    Normalizes all nist_ai_rmf_mappings to short canonical control IDs before
+    matching, supporting all three stored shapes:
+      - string:  "NIST-AI-RMF-GOVERN-1.2"
+      - dict:    {"control_id": "NIST-AI-RMF-GOVERN-1.2"}
+      - dict:    {"function": "GOVERN", "category": "GOVERN-1.2", ...}
+
+    Each created FaEvidenceLink records full deterministic lineage in
+    link_metadata for audit replay and regulator review.
+    """
     from api.db_models_field_assessment import FaEvidenceLink, FaNormalizedFinding
 
     responses = list_responses(
@@ -325,13 +400,13 @@ def _link_responses_to_findings(
 
     now = utc_iso8601_z_now()
     for finding in findings:
-        mappings: list[Any] = finding.nist_ai_rmf_mappings or []
-        matched_controls: list[str] = [
-            m if isinstance(m, str) else m.get("control_id", "")
-            for m in mappings
-            if (isinstance(m, str) and m in assessed_control_ids)
-            or (isinstance(m, dict) and m.get("control_id", "") in assessed_control_ids)
-        ]
+        raw_mappings: list[Any] = finding.nist_ai_rmf_mappings or []
+        matched_controls: list[str] = []
+        for m in raw_mappings:
+            normalized = normalize_nist_control(m)
+            if normalized and normalized in assessed_control_ids:
+                matched_controls.append(normalized)
+
         for control_id in matched_controls:
             response = response_by_control.get(control_id)
             if response is None:
@@ -348,6 +423,11 @@ def _link_responses_to_findings(
                     "control_id": control_id,
                     "questionnaire_id": questionnaire.id,
                     "response_status": response.response_status,
+                    "source_type": "questionnaire",
+                    "source_question_id": response.control_id,
+                    "source_response_id": response.id,
+                    "matched_control_id": control_id,
+                    "link_reason": "nist_control_match",
                 },
                 created_at=now,
                 schema_version="1.0",

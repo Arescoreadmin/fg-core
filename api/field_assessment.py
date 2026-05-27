@@ -3657,6 +3657,7 @@ from services.field_assessment.questionnaire_store import (  # noqa: E402
     get_or_create_questionnaire,
     get_questionnaire,
     list_responses,
+    normalize_nist_control,  # noqa: F401 — exported for test access
     submit_questionnaire,
     update_response,
 )
@@ -3827,7 +3828,10 @@ def get_questionnaire_route(
         )
     try:
         q = get_questionnaire(
-            db, questionnaire_id=questionnaire_id, tenant_id=tenant_id
+            db,
+            questionnaire_id=questionnaire_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
         )
     except QuestionnaireNotFound:
         raise HTTPException(
@@ -3873,6 +3877,7 @@ def patch_questionnaire_response(
             questionnaire_id=questionnaire_id,
             control_id=control_id,
             tenant_id=tenant_id,
+            engagement_id=engagement_id,
             response_status=body.response_status,
             evidence_text=body.evidence_text,
             confidence_score=body.confidence_score,
@@ -3925,17 +3930,22 @@ def submit_questionnaire_route(
         )
     try:
         q = submit_questionnaire(
-            db, questionnaire_id=questionnaire_id, tenant_id=tenant_id, actor=actor
+            db,
+            questionnaire_id=questionnaire_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            actor=actor,
         )
     except QuestionnaireNotFound:
         raise HTTPException(
             status_code=404,
             detail=api_error("QUESTIONNAIRE_NOT_FOUND", "Questionnaire not found"),
         )
+    # Audit against q.engagement_id (verified from DB), not the route path param.
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,
-        engagement_id=engagement_id,
+        engagement_id=q.engagement_id,
         event_type="questionnaire.submitted",
         actor=actor,
         reason_code="QUESTIONNAIRE_SUBMIT",
@@ -3965,7 +3975,12 @@ def get_questionnaire_coverage(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
     try:
-        get_questionnaire(db, questionnaire_id=questionnaire_id, tenant_id=tenant_id)
+        get_questionnaire(
+            db,
+            questionnaire_id=questionnaire_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+        )
     except QuestionnaireNotFound:
         raise HTTPException(
             status_code=404,

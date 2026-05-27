@@ -4185,3 +4185,36 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/route_inventory.json` — regenerated
 - `docs/ai/PR_FIX_LOG.md` — updated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
+### PR 26 — NIST AI RMF Questionnaire Framework (2026-05-27)
+
+**Critical files changed:** `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`
+
+**Routes added (5):**
+- `POST /field-assessment/engagements/{engagement_id}/questionnaires` — init questionnaire, governance:write
+- `GET /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}` — get questionnaire + responses, governance:read
+- `PATCH /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/responses/{control_id}` — update control response, governance:write
+- `POST /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/submit` — submit and create evidence links, governance:write
+- `GET /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/coverage` — coverage summary, governance:read
+
+**Security posture:**
+- All 5 routes gate on `governance:read` or `governance:write` scope via `_require_scope`.
+- All queries scope by `(tenant_id, engagement_id)` — cross-tenant and cross-engagement access returns 404.
+- `submit` route writes audit event against `q.engagement_id` (DB-verified), not the route path parameter.
+- No new auth scopes, no new DB write paths outside questionnaire tables, no schema migrations in this PR.
+
+**Artifacts regenerated:**
+- Route inventory regenerated via `make route-inventory-generate`
+- Contract authority markers updated in `BLUEPRINT_STAGED.md` + `CONTRACT.md`
+
+**Files touched:**
+- `services/field_assessment/questionnaire_store.py` — normalization + engagement isolation + lineage metadata
+- `api/field_assessment.py` — 5 questionnaire routes
+- `tests/test_questionnaire.py` (new)
+- `.env.example` — secret scan fix
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
+- `tools/ci/route_inventory.json` + related — regenerated
+- `docs/ai/PR_FIX_LOG.md` — updated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
