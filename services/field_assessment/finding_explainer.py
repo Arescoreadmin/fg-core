@@ -18,24 +18,29 @@ from __future__ import annotations
 
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from services.canonical import utc_iso8601_z_now
 from services.field_assessment.store import (
-    FindingNotFound,
     ScanResultNotFound,
     get_finding,
     get_scan_result,
     list_evidence_links,
 )
 
+_MSGRAPH_REGISTRY: dict[str, Any]
+
 try:
-    from services.connectors.msgraph.findings.registry import REGISTRY as _MSGRAPH_REGISTRY
+    from services.connectors.msgraph.findings.registry import (
+        REGISTRY as _IMPORTED_MSGRAPH_REGISTRY,
+    )
 except ImportError:
-    _MSGRAPH_REGISTRY: dict[str, Any] = {}
+    _MSGRAPH_REGISTRY = {}
+else:
+    _MSGRAPH_REGISTRY = _IMPORTED_MSGRAPH_REGISTRY
 
 # Connector-imported findings store finding_type as "msgraph.{control_id}" where
 # control_id is a NIST control string (e.g. "NIST-AI-RMF-GOVERN-1.2"), not the
@@ -61,7 +66,9 @@ def _cache_get(key: tuple[str, str], now_ts: float) -> "FindingExplanation | Non
     return cached
 
 
-def _cache_put(key: tuple[str, str], value: "FindingExplanation", expires_at: float) -> None:
+def _cache_put(
+    key: tuple[str, str], value: "FindingExplanation", expires_at: float
+) -> None:
     if key in _CACHE:
         _CACHE.move_to_end(key)
     _CACHE[key] = (expires_at, value)
@@ -136,7 +143,7 @@ def explain_finding(
     # For shape 2 the code lookup misses; fall back to the title index which is
     # 1-to-1 across all 39 registry entries.
     raw_type = finding.finding_type or ""
-    code = raw_type[len("msgraph."):] if raw_type.startswith("msgraph.") else raw_type
+    code = raw_type[len("msgraph.") :] if raw_type.startswith("msgraph.") else raw_type
     finding_def = _MSGRAPH_REGISTRY.get(code) or _MSGRAPH_REGISTRY_BY_TITLE.get(
         finding.title or ""
     )
@@ -215,6 +222,7 @@ def explain_finding(
         if last_seen:
             try:
                 from datetime import datetime, timezone
+
                 scan_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
                 age_days = (datetime.now(timezone.utc) - scan_dt).days
                 confidence = 1.0 if age_days <= 30 else 0.7
@@ -298,11 +306,21 @@ def _explain_mfa(
 
     entities: list[AffectedEntitySummary] = []
     if admin_no_mfa > 0:
-        entities.append(AffectedEntitySummary("admin_user", admin_no_mfa, "administrator accounts without MFA"))
+        entities.append(
+            AffectedEntitySummary(
+                "admin_user", admin_no_mfa, "administrator accounts without MFA"
+            )
+        )
     if no_mfa > 0:
-        entities.append(AffectedEntitySummary("user", no_mfa, "user accounts without MFA"))
+        entities.append(
+            AffectedEntitySummary("user", no_mfa, "user accounts without MFA")
+        )
     if weak_only > 0:
-        entities.append(AffectedEntitySummary("user", weak_only, "accounts using SMS/voice MFA only"))
+        entities.append(
+            AffectedEntitySummary(
+                "user", weak_only, "accounts using SMS/voice MFA only"
+            )
+        )
 
     signals: list[str] = []
     if admin_no_mfa > 0:
@@ -339,7 +357,9 @@ def _explain_ca(
             "(IMAP, POP3, SMTP AUTH), which bypass MFA."
         )
     elif not has_admin_mfa:
-        plain_summary = "No Conditional Access policy requires MFA for administrator accounts."
+        plain_summary = (
+            "No Conditional Access policy requires MFA for administrator accounts."
+        )
     elif broad_exclusions > 0:
         plain_summary = (
             f"{broad_exclusions} Conditional Access {'policies have' if broad_exclusions != 1 else 'policy has'} "
@@ -365,9 +385,15 @@ def _explain_ca(
         )
 
     entities: list[AffectedEntitySummary] = []
-    entities.append(AffectedEntitySummary("policy", enabled, f"enabled policies of {total} total"))
+    entities.append(
+        AffectedEntitySummary("policy", enabled, f"enabled policies of {total} total")
+    )
     if broad_exclusions > 0:
-        entities.append(AffectedEntitySummary("policy", broad_exclusions, "policies with broad exclusions"))
+        entities.append(
+            AffectedEntitySummary(
+                "policy", broad_exclusions, "policies with broad exclusions"
+            )
+        )
 
     signals: list[str] = []
     if total > 0:
@@ -431,13 +457,29 @@ def _explain_app(
 
     entities: list[AffectedEntitySummary] = []
     if unverified_high > 0:
-        entities.append(AffectedEntitySummary("app", unverified_high, "unverified apps with high-privilege permissions"))
+        entities.append(
+            AffectedEntitySummary(
+                "app",
+                unverified_high,
+                "unverified apps with high-privilege permissions",
+            )
+        )
     if stale > 0:
-        entities.append(AffectedEntitySummary("app", stale, "stale apps (90+ days inactive)"))
+        entities.append(
+            AffectedEntitySummary("app", stale, "stale apps (90+ days inactive)")
+        )
     if new_apps > 0:
-        entities.append(AffectedEntitySummary("app", new_apps, "new apps in last 30 days"))
+        entities.append(
+            AffectedEntitySummary("app", new_apps, "new apps in last 30 days")
+        )
     if user_consented > 0:
-        entities.append(AffectedEntitySummary("app", user_consented, "user-consented apps accessing sensitive resources"))
+        entities.append(
+            AffectedEntitySummary(
+                "app",
+                user_consented,
+                "user-consented apps accessing sensitive resources",
+            )
+        )
 
     signals: list[str] = []
     if total > 0:
@@ -505,11 +547,23 @@ def _explain_oauth(
 
     entities: list[AffectedEntitySummary] = []
     if score_3 > 0:
-        entities.append(AffectedEntitySummary("app", score_3, "OAuth grants with critical risk score (3/3)"))
+        entities.append(
+            AffectedEntitySummary(
+                "app", score_3, "OAuth grants with critical risk score (3/3)"
+            )
+        )
     if score_2 > 0:
-        entities.append(AffectedEntitySummary("app", score_2, "OAuth grants with elevated risk score (2/3)"))
+        entities.append(
+            AffectedEntitySummary(
+                "app", score_2, "OAuth grants with elevated risk score (2/3)"
+            )
+        )
     if stale > 0:
-        entities.append(AffectedEntitySummary("app", stale, "stale OAuth grants (180+ days inactive)"))
+        entities.append(
+            AffectedEntitySummary(
+                "app", stale, "stale OAuth grants (180+ days inactive)"
+            )
+        )
 
     signals: list[str] = []
     if total > 0:
@@ -589,15 +643,27 @@ def _explain_ai(
 
     entities: list[AffectedEntitySummary] = []
     if dlp_critical > 0:
-        entities.append(AffectedEntitySummary("app", dlp_critical, "AI apps with maximum DLP exposure"))
+        entities.append(
+            AffectedEntitySummary(
+                "app", dlp_critical, "AI apps with maximum DLP exposure"
+            )
+        )
     if dlp_high > 0:
-        entities.append(AffectedEntitySummary("app", dlp_high, "AI apps with elevated DLP exposure"))
+        entities.append(
+            AffectedEntitySummary("app", dlp_high, "AI apps with elevated DLP exposure")
+        )
     if shadow > 0:
-        entities.append(AffectedEntitySummary("app", shadow, "shadow AI apps (no IT governance)"))
+        entities.append(
+            AffectedEntitySummary("app", shadow, "shadow AI apps (no IT governance)")
+        )
     if unapproved > 0:
         entities.append(AffectedEntitySummary("app", unapproved, "unapproved AI apps"))
     if user_consented_ai > 0:
-        entities.append(AffectedEntitySummary("user", user_consented_ai, "users with self-consented AI app access"))
+        entities.append(
+            AffectedEntitySummary(
+                "user", user_consented_ai, "users with self-consented AI app access"
+            )
+        )
 
     signals: list[str] = []
     if dlp_critical > 0:
@@ -648,7 +714,9 @@ def _explain_guest(
     else:
         plain_summary = f"Guest account finding: {title}."
 
-    what_it_means = f"Your tenant has {total} guest accounts from external organizations. "
+    what_it_means = (
+        f"Your tenant has {total} guest accounts from external organizations. "
+    )
     if priv_role > 0:
         what_it_means += (
             "Guest accounts should never hold privileged roles. An external user with "
@@ -664,13 +732,29 @@ def _explain_guest(
 
     entities: list[AffectedEntitySummary] = []
     if priv_role > 0:
-        entities.append(AffectedEntitySummary("guest_user", priv_role, "guests with privileged role assignments"))
+        entities.append(
+            AffectedEntitySummary(
+                "guest_user", priv_role, "guests with privileged role assignments"
+            )
+        )
     if sensitive_groups > 0:
-        entities.append(AffectedEntitySummary("guest_user", sensitive_groups, "guests in sensitive security groups"))
+        entities.append(
+            AffectedEntitySummary(
+                "guest_user", sensitive_groups, "guests in sensitive security groups"
+            )
+        )
     if stale > 0:
-        entities.append(AffectedEntitySummary("guest_user", stale, "stale guests (90+ days no sign-in)"))
+        entities.append(
+            AffectedEntitySummary(
+                "guest_user", stale, "stale guests (90+ days no sign-in)"
+            )
+        )
     if never_activated > 0:
-        entities.append(AffectedEntitySummary("guest_user", never_activated, "never-activated guest invitations"))
+        entities.append(
+            AffectedEntitySummary(
+                "guest_user", never_activated, "never-activated guest invitations"
+            )
+        )
 
     signals: list[str] = []
     if total > 0:
@@ -724,7 +808,9 @@ def _explain_priv(
     else:
         plain_summary = f"Privileged identity finding: {title}."
 
-    what_it_means = "Privileged role management is critical because Global Administrators "
+    what_it_means = (
+        "Privileged role management is critical because Global Administrators "
+    )
     if global_admin_count > 5:
         what_it_means += (
             "have unrestricted access to your entire Microsoft 365 environment. "
@@ -752,13 +838,33 @@ def _explain_priv(
 
     entities: list[AffectedEntitySummary] = []
     if global_admin_count > 0:
-        entities.append(AffectedEntitySummary("admin_user", global_admin_count, "Global Administrator accounts"))
+        entities.append(
+            AffectedEntitySummary(
+                "admin_user", global_admin_count, "Global Administrator accounts"
+            )
+        )
     if permanent > 0:
-        entities.append(AffectedEntitySummary("admin_user", permanent, "permanent privileged role assignments (no PIM)"))
+        entities.append(
+            AffectedEntitySummary(
+                "admin_user",
+                permanent,
+                "permanent privileged role assignments (no PIM)",
+            )
+        )
     if synced > 0:
-        entities.append(AffectedEntitySummary("admin_user", synced, "admin accounts synced from on-premises AD"))
+        entities.append(
+            AffectedEntitySummary(
+                "admin_user", synced, "admin accounts synced from on-premises AD"
+            )
+        )
     if pim_enrolled > 0:
-        entities.append(AffectedEntitySummary("admin_user", pim_enrolled, "PIM-enrolled admin accounts (positive signal)"))
+        entities.append(
+            AffectedEntitySummary(
+                "admin_user",
+                pim_enrolled,
+                "PIM-enrolled admin accounts (positive signal)",
+            )
+        )
 
     signals: list[str] = []
     if global_admin_count > 0:
@@ -781,7 +887,9 @@ def _explain_generic(
     summary: dict[str, Any],  # noqa: ARG001
 ) -> tuple[str, str, list[AffectedEntitySummary], list[str]]:
     title = finding_def.title if finding_def else finding.title
-    description = finding_def.recommendation if finding_def else finding.description or ""
+    description = (
+        finding_def.recommendation if finding_def else finding.description or ""
+    )
     plain_summary = title or "Security finding identified."
     what_it_means = description or (
         "This finding indicates a potential risk in your organization's security posture. "
