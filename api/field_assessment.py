@@ -1990,7 +1990,7 @@ def _msgraph_scan_background(
             envelope = ConnectorImportEnvelope.model_validate(
                 {
                     "connector_type": "microsoft_graph",
-                    "connector_run_id": run_id,
+                    "connector_run_id": scan_result.scan_id,
                     "import_review_status": "imported",
                     "scan_result": scan_result.model_dump(mode="json"),
                 }

@@ -4185,3 +4185,39 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/route_inventory.json` — regenerated
 - `docs/ai/PR_FIX_LOG.md` — updated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
+## PR 25 — MS Graph Scan Trigger UI + Azure AD Operator Guide
+
+**Date:** 2026-05-27
+**Reviewer:** EmpireOverloard
+**Gate:** api/ high-risk change (2 new routes on connector-runs resource) + tools/ci/ regenerated artifacts
+
+**Security posture:**
+- `POST .../connector-runs/msgraph/initiate`: validates `FG_MSAL_CLIENT_ID` and `FG_ACKNOWLEDGMENT_KEY` env vars before doing anything; generates acknowledgment receipt (same gate as manual import); uses MSAL `PublicClientApplication` device-code flow (no client secret). Access token held in memory in background thread only, never logged or stored.
+- `GET .../connector-runs/{run_id}/status`: read-only in-memory poll, no DB access, returns sanitized status struct. `run_id` is a random UUID hex; no tenant data exposed in response.
+- Background task builds import envelope with `scan_result.scan_id` (not the UI polling run_id) — required by `import_msgraph_scan_result()` validation which rejects `connector_run_id != scan.scan_id`. Fixes a bug where envelope used UI polling UUID causing all live scans to fail at import.
+- No new auth scopes. No new DB write paths beyond existing connector import path. No schema migrations.
+- `.env.example` secret-class values replaced with `CHANGE_ME_*` placeholders — secret scan gate now passes cleanly.
+- Route inventory, contract routes, topology, and plane registry regenerated via `make route-inventory-generate`.
+- `BLUEPRINT_STAGED.md` and `CONTRACT.md` authority markers refreshed.
+
+**Files touched:**
+- `api/field_assessment.py` — 2 new routes + background task + in-memory run state
+- `services/connectors/msgraph/report.py` — configurable verify URL (no logic change to scan/import path)
+- `services/field_assessment/finding_explainer.py` — ruff formatting only
+- `apps/console/lib/fieldAssessmentApi.ts` — new types + scan trigger API methods
+- `apps/console/components/field-assessment/MsgraphScanPanel.tsx` (new — UI only)
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` — wire MsgraphScanPanel
+- `docs/operators/azure_ad_app_setup.md` (new — operator guide, no code)
+- `.env.example` — CHANGE_ME_* placeholders throughout
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `tests/test_field_assessment_msgraph_bridge.py` — 3 connector_run_id regression tests added
+- `docs/ai/PR_FIX_LOG.md` — PR 25 entry added
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
