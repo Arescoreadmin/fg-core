@@ -1,0 +1,23 @@
+User-agent: *
+
+# Allow public marketing and report pages
+Allow: /
+Allow: /onboarding
+
+# Block operator dashboard and all sub-routes
+Disallow: /dashboard/
+Disallow: /audit
+Disallow: /keys
+Disallow: /products
+Disallow: /field-assessment/
+
+# Block assessment flow (requires payment + UUID — not indexable)
+Disallow: /assessment
+Disallow: /reports/
+
+# Block all API routes
+Disallow: /api/
+
+# Block Next.js internals
+Disallow: /_next/
+Disallow: /_vercel/
