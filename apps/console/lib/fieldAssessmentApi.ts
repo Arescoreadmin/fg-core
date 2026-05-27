@@ -426,6 +426,33 @@ export interface PlaybookProgress {
   generated_at: string;
 }
 
+export interface AffectedEntitySummary {
+  entity_type: string;
+  count: number;
+  label: string;
+}
+
+export interface FindingExplanation {
+  finding_id: string;
+  finding_type: string;
+  severity: string;
+  title: string;
+  plain_summary: string;
+  what_it_means: string;
+  affected_entities: AffectedEntitySummary[];
+  registry_recommendation: string;
+  evidence_count: number;
+  source_scan_ids: string[];
+  last_seen: string;
+  explanation_confidence: number;
+  signals_used: string[];
+  framework_impact: string[];
+  template: string;
+  explanation_version: string;
+  generated_at: string;
+  schema_version: string;
+}
+
 // ---------------------------------------------------------------------------
 // Request shapes
 // ---------------------------------------------------------------------------
@@ -684,5 +711,9 @@ export const fieldAssessmentApi = {
 
   getNextActions(engagementId: string): Promise<PlaybookProgress> {
     return request(`/engagements/${engagementId}/next-actions`);
+  },
+
+  explainFinding(engagementId: string, findingId: string): Promise<FindingExplanation> {
+    return request(`/engagements/${engagementId}/findings/${findingId}/explain`);
   },
 };

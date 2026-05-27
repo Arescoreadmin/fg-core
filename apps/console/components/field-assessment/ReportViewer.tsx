@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { SeverityBadge } from './StatusBadge';
+import { fieldAssessmentApi, type FindingExplanation } from '@/lib/fieldAssessmentApi';
 import type { ReportDocument } from '@/lib/fieldAssessmentApi';
 
 // Safe string coercion — no raw objects/payloads in UI
@@ -49,7 +50,15 @@ function SectionAccordion({ title, children, defaultOpen = false }: {
   );
 }
 
-function FindingRow({ finding }: { finding: Record<string, unknown> }) {
+function FindingRow({
+  finding,
+  engagementId,
+  onShowEvidence,
+}: {
+  finding: Record<string, unknown>;
+  engagementId?: string;
+  onShowEvidence?: (findingId: string) => void;
+}) {
   const severity = safeStr(finding.severity) || 'info';
   const title = safeStr(finding.title) || safeStr(finding.finding_type) || 'Untitled finding';
   const id = safeStr(finding.id) || safeStr(finding.finding_id);
@@ -58,6 +67,27 @@ function FindingRow({ finding }: { finding: Record<string, unknown> }) {
   const nistMappings = safeArr(finding.nist_ai_rmf_mappings);
   const evidenceRefs = safeArr(finding.evidence_ref_ids);
 
+  const [explanation, setExplanation] = useState<FindingExplanation | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
+  const [showExplain, setShowExplain] = useState(false);
+
+  async function handleExplain() {
+    if (explanation) { setShowExplain((v) => !v); return; }
+    if (!engagementId || !id) return;
+    setExplainLoading(true);
+    setExplainError(null);
+    setShowExplain(true);
+    try {
+      const result = await fieldAssessmentApi.explainFinding(engagementId, id);
+      setExplanation(result);
+    } catch {
+      setExplainError('Could not load explanation.');
+    } finally {
+      setExplainLoading(false);
+    }
+  }
+
   return (
     <div className="p-2.5 rounded border border-border bg-surface-2 space-y-1.5 text-xs">
       <div className="flex flex-wrap items-start gap-2">
@@ -65,6 +95,15 @@ function FindingRow({ finding }: { finding: Record<string, unknown> }) {
         <span className="font-medium text-foreground flex-1 min-w-0">{title}</span>
         {confidence !== null && (
           <span className="font-mono text-muted">confidence: {confidence}%</span>
+        )}
+        {engagementId && id && (
+          <button
+            type="button"
+            onClick={handleExplain}
+            className="text-[11px] text-primary hover:underline focus:outline-none shrink-0"
+          >
+            {showExplain ? 'Hide' : 'Explain →'}
+          </button>
         )}
       </div>
       {id && (
@@ -87,6 +126,80 @@ function FindingRow({ finding }: { finding: Record<string, unknown> }) {
       {evidenceRefs.length > 0 && (
         <div className="text-muted">Evidence refs: <span className="text-foreground">{evidenceRefs.length}</span></div>
       )}
+
+      {showExplain && (
+        <div className="mt-1.5 rounded border border-primary/20 bg-primary/5 p-2.5 space-y-2">
+          {explainLoading && (
+            <div className="space-y-1.5" aria-busy="true">
+              <div className="h-3 w-3/4 rounded bg-surface-3 animate-pulse" />
+              <div className="h-3 w-1/2 rounded bg-surface-3 animate-pulse" />
+            </div>
+          )}
+          {explainError && (
+            <p className="text-red-300">{explainError}</p>
+          )}
+          {explanation && !explainLoading && (
+            <>
+              <p className="text-foreground font-medium">{explanation.plain_summary}</p>
+              <p className="text-muted">{explanation.what_it_means}</p>
+              {explanation.affected_entities.length > 0 && (
+                <ul className="space-y-0.5 pl-3">
+                  {explanation.affected_entities.map((e, i) => (
+                    <li key={i} className="text-muted list-disc">
+                      <span className="font-semibold text-foreground">{e.count}</span>{' '}
+                      {e.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {explanation.framework_impact.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {explanation.framework_impact.map((fw) => (
+                    <span key={fw} className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] border border-info/20 bg-info/5 text-info font-medium">
+                      {fw}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {explanation.explanation_confidence < 0.7 && (
+                <p className="text-[11px] text-amber-300">
+                  Limited scan evidence — explanation based on finding metadata only.
+                </p>
+              )}
+              {explanation.signals_used.length > 0 && (
+                <details className="pt-0.5">
+                  <summary className="text-[11px] text-muted cursor-pointer hover:text-foreground select-none">
+                    Provenance — {explanation.signals_used.length} signal{explanation.signals_used.length !== 1 ? 's' : ''}
+                  </summary>
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {explanation.signals_used.map((s) => (
+                      <span key={s} className="font-mono text-[10px] rounded px-1 py-0.5 border border-border bg-surface-3 text-muted">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </details>
+              )}
+              <div className="flex items-center gap-3 pt-0.5">
+                {onShowEvidence && id && (
+                  <button
+                    type="button"
+                    onClick={() => onShowEvidence(id)}
+                    className="text-[11px] text-primary hover:underline focus:outline-none"
+                  >
+                    Show evidence →
+                  </button>
+                )}
+                <span className="text-[11px] text-muted ml-auto">
+                  {explanation.evidence_count} scan{explanation.evidence_count !== 1 ? 's' : ''} ·{' '}
+                  confidence {Math.round(explanation.explanation_confidence * 100)}% ·{' '}
+                  template {explanation.template}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -108,9 +221,11 @@ interface Props {
   document: ReportDocument | null;
   loading: boolean;
   error: string | null;
+  engagementId?: string;
+  onShowEvidence?: (findingId: string) => void;
 }
 
-export function ReportViewer({ document: doc, loading, error }: Props) {
+export function ReportViewer({ document: doc, loading, error, engagementId, onShowEvidence }: Props) {
   if (loading) {
     return (
       <div className="space-y-3" aria-label="report-viewer" aria-busy="true">
@@ -186,7 +301,12 @@ export function ReportViewer({ document: doc, loading, error }: Props) {
           <SectionAccordion title={`Findings (${findings.length})`} defaultOpen>
             <div className="space-y-2">
               {findings.map((f, i) => (
-                <FindingRow key={i} finding={safeObj(f)} />
+                <FindingRow
+                  key={i}
+                  finding={safeObj(f)}
+                  engagementId={engagementId}
+                  onShowEvidence={onShowEvidence}
+                />
               ))}
             </div>
           </SectionAccordion>
@@ -196,7 +316,12 @@ export function ReportViewer({ document: doc, loading, error }: Props) {
           <SectionAccordion title={`Findings Register (${normalizedFindings.length})`}>
             <div className="space-y-2">
               {normalizedFindings.map((f, i) => (
-                <FindingRow key={i} finding={safeObj(f)} />
+                <FindingRow
+                  key={i}
+                  finding={safeObj(f)}
+                  engagementId={engagementId}
+                  onShowEvidence={onShowEvidence}
+                />
               ))}
             </div>
           </SectionAccordion>

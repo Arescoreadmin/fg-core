@@ -167,6 +167,33 @@ export interface AttestationHealthSummary {
   health_pct: number;
 }
 
+export interface AffectedEntitySummary {
+  entity_type: string;
+  count: number;
+  label: string;
+}
+
+export interface FindingExplanation {
+  finding_id: string;
+  finding_type: string;
+  severity: string;
+  title: string;
+  plain_summary: string;
+  what_it_means: string;
+  affected_entities: AffectedEntitySummary[];
+  registry_recommendation: string;
+  evidence_count: number;
+  source_scan_ids: string[];
+  last_seen: string;
+  explanation_confidence: number;
+  signals_used: string[];
+  framework_impact: string[];
+  template: string;
+  explanation_version: string;
+  generated_at: string;
+  schema_version: string;
+}
+
 export interface ContinuityGap {
   asset_id: string;
   asset_type: string;
@@ -261,6 +288,12 @@ export const portalApi = {
   // Continuity
   getAttestationHealth(): Promise<AttestationHealthSummary> {
     return request('/governance/assets/attestation-health');
+  },
+
+  explainFinding(engagementId: string, findingId: string): Promise<FindingExplanation> {
+    return request(
+      `/field-assessment/engagements/${engagementId}/findings/${findingId}/explain`,
+    );
   },
 
   listContinuityGaps(params?: {

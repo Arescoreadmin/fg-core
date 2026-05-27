@@ -139,6 +139,29 @@
         "title": "AIPolicyUpsertRequest",
         "type": "object"
       },
+      "AffectedEntitySummaryResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "count",
+          "label"
+        ],
+        "title": "AffectedEntitySummaryResponse",
+        "type": "object"
+      },
       "AgentConfigResponse": {
         "properties": {
           "action": {
@@ -7477,6 +7500,116 @@
           "findings"
         ],
         "title": "FindingCreateRequest",
+        "type": "object"
+      },
+      "FindingExplanationResponse": {
+        "properties": {
+          "affected_entities": {
+            "items": {
+              "$ref": "#/components/schemas/AffectedEntitySummaryResponse"
+            },
+            "title": "Affected Entities",
+            "type": "array"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "explanation_confidence": {
+            "title": "Explanation Confidence",
+            "type": "number"
+          },
+          "explanation_version": {
+            "title": "Explanation Version",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "finding_type": {
+            "title": "Finding Type",
+            "type": "string"
+          },
+          "framework_impact": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Framework Impact",
+            "type": "array"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "last_seen": {
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "plain_summary": {
+            "title": "Plain Summary",
+            "type": "string"
+          },
+          "registry_recommendation": {
+            "title": "Registry Recommendation",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "signals_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Signals Used",
+            "type": "array"
+          },
+          "source_scan_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Scan Ids",
+            "type": "array"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "what_it_means": {
+            "title": "What It Means",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "finding_type",
+          "severity",
+          "title",
+          "plain_summary",
+          "what_it_means",
+          "affected_entities",
+          "registry_recommendation",
+          "evidence_count",
+          "source_scan_ids",
+          "last_seen",
+          "explanation_confidence",
+          "signals_used",
+          "framework_impact",
+          "template",
+          "explanation_version",
+          "generated_at",
+          "schema_version"
+        ],
+        "title": "FindingExplanationResponse",
         "type": "object"
       },
       "FindingListResponse": {
@@ -32676,6 +32809,74 @@
           }
         },
         "summary": "Get Finding Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain": {
+      "get": {
+        "description": "Plain-language explanation for a normalized finding.\n\nTenant-isolated: resolves caller tenant and enforces it through\nthe explain_finding service. Returns 404 for unknown or cross-tenant findings.",
+        "operationId": "get_finding_explanation_route_field_assessment_engagements__engagement_id__findings__finding_id__explain_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingExplanationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Finding Explanation Route",
         "tags": [
           "field-assessment"
         ]

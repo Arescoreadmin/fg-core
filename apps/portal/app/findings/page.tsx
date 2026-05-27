@@ -2,7 +2,12 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { portalApi, PortalApiError, type FindingSummary } from '@/lib/portalApi';
+import {
+  portalApi,
+  PortalApiError,
+  type FindingSummary,
+  type FindingExplanation,
+} from '@/lib/portalApi';
 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 0, high: 1, medium: 2, low: 3, info: 4,
@@ -35,48 +40,174 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
-function FindingCard({ finding }: { finding: FindingSummary }) {
+function FindingCard({
+  finding,
+  engagementId,
+}: {
+  finding: FindingSummary;
+  engagementId: string;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [explanation, setExplanation] = useState<FindingExplanation | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [showTechnical, setShowTechnical] = useState(false);
+
+  async function handleExpand() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !explanation && !explainLoading) {
+      setExplainLoading(true);
+      try {
+        const result = await portalApi.explainFinding(engagementId, finding.finding_id);
+        setExplanation(result);
+      } catch {
+        // Falls back to technical view if explanation unavailable
+      } finally {
+        setExplainLoading(false);
+      }
+    }
+  }
+
   return (
     <div
-      className="rounded border border-border bg-surface-2 p-3 space-y-2 cursor-pointer hover:border-border/80"
-      onClick={() => setExpanded((v) => !v)}
-      role="button"
-      tabIndex={0}
+      className="rounded border border-border bg-surface-2 p-3 space-y-2"
       aria-expanded={expanded}
-      onKeyDown={(e) => e.key === 'Enter' && setExpanded((v) => !v)}
     >
-      <div className="flex flex-wrap items-start gap-2">
+      <div
+        className="flex flex-wrap items-start gap-2 cursor-pointer hover:opacity-90"
+        onClick={handleExpand}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && handleExpand()}
+      >
         <SeverityBadge severity={finding.severity} />
         <span className="flex-1 min-w-0 text-sm font-medium text-foreground">{finding.title}</span>
         <span className="text-xs text-muted">{STATUS_LABEL[finding.status] ?? finding.status}</span>
+        <span className="text-muted text-sm">{expanded ? '▲' : '▼'}</span>
       </div>
+
       <div className="text-xs text-muted font-mono">{finding.finding_id}</div>
+
       {expanded && (
-        <div className="pt-1 space-y-2">
-          {finding.nist_ai_rmf_mappings.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {finding.nist_ai_rmf_mappings.map((m) => (
-                <span key={m} className="rounded px-1.5 py-0.5 text-xs border border-blue-500/20 bg-blue-500/5 text-blue-300">
-                  {m}
-                </span>
-              ))}
+        <div className="pt-1 space-y-3">
+          {explainLoading && (
+            <div className="space-y-2" aria-busy="true">
+              <div className="h-3 w-4/5 rounded bg-surface-3 animate-pulse" />
+              <div className="h-3 w-3/5 rounded bg-surface-3 animate-pulse" />
+              <div className="h-3 w-2/5 rounded bg-surface-3 animate-pulse" />
             </div>
           )}
-          {finding.framework_mappings.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {finding.framework_mappings.map((m) => (
-                <span key={m} className="rounded px-1.5 py-0.5 text-xs border border-border bg-surface-3 text-muted">
-                  {m}
-                </span>
-              ))}
+
+          {explanation && !explainLoading && (
+            <div className="space-y-2">
+              <p className="text-sm text-foreground">{explanation.plain_summary}</p>
+              <p className="text-xs text-muted">{explanation.what_it_means}</p>
+
+              {explanation.affected_entities.length > 0 && (
+                <ul className="space-y-0.5 pl-3">
+                  {explanation.affected_entities.map((e, i) => (
+                    <li key={i} className="text-xs text-muted list-disc">
+                      <span className="font-semibold text-foreground">{e.count}</span>{' '}
+                      {e.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {explanation.framework_impact.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {explanation.framework_impact.map((fw) => (
+                    <span key={fw} className="rounded px-1.5 py-0.5 text-[11px] border border-blue-500/20 bg-blue-500/5 text-blue-300 font-medium">
+                      {fw}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {explanation.explanation_confidence < 0.7 && (
+                <p className="text-[11px] text-amber-300">
+                  Explanation based on finding metadata — limited scan evidence available.
+                </p>
+              )}
+
+              {explanation.signals_used.length > 0 && (
+                <p className="text-[11px] text-muted">
+                  Based on {explanation.signals_used.length} scan signal{explanation.signals_used.length !== 1 ? 's' : ''}.
+                </p>
+              )}
+
+              <button
+                type="button"
+                className="text-xs text-muted hover:text-foreground transition-colors"
+                onClick={() => setShowTechnical((v) => !v)}
+              >
+                {showTechnical ? '▲ Hide technical details' : '▼ Technical details'}
+              </button>
+
+              {showTechnical && (
+                <div className="rounded border border-border bg-surface-3 p-2.5 space-y-2 text-xs">
+                  {finding.nist_ai_rmf_mappings.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {finding.nist_ai_rmf_mappings.map((m) => (
+                        <span key={m} className="rounded px-1.5 py-0.5 border border-blue-500/20 bg-blue-500/5 text-blue-300">
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {finding.framework_mappings.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {finding.framework_mappings.map((m) => (
+                        <span key={m} className="rounded px-1.5 py-0.5 border border-border bg-surface-3 text-muted">
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {explanation.registry_recommendation && (
+                    <p className="text-muted">
+                      <span className="text-foreground font-medium">Recommendation: </span>
+                      {explanation.registry_recommendation}
+                    </p>
+                  )}
+                  {finding.remediation_hint && (
+                    <p className="text-muted">
+                      <span className="text-foreground font-medium">Guidance: </span>
+                      {finding.remediation_hint}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
-          {finding.remediation_hint && (
-            <p className="text-xs text-muted">
-              <span className="text-foreground font-medium">Guidance: </span>
-              {finding.remediation_hint}
-            </p>
+
+          {!explanation && !explainLoading && (
+            <div className="space-y-2 text-xs">
+              {finding.nist_ai_rmf_mappings.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {finding.nist_ai_rmf_mappings.map((m) => (
+                    <span key={m} className="rounded px-1.5 py-0.5 border border-blue-500/20 bg-blue-500/5 text-blue-300">
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {finding.framework_mappings.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {finding.framework_mappings.map((m) => (
+                    <span key={m} className="rounded px-1.5 py-0.5 border border-border bg-surface-3 text-muted">
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {finding.remediation_hint && (
+                <p className="text-muted">
+                  <span className="text-foreground font-medium">Guidance: </span>
+                  {finding.remediation_hint}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -208,7 +339,7 @@ function FindingsPageInner() {
         <>
           <div className="space-y-2">
             {findings.map((f) => (
-              <FindingCard key={f.finding_id} finding={f} />
+              <FindingCard key={f.finding_id} finding={f} engagementId={engagementId} />
             ))}
           </div>
 

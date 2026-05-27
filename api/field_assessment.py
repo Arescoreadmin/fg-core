@@ -53,6 +53,7 @@ from services.field_assessment.models import (
 )
 from services.canonical import utc_iso8601_z_now
 from services.field_assessment.playbooks import get_playbook
+from services.field_assessment.finding_explainer import explain_finding
 from services.field_assessment.progress import compute_next_actions
 from services.field_assessment.readiness import build_execution_state
 from services.field_assessment.redaction import redact_payload
@@ -537,6 +538,33 @@ class PlaybookProgressResponse(BaseModel):
     blocking_count: int
     actions: list[PlaybookNextActionResponse]
     generated_at: str
+
+
+class AffectedEntitySummaryResponse(BaseModel):
+    entity_type: str
+    count: int
+    label: str
+
+
+class FindingExplanationResponse(BaseModel):
+    finding_id: str
+    finding_type: str
+    severity: str
+    title: str
+    plain_summary: str
+    what_it_means: str
+    affected_entities: list[AffectedEntitySummaryResponse]
+    registry_recommendation: str
+    evidence_count: int
+    source_scan_ids: list[str]
+    last_seen: str
+    explanation_confidence: float
+    signals_used: list[str]
+    framework_impact: list[str]
+    template: str
+    explanation_version: str
+    generated_at: str
+    schema_version: str
 
 
 class ConnectorImportResponse(BaseModel):
@@ -3544,4 +3572,72 @@ def verify_engagement_report_route(
         manifest_hash=record.manifest_hash,
         signature=record.signature,
         verified_at=now,
+    )
+
+
+@router.get(
+    "/engagements/{engagement_id}/findings/{finding_id}/explain",
+    response_model=FindingExplanationResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_finding_explanation_route(
+    engagement_id: str,
+    finding_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> FindingExplanationResponse:
+    """Plain-language explanation for a normalized finding.
+
+    Tenant-isolated: resolves caller tenant and enforces it through
+    the explain_finding service. Returns 404 for unknown or cross-tenant findings.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        exp = explain_finding(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            finding_id=finding_id,
+        )
+    except FindingNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("FINDING_NOT_FOUND", str(exc))
+        )
+    try:
+        finding = get_finding(
+            db,
+            finding_id=finding_id,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+        )
+    except FindingNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("FINDING_NOT_FOUND", str(exc))
+        )
+    return FindingExplanationResponse(
+        finding_id=finding.id,
+        finding_type=finding.finding_type,
+        severity=finding.severity,
+        title=finding.title,
+        plain_summary=exp.plain_summary,
+        what_it_means=exp.what_it_means,
+        affected_entities=[
+            AffectedEntitySummaryResponse(
+                entity_type=e.entity_type,
+                count=e.count,
+                label=e.label,
+            )
+            for e in exp.affected_entities
+        ],
+        registry_recommendation=exp.registry_recommendation,
+        evidence_count=exp.evidence_count,
+        source_scan_ids=exp.source_scan_ids,
+        last_seen=exp.last_seen,
+        explanation_confidence=exp.explanation_confidence,
+        signals_used=exp.signals_used,
+        framework_impact=exp.framework_impact,
+        template=exp.template,
+        explanation_version=exp.explanation_version,
+        generated_at=exp.generated_at,
+        schema_version=exp.schema_version,
     )
