@@ -59,7 +59,7 @@ async function requestBlob(path: string): Promise<Blob> {
 
 export interface EngagementSummary {
   id: string;
-  name: string;
+  client_name: string;
   assessment_type: string;
   status: string;
   created_at: string;
@@ -68,9 +68,8 @@ export interface EngagementSummary {
 
 export interface EngagementListResponse {
   items: EngagementSummary[];
-  total: number;
-  limit: number;
-  offset: number;
+  cursor: string | null;
+  total_count: number;
 }
 
 export interface FindingSummary {
@@ -87,9 +86,7 @@ export interface FindingSummary {
 
 export interface FindingListResponse {
   items: FindingSummary[];
-  total: number;
-  limit: number;
-  offset: number;
+  total_count: number;
 }
 
 export interface ReportVersionSummary {
@@ -239,7 +236,7 @@ export const portalApi = {
   },
 
   // Governance Assets
-  listAssets(params?: { limit?: number; offset?: number }): Promise<GovernanceAssetListResponse> {
+  listAssets(params?: { limit?: number; offset?: number }): Promise<GovernanceAsset[]> {
     const qs = new URLSearchParams();
     if (params?.limit != null) qs.set('limit', String(params.limit));
     if (params?.offset != null) qs.set('offset', String(params.offset));

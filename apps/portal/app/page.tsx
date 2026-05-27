@@ -157,7 +157,7 @@ export default function PortalHome() {
             {engagements.map((eng) => (
               <div key={eng.id} className="rounded border border-border bg-surface-2 p-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-foreground">{eng.name}</p>
+                  <p className="text-sm font-medium text-foreground">{eng.client_name}</p>
                   <p className="text-xs text-muted capitalize">{eng.assessment_type.replace(/_/g, ' ')}</p>
                 </div>
                 <div className="flex items-center gap-2">

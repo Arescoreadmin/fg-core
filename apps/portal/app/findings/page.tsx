@@ -111,7 +111,7 @@ function FindingsPageInner() {
             (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9),
         );
         setFindings(sorted);
-        setTotal(result.total);
+        setTotal(result.total_count);
       } catch (e) {
         if (e instanceof PortalApiError && e.status === 404) {
           setError('Engagement not found.');

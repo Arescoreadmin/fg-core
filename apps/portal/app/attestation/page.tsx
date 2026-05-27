@@ -393,8 +393,8 @@ export default function AttestationPage() {
     setError(null);
     try {
       const result = await portalApi.listAssets({ limit: PAGE_SIZE, offset });
-      setAssets(result.items);
-      setTotal(result.total);
+      setAssets(result);
+      setTotal(result.length);
     } catch {
       setError('Failed to load assets. Please try again.');
     } finally {

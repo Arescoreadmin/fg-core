@@ -142,7 +142,7 @@ function RemediationPageInner() {
           (f) => f.remediation_hint || ['open', 'in_progress', 'deferred'].includes(f.status),
         );
         setFindings(withRemediation);
-        setTotal(result.total);
+        setTotal(result.total_count);
       } catch (e) {
         if (e instanceof PortalApiError && e.status === 404) {
           setError('Engagement not found.');
