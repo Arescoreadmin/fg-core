@@ -53,6 +53,7 @@ from services.field_assessment.models import (
 )
 from services.canonical import utc_iso8601_z_now
 from services.field_assessment.playbooks import get_playbook
+from services.field_assessment.progress import compute_next_actions
 from services.field_assessment.readiness import build_execution_state
 from services.field_assessment.redaction import redact_payload
 from services.field_assessment.scan_registry import validate_scan_payload
@@ -510,6 +511,32 @@ class ExecutionStateResponse(BaseModel):
     readiness_categories: dict[str, str]
     generated_at: str
     schema_version: str
+
+
+class PlaybookNextActionResponse(BaseModel):
+    action_id: str
+    priority: int
+    title: str
+    instruction: str
+    why_it_matters: str
+    closes_gate_ids: list[str]
+    required_input_type: str
+    target_ui_section: str
+    expected_evidence: list[str]
+    safe_for_junior_assessor: bool
+    severity: str
+    blocking: bool
+    action_type: str
+    deep_link: str | None
+
+
+class PlaybookProgressResponse(BaseModel):
+    engagement_id: str
+    current_status: str
+    completion_pct: float
+    blocking_count: int
+    actions: list[PlaybookNextActionResponse]
+    generated_at: str
 
 
 class ConnectorImportResponse(BaseModel):
@@ -1663,6 +1690,62 @@ def get_engagement_execution_state_route(
         )
     execution_state = _evaluate_execution_state(db, eng=eng, tenant_id=tenant_id)
     return ExecutionStateResponse(**execution_state.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Route — Playbook progress + enriched next actions
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/engagements/{engagement_id}/next-actions",
+    response_model=PlaybookProgressResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_engagement_next_actions_route(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> PlaybookProgressResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    execution_state = _evaluate_execution_state(db, eng=eng, tenant_id=tenant_id)
+    progress = compute_next_actions(
+        execution_state,
+        engagement_id=engagement_id,
+        current_status=eng.status,
+    )
+    return PlaybookProgressResponse(
+        engagement_id=progress.engagement_id,
+        current_status=progress.current_status,
+        completion_pct=progress.completion_pct,
+        blocking_count=progress.blocking_count,
+        actions=[
+            PlaybookNextActionResponse(
+                action_id=a.action_id,
+                priority=a.priority,
+                title=a.title,
+                instruction=a.instruction,
+                why_it_matters=a.why_it_matters,
+                closes_gate_ids=a.closes_gate_ids,
+                required_input_type=a.required_input_type,
+                target_ui_section=a.target_ui_section,
+                expected_evidence=a.expected_evidence,
+                safe_for_junior_assessor=a.safe_for_junior_assessor,
+                severity=a.severity,
+                blocking=a.blocking,
+                action_type=a.action_type,
+                deep_link=a.deep_link,
+            )
+            for a in progress.actions
+        ],
+        generated_at=progress.generated_at,
+    )
 
 
 # ---------------------------------------------------------------------------

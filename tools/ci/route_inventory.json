@@ -5068,6 +5068,23 @@
       ],
       "file": "api/field_assessment.py",
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/next-actions",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/observations",
       "plane": "control",
       "plane_id": "control",
@@ -8184,7 +8201,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-26T18:09:20.845774+00:00",
+  "generated_at": "2026-05-27T01:14:27.305669+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

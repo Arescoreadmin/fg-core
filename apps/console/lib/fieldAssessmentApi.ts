@@ -400,6 +400,32 @@ export interface GenerateReportResponse {
   compiled_at: string;
 }
 
+export interface PlaybookNextAction {
+  action_id: string;
+  priority: number;
+  title: string;
+  instruction: string;
+  why_it_matters: string;
+  closes_gate_ids: string[];
+  required_input_type: string;
+  target_ui_section: string;
+  expected_evidence: string[];
+  safe_for_junior_assessor: boolean;
+  severity: string;
+  blocking: boolean;
+  action_type: string;
+  deep_link: string | null;
+}
+
+export interface PlaybookProgress {
+  engagement_id: string;
+  current_status: string;
+  completion_pct: number;
+  blocking_count: number;
+  actions: PlaybookNextAction[];
+  generated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Request shapes
 // ---------------------------------------------------------------------------
@@ -654,5 +680,9 @@ export const fieldAssessmentApi = {
     return request(`/engagements/${engagementId}/reports/${version}/verify`, {
       method: 'POST',
     });
+  },
+
+  getNextActions(engagementId: string): Promise<PlaybookProgress> {
+    return request(`/engagements/${engagementId}/next-actions`);
   },
 };

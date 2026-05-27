@@ -4091,3 +4091,36 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 **Files touched:**
 - `scripts/prod_profile_check.py` — add FG_KEY_PEPPER to CI placeholder env dict
 - `.github/workflows/fg-required.yml` — add FG_KEY_PEPPER to job env block
+
+---
+
+### 2026-05-26 — PR 21b: Guided Assessor Workflow — PlaybookProgress service + /next-actions route
+
+**Branch:** `feat/guided-assessor-workflow-pr21`
+
+**SOC review:**
+- 1 new route added:
+  - `GET /field-assessment/engagements/{engagement_id}/next-actions` — requires `governance:read` scope. Returns `PlaybookProgressResponse` (completion_pct, blocking_count, enriched actions with deep_link URLs). Tenant-isolated: uses same `_evaluate_execution_state` + `get_engagement` guard as existing execution-state route. No cross-tenant reads.
+- New `services/field_assessment/progress.py` module is a pure computation layer — no DB I/O, no HTTP calls, no side effects. Accepts a pre-built `ExecutionState` and enriches it. Cannot escalate privilege or bypass auth.
+- `deep_link` values are server-generated console URL strings (e.g. `/field-assessment/{id}?tab=scans`). They are never user-supplied. No SSRF surface.
+- `action_type` is derived from an allowlist map (`_ACTION_TYPE_MAP`). No free-form string injection.
+- BFF proxy already allows `GET field-assessment/engagements` — no proxy policy changes needed.
+- No fail-open behavior: `compute_next_actions` always returns `blocking: True` for actions that close currently-blocked gates. Never hides urgency.
+- No new scopes, no new auth paths, no schema changes, no migrations.
+- Route inventory and contract artifacts regenerated.
+
+**Files touched:**
+- `services/field_assessment/progress.py` (new — pure computation)
+- `api/field_assessment.py` — new route + `PlaybookNextActionResponse` + `PlaybookProgressResponse` models + import
+- `apps/console/lib/fieldAssessmentApi.ts` — new types `PlaybookNextAction`, `PlaybookProgress` + `getNextActions` method
+- `apps/console/components/field-assessment/GuidedExecutionPanel.tsx` — added `engagementId` prop, auto-fetch `/next-actions` every 30s, progress bar, blocking badge, "Fix this" deep links
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` — pass `engagementId` to `GuidedExecutionPanel`
+- `tests/test_playbook_progress.py` (new — 10 tests)
+- `BLUEPRINT_STAGED.md` — contract authority marker refreshed
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `docs/ai/PR_FIX_LOG.md` — updated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry

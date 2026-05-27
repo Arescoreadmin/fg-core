@@ -11965,3 +11965,78 @@ Operational bridge between the Field Assessment Layer, Governance Asset Registry
 - Legal/compliance review mode with redaction controls
 - Executive export workspace (branded PDF templates)
 - Per-control gap detail as backend framework coverage evolves
+
+---
+
+## PR 21a — Client-Facing Governance Portal
+
+**Date:** 2026-05-27
+**Branch:** `feat/client-governance-portal-pr21`
+**Status:** Committed, pending push
+
+**Summary:**
+Full enterprise portal for client-facing governance data. BFF proxy with SSRF guard and in-memory rate limiting. Five pages: findings (read-only, severity filter), reports (list + export JSON/PDF + verify signature), attestation (submit → pending_operator_review, IndexedDB draft autosave), remediation (findings with guidance, status filter), continuity (health meter + gap list). Dashboard overview with live health metrics.
+
+**New API client:**
+- `/api/core/[...path]` portal BFF — portal-scoped allowlist (governance assets GET/HEAD, attestation GET+POST, field-assessment engagements GET/HEAD, report verify POST)
+- `apps/portal/lib/portalApi.ts` — 8 types, 10 typed API methods (no tenant_id in bodies)
+- `apps/portal/lib/attestationDrafts.ts` — IndexedDB draft queue for attestation forms
+
+**Files changed:**
+- `apps/portal/app/api/core/[...path]/route.ts` (new — portal BFF proxy)
+- `apps/portal/lib/portalApi.ts` (new)
+- `apps/portal/lib/attestationDrafts.ts` (new)
+- `apps/portal/app/findings/page.tsx` (new)
+- `apps/portal/app/reports/page.tsx` (new)
+- `apps/portal/app/attestation/page.tsx` (new)
+- `apps/portal/app/remediation/page.tsx` (new)
+- `apps/portal/app/continuity/page.tsx` (new)
+- `apps/portal/app/layout.tsx` — navigation + footer
+- `apps/portal/app/page.tsx` — dashboard with health metrics + engagement list
+- `apps/portal/next.config.js` — removed direct rewrite (BFF proxy replaces it)
+- `apps/portal/.gitignore` (new)
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Validation:**
+- `make portal-build` → ✓ Compiled, 9 routes, 0 errors
+
+**Security moat:**
+- Attestation submits are soft-gated: always → pending_operator_review, never auto-approved
+- No tenant_id, UPN, or raw scan payloads ever reach the client layer
+- Write surface explicitly enumerated in `PORTAL_WRITE_PATTERNS` (regex allowlist, not prefix)
+- SSRF guard prevents private-IP upstream in non-dev environments
+- Rate limiting is per-IP at the BFF boundary (module-level sliding window, configurable)
+- IndexedDB drafts are local-only, cleared on submit, never transmitted
+
+---
+
+## PR 21b — Guided Assessor Workflow (PlaybookProgress + /next-actions)
+
+**Date:** 2026-05-27
+**Branch:** `feat/guided-assessor-workflow-pr21`
+**Status:** Committed, pending push
+
+**Summary:**
+Pure-computation `progress.py` service enriches `ExecutionState.next_actions` with `blocking: bool`, `action_type: str`, and `deep_link: str`. New `GET /engagements/{id}/next-actions` route returns `PlaybookProgressResponse` (completion_pct, blocking_count, enriched actions). `GuidedExecutionPanel` auto-fetches every 30s, shows progress bar, "blocking" badges, and "Fix this →" deep links.
+
+**New API route:**
+- `GET /field-assessment/engagements/{engagement_id}/next-actions` — governance:read scope
+
+**Files changed:**
+- `services/field_assessment/progress.py` (new — pure computation)
+- `api/field_assessment.py` — new route + `PlaybookNextActionResponse` + `PlaybookProgressResponse` + import
+- `apps/console/lib/fieldAssessmentApi.ts` — types `PlaybookNextAction`, `PlaybookProgress` + `getNextActions`
+- `apps/console/components/field-assessment/GuidedExecutionPanel.tsx` — engagementId prop, auto-fetch, progress bar, deep links
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` — pass engagementId to panel
+- `tests/test_playbook_progress.py` (new — 10 tests: 6 unit + 4 integration)
+- `BLUEPRINT_STAGED.md` — contract authority marker refreshed
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 21b entry added
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Validation:**
+- `make fg-fast` → 398 passed, 2 skipped, all gates pass, EXIT:0 (10 new progress tests pass)

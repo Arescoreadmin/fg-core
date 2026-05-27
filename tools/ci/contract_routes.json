@@ -1375,6 +1375,12 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/connector-schedules",
       "scopes": [],
@@ -1569,6 +1575,18 @@
     {
       "method": "POST",
       "path": "/governance/assets",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/attestation-health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/continuity-gaps",
       "scopes": [],
       "source": "contract"
     },
@@ -2239,7 +2257,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-26T00:30:27.661409+00:00",
+  "generated_at": "2026-05-27T01:14:27.314716+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

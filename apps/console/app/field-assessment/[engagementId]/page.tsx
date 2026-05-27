@@ -291,6 +291,7 @@ export default function EngagementWorkspacePage() {
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 <GuidedExecutionPanel
+                  engagementId={engagementId}
                   executionState={executionState}
                   loading={executionLoading}
                   error={executionError}
