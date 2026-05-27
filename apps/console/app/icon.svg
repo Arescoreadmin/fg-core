@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>FrostGate</title>
+  <!-- Dark background with slight rounding -->
+  <rect width="24" height="24" rx="5" fill="#05070A"/>
+  <!-- Trust half (blue) — left side of shield -->
+  <path d="M12 2L4 5.5V11C4 15.5 7.5 19.7 12 21V2Z" fill="#3B82F6"/>
+  <!-- Verify half (orange) — right side of shield -->
+  <path d="M12 2V21C16.5 19.7 20 15.5 20 11V5.5L12 2Z" fill="#FF5A1F"/>
+  <!-- Centre divider -->
+  <line x1="12" y1="2" x2="12" y2="21" stroke="rgba(255,255,255,0.15)" stroke-width="0.4"/>
+</svg>
