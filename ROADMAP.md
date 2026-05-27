@@ -50,6 +50,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | PR 20 | FA Portal — Continuity | ✅ merged | Portal: continuity gap view, overdue alerts |
 | PR 21 | FA Portal — Bug Fixes | ✅ merged | Portal attestation/continuity UI fixes + CI pass |
 | PR 22 | Finding Explainer | ✅ merged (#390) | Plain-language finding explanations, LRU cache, provenance manifest |
+| PR 27 | Executive Summary | 🔄 in progress | AI-generated narrative section in report; risk posture + key concerns; console + portal |
 
 ---
 
@@ -62,7 +63,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | # | Item | Owner | PR | Status |
 |---|------|-------|----|--------|
 | 1 | **Portal authentication** — `middleware.ts` login gate; portal currently has no auth | — | PR 24 | ✅ done — HMAC-SHA256 session cookies, `/login` page, `PORTAL_PASSWORD` + `PORTAL_SESSION_SECRET` |
-| 2 | **Scan trigger UI** — operator needs to initiate MS Graph device-code scan from console without running CLI | — | — | ⬜ not started |
+| 2 | **Scan trigger UI** — operator needs to initiate MS Graph device-code scan from console without running CLI | — | PR 25 | ✅ done — `ScanTriggerPanel` component; device-code flow with polling; status display in console engagement workspace |
 | 3 | **NIST AI RMF questionnaire** — structured per-control manual evidence input; `FaFieldObservation` has no questionnaire schema | — | PR 26 | ✅ done — `fa_questionnaires` + `fa_questionnaire_responses` tables; 69 NIST AI RMF 1.0 controls; auto-seeded on init; per-control status + evidence; submit auto-links to findings |
 | 4 | **Fix `VERIFY_BASE_URL`** — hardcoded as `"https://verify.fieldguide.io/report"` in `services/connectors/msgraph/report.py` | — | PR 23 | ✅ done — reads `FG_REPORT_VERIFY_URL`, defaults to `localhost:3001/verify` |
 | 5 | **`.env.example`** — document `FG_MSAL_CLIENT_ID`, `FG_ACKNOWLEDGMENT_KEY`, `FG_CORE_TENANT_ID`, all required vars | — | PR 23 | ✅ done — all vars documented with descriptions and generation instructions |
@@ -71,7 +72,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 
 | # | Item | Owner | PR | Status |
 |---|------|-------|----|--------|
-| 6 | **Executive summary in report** — currently no narrative opening section for client PDF | — | — | ⬜ not started |
+| 6 | **Executive summary in report** — currently no narrative opening section for client PDF | — | PR 27 | ✅ done — `executive_summary` section in report JSON; Claude narrative with risk posture + key concerns; graceful template fallback; rendered in console ReportViewer and portal inline view |
 | 7 | **NIST control coverage matrix** — portal view: which controls have evidence, which are gaps | — | — | ⬜ not started |
 | 8 | **HIPAA playbook** — `services/field_assessment/playbooks.py` HIPAA falls back to `comprehensive`; banking clients need dedicated gates | — | — | ⬜ not started |
 | 9 | **Portal engagement selector UI** — findings page currently requires engagement ID in URL, no picker | — | — | ⬜ not started |
@@ -103,4 +104,4 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-05-27 (PR 26 in progress)*
+*Last updated: 2026-05-27 (PR 27 in progress)*

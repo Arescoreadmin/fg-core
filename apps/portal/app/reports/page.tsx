@@ -7,6 +7,7 @@ import {
   PortalApiError,
   type ReportVersionSummary,
   type ReportVerifyResult,
+  type ReportDocument,
 } from '@/lib/portalApi';
 
 const STATUS_CLASS: Record<string, string> = {
@@ -46,6 +47,30 @@ function safeExportMsg(e: unknown): string {
   return 'Export failed. Please try again.';
 }
 
+const POSTURE_CLASS: Record<string, string> = {
+  critical: 'border-red-500/30 bg-red-500/5 text-red-300',
+  high: 'border-amber-500/30 bg-amber-500/5 text-amber-200',
+  medium: 'border-yellow-500/30 bg-yellow-500/5 text-yellow-200',
+  low: 'border-green-500/30 bg-green-500/5 text-green-300',
+};
+
+function safeStr(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return '';
+}
+
+function safeArr(v: unknown): unknown[] {
+  return Array.isArray(v) ? v : [];
+}
+
+function safeObj(v: unknown): Record<string, unknown> {
+  return v !== null && typeof v === 'object' && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {};
+}
+
 interface ReportRowProps {
   report: ReportVersionSummary;
   engagementId: string;
@@ -57,7 +82,31 @@ function ReportRow({ report, engagementId }: ReportRowProps) {
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<ReportVerifyResult | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryDoc, setSummaryDoc] = useState<ReportDocument | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const busy = exportingJson || exportingPdf || verifying;
+
+  async function handleToggleSummary() {
+    if (summaryOpen) { setSummaryOpen(false); return; }
+    setSummaryOpen(true);
+    if (summaryDoc) return;
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const doc = await portalApi.getReport(engagementId, report.version);
+      setSummaryDoc(doc);
+    } catch (e) {
+      setSummaryError(
+        e instanceof PortalApiError && e.status === 404
+          ? 'Report not found.'
+          : 'Could not load report summary.',
+      );
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
   const filename = (fmt: string) =>
     `frostgate-report-${engagementId}-v${report.version}.${fmt}`;
 
@@ -114,6 +163,13 @@ function ReportRow({ report, engagementId }: ReportRowProps) {
 
       <div className="flex flex-wrap gap-2 pt-1">
         <button
+          className="rounded border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed"
+          onClick={handleToggleSummary}
+          aria-expanded={summaryOpen}
+        >
+          {summaryOpen ? 'Hide Summary ▲' : 'View Summary ▼'}
+        </button>
+        <button
           className="rounded border border-border bg-surface-3 px-2.5 py-1 text-xs text-foreground hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={() => handleExport('json')}
           disabled={busy}
@@ -138,6 +194,58 @@ function ReportRow({ report, engagementId }: ReportRowProps) {
           {verifying ? 'Verifying…' : 'Verify Signature'}
         </button>
       </div>
+
+      {summaryOpen && (
+        <div className="rounded border border-border bg-surface-3 p-3 space-y-2.5 text-xs">
+          {summaryLoading && (
+            <div className="space-y-2" aria-busy="true">
+              <div className="h-3 w-3/4 rounded bg-surface-2 animate-pulse" />
+              <div className="h-3 w-full rounded bg-surface-2 animate-pulse" />
+              <div className="h-3 w-2/3 rounded bg-surface-2 animate-pulse" />
+            </div>
+          )}
+          {summaryError && !summaryLoading && (
+            <p className="text-red-300">{summaryError}</p>
+          )}
+          {summaryDoc && !summaryLoading && (() => {
+            const body = safeObj(summaryDoc.report);
+            const exec = safeObj(body.executive_summary);
+            const narrative = safeStr(exec.narrative);
+            const posture = safeStr(exec.risk_posture);
+            const concerns = safeArr(exec.key_concerns);
+            const note = safeStr(exec.generation_note);
+            if (!narrative) {
+              return <p className="text-muted">No executive summary available for this report version.</p>;
+            }
+            return (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-foreground uppercase tracking-wide text-[11px]">Executive Summary</span>
+                  {posture && (
+                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs border font-medium capitalize ${POSTURE_CLASS[posture] ?? 'border-border bg-surface-3 text-muted'}`}>
+                      {posture} risk
+                    </span>
+                  )}
+                </div>
+                <p className="text-foreground leading-relaxed whitespace-pre-line">{narrative}</p>
+                {concerns.length > 0 && (
+                  <ul className="space-y-1">
+                    {concerns.map((c, i) => (
+                      <li key={i} className="flex items-start gap-2 text-muted">
+                        <span className="text-amber-400 mt-px shrink-0">▸</span>
+                        <span>{safeStr(c)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {note && (
+                  <p className="text-[11px] text-muted border-t border-border pt-2">{note}</p>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
 
       {exportError && (
         <p className="text-xs text-red-300">{exportError}</p>
