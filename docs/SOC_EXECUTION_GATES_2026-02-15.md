@@ -4155,3 +4155,33 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/topology.sha256` — regenerated
 - `docs/ai/PR_FIX_LOG.md` — updated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
+## PR 22 — Plain-Language Finding Explanations
+
+**Date:** 2026-05-27
+**Reviewer:** EmpireOverloard
+**Gate:** api/ high-risk change (new route on finding resource)
+
+**Security posture:**
+- `GET .../findings/{finding_id}/explain` is read-only, gated on `governance:read` scope, and enforces tenant isolation via `_resolve_caller_tenant` → `get_finding` (tenant_id mismatch → FindingNotFound → 404).
+- No new auth scopes, no new DB write paths, no schema migrations.
+- `plain_summary` and all template outputs are constructed from aggregate counts in `normalized_payload["summary"]`. No PII, UPNs, app names, or raw payloads are ever rendered.
+- TTL cache is per (engagement_id, finding_id) with 300s expiry — process-scoped, no shared state.
+- `_export_safe_payload()` strip is upstream (at ingest) and unaffected by this PR.
+- Route inventory and contract authority artifacts regenerated via `make route-inventory-generate` + `make contract-authority-refresh`.
+
+**Files touched:**
+- `services/field_assessment/finding_explainer.py` (new — explainer service)
+- `api/field_assessment.py` — new route + response models
+- `apps/console/lib/fieldAssessmentApi.ts` — new types + method
+- `apps/console/components/field-assessment/ReportViewer.tsx` — explain button/callout
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` — pass engagementId + onShowEvidence
+- `apps/portal/lib/portalApi.ts` — new types + method
+- `apps/portal/app/findings/page.tsx` — explain on expand, plain-summary default
+- `tests/test_finding_explainer.py` (new — 14 tests)
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
+- `tools/ci/route_inventory.json` — regenerated
+- `docs/ai/PR_FIX_LOG.md` — updated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry

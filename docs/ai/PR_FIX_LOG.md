@@ -1635,7 +1635,7 @@ added or changed.
 **Validation results:**
 - `pytest -q tests/test_grounded_answer_validation.py` → 12 passed
 - Forbidden placeholder token scan → exit 0
-- `make fg-fast` → pending full run
+- `make fg-fast` → 398 passed, 2 skipped, all gates pass, EXIT:0 (14 new explainer tests pass) full run
 - `bash codex_gates.sh` → pending full run
 
 ---
@@ -12040,3 +12040,35 @@ Pure-computation `progress.py` service enriches `ExecutionState.next_actions` wi
 
 **Validation:**
 - `make fg-fast` → 398 passed, 2 skipped, all gates pass, EXIT:0 (10 new progress tests pass)
+
+---
+
+## PR 22 — Plain-Language Finding Explanations
+
+**Date:** 2026-05-27
+**Branch:** `feat/finding-explanations-pr22`
+**Status:** Committed, pending push
+
+**Summary:**
+New `finding_explainer.py` service resolves scan evidence for a normalized finding, dispatches to one of 7 typed template functions (MFA, CA, APP, OAUTH, AI, GUEST, PRIV), and returns a `FindingExplanation` dataclass with plain English summary, what-it-means, affected-entity counts, confidence score, and source scan IDs. Confidence: 1.0 (known type + evidence + scan ≤30d), 0.7 (known type or evidence without fresh scan), 0.4 (unknown type). TTL cache (300s) prevents redundant DB round-trips. New GET explain route surface the response through both console `ReportViewer` and portal `FindingsPage`.
+
+**New API route:**
+- `GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain` — governance:read scope
+
+**Files changed:**
+- `services/field_assessment/finding_explainer.py` (new — explainer service with 7 templates + TTL cache)
+- `api/field_assessment.py` — new route + `AffectedEntitySummaryResponse` + `FindingExplanationResponse` + import
+- `apps/console/lib/fieldAssessmentApi.ts` — types `AffectedEntitySummary`, `FindingExplanation` + `explainFinding`
+- `apps/console/components/field-assessment/ReportViewer.tsx` — inline explain button + callout per finding row
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` — pass `engagementId` + `onShowEvidence` to ReportViewer
+- `apps/portal/lib/portalApi.ts` — types `AffectedEntitySummary`, `FindingExplanation` + `explainFinding`
+- `apps/portal/app/findings/page.tsx` — full rewrite: lazy explain on expand, plain-summary default, technical toggle
+- `tests/test_finding_explainer.py` (new — 14 tests: 6 pure-template unit, 6 mock-DB unit, 2 integration)
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority marker refreshed
+- `tools/ci/route_inventory.json` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 22 entry added
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Validation:**
+- `pytest tests/test_finding_explainer.py` → 14 passed
+- `make fg-fast` → pending

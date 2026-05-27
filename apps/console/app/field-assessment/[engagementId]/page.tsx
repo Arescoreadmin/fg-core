@@ -674,6 +674,8 @@ export default function EngagementWorkspacePage() {
                         document={reportDoc}
                         loading={reportDocLoading}
                         error={reportDocError}
+                        engagementId={engagementId}
+                        onShowEvidence={() => setActiveTab('evidence')}
                       />
                       <ControlGapMatrix
                         data={
