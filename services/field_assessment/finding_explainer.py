@@ -9,11 +9,15 @@ cryptographically-verified scan result via source_scan_ids.
 Entity names are never available (raw_payload is metadata-only by design).
 Counts and aggregate signals come from normalized_payload["summary"].
 Finding definitions (title, recommendation) come from the FindingDef registry.
+
+Explanation manifest fields (signals_used, template, explanation_version)
+enable audit replay and future AI validation without regenerating explanations.
 """
 
 from __future__ import annotations
 
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,10 +26,10 @@ from sqlalchemy.orm import Session
 from services.canonical import utc_iso8601_z_now
 from services.field_assessment.store import (
     FindingNotFound,
-    get_finding,
-    list_evidence_links,
-    get_scan_result,
     ScanResultNotFound,
+    get_finding,
+    get_scan_result,
+    list_evidence_links,
 )
 
 try:
@@ -34,7 +38,27 @@ except ImportError:
     _MSGRAPH_REGISTRY: dict[str, Any] = {}
 
 _TTL_SECONDS = 300
-_CACHE: dict[tuple[str, str], tuple[float, "FindingExplanation"]] = {}
+_CACHE_MAX = 1000
+_CACHE: OrderedDict[tuple[str, str], tuple[float, "FindingExplanation"]] = OrderedDict()
+
+
+def _cache_get(key: tuple[str, str], now_ts: float) -> "FindingExplanation | None":
+    if key not in _CACHE:
+        return None
+    expires_at, cached = _CACHE[key]
+    if now_ts >= expires_at:
+        del _CACHE[key]
+        return None
+    _CACHE.move_to_end(key)
+    return cached
+
+
+def _cache_put(key: tuple[str, str], value: "FindingExplanation", expires_at: float) -> None:
+    if key in _CACHE:
+        _CACHE.move_to_end(key)
+    _CACHE[key] = (expires_at, value)
+    while len(_CACHE) > _CACHE_MAX:
+        _CACHE.popitem(last=False)
 
 
 # ---------------------------------------------------------------------------
@@ -59,8 +83,12 @@ class FindingExplanation:
     source_scan_ids: list[str]
     last_seen: str
     explanation_confidence: float
+    signals_used: list[str]
+    framework_impact: list[str]
+    template: str
     generated_at: str
     schema_version: str = "1.0"
+    explanation_version: str = "1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -78,14 +106,13 @@ def explain_finding(
     """Return a plain-language explanation for a normalized finding.
 
     Raises FindingNotFound if the finding does not exist for this tenant.
-    Uses a 5-minute in-process TTL cache keyed on (engagement_id, finding_id).
+    LRU cache (max 1000 entries, 5-minute TTL) keyed on (engagement_id, finding_id).
     """
     cache_key = (engagement_id, finding_id)
     now_ts = time.monotonic()
-    if cache_key in _CACHE:
-        expires_at, cached = _CACHE[cache_key]
-        if now_ts < expires_at:
-            return cached
+    cached = _cache_get(cache_key, now_ts)
+    if cached is not None:
+        return cached
 
     finding = get_finding(
         db,
@@ -131,12 +158,10 @@ def explain_finding(
     source_scan_ids = [s.id for s in scans]
     evidence_count = len(scans)
 
-    # Derive last_seen from the most recent scan.
     last_seen = ""
     if scans:
         last_seen = max((s.collected_at or "") for s in scans)
 
-    # Merge normalized_payload summary dicts from all linked scans.
     merged_summary: dict[str, Any] = {}
     for scan in scans:
         payload = scan.normalized_payload or {}
@@ -145,7 +170,6 @@ def explain_finding(
             if isinstance(data, dict):
                 merged_summary.setdefault(section, {}).update(data)
 
-    # Dispatch to the appropriate template.
     prefix = code.split("-")[0] if "-" in code else ""
     dispatch: dict[str, Any] = {
         "MFA": _explain_mfa,
@@ -157,7 +181,9 @@ def explain_finding(
         "PRIV": _explain_priv,
     }
     handler = dispatch.get(prefix, _explain_generic)
-    plain_summary, what_it_means, affected_entities = handler(
+    template_key = prefix if prefix in dispatch else "generic"
+
+    plain_summary, what_it_means, affected_entities, signals_used = handler(
         finding, finding_def, merged_summary
     )
 
@@ -165,7 +191,12 @@ def explain_finding(
         finding_def.recommendation if finding_def else finding.description or ""
     )
 
-    # Confidence: high if known type + evidence present + scan is fresh.
+    # framework_impact: deduplicated framework names + NIST AI RMF if controls present.
+    raw_fw = list(finding.framework_mappings or [])
+    fw_impact: list[str] = list(dict.fromkeys(str(f) for f in raw_fw))
+    if (finding.nist_ai_rmf_mappings or []) and "NIST AI RMF" not in fw_impact:
+        fw_impact.append("NIST AI RMF")
+
     if finding_def and evidence_count > 0:
         if last_seen:
             try:
@@ -191,14 +222,19 @@ def explain_finding(
         source_scan_ids=source_scan_ids,
         last_seen=last_seen or utc_iso8601_z_now(),
         explanation_confidence=confidence,
+        signals_used=signals_used,
+        framework_impact=fw_impact,
+        template=template_key,
         generated_at=utc_iso8601_z_now(),
     )
-    _CACHE[cache_key] = (now_ts + _TTL_SECONDS, result)
+    _cache_put(cache_key, result, now_ts + _TTL_SECONDS)
     return result
 
 
 # ---------------------------------------------------------------------------
 # Template functions
+# Each returns (plain_summary, what_it_means, affected_entities, signals_used).
+# signals_used lists "section.key" strings for non-zero signals that contributed.
 # ---------------------------------------------------------------------------
 
 
@@ -206,7 +242,7 @@ def _explain_mfa(
     finding: Any,
     finding_def: Any,
     summary: dict[str, Any],
-) -> tuple[str, str, list[AffectedEntitySummary]]:
+) -> tuple[str, str, list[AffectedEntitySummary], list[str]]:
     mfa = summary.get("mfa", {})
     total = int(mfa.get("total_enabled_users", 0))
     admin_no_mfa = int(mfa.get("admin_no_mfa", 0))
@@ -230,8 +266,8 @@ def _explain_mfa(
         plain_summary = f"MFA finding: {title}."
 
     what_it_means = (
-        f"Multi-factor authentication gaps mean an attacker who obtains a password can "
-        f"immediately access your organization's data. "
+        "Multi-factor authentication gaps mean an attacker who obtains a password can "
+        "immediately access your organization's data. "
     )
     if admin_no_mfa > 0:
         what_it_means += (
@@ -253,14 +289,25 @@ def _explain_mfa(
         entities.append(AffectedEntitySummary("user", no_mfa, "user accounts without MFA"))
     if weak_only > 0:
         entities.append(AffectedEntitySummary("user", weak_only, "accounts using SMS/voice MFA only"))
-    return plain_summary, what_it_means, entities
+
+    signals: list[str] = []
+    if admin_no_mfa > 0:
+        signals.append("mfa.admin_no_mfa")
+    if no_mfa > 0:
+        signals.extend(["mfa.no_mfa", "mfa.total_enabled_users"])
+    if coverage_pct > 0:
+        signals.append("mfa.coverage_pct")
+    if weak_only > 0:
+        signals.append("mfa.weak_mfa_only")
+
+    return plain_summary, what_it_means, entities, signals
 
 
 def _explain_ca(
     finding: Any,
     finding_def: Any,
     summary: dict[str, Any],
-) -> tuple[str, str, list[AffectedEntitySummary]]:
+) -> tuple[str, str, list[AffectedEntitySummary], list[str]]:
     ca = summary.get("conditional_access", {})
     total = int(ca.get("total_policies", 0))
     enabled = int(ca.get("enabled_policies", 0))
@@ -278,9 +325,7 @@ def _explain_ca(
             "(IMAP, POP3, SMTP AUTH), which bypass MFA."
         )
     elif not has_admin_mfa:
-        plain_summary = (
-            "No Conditional Access policy requires MFA for administrator accounts."
-        )
+        plain_summary = "No Conditional Access policy requires MFA for administrator accounts."
     elif broad_exclusions > 0:
         plain_summary = (
             f"{broad_exclusions} Conditional Access {'policies have' if broad_exclusions != 1 else 'policy has'} "
@@ -301,22 +346,35 @@ def _explain_ca(
         )
     elif broad_exclusions > 0:
         what_it_means += (
-            f"Wide exclusion lists create unmonitored bypass paths. Each excluded user "
-            f"represents a potential policy gap that attackers can target."
+            "Wide exclusion lists create unmonitored bypass paths. Each excluded user "
+            "represents a potential policy gap that attackers can target."
         )
 
     entities: list[AffectedEntitySummary] = []
     entities.append(AffectedEntitySummary("policy", enabled, f"enabled policies of {total} total"))
     if broad_exclusions > 0:
         entities.append(AffectedEntitySummary("policy", broad_exclusions, "policies with broad exclusions"))
-    return plain_summary, what_it_means, entities
+
+    signals: list[str] = []
+    if total > 0:
+        signals.append("conditional_access.total_policies")
+    if enabled > 0:
+        signals.append("conditional_access.enabled_policies")
+    if has_legacy_block:
+        signals.append("conditional_access.has_legacy_auth_block")
+    if has_admin_mfa:
+        signals.append("conditional_access.has_admin_mfa_requirement")
+    if broad_exclusions > 0:
+        signals.append("conditional_access.broad_exclusion_count")
+
+    return plain_summary, what_it_means, entities, signals
 
 
 def _explain_app(
     finding: Any,
     finding_def: Any,
     summary: dict[str, Any],
-) -> tuple[str, str, list[AffectedEntitySummary]]:
+) -> tuple[str, str, list[AffectedEntitySummary], list[str]]:
     apps = summary.get("enterprise_apps", {})
     unverified_high = int(apps.get("unverified_publisher_high_priv", 0))
     stale = int(apps.get("stale_apps_90d", 0))
@@ -344,9 +402,7 @@ def _explain_app(
     else:
         plain_summary = f"Enterprise application finding: {title}."
 
-    what_it_means = (
-        f"Your tenant has {total} registered enterprise applications. "
-    )
+    what_it_means = f"Your tenant has {total} registered enterprise applications. "
     if unverified_high > 0:
         what_it_means += (
             "Applications from unverified publishers with Directory.ReadWrite or Mail.ReadWrite "
@@ -368,14 +424,27 @@ def _explain_app(
         entities.append(AffectedEntitySummary("app", new_apps, "new apps in last 30 days"))
     if user_consented > 0:
         entities.append(AffectedEntitySummary("app", user_consented, "user-consented apps accessing sensitive resources"))
-    return plain_summary, what_it_means, entities
+
+    signals: list[str] = []
+    if total > 0:
+        signals.append("enterprise_apps.total_apps")
+    if unverified_high > 0:
+        signals.append("enterprise_apps.unverified_publisher_high_priv")
+    if stale > 0:
+        signals.append("enterprise_apps.stale_apps_90d")
+    if new_apps > 0:
+        signals.append("enterprise_apps.new_apps_30d")
+    if user_consented > 0:
+        signals.append("enterprise_apps.user_consented_sensitive")
+
+    return plain_summary, what_it_means, entities, signals
 
 
 def _explain_oauth(
     finding: Any,
     finding_def: Any,
     summary: dict[str, Any],
-) -> tuple[str, str, list[AffectedEntitySummary]]:
+) -> tuple[str, str, list[AffectedEntitySummary], list[str]]:
     oauth = summary.get("oauth_consent", {})
     score_3 = int(oauth.get("score_3_critical", 0))
     score_2 = int(oauth.get("score_2_high", 0))
@@ -427,14 +496,29 @@ def _explain_oauth(
         entities.append(AffectedEntitySummary("app", score_2, "OAuth grants with elevated risk score (2/3)"))
     if stale > 0:
         entities.append(AffectedEntitySummary("app", stale, "stale OAuth grants (180+ days inactive)"))
-    return plain_summary, what_it_means, entities
+
+    signals: list[str] = []
+    if total > 0:
+        signals.append("oauth_consent.total_grants")
+    if score_3 > 0:
+        signals.append("oauth_consent.score_3_critical")
+    if score_2 > 0:
+        signals.append("oauth_consent.score_2_high")
+    if user_consented > 0:
+        signals.append("oauth_consent.user_consented")
+    if stale > 0:
+        signals.append("oauth_consent.stale_grants_180d")
+    if unverified > 0:
+        signals.append("oauth_consent.unverified_publisher_grants")
+
+    return plain_summary, what_it_means, entities, signals
 
 
 def _explain_ai(
     finding: Any,
     finding_def: Any,
     summary: dict[str, Any],
-) -> tuple[str, str, list[AffectedEntitySummary]]:
+) -> tuple[str, str, list[AffectedEntitySummary], list[str]]:
     ai = summary.get("ai_signals", {})
     shadow = int(ai.get("shadow_ai_apps", 0))
     dlp_critical = int(ai.get("dlp_score_3_critical", 0))
@@ -500,14 +584,29 @@ def _explain_ai(
         entities.append(AffectedEntitySummary("app", unapproved, "unapproved AI apps"))
     if user_consented_ai > 0:
         entities.append(AffectedEntitySummary("user", user_consented_ai, "users with self-consented AI app access"))
-    return plain_summary, what_it_means, entities
+
+    signals: list[str] = []
+    if dlp_critical > 0:
+        signals.append("ai_signals.dlp_score_3_critical")
+    if dlp_high > 0:
+        signals.append("ai_signals.dlp_score_2_high")
+    if shadow > 0:
+        signals.append("ai_signals.shadow_ai_apps")
+    if unapproved > 0:
+        signals.append("ai_signals.unapproved_ai_apps")
+    if copilot_active > 0:
+        signals.append("ai_signals.copilot_active_users")
+    if user_consented_ai > 0:
+        signals.append("ai_signals.user_consented_ai")
+
+    return plain_summary, what_it_means, entities, signals
 
 
 def _explain_guest(
     finding: Any,
     finding_def: Any,
     summary: dict[str, Any],
-) -> tuple[str, str, list[AffectedEntitySummary]]:
+) -> tuple[str, str, list[AffectedEntitySummary], list[str]]:
     guest = summary.get("guest_exposure", {})
     total = int(guest.get("total_guests", 0))
     priv_role = int(guest.get("privileged_role_guests", 0))
@@ -535,9 +634,7 @@ def _explain_guest(
     else:
         plain_summary = f"Guest account finding: {title}."
 
-    what_it_means = (
-        f"Your tenant has {total} guest accounts from external organizations. "
-    )
+    what_it_means = f"Your tenant has {total} guest accounts from external organizations. "
     if priv_role > 0:
         what_it_means += (
             "Guest accounts should never hold privileged roles. An external user with "
@@ -560,14 +657,27 @@ def _explain_guest(
         entities.append(AffectedEntitySummary("guest_user", stale, "stale guests (90+ days no sign-in)"))
     if never_activated > 0:
         entities.append(AffectedEntitySummary("guest_user", never_activated, "never-activated guest invitations"))
-    return plain_summary, what_it_means, entities
+
+    signals: list[str] = []
+    if total > 0:
+        signals.append("guest_exposure.total_guests")
+    if priv_role > 0:
+        signals.append("guest_exposure.privileged_role_guests")
+    if stale > 0:
+        signals.append("guest_exposure.stale_guests_90d")
+    if never_activated > 0:
+        signals.append("guest_exposure.never_activated")
+    if sensitive_groups > 0:
+        signals.append("guest_exposure.sensitive_group_guests")
+
+    return plain_summary, what_it_means, entities, signals
 
 
 def _explain_priv(
     finding: Any,
     finding_def: Any,
     summary: dict[str, Any],
-) -> tuple[str, str, list[AffectedEntitySummary]]:
+) -> tuple[str, str, list[AffectedEntitySummary], list[str]]:
     priv = summary.get("privileged_roles", {})
     global_admin_count = int(priv.get("global_admin_count", 0))
     permanent = int(priv.get("permanent_assignments", 0))
@@ -635,21 +745,32 @@ def _explain_priv(
         entities.append(AffectedEntitySummary("admin_user", synced, "admin accounts synced from on-premises AD"))
     if pim_enrolled > 0:
         entities.append(AffectedEntitySummary("admin_user", pim_enrolled, "PIM-enrolled admin accounts (positive signal)"))
-    return plain_summary, what_it_means, entities
+
+    signals: list[str] = []
+    if global_admin_count > 0:
+        signals.append("privileged_roles.global_admin_count")
+    if permanent > 0:
+        signals.append("privileged_roles.permanent_assignments")
+    if synced > 0:
+        signals.append("privileged_roles.synced_account_admins")
+    if pim_enrolled > 0:
+        signals.append("privileged_roles.pim_enrolled_admins")
+    if time_bound > 0:
+        signals.append("privileged_roles.time_bound_assignments")
+
+    return plain_summary, what_it_means, entities, signals
 
 
 def _explain_generic(
     finding: Any,
     finding_def: Any,
     summary: dict[str, Any],  # noqa: ARG001
-) -> tuple[str, str, list[AffectedEntitySummary]]:
+) -> tuple[str, str, list[AffectedEntitySummary], list[str]]:
     title = finding_def.title if finding_def else finding.title
-    description = (
-        finding_def.recommendation if finding_def else finding.description or ""
-    )
+    description = finding_def.recommendation if finding_def else finding.description or ""
     plain_summary = title or "Security finding identified."
     what_it_means = description or (
         "This finding indicates a potential risk in your organization's security posture. "
         "Review the technical details and follow the recommended remediation steps."
     )
-    return plain_summary, what_it_means, []
+    return plain_summary, what_it_means, [], []

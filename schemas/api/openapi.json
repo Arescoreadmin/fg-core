@@ -7519,6 +7519,10 @@
             "title": "Explanation Confidence",
             "type": "number"
           },
+          "explanation_version": {
+            "title": "Explanation Version",
+            "type": "string"
+          },
           "finding_id": {
             "title": "Finding Id",
             "type": "string"
@@ -7526,6 +7530,13 @@
           "finding_type": {
             "title": "Finding Type",
             "type": "string"
+          },
+          "framework_impact": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Framework Impact",
+            "type": "array"
           },
           "generated_at": {
             "title": "Generated At",
@@ -7551,12 +7562,23 @@
             "title": "Severity",
             "type": "string"
           },
+          "signals_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Signals Used",
+            "type": "array"
+          },
           "source_scan_ids": {
             "items": {
               "type": "string"
             },
             "title": "Source Scan Ids",
             "type": "array"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
           },
           "title": {
             "title": "Title",
@@ -7580,6 +7602,10 @@
           "source_scan_ids",
           "last_seen",
           "explanation_confidence",
+          "signals_used",
+          "framework_impact",
+          "template",
+          "explanation_version",
           "generated_at",
           "schema_version"
         ],

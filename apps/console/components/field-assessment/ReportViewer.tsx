@@ -152,10 +152,33 @@ function FindingRow({
                   ))}
                 </ul>
               )}
+              {explanation.framework_impact.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {explanation.framework_impact.map((fw) => (
+                    <span key={fw} className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] border border-info/20 bg-info/5 text-info font-medium">
+                      {fw}
+                    </span>
+                  ))}
+                </div>
+              )}
               {explanation.explanation_confidence < 0.7 && (
                 <p className="text-[11px] text-amber-300">
                   Limited scan evidence — explanation based on finding metadata only.
                 </p>
+              )}
+              {explanation.signals_used.length > 0 && (
+                <details className="pt-0.5">
+                  <summary className="text-[11px] text-muted cursor-pointer hover:text-foreground select-none">
+                    Provenance — {explanation.signals_used.length} signal{explanation.signals_used.length !== 1 ? 's' : ''}
+                  </summary>
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {explanation.signals_used.map((s) => (
+                      <span key={s} className="font-mono text-[10px] rounded px-1 py-0.5 border border-border bg-surface-3 text-muted">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </details>
               )}
               <div className="flex items-center gap-3 pt-0.5">
                 {onShowEvidence && id && (
@@ -169,7 +192,8 @@ function FindingRow({
                 )}
                 <span className="text-[11px] text-muted ml-auto">
                   {explanation.evidence_count} scan{explanation.evidence_count !== 1 ? 's' : ''} ·{' '}
-                  confidence {Math.round(explanation.explanation_confidence * 100)}%
+                  confidence {Math.round(explanation.explanation_confidence * 100)}% ·{' '}
+                  template {explanation.template}
                 </span>
               </div>
             </>

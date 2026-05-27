@@ -114,9 +114,25 @@ function FindingCard({
                 </ul>
               )}
 
+              {explanation.framework_impact.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {explanation.framework_impact.map((fw) => (
+                    <span key={fw} className="rounded px-1.5 py-0.5 text-[11px] border border-blue-500/20 bg-blue-500/5 text-blue-300 font-medium">
+                      {fw}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {explanation.explanation_confidence < 0.7 && (
                 <p className="text-[11px] text-amber-300">
                   Explanation based on finding metadata — limited scan evidence available.
+                </p>
+              )}
+
+              {explanation.signals_used.length > 0 && (
+                <p className="text-[11px] text-muted">
+                  Based on {explanation.signals_used.length} scan signal{explanation.signals_used.length !== 1 ? 's' : ''}.
                 </p>
               )}
 

@@ -559,6 +559,10 @@ class FindingExplanationResponse(BaseModel):
     source_scan_ids: list[str]
     last_seen: str
     explanation_confidence: float
+    signals_used: list[str]
+    framework_impact: list[str]
+    template: str
+    explanation_version: str
     generated_at: str
     schema_version: str
 
@@ -3630,6 +3634,10 @@ def get_finding_explanation_route(
         source_scan_ids=exp.source_scan_ids,
         last_seen=exp.last_seen,
         explanation_confidence=exp.explanation_confidence,
+        signals_used=exp.signals_used,
+        framework_impact=exp.framework_impact,
+        template=exp.template,
+        explanation_version=exp.explanation_version,
         generated_at=exp.generated_at,
         schema_version=exp.schema_version,
     )

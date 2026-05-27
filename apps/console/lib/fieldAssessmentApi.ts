@@ -445,6 +445,10 @@ export interface FindingExplanation {
   source_scan_ids: string[];
   last_seen: string;
   explanation_confidence: number;
+  signals_used: string[];
+  framework_impact: string[];
+  template: string;
+  explanation_version: string;
   generated_at: string;
   schema_version: string;
 }

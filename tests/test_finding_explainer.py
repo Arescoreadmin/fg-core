@@ -87,10 +87,12 @@ def test_priv_template_uses_global_admin_count() -> None:
     summary = {
         "privileged_roles": {"global_admin_count": 7, "permanent_assignments": 3}
     }
-    plain, what, entities = _explain_priv(finding, None, summary)
+    plain, what, entities, signals = _explain_priv(finding, None, summary)
     assert "7" in plain
     assert any(e.entity_type == "admin_user" for e in entities)
     assert any(e.count == 7 for e in entities)
+    assert "privileged_roles.global_admin_count" in signals
+    assert "privileged_roles.permanent_assignments" in signals
 
 
 def test_mfa_template_uses_admin_no_mfa_count() -> None:
@@ -106,10 +108,11 @@ def test_mfa_template_uses_admin_no_mfa_count() -> None:
             "weak_mfa_only": 0,
         }
     }
-    plain, what, entities = _explain_mfa(finding, None, summary)
+    plain, what, entities, signals = _explain_mfa(finding, None, summary)
     assert "2" in plain
     assert "administrator" in plain.lower()
     assert any(e.entity_type == "admin_user" and e.count == 2 for e in entities)
+    assert "mfa.admin_no_mfa" in signals
 
 
 def test_oauth_template_uses_score_3_critical() -> None:
@@ -126,9 +129,10 @@ def test_oauth_template_uses_score_3_critical() -> None:
             "score_2_high": 1,
         }
     }
-    plain, what, entities = _explain_oauth(finding, None, summary)
+    plain, what, entities, signals = _explain_oauth(finding, None, summary)
     assert "4" in plain
     assert any(e.count == 4 for e in entities)
+    assert "oauth_consent.score_3_critical" in signals
 
 
 def test_ai_template_uses_shadow_and_dlp_counts() -> None:
@@ -143,9 +147,10 @@ def test_ai_template_uses_shadow_and_dlp_counts() -> None:
             "user_consented_ai": 8,
         }
     }
-    plain, what, entities = _explain_ai(finding, None, summary)
+    plain, what, entities, signals = _explain_ai(finding, None, summary)
     assert "2" in plain
     assert any(e.entity_type == "app" and e.count == 2 for e in entities)
+    assert "ai_signals.dlp_score_3_critical" in signals
 
 
 def test_all_templates_render_on_empty_summary() -> None:
@@ -160,19 +165,21 @@ def test_all_templates_render_on_empty_summary() -> None:
         _explain_guest,
         _explain_priv,
     ):
-        plain, what, entities = fn(finding, None, empty)
+        plain, what, entities, signals = fn(finding, None, empty)
         assert isinstance(plain, str) and plain
         assert isinstance(what, str) and what
         assert isinstance(entities, list)
+        assert isinstance(signals, list)
 
 
 def test_generic_fallback_uses_finding_title() -> None:
     finding = _make_finding(
         title="Custom finding type", description="Some description."
     )
-    plain, what, entities = _explain_generic(finding, None, {})
+    plain, what, entities, signals = _explain_generic(finding, None, {})
     assert "Custom finding type" in plain
     assert entities == []
+    assert signals == []
 
 
 # ─── Unit tests — explain_finding with mocked DB ─────────────────────────────
@@ -207,6 +214,9 @@ def test_explain_finding_with_linked_scan() -> None:
     assert result.evidence_count == 1
     assert scan.id in result.source_scan_ids
     assert result.explanation_confidence >= 0.7
+    assert "privileged_roles.global_admin_count" in result.signals_used
+    assert result.template == "PRIV"
+    assert result.explanation_version == "1.0"
 
 
 def test_explain_finding_no_evidence_fallback() -> None:
@@ -404,6 +414,10 @@ def test_explain_route_returns_explanation(client: TestClient) -> None:
     assert isinstance(body["explanation_confidence"], float)
     assert "source_scan_ids" in body
     assert body["schema_version"] == "1.0"
+    assert isinstance(body["signals_used"], list)
+    assert isinstance(body["framework_impact"], list)
+    assert isinstance(body["template"], str)
+    assert body["explanation_version"] == "1.0"
 
 
 def test_explain_route_wrong_tenant_returns_404(build_app: Any) -> None:
