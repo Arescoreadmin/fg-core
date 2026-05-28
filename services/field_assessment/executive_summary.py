@@ -137,7 +137,6 @@ def generate_executive_summary(
 
     try:
         from services.ai.dispatch import call_provider
-        from services.ai.providers.base import ProviderCallError
     except ImportError:
         logger.warning("executive_summary.provider_unavailable — using template")
         return _template_summary(
@@ -178,7 +177,17 @@ def generate_executive_summary(
             severity_counts, framework_names, finding_count, risk_posture
         )
 
-    raw = resp.content if hasattr(resp, "content") else str(resp)
+    raw = getattr(resp, "text", None)
+    if raw is None:
+        raw = getattr(resp, "content", None)
+    if not isinstance(raw, str) or not raw.strip():
+        logger.warning(
+            "executive_summary.empty_response engagement=%s — using template",
+            engagement_id,
+        )
+        return _template_summary(
+            severity_counts, framework_names, finding_count, risk_posture
+        )
 
     # Extract JSON from response
     try:

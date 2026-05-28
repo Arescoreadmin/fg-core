@@ -12171,3 +12171,68 @@ New `finding_explainer.py` service resolves scan evidence for a normalized findi
 **Validation:**
 - `pytest tests/test_questionnaire.py` → 20 passed
 - `make fg-fast` → all gates green
+
+---
+
+## PR 27 — Executive Summary in Governance Reports (CI repair + provider response fix)
+
+**Branch:** `feat/executive-summary-pr27`
+**Date:** 2026-05-27
+
+**What was changed:**
+
+1. **Executive summary section added to governance reports** (`services/field_assessment/executive_summary.py` — new)
+   - `generate_executive_summary()` generates a plain-language narrative using `call_provider("anthropic", ...)` and returns `{narrative, risk_posture, key_concerns, generation_note}`.
+   - Inputs: engagement ID, tenant ID, finding severity counts, framework summary keys, confidence score. No raw payloads, no secrets, no internal IDs.
+   - Output is sanitized: `risk_posture` clamped to `{critical, high, medium, low}`; `key_concerns` capped at 3; `narrative` validated non-empty before use.
+   - `generation_note` marks the field as AI-generated and defers to deterministic findings as authoritative.
+
+2. **Deterministic fallback** (`_template_summary()`)
+   - Called when: provider import fails, `call_provider()` raises any exception, provider returns empty/non-string text, JSON parse fails, narrative field is blank, or `risk_posture` is invalid.
+   - Template output is stable: same inputs → same output. No randomness, no I/O, no LLM calls.
+   - Template never contains secrets, raw prompts, provider metadata, stack traces, or dataclass repr.
+
+3. **Provider response field fix** (`services/field_assessment/executive_summary.py`)
+   - Bug: code read `resp.content` which does not exist on `ProviderResponse`. `str(resp)` was the dataclass repr, not model text. Result: AI summaries were never used; all reports silently fell back to template.
+   - Fix: read `resp.text` first (the correct `ProviderResponse` field), then `resp.content` as compatibility fallback, then fall back deterministically if neither is a non-empty string. `str(resp)` is never parsed as JSON.
+
+4. **API integration** (`api/field_assessment.py`)
+   - `executive_summary` added to `_ALL_SECTIONS`.
+   - `generate_executive_summary()` called in `_build_engagement_report_json()` when `executive_summary` is in `active_sections` and `report_type` is `full_assessment` or `executive_summary`.
+   - Import is lazy (inside branch) to avoid circular import risk.
+   - Executive summary is included in section content before manifest hash computation — it is part of the signed report JSON.
+
+5. **Console UI** (`apps/console/components/field-assessment/ReportViewer.tsx`)
+   - Executive summary card rendered at top of report: risk posture badge (color-coded by severity), narrative text, key concerns list, generation note footer.
+   - All values pass through `safeStr()` / `safeArr()` before rendering — no raw `unknown` into JSX.
+
+6. **Portal inline viewer** (`apps/portal/app/reports/page.tsx`)
+   - "View Summary ▼" expand button on each `ReportRow`; lazy-fetches full report JSON via `portalApi.getReport()` on first expand.
+   - Shows narrative, risk posture badge, key concerns, generation note. Falls back to "No executive summary available" message if section absent (older reports).
+
+7. **Console CSP fix** (`apps/console/next.config.js`)
+   - Added `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` headers via `async headers()`.
+   - `connect-src` includes both `'self'` (for `/api/*` proxy path) and the resolved origin of `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:18001`). Without this, `lib/api.ts` fetches to the admin-gateway from Products, Audit, and Keys pages would be blocked in split-origin deployments.
+
+**Safety and validation constraints:**
+- Executive summary output never overwrites deterministic evidence, finding counts, severity counts, or framework mappings.
+- Provider output cannot invent findings or controls not present in the structured inputs.
+- All provider output is parsed into a strict schema before use.
+- Provider failures (any exception, empty response, parse error, blank narrative) fall back deterministically — report generation never blocks.
+- No stack traces, internal IDs, secrets, raw prompts, or provider metadata reach client output.
+
+**Files touched:**
+- `services/field_assessment/executive_summary.py` (new — executive summary generator, deterministic fallback, provider response parsing)
+- `api/field_assessment.py` — `executive_summary` section in `_ALL_SECTIONS`; generation call in `_build_engagement_report_json`
+- `apps/console/components/field-assessment/ReportViewer.tsx` — executive summary card at report top
+- `apps/portal/app/reports/page.tsx` — "View Summary" expand with lazy report fetch
+- `apps/console/next.config.js` — CSP headers with correct `connect-src` for split-origin deployments
+- `tests/test_executive_summary.py` (new — 17 tests: unit severity/posture helpers, template safety, provider text parsing, dataclass repr rejection, fallback paths, integration report route)
+- `ROADMAP.md` — P0 #2 tracking fixed (PR 25 covered scan trigger UI); P1 #6 marked done
+
+**Validation:**
+- `ruff check .` → no issues
+- `ruff format --check .` → all files formatted
+- `mypy services/field_assessment/executive_summary.py api/field_assessment.py --ignore-missing-imports` → no issues found
+- `pytest tests/test_executive_summary.py` → 17 passed
+- `make fg-fast` → 415 passed (398 + 17 new), pr-fix-log green
