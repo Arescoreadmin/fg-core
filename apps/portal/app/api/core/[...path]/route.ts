@@ -43,6 +43,11 @@ const PORTAL_WRITE_PATTERNS: Array<{ pattern: RegExp; methods: ReadonlySet<strin
     pattern: /^field-assessment\/engagements\/[^/]+\/reports\/\d+\/verify$/,
     methods: new Set(['POST']),
   },
+  {
+    // PATCH field-assessment/engagements/{id}/findings/{findingId} — close-loop status update
+    pattern: /^field-assessment\/engagements\/[^/]+\/findings\/[^/]+$/,
+    methods: new Set(['GET', 'PATCH', 'HEAD']),
+  },
 ];
 
 function isPortalPathAllowed(path: string[], method: string): boolean {
@@ -171,5 +176,8 @@ export async function POST(req: NextRequest, ctx: { params: { path: string[] } }
   return handle(req, ctx);
 }
 export async function HEAD(req: NextRequest, ctx: { params: { path: string[] } }) {
+  return handle(req, ctx);
+}
+export async function PATCH(req: NextRequest, ctx: { params: { path: string[] } }) {
   return handle(req, ctx);
 }

@@ -7759,6 +7759,60 @@
         "title": "FindingResponse",
         "type": "object"
       },
+      "FindingStatusPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Notes",
+            "type": "string"
+          },
+          "owner_email": {
+            "minLength": 1,
+            "title": "Owner Email",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "remediated",
+              "accepted",
+              "false_positive"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "notes",
+          "owner_email"
+        ],
+        "title": "FindingStatusPatchRequest",
+        "type": "object"
+      },
+      "FindingStatusPatchResponse": {
+        "properties": {
+          "finding": {
+            "$ref": "#/components/schemas/FindingResponse"
+          },
+          "observation_id": {
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "questionnaire_controls_updated": {
+            "title": "Questionnaire Controls Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "finding",
+          "observation_id",
+          "questionnaire_controls_updated"
+        ],
+        "title": "FindingStatusPatchResponse",
+        "type": "object"
+      },
       "FrameworkResponse": {
         "properties": {
           "activated_at": {
@@ -33600,6 +33654,82 @@
           }
         },
         "summary": "Get Finding Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "patch": {
+        "description": "Mark a finding resolved, accepted, or false-positive.\n\nSide effects (all in one transaction):\n1. Creates a FaFieldObservation recording the client's evidence notes.\n2. Creates a FaEvidenceLink from the finding to that observation.\n3. Bumps matching NIST AI RMF questionnaire responses from\n   not_implemented / not_assessed \u2192 partial (one step closer to implemented).\n4. Updates finding.status to the requested terminal value.\n5. Emits an audit event.",
+        "operationId": "patch_finding_status_route_field_assessment_engagements__engagement_id__findings__finding_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingStatusPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingStatusPatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Finding Status Route",
         "tags": [
           "field-assessment"
         ]

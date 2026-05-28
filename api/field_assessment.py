@@ -89,6 +89,7 @@ from services.field_assessment.store import (
     list_observations,
     list_scan_results,
     transition_engagement,
+    update_finding_status,
 )
 from services.field_assessment.timeline import emit_fa_timeline_event
 from api.db_models_field_assessment import (
@@ -446,6 +447,20 @@ class EvidenceLinkResponse(BaseModel):
     link_metadata: dict[str, Any]
     created_at: str
     schema_version: str
+
+
+class FindingStatusPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["remediated", "accepted", "false_positive"]
+    notes: str = Field(..., min_length=1, max_length=2000)
+    owner_email: str = Field(..., min_length=1)
+
+
+class FindingStatusPatchResponse(BaseModel):
+    finding: FindingResponse
+    observation_id: str
+    questionnaire_controls_updated: int
 
 
 class EngagementSummaryResponse(BaseModel):
@@ -1484,6 +1499,178 @@ def get_finding_route(
             status_code=404, detail=api_error("FINDING_NOT_FOUND", exc.message)
         )
     return _finding_to_response(finding)
+
+
+# ---------------------------------------------------------------------------
+# Route — Finding status update (closed-loop remediation)
+# ---------------------------------------------------------------------------
+
+_TERMINAL_FINDING_STATUSES: frozenset[str] = frozenset(
+    {"remediated", "accepted", "false_positive"}
+)
+
+
+@router.patch(
+    "/engagements/{engagement_id}/findings/{finding_id}",
+    response_model=FindingStatusPatchResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def patch_finding_status_route(
+    engagement_id: str,
+    finding_id: str,
+    request: Request,
+    body: FindingStatusPatchRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> FindingStatusPatchResponse:
+    """Mark a finding resolved, accepted, or false-positive.
+
+    Side effects (all in one transaction):
+    1. Creates a FaFieldObservation recording the client's evidence notes.
+    2. Creates a FaEvidenceLink from the finding to that observation.
+    3. Bumps matching NIST AI RMF questionnaire responses from
+       not_implemented / not_assessed → partial (one step closer to implemented).
+    4. Updates finding.status to the requested terminal value.
+    5. Emits an audit event.
+    """
+    from services.field_assessment.questionnaire_store import (  # noqa: F811
+        list_questionnaires,
+        list_responses,
+        normalize_nist_control,
+    )
+
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    try:
+        finding = get_finding(
+            db,
+            finding_id=finding_id,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+        )
+    except FindingNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("FINDING_NOT_FOUND", exc.message)
+        )
+
+    if finding.status in _TERMINAL_FINDING_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "FINDING_ALREADY_RESOLVED",
+                f"finding is already in terminal status '{finding.status}'",
+            ),
+        )
+
+    # 1 — Create evidence observation.
+    observation = create_observation(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        domain=ObservationDomain.COMPLIANCE.value,
+        observation_type=ObservationType.NOTE.value,
+        severity=finding.severity,
+        title=f"Client remediation: {finding.title}",
+        description=body.notes,
+        interview_role=None,
+        structured_evidence={
+            "finding_id": finding_id,
+            "new_status": body.status,
+            "owner_email": body.owner_email,
+        },
+        linked_finding_ids=[finding_id],
+        assessor_id=body.owner_email,
+    )
+
+    # 2 — Link observation to finding.
+    try:
+        create_evidence_link(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            source_entity_type="finding",
+            source_entity_id=finding_id,
+            evidence_entity_type=EvidenceLinkType.FIELD_OBSERVATION.value,
+            evidence_entity_id=observation.id,
+            link_metadata={
+                "linked_by": "portal_closed_loop",
+                "new_status": body.status,
+            },
+        )
+    except Exception:
+        pass  # duplicate link is acceptable — idempotent
+
+    # 3 — Bump questionnaire responses for matched NIST controls.
+    # Only remediated findings represent actual implementation evidence.
+    # accepted / false_positive do not advance control coverage.
+    controls_updated = 0
+    if body.status == "remediated":
+        nist_controls: set[str] = set()
+        for raw in finding.nist_ai_rmf_mappings or []:
+            cid = normalize_nist_control(raw)
+            if cid:
+                nist_controls.add(cid)
+
+        if nist_controls:
+            qs = list_questionnaires(
+                db, engagement_id=engagement_id, tenant_id=tenant_id
+            )
+            for q in qs:
+                responses = list_responses(
+                    db, questionnaire_id=q.id, tenant_id=tenant_id
+                )
+                for r in responses:
+                    if r.control_id in nist_controls and r.response_status in (
+                        "not_implemented",
+                        "not_assessed",
+                    ):
+                        r.response_status = "partial"
+                        r.updated_at = utc_iso8601_z_now()
+                        controls_updated += 1
+                if controls_updated:
+                    q.updated_at = utc_iso8601_z_now()
+            db.flush()
+
+    # 4 — Update finding status.
+    updated_finding = update_finding_status(
+        db,
+        finding_id=finding_id,
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+        new_status=body.status,
+    )
+
+    # 5 — Audit.
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="finding_status_updated",
+        actor=actor,
+        reason_code="client_remediation",
+        payload={
+            "finding_id": finding_id,
+            "new_status": body.status,
+            "observation_id": observation.id,
+            "questionnaire_controls_updated": controls_updated,
+        },
+    )
+
+    db.commit()
+    db.refresh(updated_finding)
+
+    return FindingStatusPatchResponse(
+        finding=_finding_to_response(updated_finding),
+        observation_id=observation.id,
+        questionnaire_controls_updated=controls_updated,
+    )
 
 
 # ---------------------------------------------------------------------------
