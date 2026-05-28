@@ -53,7 +53,8 @@ def test_playbook_selection_by_assessment_type() -> None:
 
     assert ai_playbook.playbook_id == "field_assessment.ai_governance.v1"
     assert comprehensive.playbook_id == "field_assessment.comprehensive.v1"
-    assert hipaa.playbook_id == "field_assessment.comprehensive.v1"
+    assert hipaa.playbook_id == "field_assessment.hipaa.v1"
+    assert hipaa.playbook_id != comprehensive.playbook_id
 
 
 def test_execution_state_output_is_deterministic_for_same_inputs() -> None:
