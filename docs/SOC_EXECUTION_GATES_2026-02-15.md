@@ -4288,3 +4288,39 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/route_inventory.json` + related — regenerated
 - `docs/ai/PR_FIX_LOG.md` — PR 28 entry added
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
+### PR 31 — Remediation Roadmap v1 + Addendum (2026-05-28)
+
+**Critical files changed:** `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`
+
+**Routes added (1):**
+- `GET /field-assessment/engagements/{engagement_id}/remediation-roadmap` — phased remediation roadmap with priority scoring and compliance delta preview, `governance:read`
+
+**Security posture:**
+- New route gates on `governance:read` scope via `require_scopes`.
+- All queries scope by `(engagement_id, tenant_id)` — cross-tenant and cross-engagement access returns 404.
+- Endpoint is strictly read-only: computes priority scores and phase assignments in memory from already-accessible `FaNormalizedFinding` + `FaQuestionnaireResponse` rows.
+- `is_truncated` flag surfaces when finding count exceeds HARD_MAX=2000 — no silent data truncation.
+- `remediation_priority` and `effort_level` are computed fields derived from existing columns — no new data exposure.
+- `generate_remediation_steps()` is deterministic and template-based — no LLM calls, no external network access.
+- No new auth scopes, no DB schema changes, no migration required.
+- Addendum: `normalize_nist_control()` receives raw mapping objects (not stringified) — dict-shaped MS Graph mappings now parse correctly.
+- Addendum: pagination loop (PAGE=100, HARD_MAX=2000) replaces single-call with clamped limit.
+
+**Artifacts regenerated:**
+- Route inventory regenerated via `make route-inventory-generate`
+- OpenAPI contracts regenerated via `make contracts-gen`
+- Contract authority markers updated in `BLUEPRINT_STAGED.md` + `CONTRACT.md`
+
+**Files touched:**
+- `services/field_assessment/remediation.py` — new module
+- `api/field_assessment.py` — new roadmap models + endpoint; `FindingResponse` + `FindingExplanationResponse` extended
+- `apps/portal/lib/portalApi.ts` — roadmap types + method
+- `apps/portal/app/remediation/page.tsx` — complete rewrite
+- `tests/test_remediation_roadmap.py` — 14 new tests
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
+- `tools/ci/route_inventory.json` + related — regenerated
+- `docs/ai/PR_FIX_LOG.md` — updated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry

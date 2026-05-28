@@ -12458,3 +12458,120 @@ New `finding_explainer.py` service resolves scan evidence for a normalized findi
 - `ruff format --check .` → all files formatted
 - `pytest tests/test_playbook_hipaa.py` → 77 passed
 - `make fg-fast` → all gates passed
+
+---
+
+## PR 31 — Remediation Roadmap v1
+
+**Date:** 2026-05-28
+**Branch:** `feat/remediation-roadmap-pr31`
+**Touches:** `api/field_assessment.py`, `services/field_assessment/remediation.py` (new)
+
+**What changed:**
+
+1. **New `services/field_assessment/remediation.py`**
+   - `compute_priority_score(finding)` — weighted formula: `(severity_weight × 8) + scan_evidence_bonus + nist_coverage_bonus`. Score range 0–55.
+   - `compute_effort_level(finding)` — heuristic from `finding_type` prefix (MFA/GUEST=low, CA/PRIV=medium, APP/OAUTH/AI=high).
+   - `assign_phase(score)` — three thresholds: immediate (≥28), short_term (≥16), planned (<16).
+   - `generate_remediation_steps(finding)` — template-based, deterministic step lists per finding type prefix (7 templates + generic fallback). No LLM calls.
+
+2. **`api/field_assessment.py`**
+   - `FindingResponse` extended: `remediation_priority: int`, `effort_level: str` (computed via `_finding_to_response`).
+   - `FindingExplanationResponse` extended: `remediation_steps: list[str]` populated by `generate_remediation_steps()`.
+   - New Pydantic models: `RemediationPhaseFinding`, `RemediationPhase`, `RemediationRoadmapResponse`.
+   - New `GET /engagements/{id}/remediation-roadmap` endpoint (`governance:read` scope):
+     - Loads all open/in-progress findings (limit 500).
+     - Loads questionnaire baseline for current `current_coverage_pct`.
+     - Groups findings into 3 phases by priority score.
+     - Computes `compliance_delta_pct` per phase: unique NIST controls addressed by phase findings that are currently not implemented, as a fraction of 69 total controls.
+     - Returns `projected_coverage_pct` = baseline + cumulative delta across all phases.
+
+**Safety constraints:**
+- No DB migrations. `remediation_priority` and `effort_level` are computed at query time from existing columns (`severity`, `evidence_ref_ids`, `nist_ai_rmf_mappings`, `finding_type`).
+- No auth scope changes. Endpoint uses existing `governance:read`.
+- No tenant isolation changes. Tenant resolved via existing `_resolve_caller_tenant(request)`.
+- `generate_remediation_steps` is deterministic — no external calls, cache-safe.
+
+**Files touched:**
+- `services/field_assessment/remediation.py` — new module
+- `api/field_assessment.py` — `FindingResponse` + `FindingExplanationResponse` extension; new models; new roadmap endpoint
+- `apps/portal/lib/portalApi.ts` — `FindingSummary` extended; `FindingExplanation` extended; new roadmap types; `getRemediationRoadmap()` method
+- `apps/portal/app/remediation/page.tsx` — complete rewrite: phased roadmap lanes, compliance delta banner, quick-wins matrix, effort badges
+- `ROADMAP.md` — P1 #10 marked done, PR 31 row added
+
+---
+
+## PR 31 — ADDENDUM (2026-05-28)
+
+**Branch:** `feat/remediation-roadmap-pr31`
+
+### 1. NIST mapping normalization correction
+
+**Problem:** `normalize_nist_control(str(raw))` in `get_remediation_roadmap` stringified dict
+NIST mappings (e.g. `{"function": "GOVERN", "category": "GOVERN-1.2"}`) into
+`"{'function': 'GOVERN', ...}"`, which the normalizer could not parse — resulting in
+zero controls being counted for MS Graph connector findings.
+
+**Fix:** Removed all `str()` wrapping. Now calls `normalize_nist_control(raw)` directly,
+passing the dict object so the existing `category` branch in the normalizer handles it.
+
+**Files:** `api/field_assessment.py` (3 occurrences removed)
+
+---
+
+### 2. Multi-page finding retrieval correction
+
+**Problem:** `list_findings(..., limit=500)` was silently clamped to `MAX_PAGE_SIZE=100`
+in the store layer, meaning engagements with more than 100 findings would produce
+incomplete roadmaps without any indication of truncation.
+
+**Fix:** Replaced the single call with a pagination loop (`PAGE=100`, `HARD_MAX=2000`).
+Added `is_truncated: bool = False` field to `RemediationRoadmapResponse` so consumers
+can surface the truncation warning if `len(findings) >= HARD_MAX`.
+
+**Files:** `api/field_assessment.py` (`RemediationRoadmapResponse`, `get_remediation_roadmap`)
+
+---
+
+### 3. Connector-imported finding prefix/template correction
+
+**Problem:** Connector findings persisted as `finding_type="msgraph.NIST-AI-RMF-GOVERN-1.2"`
+were stripped to `"NIST-AI-RMF-GOVERN-1.2"`, then split on `-` to yield `"NIST"` — which
+does not match any family prefix in `_EFFORT_BY_PREFIX` or the step-dispatch map, routing
+every connector-imported finding to the generic fallback template.
+
+**Fix:** Extended `_type_prefix()` with a two-step resolution:
+1. Strip `"msgraph."` prefix; if first segment is a known family code (`MFA/CA/APP/OAUTH/AI/GUEST/PRIV`), return it directly.
+2. Look up `finding.title` in `_MSGRAPH_REGISTRY_BY_TITLE` (same pattern as `finding_explainer.py`),
+   recover the real registry code (e.g. `"MFA-001"`), and extract the prefix from it.
+3. Fall back to `""` for unknown types.
+
+The MS Graph registry import uses try/except ImportError identical to `finding_explainer.py`.
+
+**Files:** `services/field_assessment/remediation.py` (`_type_prefix`, top-level registry import)
+
+---
+
+### 4. Contract authority refresh
+
+Regenerated `contracts/core/openapi.json` via `make fg-contract` (which runs
+`contracts_gen_core.py` then `contract_toolchain_check.py` and `contract_lint.py`)
+and refreshed `Contract-Authority-SHA256` markers in `BLUEPRINT_STAGED.md` and
+`CONTRACT.md` via `refresh_contract_authority.py`.
+
+The route inventory (`tools/ci/route_inventory.json`) was also regenerated to
+reflect the new `is_truncated` field in `RemediationRoadmapResponse`.
+
+**Files:** `contracts/core/openapi.json`, `schemas/api/openapi.json`,
+`BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/route_inventory.json`
+
+---
+
+### 5. New tests
+
+Added `tests/test_remediation_roadmap.py` (13 tests):
+- 5 NIST normalization tests (string, control_id dict, function/category dict, str-repr guard, dedup)
+- 3 pagination tests (pages collected, total count, phase grouping)
+- 5 prefix resolution tests (direct family codes, title-index lookup, MFA template, generic fallback, non-msgraph)
+
+**Validation:** `ruff check` + `ruff format --check` clean; `pytest tests/test_remediation_roadmap.py` passes.

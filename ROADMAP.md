@@ -54,6 +54,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | PR 28 | NIST Control Coverage Matrix | ✅ merged | Per-control evidence fusion (questionnaire + scan); coverage matrix in portal; `governance:read`-gated list endpoint |
 | PR 29 | HIPAA + SOC 2 Playbooks | 🔄 in progress | Dedicated HIPAA and SOC 2 governance execution playbooks; Privacy/Security Officer gates (HIPAA); Executive Sponsor + 8 document class gates (SOC 2); annual evidence freshness on all policy docs |
 | PR 30 | Portal Engagement Selector | 🔄 in progress | localStorage-backed engagement persistence (`fg_portal_eid`); engagement selector hub on home page; auto-select single engagement; all 4 sub-pages fall back to stored ID when `?e=` param absent |
+| PR 31 | Remediation Roadmap v1 | 🔄 in progress | Priority scoring (severity × scan evidence × NIST coverage); 3-phase execution roadmap (0–30/31–60/61–90 days); per-phase compliance delta preview; quick-wins matrix (impact vs effort); AI step-by-step runbooks |
 
 ---
 
@@ -79,7 +80,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | 7 | **NIST control coverage matrix** — portal view: which controls have evidence, which are gaps | — | PR 28 | ✅ done — `GET /engagements/{id}/questionnaires` with evidence fusion (questionnaire + scan counts per control); `governance:read`-gated; portal Coverage page + nav link |
 | 8 | **HIPAA + SOC 2 playbooks** — dedicated governance execution playbooks for healthcare and commercial compliance | — | PR 29 | ✅ done — `HIPAA_PLAYBOOK` (Privacy + Security Officer gates, 7 HIPAA document classes, BAA no-expiry) + `SOC2_PLAYBOOK` (Executive Sponsor gate, 8 Trust Service Criteria document classes, 6 observation domains, annual freshness) |
 | 9 | **Portal engagement selector UI** — findings page currently requires engagement ID in URL, no picker | — | PR 30 | ✅ done — engagement selector hub on home page; localStorage persistence; all sub-pages fall back to stored ID |
-| 10 | **Remediation roadmap in portal** — sequenced, owned remediation steps with priority ordering | — | — | ⬜ not started |
+| 10 | **Remediation roadmap in portal** — sequenced, owned remediation steps with priority ordering | — | PR 31 | ✅ done — priority scoring; 3-phase lanes; compliance delta preview; quick-wins matrix; per-finding step runbooks |
 | 11 | **Azure AD app pre-registration guide** — required API scopes + admin consent walkthrough for MS Graph scan setup | — | PR 25 | ✅ done — `docs/operators/azure_ad_app_setup.md`: create app, 7 delegated permissions, public client flow, scan walkthrough, troubleshooting |
 
 ### P2 — Post-first-client (backlog)
@@ -107,4 +108,4 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-05-28 (PR 30 in progress)*
+*Last updated: 2026-05-28 (PR 31 in progress)*
