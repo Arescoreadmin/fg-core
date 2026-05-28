@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   portalApi,
@@ -9,6 +10,7 @@ import {
   type QuestionnaireControlResponse,
   type ResponseStatus,
 } from '@/lib/portalApi';
+import { getStoredEngagementId } from '@/lib/engagementStore';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -198,7 +200,7 @@ function Legend() {
 
 function CoveragePageInner() {
   const params = useSearchParams();
-  const engagementId = params.get('e') ?? '';
+  const engagementId = params.get('e') || getStoredEngagementId();
 
   const [questionnaire, setQuestionnaire] = useState<Questionnaire | null>(null);
   const [loading, setLoading] = useState(false);
@@ -228,7 +230,9 @@ function CoveragePageInner() {
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <p className="text-sm font-semibold text-foreground">No engagement selected</p>
         <p className="mt-1 text-xs text-muted">
-          Add <code className="font-mono">?e=&lt;engagement_id&gt;</code> to the URL.
+          <Link href="/" className="underline hover:text-foreground transition-colors">
+            Select an engagement from the dashboard.
+          </Link>
         </p>
       </div>
     );

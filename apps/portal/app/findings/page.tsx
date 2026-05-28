@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   portalApi,
@@ -8,6 +9,7 @@ import {
   type FindingSummary,
   type FindingExplanation,
 } from '@/lib/portalApi';
+import { getStoredEngagementId } from '@/lib/engagementStore';
 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 0, high: 1, medium: 2, low: 3, info: 4,
@@ -217,7 +219,7 @@ function FindingCard({
 
 function FindingsPageInner() {
   const params = useSearchParams();
-  const engagementId = params.get('e') ?? '';
+  const engagementId = params.get('e') || getStoredEngagementId();
 
   const [findings, setFindings] = useState<FindingSummary[]>([]);
   const [total, setTotal] = useState(0);
@@ -273,7 +275,9 @@ function FindingsPageInner() {
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <p className="text-sm font-semibold text-foreground">No engagement selected</p>
         <p className="mt-1 text-xs text-muted">
-          Add <code className="font-mono">?e=&lt;engagement_id&gt;</code> to the URL.
+          <Link href="/" className="underline hover:text-foreground transition-colors">
+            Select an engagement from the dashboard.
+          </Link>
         </p>
       </div>
     );
