@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   portalApi,
@@ -9,6 +10,7 @@ import {
   type ReportVerifyResult,
   type ReportDocument,
 } from '@/lib/portalApi';
+import { getStoredEngagementId } from '@/lib/engagementStore';
 
 const STATUS_CLASS: Record<string, string> = {
   finalized: 'border-green-500/30 bg-green-500/5 text-green-300',
@@ -275,7 +277,7 @@ const PAGE_SIZE = 10;
 
 function ReportsPageInner() {
   const params = useSearchParams();
-  const engagementId = params.get('e') ?? '';
+  const engagementId = params.get('e') || getStoredEngagementId();
 
   const [reports, setReports] = useState<ReportVersionSummary[]>([]);
   const [total, setTotal] = useState(0);
@@ -327,7 +329,9 @@ function ReportsPageInner() {
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <p className="text-sm font-semibold text-foreground">No engagement selected</p>
         <p className="mt-1 text-xs text-muted">
-          Add <code className="font-mono">?e=&lt;engagement_id&gt;</code> to the URL.
+          <Link href="/" className="underline hover:text-foreground transition-colors">
+            Select an engagement from the dashboard.
+          </Link>
         </p>
       </div>
     );
