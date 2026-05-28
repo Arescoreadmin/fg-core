@@ -7554,6 +7554,14 @@
             "title": "Registry Recommendation",
             "type": "string"
           },
+          "remediation_steps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Remediation Steps",
+            "type": "array"
+          },
           "schema_version": {
             "title": "Schema Version",
             "type": "string"
@@ -7647,6 +7655,11 @@
             "title": "Description",
             "type": "string"
           },
+          "effort_level": {
+            "default": "medium",
+            "title": "Effort Level",
+            "type": "string"
+          },
           "engagement_id": {
             "title": "Engagement Id",
             "type": "string"
@@ -7688,6 +7701,11 @@
               }
             ],
             "title": "Remediation Hint"
+          },
+          "remediation_priority": {
+            "default": 0,
+            "title": "Remediation Priority",
+            "type": "integer"
           },
           "schema_version": {
             "title": "Schema Version",
@@ -12850,6 +12868,119 @@
         "title": "RemediationFactorResponse",
         "type": "object"
       },
+      "RemediationPhase": {
+        "properties": {
+          "compliance_delta_pct": {
+            "title": "Compliance Delta Pct",
+            "type": "number"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/RemediationPhaseFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "nist_controls_addressed": {
+            "title": "Nist Controls Addressed",
+            "type": "integer"
+          },
+          "phase_id": {
+            "title": "Phase Id",
+            "type": "string"
+          },
+          "window": {
+            "title": "Window",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase_id",
+          "label",
+          "window",
+          "findings",
+          "compliance_delta_pct",
+          "nist_controls_addressed"
+        ],
+        "title": "RemediationPhase",
+        "type": "object"
+      },
+      "RemediationPhaseFinding": {
+        "properties": {
+          "effort_level": {
+            "title": "Effort Level",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "finding_type": {
+            "title": "Finding Type",
+            "type": "string"
+          },
+          "framework_mappings": {
+            "items": {},
+            "title": "Framework Mappings",
+            "type": "array"
+          },
+          "nist_ai_rmf_mappings": {
+            "items": {},
+            "title": "Nist Ai Rmf Mappings",
+            "type": "array"
+          },
+          "nist_controls_addressed": {
+            "title": "Nist Controls Addressed",
+            "type": "integer"
+          },
+          "remediation_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Hint"
+          },
+          "remediation_priority": {
+            "title": "Remediation Priority",
+            "type": "integer"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "title",
+          "severity",
+          "status",
+          "finding_type",
+          "remediation_hint",
+          "remediation_priority",
+          "effort_level",
+          "nist_ai_rmf_mappings",
+          "framework_mappings",
+          "nist_controls_addressed"
+        ],
+        "title": "RemediationPhaseFinding",
+        "type": "object"
+      },
       "RemediationRecommendationResponse": {
         "properties": {
           "affected_control_ids": {
@@ -12939,6 +13070,52 @@
           "compensating_control_ids"
         ],
         "title": "RemediationRecommendationResponse",
+        "type": "object"
+      },
+      "RemediationRoadmapResponse": {
+        "properties": {
+          "current_coverage_pct": {
+            "title": "Current Coverage Pct",
+            "type": "number"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "is_truncated": {
+            "default": false,
+            "title": "Is Truncated",
+            "type": "boolean"
+          },
+          "phases": {
+            "items": {
+              "$ref": "#/components/schemas/RemediationPhase"
+            },
+            "title": "Phases",
+            "type": "array"
+          },
+          "projected_coverage_pct": {
+            "title": "Projected Coverage Pct",
+            "type": "number"
+          },
+          "schema_version": {
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "total_open_findings": {
+            "title": "Total Open Findings",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "engagement_id",
+          "current_coverage_pct",
+          "projected_coverage_pct",
+          "phases",
+          "total_open_findings"
+        ],
+        "title": "RemediationRoadmapResponse",
         "type": "object"
       },
       "ReplayContractResponse": {
@@ -34241,6 +34418,65 @@
           }
         },
         "summary": "Get Readiness Drift Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/remediation-roadmap": {
+      "get": {
+        "description": "Phased remediation roadmap with compliance delta preview.\n\nGroups open/in-progress findings into three execution phases based on\npriority score (severity \u00d7 scan evidence \u00d7 NIST control coverage).\nPer-phase compliance delta is computed against the current questionnaire\nbaseline so clients see projected NIST AI RMF coverage improvement.",
+        "operationId": "get_remediation_roadmap_field_assessment_engagements__engagement_id__remediation_roadmap_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemediationRoadmapResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Remediation Roadmap",
         "tags": [
           "field-assessment"
         ]

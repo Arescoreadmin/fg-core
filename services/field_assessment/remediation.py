@@ -26,6 +26,21 @@ from __future__ import annotations
 
 from typing import Any
 
+# MS Graph registry — optional import; fall back to empty dict if connector not installed.
+try:
+    from services.connectors.msgraph.findings.registry import (
+        REGISTRY as _IMPORTED_MSGRAPH_REGISTRY,
+    )
+except ImportError:
+    _IMPORTED_MSGRAPH_REGISTRY = {}
+
+_MSGRAPH_REGISTRY_BY_TITLE: dict[str, Any] = {
+    d.title: d for d in _IMPORTED_MSGRAPH_REGISTRY.values()
+}
+
+# Known family prefixes for connector-imported finding types.
+_KNOWN_FAMILIES = frozenset({"MFA", "CA", "APP", "OAUTH", "AI", "GUEST", "PRIV"})
+
 _SEVERITY_WEIGHT: dict[str, int] = {
     "critical": 4,
     "high": 3,
@@ -59,9 +74,35 @@ NIST_TOTAL_CONTROLS = 69
 
 
 def _type_prefix(finding: Any) -> str:
+    """Extract the family prefix from a finding_type string.
+
+    Resolution order:
+    1. Strip "msgraph." prefix; if the resulting first segment is a known family
+       code (MFA/CA/APP/OAUTH/AI/GUEST/PRIV), return it directly.
+    2. Look up finding.title in the MS Graph registry by title to recover the
+       real finding code (e.g. "MFA-001"), then extract the prefix from that.
+    3. Fall back to "" (routes to generic template).
+    """
     raw = finding.finding_type or ""
     code = raw[len("msgraph.") :] if raw.startswith("msgraph.") else raw
-    return code.split("-")[0] if "-" in code else ""
+
+    # Step 1 — fast path: first segment is already a known family code.
+    first = code.split("-")[0] if "-" in code else code
+    if first in _KNOWN_FAMILIES:
+        return first
+
+    # Step 2 — title-index lookup in MS Graph registry.
+    title = getattr(finding, "title", "") or ""
+    if title and _MSGRAPH_REGISTRY_BY_TITLE:
+        defn = _MSGRAPH_REGISTRY_BY_TITLE.get(title)
+        if defn is not None:
+            real_code = getattr(defn, "code", "") or ""
+            real_prefix = real_code.split("-")[0] if "-" in real_code else ""
+            if real_prefix in _KNOWN_FAMILIES:
+                return real_prefix
+
+    # Step 3 — generic fallback.
+    return ""
 
 
 def compute_priority_score(finding: Any) -> int:

@@ -431,6 +431,7 @@ class RemediationRoadmapResponse(BaseModel):
     projected_coverage_pct: float
     phases: list[RemediationPhase]
     total_open_findings: int
+    is_truncated: bool = False
     schema_version: str = "1.0"
 
 
@@ -4430,14 +4431,28 @@ def get_remediation_roadmap(
         )
 
     # All open or in-progress findings for this engagement.
-    all_findings = list_findings(
-        db,
-        engagement_id=engagement_id,
-        tenant_id=tenant_id,
-        severity_filter=None,
-        status_filter=None,
-        limit=500,
+    # list_findings is capped at MAX_PAGE_SIZE=100, so paginate up to HARD_MAX=2000.
+    _PAGE = 100
+    _HARD_MAX = (
+        2000  # safety cap — roadmaps beyond this are truncated with is_truncated=True
     )
+    _offset = 0
+    all_findings = []
+    while True:
+        _page = list_findings(
+            db,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+            severity_filter=None,
+            status_filter=None,
+            limit=_PAGE,
+            offset=_offset,
+        )
+        all_findings.extend(_page)
+        if len(_page) < _PAGE or len(all_findings) >= _HARD_MAX:
+            break
+        _offset += _PAGE
+    _truncated = len(all_findings) >= _HARD_MAX
     active = [f for f in all_findings if f.status in ("open", "in_progress")]
 
     # Build current NIST AI RMF coverage baseline from questionnaire.
@@ -4470,7 +4485,7 @@ def get_remediation_roadmap(
         phase_new_controls: set[str] = set()
         for f in findings:
             for raw in f.nist_ai_rmf_mappings or []:
-                cid = normalize_nist_control(str(raw))
+                cid = normalize_nist_control(raw)
                 if cid and cid not in covered_so_far:
                     phase_new_controls.add(cid)
 
@@ -4491,9 +4506,9 @@ def get_remediation_roadmap(
                 framework_mappings=f.framework_mappings or [],
                 nist_controls_addressed=len(
                     {
-                        normalize_nist_control(str(r))
+                        normalize_nist_control(r)
                         for r in (f.nist_ai_rmf_mappings or [])
-                        if normalize_nist_control(str(r))
+                        if normalize_nist_control(r)
                     }
                 ),
             )
@@ -4520,4 +4535,5 @@ def get_remediation_roadmap(
         projected_coverage_pct=projected_coverage_pct,
         phases=phases,
         total_open_findings=len(active),
+        is_truncated=_truncated,
     )
