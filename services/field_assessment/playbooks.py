@@ -281,17 +281,152 @@ COMPREHENSIVE_PLAYBOOK = FieldAssessmentPlaybook(
 )
 
 
+HIPAA_PLAYBOOK = FieldAssessmentPlaybook(
+    playbook_id="field_assessment.hipaa.v1",
+    assessment_type="hipaa",
+    version="1.0",
+    required_steps=(
+        "scan.microsoft_graph.import",
+        "scan.oauth_inventory.import",
+        "document.hipaa_baa.register",
+        "document.hipaa_phi_inventory.register",
+        "document.hipaa_risk_analysis.register",
+        "document.hipaa_sanction_policy.register",
+        "document.incident_response.register",
+        "document.training_records.register",
+        "document.hipaa_access_control_policy.register",
+        "interview.privacy_officer.capture",
+        "interview.security_officer.capture",
+        "interview.compliance_owner.capture",
+        "observation.phi_handling.capture",
+        "observation.breach_response.capture",
+        "observation.access_management.capture",
+        "observation.audit_logging.capture",
+        "observation.training_compliance.capture",
+        "evidence.graph.link",
+        "finding.evidence.validate",
+    ),
+    required_scan_sources=("microsoft_graph", "oauth_inventory"),
+    required_document_classes=(
+        "hipaa_baa",
+        "hipaa_phi_inventory",
+        "hipaa_risk_analysis",
+        "hipaa_sanction_policy",
+        "incident_response",
+        "training_records",
+        "hipaa_access_control_policy",
+    ),
+    required_interview_roles=(
+        "privacy_officer",
+        "security_officer",
+        "compliance_owner",
+    ),
+    required_observation_domains=(
+        "phi_handling",
+        "breach_response",
+        "access_management",
+        "audit_logging",
+        "training_compliance",
+    ),
+    required_evidence_links=AI_GOVERNANCE_PLAYBOOK.required_evidence_links,
+    required_asset_candidate_sources=("microsoft_graph", "oauth_inventory"),
+    blocking_gates=(
+        "scan.microsoft_graph.required",
+        "scan.oauth_inventory.required",
+        "document.hipaa_baa.required",
+        "document.hipaa_phi_inventory.required",
+        "document.hipaa_risk_analysis.required",
+        "document.hipaa_sanction_policy.required",
+        "document.incident_response.required",
+        "document.training_records.required",
+        "interview.privacy_officer.required",
+        "interview.security_officer.required",
+        "interview.compliance_owner.required",
+        "evidence.link.required",
+        "finding.evidence.required",
+        "finding.remediation.required",
+    ),
+    minimum_evidence_expectations=(
+        EvidenceExpectation(
+            evidence_type="document.hipaa_risk_analysis",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.hipaa_phi_inventory",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.hipaa_baa",
+            minimum_count=1,
+            freshness_days=None,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.hipaa_sanction_policy",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.incident_response",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.training_records",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+    ),
+    status_transition_requirements=MappingProxyType(
+        {
+            "evidence_collected": (
+                "scan.microsoft_graph.required",
+                "scan.oauth_inventory.required",
+                "document.hipaa_baa.required",
+                "document.hipaa_phi_inventory.required",
+                "document.hipaa_risk_analysis.required",
+                "document.hipaa_sanction_policy.required",
+                "document.incident_response.required",
+                "document.training_records.required",
+                "interview.privacy_officer.required",
+                "interview.security_officer.required",
+                "interview.compliance_owner.required",
+            ),
+            "report_generation": (
+                "evidence.link.required",
+                "finding.evidence.required",
+                "finding.remediation.required",
+            ),
+            "delivered": (
+                "evidence.link.required",
+                "finding.evidence.required",
+                "finding.remediation.required",
+                "escalation.critical.required",
+                "report.qa.approved",
+            ),
+        }
+    ),
+)
+
+
 _PLAYBOOKS: MappingProxyType[str, FieldAssessmentPlaybook] = MappingProxyType(
     {
         "ai_governance": AI_GOVERNANCE_PLAYBOOK,
         "comprehensive": COMPREHENSIVE_PLAYBOOK,
+        "hipaa": HIPAA_PLAYBOOK,
     }
 )
 
 _FALLBACK_PLAYBOOK_BY_ASSESSMENT_TYPE: MappingProxyType[str, str] = MappingProxyType(
     {
         "cmmc": "comprehensive",
-        "hipaa": "comprehensive",
         "soc2": "comprehensive",
         "iso27001": "comprehensive",
     }
