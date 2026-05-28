@@ -118,8 +118,13 @@ export default function PortalHome() {
       if (engRes.status === 'fulfilled') {
         const items = engRes.value.items;
         setEngagements(items);
-        // Auto-select when there is exactly one engagement and nothing stored.
-        if (items.length === 1 && !getStoredEngagementId()) {
+        const storedId = getStoredEngagementId();
+        const storedValid = storedId !== '' && items.some((e) => e.id === storedId);
+        if (storedId && !storedValid) {
+          setActiveId('');
+          setStoredEngagementId('');
+        }
+        if (items.length === 1 && !storedValid) {
           setActiveId(items[0].id);
           setStoredEngagementId(items[0].id);
         }
