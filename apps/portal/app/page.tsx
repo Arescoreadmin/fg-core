@@ -368,6 +368,26 @@ function ImmediateActionsCallout({
 }
 
 // ---------------------------------------------------------------------------
+// Findings pagination helper — pages through all findings up to HARD_MAX
+// ---------------------------------------------------------------------------
+
+async function fetchAllFindings(
+  engagementId: string,
+  hardMax = 500,
+): Promise<FindingSummary[]> {
+  const PAGE = 100;
+  const all: FindingSummary[] = [];
+  let offset = 0;
+  while (true) {
+    const res = await portalApi.listFindings(engagementId, { limit: PAGE, offset });
+    all.push(...res.items);
+    if (res.items.length < PAGE || all.length >= hardMax) break;
+    offset += PAGE;
+  }
+  return all;
+}
+
+// ---------------------------------------------------------------------------
 // Risk posture panel (composite — shown when engagement is active)
 // ---------------------------------------------------------------------------
 
@@ -379,20 +399,25 @@ function RiskPosturePanel({ engagementId }: { engagementId: string }) {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    let isCurrent = true;
     setLoading(true);
     setFailed(false);
     Promise.allSettled([
       portalApi.getRemediationRoadmap(engagementId),
-      portalApi.listFindings(engagementId, { limit: 100 }),
+      fetchAllFindings(engagementId),
       portalApi.listQuestionnaires(engagementId),
     ]).then(([rmRes, fnRes, qsRes]) => {
+      if (!isCurrent) return;
       if (rmRes.status === 'fulfilled') setRoadmap(rmRes.value);
-      if (fnRes.status === 'fulfilled') setFindings(fnRes.value.items);
+      if (fnRes.status === 'fulfilled') setFindings(fnRes.value);
       if (qsRes.status === 'fulfilled') setQuestionnaires(qsRes.value);
       const allFailed = [rmRes, fnRes, qsRes].every((r) => r.status === 'rejected');
       if (allFailed) setFailed(true);
       setLoading(false);
     });
+    return () => {
+      isCurrent = false;
+    };
   }, [engagementId]);
 
   if (loading) {
