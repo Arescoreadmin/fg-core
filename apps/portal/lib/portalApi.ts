@@ -81,6 +81,8 @@ export interface FindingSummary {
   framework_mappings: string[];
   nist_ai_rmf_mappings: string[];
   remediation_hint: string | null;
+  remediation_priority: number;
+  effort_level: 'low' | 'medium' | 'high';
   created_at: string;
 }
 
@@ -182,6 +184,7 @@ export interface FindingExplanation {
   what_it_means: string;
   affected_entities: AffectedEntitySummary[];
   registry_recommendation: string;
+  remediation_steps: string[];
   evidence_count: number;
   source_scan_ids: string[];
   last_seen: string;
@@ -191,6 +194,38 @@ export interface FindingExplanation {
   template: string;
   explanation_version: string;
   generated_at: string;
+  schema_version: string;
+}
+
+export interface RemediationPhaseFinding {
+  finding_id: string;
+  title: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  status: string;
+  finding_type: string;
+  remediation_hint: string | null;
+  remediation_priority: number;
+  effort_level: 'low' | 'medium' | 'high';
+  nist_ai_rmf_mappings: string[];
+  framework_mappings: string[];
+  nist_controls_addressed: number;
+}
+
+export interface RemediationPhase {
+  phase_id: string;
+  label: string;
+  window: string;
+  findings: RemediationPhaseFinding[];
+  compliance_delta_pct: number;
+  nist_controls_addressed: number;
+}
+
+export interface RemediationRoadmap {
+  engagement_id: string;
+  current_coverage_pct: number;
+  projected_coverage_pct: number;
+  phases: RemediationPhase[];
+  total_open_findings: number;
   schema_version: string;
 }
 
@@ -347,5 +382,10 @@ export const portalApi = {
   // Coverage matrix
   listQuestionnaires(engagementId: string): Promise<Questionnaire[]> {
     return request(`/field-assessment/engagements/${engagementId}/questionnaires`);
+  },
+
+  // Remediation roadmap
+  getRemediationRoadmap(engagementId: string): Promise<RemediationRoadmap> {
+    return request(`/field-assessment/engagements/${engagementId}/remediation-roadmap`);
   },
 } as const;

@@ -390,6 +390,8 @@ class FindingResponse(BaseModel):
     nist_ai_rmf_mappings: list[Any]
     evidence_ref_ids: list[Any]
     remediation_hint: str | None
+    remediation_priority: int = 0
+    effort_level: str = "medium"
     schema_version: str
     created_at: str
     updated_at: str
@@ -398,6 +400,38 @@ class FindingResponse(BaseModel):
 class FindingListResponse(BaseModel):
     items: list[FindingResponse]
     total_count: int
+
+
+class RemediationPhaseFinding(BaseModel):
+    finding_id: str
+    title: str
+    severity: str
+    status: str
+    finding_type: str
+    remediation_hint: str | None
+    remediation_priority: int
+    effort_level: str
+    nist_ai_rmf_mappings: list[Any]
+    framework_mappings: list[Any]
+    nist_controls_addressed: int
+
+
+class RemediationPhase(BaseModel):
+    phase_id: str
+    label: str
+    window: str
+    findings: list[RemediationPhaseFinding]
+    compliance_delta_pct: float
+    nist_controls_addressed: int
+
+
+class RemediationRoadmapResponse(BaseModel):
+    engagement_id: str
+    current_coverage_pct: float
+    projected_coverage_pct: float
+    phases: list[RemediationPhase]
+    total_open_findings: int
+    schema_version: str = "1.0"
 
 
 class EvidenceLinkResponse(BaseModel):
@@ -581,6 +615,7 @@ class FindingExplanationResponse(BaseModel):
     what_it_means: str
     affected_entities: list[AffectedEntitySummaryResponse]
     registry_recommendation: str
+    remediation_steps: list[str] = []
     evidence_count: int
     source_scan_ids: list[str]
     last_seen: str
@@ -704,6 +739,11 @@ def _observation_to_response(o: FaFieldObservation) -> ObservationResponse:
 
 
 def _finding_to_response(f: FaNormalizedFinding) -> FindingResponse:
+    from services.field_assessment.remediation import (
+        compute_priority_score,
+        compute_effort_level,
+    )
+
     return FindingResponse(
         id=f.id,
         tenant_id=f.tenant_id,
@@ -720,6 +760,8 @@ def _finding_to_response(f: FaNormalizedFinding) -> FindingResponse:
         nist_ai_rmf_mappings=f.nist_ai_rmf_mappings or [],
         evidence_ref_ids=f.evidence_ref_ids or [],
         remediation_hint=f.remediation_hint,
+        remediation_priority=compute_priority_score(f),
+        effort_level=compute_effort_level(f),
         schema_version=f.schema_version,
         created_at=f.created_at,
         updated_at=f.updated_at,
@@ -3884,6 +3926,8 @@ def get_finding_explanation_route(
         raise HTTPException(
             status_code=404, detail=api_error("FINDING_NOT_FOUND", str(exc))
         )
+    from services.field_assessment.remediation import generate_remediation_steps
+
     return FindingExplanationResponse(
         finding_id=finding.id,
         finding_type=finding.finding_type,
@@ -3900,6 +3944,7 @@ def get_finding_explanation_route(
             for e in exp.affected_entities
         ],
         registry_recommendation=exp.registry_recommendation,
+        remediation_steps=generate_remediation_steps(finding),
         evidence_count=exp.evidence_count,
         source_scan_ids=exp.source_scan_ids,
         last_seen=exp.last_seen,
@@ -4343,3 +4388,136 @@ def list_questionnaires_route(
         responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
         result.append(_questionnaire_to_response(q, responses, scan_counts=scan_counts))
     return result
+
+
+# ---------------------------------------------------------------------------
+# Routes — Remediation Roadmap
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/engagements/{engagement_id}/remediation-roadmap",
+    response_model=RemediationRoadmapResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_remediation_roadmap(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> RemediationRoadmapResponse:
+    """Phased remediation roadmap with compliance delta preview.
+
+    Groups open/in-progress findings into three execution phases based on
+    priority score (severity × scan evidence × NIST control coverage).
+    Per-phase compliance delta is computed against the current questionnaire
+    baseline so clients see projected NIST AI RMF coverage improvement.
+    """
+    from services.field_assessment.remediation import (
+        compute_priority_score,
+        compute_effort_level,
+        assign_phase,
+        PHASE_META,
+        PHASE_ORDER,
+        NIST_TOTAL_CONTROLS,
+    )
+
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    # All open or in-progress findings for this engagement.
+    all_findings = list_findings(
+        db,
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+        severity_filter=None,
+        status_filter=None,
+        limit=500,
+    )
+    active = [f for f in all_findings if f.status in ("open", "in_progress")]
+
+    # Build current NIST AI RMF coverage baseline from questionnaire.
+    current_coverage_pct = 0.0
+    implemented_controls: set[str] = set()
+    qs = list_questionnaires(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    if qs:
+        responses = list_responses(db, questionnaire_id=qs[0].id, tenant_id=tenant_id)
+        implemented = [r for r in responses if r.response_status == "implemented"]
+        current_coverage_pct = round((len(implemented) / NIST_TOTAL_CONTROLS) * 100, 1)
+        implemented_controls = {r.control_id for r in implemented}
+
+    # Group findings into phases; track NIST controls addressed per phase.
+    phase_buckets: dict[str, list[FaNormalizedFinding]] = {p: [] for p in PHASE_ORDER}
+    for f in active:
+        score = compute_priority_score(f)
+        phase_buckets[assign_phase(score)].append(f)
+
+    # Compute cumulative projected coverage.
+    covered_so_far: set[str] = set(implemented_controls)
+    phases: list[RemediationPhase] = []
+
+    for phase_id in PHASE_ORDER:
+        findings = sorted(
+            phase_buckets[phase_id],
+            key=lambda f: compute_priority_score(f),
+            reverse=True,
+        )
+        # Unique NIST controls addressed by this phase that are not yet implemented.
+        phase_new_controls: set[str] = set()
+        for f in findings:
+            for raw in f.nist_ai_rmf_mappings or []:
+                cid = normalize_nist_control(str(raw))
+                if cid and cid not in covered_so_far:
+                    phase_new_controls.add(cid)
+
+        delta_pct = round((len(phase_new_controls) / NIST_TOTAL_CONTROLS) * 100, 1)
+        covered_so_far |= phase_new_controls
+
+        phase_findings = [
+            RemediationPhaseFinding(
+                finding_id=f.id,
+                title=f.title,
+                severity=f.severity,
+                status=f.status,
+                finding_type=f.finding_type,
+                remediation_hint=f.remediation_hint,
+                remediation_priority=compute_priority_score(f),
+                effort_level=compute_effort_level(f),
+                nist_ai_rmf_mappings=f.nist_ai_rmf_mappings or [],
+                framework_mappings=f.framework_mappings or [],
+                nist_controls_addressed=len(
+                    {
+                        normalize_nist_control(str(r))
+                        for r in (f.nist_ai_rmf_mappings or [])
+                        if normalize_nist_control(str(r))
+                    }
+                ),
+            )
+            for f in findings
+        ]
+
+        meta = PHASE_META[phase_id]
+        phases.append(
+            RemediationPhase(
+                phase_id=phase_id,
+                label=meta["label"],
+                window=meta["window"],
+                findings=phase_findings,
+                compliance_delta_pct=delta_pct,
+                nist_controls_addressed=len(phase_new_controls),
+            )
+        )
+
+    projected_coverage_pct = round((len(covered_so_far) / NIST_TOTAL_CONTROLS) * 100, 1)
+
+    return RemediationRoadmapResponse(
+        engagement_id=engagement_id,
+        current_coverage_pct=current_coverage_pct,
+        projected_coverage_pct=projected_coverage_pct,
+        phases=phases,
+        total_open_findings=len(active),
+    )
