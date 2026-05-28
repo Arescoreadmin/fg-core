@@ -229,6 +229,18 @@ export interface RemediationRoadmap {
   schema_version: string;
 }
 
+export interface FindingStatusPatch {
+  status: 'remediated' | 'accepted' | 'false_positive';
+  notes: string;
+  owner_email: string;
+}
+
+export interface FindingStatusPatchResult {
+  finding: FindingSummary;
+  observation_id: string;
+  questionnaire_controls_updated: number;
+}
+
 export interface ContinuityGap {
   asset_id: string;
   asset_type: string;
@@ -387,5 +399,17 @@ export const portalApi = {
   // Remediation roadmap
   getRemediationRoadmap(engagementId: string): Promise<RemediationRoadmap> {
     return request(`/field-assessment/engagements/${engagementId}/remediation-roadmap`);
+  },
+
+  // Closed-loop finding status update
+  updateFindingStatus(
+    engagementId: string,
+    findingId: string,
+    payload: FindingStatusPatch,
+  ): Promise<FindingStatusPatchResult> {
+    return request(
+      `/field-assessment/engagements/${engagementId}/findings/${findingId}`,
+      { method: 'PATCH', body: JSON.stringify(payload) },
+    );
   },
 } as const;

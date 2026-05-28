@@ -54,7 +54,8 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | PR 28 | NIST Control Coverage Matrix | ✅ merged | Per-control evidence fusion (questionnaire + scan); coverage matrix in portal; `governance:read`-gated list endpoint |
 | PR 29 | HIPAA + SOC 2 Playbooks | 🔄 in progress | Dedicated HIPAA and SOC 2 governance execution playbooks; Privacy/Security Officer gates (HIPAA); Executive Sponsor + 8 document class gates (SOC 2); annual evidence freshness on all policy docs |
 | PR 30 | Portal Engagement Selector | 🔄 in progress | localStorage-backed engagement persistence (`fg_portal_eid`); engagement selector hub on home page; auto-select single engagement; all 4 sub-pages fall back to stored ID when `?e=` param absent |
-| PR 31 | Remediation Roadmap v1 | 🔄 in progress | Priority scoring (severity × scan evidence × NIST coverage); 3-phase execution roadmap (0–30/31–60/61–90 days); per-phase compliance delta preview; quick-wins matrix (impact vs effort); AI step-by-step runbooks |
+| PR 31 | Remediation Roadmap v1 | ✅ merged | Priority scoring (severity × scan evidence × NIST coverage); 3-phase execution roadmap (0–30/31–60/61–90 days); per-phase compliance delta preview; quick-wins matrix (impact vs effort); step-by-step runbooks |
+| PR 32 | Remediation Closed Loop | 🔄 in progress | Client marks finding resolved with evidence notes; `FaFieldObservation` + `FaEvidenceLink` created; NIST questionnaire responses bumped `not_implemented`→`partial`; live roadmap refresh in portal |
 
 ---
 
@@ -108,4 +109,4 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-05-28 (PR 31 in progress)*
+*Last updated: 2026-05-28 (PR 32 in progress)*

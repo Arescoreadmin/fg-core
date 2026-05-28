@@ -4324,3 +4324,47 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/route_inventory.json` + related — regenerated
 - `docs/ai/PR_FIX_LOG.md` — updated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
+## PR 32 — Remediation Closed Loop (2026-05-28)
+
+**Route added:** `PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}`
+
+**Scope required:** `governance:write`
+
+**Review classification:** New write route (finding status mutation + evidence creation)
+
+**Security review:**
+- Tenant isolation enforced: all DB queries scope to `(engagement_id, tenant_id)`.
+- Scope gate: `governance:write` required — same scope as attestation submit.
+- No tenant_id, raw scan payloads, or credentials accepted in request body.
+- `notes` capped at 2000 characters; `owner_email` validated as non-empty string.
+- Extra fields rejected (`extra="forbid"` on `FindingStatusPatchRequest`).
+- 409 guard prevents re-patching already-terminal findings.
+- Audit event emitted with finding_id, new_status, observation_id — client notes NOT included.
+- Portal BFF `PORTAL_WRITE_PATTERNS` explicitly enumerates this path; no wildcard.
+
+**Behavioral contract:**
+- Allowed transitions: `open` or `in_progress` → `remediated` / `accepted` / `false_positive`.
+- Creates `FaFieldObservation` (evidence of client action) + `FaEvidenceLink` (from finding to observation).
+- Bumps matching NIST AI RMF questionnaire responses: `not_implemented` / `not_assessed` → `partial`.
+- All side effects committed atomically in one transaction.
+
+**Artifacts regenerated:**
+- Route inventory regenerated via `make route-inventory-generate`
+- OpenAPI contracts regenerated via `make fg-contract`
+- Contract authority markers updated in `BLUEPRINT_STAGED.md` + `CONTRACT.md`
+
+**Files touched:**
+- `services/field_assessment/store.py` — `update_finding_status()` added
+- `api/field_assessment.py` — `FindingStatusPatchRequest`, `FindingStatusPatchResponse`, `patch_finding_status_route`, `_TERMINAL_FINDING_STATUSES`
+- `apps/portal/app/api/core/[...path]/route.ts` — PATCH pattern + `PATCH` export
+- `apps/portal/lib/portalApi.ts` — `FindingStatusPatch`, `FindingStatusPatchResult`, `updateFindingStatus()`
+- `apps/portal/app/remediation/page.tsx` — `StatusControl` component + live roadmap refresh
+- `apps/portal/.eslintrc.json` — new (was missing, unblocks `portal-lint`)
+- `tests/test_finding_closed_loop.py` — 14 new tests
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
+- `tools/ci/route_inventory.json` — regenerated
+- `docs/ai/PR_FIX_LOG.md` — updated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry

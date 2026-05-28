@@ -12575,3 +12575,75 @@ Added `tests/test_remediation_roadmap.py` (13 tests):
 - 5 prefix resolution tests (direct family codes, title-index lookup, MFA template, generic fallback, non-msgraph)
 
 **Validation:** `ruff check` + `ruff format --check` clean; `pytest tests/test_remediation_roadmap.py` passes.
+
+---
+
+# PR 32 — Remediation Closed Loop
+
+**Date:** 2026-05-28
+**Branch:** feat/remediation-closed-loop-pr32
+**Scope:** New write route; evidence propagation; portal status controls
+
+## Summary
+
+Adds closed-loop remediation: client marks a finding resolved with evidence notes, which
+triggers `FaFieldObservation` creation, `FaEvidenceLink` from finding to observation, and
+bumps matching NIST AI RMF questionnaire responses from `not_implemented`/`not_assessed`
+to `partial`. Finding status is set to the requested terminal value atomically.
+Portal `StatusControl` component wired into each `FindingCard` (expanded view) with live
+roadmap refresh after submission.
+
+## Changes
+
+### 1. `update_finding_status()` — new store function
+
+**File:** `services/field_assessment/store.py`
+
+Wraps `get_finding()` + field mutation + `db.flush()`. Raises `FindingNotFound` if the
+finding does not belong to the `(engagement_id, tenant_id)` pair.
+
+### 2. PATCH endpoint — `api/field_assessment.py`
+
+- `FindingStatusPatchRequest`: `status` (Literal[remediated|accepted|false_positive]),
+  `notes` (1–2000 chars), `owner_email`. `extra="forbid"`.
+- `FindingStatusPatchResponse`: `finding: FindingResponse`, `observation_id: str`,
+  `questionnaire_controls_updated: int`.
+- `_TERMINAL_FINDING_STATUSES`: frozenset used for 409 guard.
+- `PATCH /engagements/{id}/findings/{finding_id}` — `governance:write` gated.
+- All five mutations (observation, evidence link, questionnaire bumps, finding status,
+  audit event) in one transaction.
+
+### 3. Portal BFF — `apps/portal/app/api/core/[...path]/route.ts`
+
+- Added PATCH pattern to `PORTAL_WRITE_PATTERNS`.
+- Exported `PATCH` handler.
+
+### 4. Portal API client — `apps/portal/lib/portalApi.ts`
+
+- `FindingStatusPatch` + `FindingStatusPatchResult` interfaces.
+- `updateFindingStatus()` method.
+
+### 5. Remediation page — `apps/portal/app/remediation/page.tsx`
+
+- `StatusControl` component: status type selector (3 options), email input, notes textarea,
+  submit button. Shows success confirmation + controls-updated count.
+- `FindingCard` + `PhaseCard` now accept `engagementId` and `onResolved`.
+- `refreshKey` state in `RemediationPageInner` triggers roadmap reload after any resolution.
+
+### 6. ESLint config — `apps/portal/.eslintrc.json`
+
+Pre-existing gap: portal had no ESLint config, causing `portal-lint` to hang on an
+interactive prompt. Added `extends: next/core-web-vitals` (mirrors console config).
+
+### 7. Tests — `tests/test_finding_closed_loop.py`
+
+14 tests: request model validation (6), terminal status set (3), update-finding-status
+pure-logic (4).
+
+### 8. Contract authority + route inventory
+
+`make fg-contract` → `refresh_contract_authority.py` → SHA256 updated in
+`BLUEPRINT_STAGED.md` + `CONTRACT.md`. `make route-inventory-generate` updated
+`tools/ci/route_inventory.json`.
+
+**Validation:** `make fg-lint` clean; `make portal-lint` clean; `pytest tests/test_finding_closed_loop.py` 14/14 pass; `make fg-contract` pass.

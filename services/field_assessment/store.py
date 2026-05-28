@@ -506,6 +506,23 @@ def get_finding(
     return row
 
 
+def update_finding_status(
+    db: Session,
+    *,
+    finding_id: str,
+    engagement_id: str,
+    tenant_id: str,
+    new_status: str,
+) -> FaNormalizedFinding:
+    finding = get_finding(
+        db, finding_id=finding_id, engagement_id=engagement_id, tenant_id=tenant_id
+    )
+    finding.status = new_status
+    finding.updated_at = utc_iso8601_z_now()
+    db.flush()
+    return finding
+
+
 def list_findings(
     db: Session,
     *,

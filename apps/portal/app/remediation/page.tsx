@@ -9,6 +9,7 @@ import {
   type RemediationRoadmap,
   type RemediationPhaseFinding,
   type RemediationPhase,
+  type FindingStatusPatch,
 } from '@/lib/portalApi';
 import { getStoredEngagementId } from '@/lib/engagementStore';
 
@@ -133,12 +134,153 @@ function OverviewBanner({ roadmap }: { roadmap: RemediationRoadmap }) {
   );
 }
 
+const STATUS_OPTIONS: { value: FindingStatusPatch['status']; label: string; hint: string }[] = [
+  { value: 'remediated', label: 'Remediated', hint: 'Fix has been applied and verified' },
+  { value: 'accepted', label: 'Risk accepted', hint: 'Risk acknowledged and accepted by owner' },
+  { value: 'false_positive', label: 'False positive', hint: 'Finding does not apply to this environment' },
+];
+
+function StatusControl({
+  engagementId,
+  finding,
+  onResolved,
+}: {
+  engagementId: string;
+  finding: RemediationPhaseFinding;
+  onResolved: () => void;
+}) {
+  const [status, setStatus] = useState<FindingStatusPatch['status']>('remediated');
+  const [notes, setNotes] = useState('');
+  const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState<{ controlsUpdated: number } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  if (success) {
+    return (
+      <div className="rounded border border-green-500/30 bg-green-500/5 p-3 space-y-1.5">
+        <p className="text-xs font-semibold text-green-300">Marked as resolved</p>
+        {success.controlsUpdated > 0 && (
+          <p className="text-xs text-muted">
+            {success.controlsUpdated} NIST control{success.controlsUpdated !== 1 ? 's' : ''} bumped to <span className="text-foreground">partial</span> coverage.
+          </p>
+        )}
+        <button
+          type="button"
+          className="text-xs text-muted underline hover:text-foreground transition-colors"
+          onClick={onResolved}
+        >
+          Refresh roadmap
+        </button>
+      </div>
+    );
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notes.trim() || !email.trim()) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const result = await portalApi.updateFindingStatus(engagementId, finding.finding_id, {
+        status,
+        notes: notes.trim(),
+        owner_email: email.trim(),
+      });
+      setSuccess({ controlsUpdated: result.questionnaire_controls_updated });
+    } catch (e) {
+      if (e instanceof PortalApiError && e.status === 409) {
+        setErr('This finding has already been resolved.');
+      } else {
+        setErr('Failed to update finding. Please try again.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="rounded border border-border bg-surface-2 p-3 space-y-3"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <p className="text-xs font-semibold text-muted uppercase tracking-wider">Mark as resolved</p>
+
+      <div className="space-y-1">
+        <p className="text-[11px] text-muted">Resolution type</p>
+        <div className="flex flex-wrap gap-1.5">
+          {STATUS_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setStatus(opt.value)}
+              className={`rounded border px-2 py-1 text-xs font-medium transition-colors ${
+                status === opt.value
+                  ? 'border-foreground/30 bg-surface-3 text-foreground'
+                  : 'border-border bg-surface-2 text-muted hover:text-foreground'
+              }`}
+              title={opt.hint}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[11px] text-muted" htmlFor={`email-${finding.finding_id}`}>
+          Owner email
+        </label>
+        <input
+          id={`email-${finding.finding_id}`}
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="owner@example.com"
+          className="w-full rounded border border-border bg-surface-3 px-2 py-1.5 text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-foreground/30"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[11px] text-muted" htmlFor={`notes-${finding.finding_id}`}>
+          Evidence notes <span className="text-red-400">*</span>
+        </label>
+        <textarea
+          id={`notes-${finding.finding_id}`}
+          required
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Describe what was done to address this finding…"
+          className="w-full rounded border border-border bg-surface-3 px-2 py-1.5 text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-foreground/30 resize-none"
+        />
+      </div>
+
+      {err && <p className="text-xs text-red-300">{err}</p>}
+
+      <button
+        type="submit"
+        disabled={submitting || !notes.trim() || !email.trim()}
+        className="rounded border border-foreground/20 bg-surface-3 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {submitting ? 'Submitting…' : 'Submit resolution'}
+      </button>
+    </form>
+  );
+}
+
 function FindingCard({
   finding,
   phaseId,
+  engagementId,
+  onResolved,
 }: {
   finding: RemediationPhaseFinding;
   phaseId: string;
+  engagementId: string;
+  onResolved: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -167,7 +309,7 @@ function FindingCard({
       )}
 
       {expanded && (
-        <div className="pt-1 space-y-3 border-t border-border mt-2">
+        <div className="pt-1 space-y-3 border-t border-border mt-2" onClick={(e) => e.stopPropagation()}>
           {finding.remediation_hint && (
             <p className="text-xs text-foreground leading-relaxed">{finding.remediation_hint}</p>
           )}
@@ -181,13 +323,26 @@ function FindingCard({
             </div>
           )}
           <p className="text-[11px] text-muted font-mono">ID: {finding.finding_id}</p>
+          <StatusControl
+            engagementId={engagementId}
+            finding={finding}
+            onResolved={onResolved}
+          />
         </div>
       )}
     </div>
   );
 }
 
-function PhaseCard({ phase }: { phase: RemediationPhase }) {
+function PhaseCard({
+  phase,
+  engagementId,
+  onResolved,
+}: {
+  phase: RemediationPhase;
+  engagementId: string;
+  onResolved: () => void;
+}) {
   const accent = PHASE_ACCENT[phase.phase_id] ?? PHASE_ACCENT.planned;
   const isEmpty = phase.findings.length === 0;
 
@@ -225,7 +380,13 @@ function PhaseCard({ phase }: { phase: RemediationPhase }) {
           <p className="text-xs text-muted text-center py-4">No findings in this phase.</p>
         ) : (
           phase.findings.map((f) => (
-            <FindingCard key={f.finding_id} finding={f} phaseId={phase.phase_id} />
+            <FindingCard
+              key={f.finding_id}
+              finding={f}
+              phaseId={phase.phase_id}
+              engagementId={engagementId}
+              onResolved={onResolved}
+            />
           ))
         )}
       </div>
@@ -345,6 +506,9 @@ function RemediationPageInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'phases' | 'matrix'>('phases');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refreshRoadmap = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
     if (!engagementId) return;
@@ -361,7 +525,7 @@ function RemediationPageInner() {
         }
       })
       .finally(() => setLoading(false));
-  }, [engagementId]);
+  }, [engagementId, refreshKey]);
 
   if (!engagementId) {
     return (
@@ -434,7 +598,12 @@ function RemediationPageInner() {
           {view === 'phases' && (
             <div className="space-y-4">
               {roadmap.phases.map((phase) => (
-                <PhaseCard key={phase.phase_id} phase={phase} />
+                <PhaseCard
+                  key={phase.phase_id}
+                  phase={phase}
+                  engagementId={engagementId}
+                  onResolved={refreshRoadmap}
+                />
               ))}
             </div>
           )}
