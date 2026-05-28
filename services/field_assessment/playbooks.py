@@ -416,18 +416,159 @@ HIPAA_PLAYBOOK = FieldAssessmentPlaybook(
 )
 
 
+SOC2_PLAYBOOK = FieldAssessmentPlaybook(
+    playbook_id="field_assessment.soc2.v1",
+    assessment_type="soc2",
+    version="1.0",
+    required_steps=(
+        "scan.microsoft_graph.import",
+        "scan.oauth_inventory.import",
+        "document.security_policy.register",
+        "document.access_control_policy.register",
+        "document.incident_response.register",
+        "document.change_management.register",
+        "document.vendor_risk.register",
+        "document.business_continuity.register",
+        "document.cryptography_policy.register",
+        "document.risk_assessment.register",
+        "interview.executive_sponsor.capture",
+        "interview.security_owner.capture",
+        "interview.compliance_owner.capture",
+        "interview.system_owner.capture",
+        "observation.logical_access.capture",
+        "observation.change_management.capture",
+        "observation.incident_response.capture",
+        "observation.availability_monitoring.capture",
+        "observation.vendor_management.capture",
+        "observation.encryption.capture",
+        "evidence.graph.link",
+        "finding.evidence.validate",
+    ),
+    required_scan_sources=("microsoft_graph", "oauth_inventory"),
+    required_document_classes=(
+        "security_policy",
+        "access_control_policy",
+        "incident_response",
+        "change_management",
+        "vendor_risk",
+        "business_continuity",
+        "cryptography_policy",
+        "risk_assessment",
+    ),
+    required_interview_roles=(
+        "executive_sponsor",
+        "security_owner",
+        "compliance_owner",
+        "system_owner",
+    ),
+    required_observation_domains=(
+        "logical_access",
+        "change_management",
+        "incident_response",
+        "availability_monitoring",
+        "vendor_management",
+        "encryption",
+    ),
+    required_evidence_links=AI_GOVERNANCE_PLAYBOOK.required_evidence_links,
+    required_asset_candidate_sources=("microsoft_graph", "oauth_inventory"),
+    blocking_gates=(
+        "scan.microsoft_graph.required",
+        "scan.oauth_inventory.required",
+        "document.security_policy.required",
+        "document.access_control_policy.required",
+        "document.incident_response.required",
+        "document.change_management.required",
+        "document.vendor_risk.required",
+        "document.risk_assessment.required",
+        "interview.executive_sponsor.required",
+        "interview.security_owner.required",
+        "interview.compliance_owner.required",
+        "evidence.link.required",
+        "finding.evidence.required",
+        "finding.remediation.required",
+    ),
+    minimum_evidence_expectations=(
+        EvidenceExpectation(
+            evidence_type="document.security_policy",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.risk_assessment",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.incident_response",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.vendor_risk",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.change_management",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
+            evidence_type="document.business_continuity",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+    ),
+    status_transition_requirements=MappingProxyType(
+        {
+            "evidence_collected": (
+                "scan.microsoft_graph.required",
+                "scan.oauth_inventory.required",
+                "document.security_policy.required",
+                "document.access_control_policy.required",
+                "document.incident_response.required",
+                "document.change_management.required",
+                "document.vendor_risk.required",
+                "document.risk_assessment.required",
+                "interview.executive_sponsor.required",
+                "interview.security_owner.required",
+                "interview.compliance_owner.required",
+            ),
+            "report_generation": (
+                "evidence.link.required",
+                "finding.evidence.required",
+                "finding.remediation.required",
+            ),
+            "delivered": (
+                "evidence.link.required",
+                "finding.evidence.required",
+                "finding.remediation.required",
+                "escalation.critical.required",
+                "report.qa.approved",
+            ),
+        }
+    ),
+)
+
+
 _PLAYBOOKS: MappingProxyType[str, FieldAssessmentPlaybook] = MappingProxyType(
     {
         "ai_governance": AI_GOVERNANCE_PLAYBOOK,
         "comprehensive": COMPREHENSIVE_PLAYBOOK,
         "hipaa": HIPAA_PLAYBOOK,
+        "soc2": SOC2_PLAYBOOK,
     }
 )
 
 _FALLBACK_PLAYBOOK_BY_ASSESSMENT_TYPE: MappingProxyType[str, str] = MappingProxyType(
     {
         "cmmc": "comprehensive",
-        "soc2": "comprehensive",
         "iso27001": "comprehensive",
     }
 )

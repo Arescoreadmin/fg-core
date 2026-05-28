@@ -12415,3 +12415,46 @@ New `finding_explainer.py` service resolves scan evidence for a normalized findi
 - `ruff format --check .` → all files formatted
 - `pytest tests/test_playbook_hipaa.py tests/test_playbook_progress.py` → 52 passed
 - `make fg-fast` → all gates passed
+
+---
+
+### 2026-05-28 — PR 29 Extension: SOC 2 Dedicated Governance Playbook
+
+**Branch:** `feat/hipaa-playbook-pr29`
+
+**PR/context:** PR 29 extension — `SOC2_PLAYBOOK` added alongside `HIPAA_PLAYBOOK`
+
+**Area:** Services / Field Assessment / Playbooks
+
+**Summary of changes:**
+
+1. **`SOC2_PLAYBOOK`** (`services/field_assessment/playbooks.py`)
+   - New frozen `FieldAssessmentPlaybook` with `playbook_id = "field_assessment.soc2.v1"`.
+   - `_PLAYBOOKS` registry updated: `"soc2"` now maps to `SOC2_PLAYBOOK`; removed from fallback map.
+
+2. **Required document classes (8):** `security_policy`, `access_control_policy`, `incident_response`, `change_management`, `vendor_risk`, `business_continuity`, `cryptography_policy`, `risk_assessment`
+
+3. **Required interview roles (4):** `executive_sponsor`, `security_owner`, `compliance_owner`, `system_owner`
+
+4. **Required observation domains (6):** `logical_access`, `change_management`, `incident_response`, `availability_monitoring`, `vendor_management`, `encryption`
+
+5. **Blocking gates (14):** AICPA Trust Service Criteria document + interview gates + standard evidence gates
+
+6. **Evidence freshness:** all policy documents 365 days; all block `report_generation` and `delivered`
+
+**Safety constraints:**
+- No API routes, DB schemas, auth scopes, or tenant isolation logic modified.
+- `SOC2_PLAYBOOK` is frozen — immutable at runtime.
+- `get_playbook("soc2")` dispatch is case-insensitive.
+- All existing playbooks unaffected.
+
+**Files touched:**
+- `services/field_assessment/playbooks.py` — `SOC2_PLAYBOOK` definition; registry + fallback map update
+- `tests/test_playbook_hipaa.py` — 34 SOC 2 tests added (77 total)
+- `ROADMAP.md` — P1 #8 updated to reflect HIPAA + SOC 2
+
+**Validation:**
+- `ruff check .` → no issues
+- `ruff format --check .` → all files formatted
+- `pytest tests/test_playbook_hipaa.py` → 77 passed
+- `make fg-fast` → all gates passed
