@@ -259,6 +259,14 @@ export function ReportViewer({ document: doc, loading, error, engagementId, onSh
   const normalizedFindings = safeArr(body.normalized_findings);
   const frameworkSummary = safeObj(body.framework_summary);
   const confidence = safeObj(body.confidence);
+  const execSummary = safeObj(body.executive_summary);
+
+  const POSTURE_CLASS: Record<string, string> = {
+    critical: 'border-red-500/30 bg-red-500/5 text-red-300',
+    high: 'border-amber-500/30 bg-amber-500/5 text-amber-200',
+    medium: 'border-yellow-500/30 bg-yellow-500/5 text-yellow-200',
+    low: 'border-green-500/30 bg-green-500/5 text-green-300',
+  };
 
   return (
     <Card className="border-border" aria-label="report-viewer">
@@ -296,6 +304,37 @@ export function ReportViewer({ document: doc, loading, error, engagementId, onSh
       </CardHeader>
 
       <CardContent className="px-4 pb-4 space-y-3">
+
+        {safeStr(execSummary.narrative) && (
+          <div className="rounded border border-border bg-surface-2 p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Executive Summary</span>
+              {safeStr(execSummary.risk_posture) && (
+                <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs border font-medium capitalize ${POSTURE_CLASS[safeStr(execSummary.risk_posture)] ?? 'border-border bg-surface-3 text-muted'}`}>
+                  {safeStr(execSummary.risk_posture)} risk
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-foreground leading-relaxed whitespace-pre-line">
+              {safeStr(execSummary.narrative)}
+            </p>
+            {safeArr(execSummary.key_concerns).length > 0 && (
+              <ul className="space-y-1">
+                {safeArr(execSummary.key_concerns).map((c, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-muted">
+                    <span className="text-amber-400 mt-px shrink-0">▸</span>
+                    <span>{safeStr(c)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {safeStr(execSummary.generation_note) && (
+              <p className="text-[11px] text-muted border-t border-border pt-2">
+                {safeStr(execSummary.generation_note)}
+              </p>
+            )}
+          </div>
+        )}
 
         {findings.length > 0 && (
           <SectionAccordion title={`Findings (${findings.length})`} defaultOpen>

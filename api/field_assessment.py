@@ -3205,6 +3205,7 @@ _VALID_REPORT_TYPES: frozenset[str] = frozenset(
 )
 
 _ALL_SECTIONS: list[str] = [
+    "executive_summary",
     "findings",
     "remediations",
     "evidence_appendix",
@@ -3390,6 +3391,30 @@ def _build_engagement_report_json(
         section_content["normalized_findings"] = [
             _safe_finding_dict(f) for f in all_findings
         ]
+
+    if "executive_summary" in active_sections and report_type in (
+        "executive_summary",
+        "full_assessment",
+    ):
+        from services.field_assessment.executive_summary import (
+            generate_executive_summary,
+        )
+
+        confidence_overall = report.confidence.overall if report.confidence else 0.0
+        section_content["executive_summary"] = generate_executive_summary(
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+            findings=[
+                {
+                    "severity": f.severity,
+                    "domain": f.domain,
+                    "gap_classification": f.gap_classification,
+                }
+                for f in report.findings
+            ],
+            framework_summary=dict(report.framework_summary),
+            confidence_overall=confidence_overall,
+        )
 
     section_hashes = _compute_section_hashes(section_content)
 
