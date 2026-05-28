@@ -106,6 +106,14 @@ class TestHipaaBlockingGates:
             "document.hipaa_sanction_policy.required" in HIPAA_PLAYBOOK.blocking_gates
         )
 
+    def test_access_control_policy_gate(self) -> None:
+        # Regression: was in required_document_classes but absent from blocking_gates,
+        # allowing evidence_collected transition despite missing this required document.
+        assert (
+            "document.hipaa_access_control_policy.required"
+            in HIPAA_PLAYBOOK.blocking_gates
+        )
+
     def test_privacy_officer_gate(self) -> None:
         assert "interview.privacy_officer.required" in HIPAA_PLAYBOOK.blocking_gates
 
@@ -158,6 +166,14 @@ class TestHipaaEvidenceFreshness:
         assert "report_generation" in e.blocks_statuses
         assert "delivered" in e.blocks_statuses
 
+    def test_access_control_policy_has_freshness_expectation(self) -> None:
+        # Regression: was missing from minimum_evidence_expectations entirely.
+        e = self._expectation("document.hipaa_access_control_policy")
+        assert e is not None
+        assert e.freshness_days == 365
+        assert "report_generation" in e.blocks_statuses
+        assert "delivered" in e.blocks_statuses
+
 
 class TestHipaaStatusTransitions:
     def test_evidence_collected_requires_privacy_officer(self) -> None:
@@ -175,6 +191,12 @@ class TestHipaaStatusTransitions:
     def test_evidence_collected_requires_risk_analysis(self) -> None:
         reqs = HIPAA_PLAYBOOK.status_transition_requirements["evidence_collected"]
         assert "document.hipaa_risk_analysis.required" in reqs
+
+    def test_evidence_collected_requires_access_control_policy(self) -> None:
+        # Regression: absent from transition requirements caused the API to advance
+        # engagements to evidence_collected even when this document was missing.
+        reqs = HIPAA_PLAYBOOK.status_transition_requirements["evidence_collected"]
+        assert "document.hipaa_access_control_policy.required" in reqs
 
     def test_report_generation_transition(self) -> None:
         reqs = HIPAA_PLAYBOOK.status_transition_requirements["report_generation"]

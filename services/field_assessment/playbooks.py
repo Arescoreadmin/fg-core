@@ -337,6 +337,7 @@ HIPAA_PLAYBOOK = FieldAssessmentPlaybook(
         "document.hipaa_phi_inventory.required",
         "document.hipaa_risk_analysis.required",
         "document.hipaa_sanction_policy.required",
+        "document.hipaa_access_control_policy.required",
         "document.incident_response.required",
         "document.training_records.required",
         "interview.privacy_officer.required",
@@ -372,6 +373,12 @@ HIPAA_PLAYBOOK = FieldAssessmentPlaybook(
             blocks_statuses=("report_generation", "delivered"),
         ),
         EvidenceExpectation(
+            evidence_type="document.hipaa_access_control_policy",
+            minimum_count=1,
+            freshness_days=365,
+            blocks_statuses=("report_generation", "delivered"),
+        ),
+        EvidenceExpectation(
             evidence_type="document.incident_response",
             minimum_count=1,
             freshness_days=365,
@@ -393,6 +400,7 @@ HIPAA_PLAYBOOK = FieldAssessmentPlaybook(
                 "document.hipaa_phi_inventory.required",
                 "document.hipaa_risk_analysis.required",
                 "document.hipaa_sanction_policy.required",
+                "document.hipaa_access_control_policy.required",
                 "document.incident_response.required",
                 "document.training_records.required",
                 "interview.privacy_officer.required",
