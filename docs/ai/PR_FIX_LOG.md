@@ -12295,3 +12295,60 @@ New `finding_explainer.py` service resolves scan evidence for a normalized findi
 - `mypy api/field_assessment.py services/field_assessment/questionnaire_store.py --ignore-missing-imports` → no issues
 - `pytest tests/test_questionnaire.py` → all tests pass (existing + 7 new)
 - `make fg-fast` → pr-fix-log green
+
+---
+
+### 2026-05-28 — PR 28 Addendum: Contract Authority + OpenAPI GET Route Publication
+
+**Branch:** `feat/coverage-matrix-pr28`
+
+**Repair context:** CI/contract gate caught that the PR 28 commit did not include fully regenerated contracts or updated authority markers after the new `GET /engagements/{id}/questionnaires` route was added. Additionally, the `tools/ci/` inventory files required a SOC review doc update per `soc-review-sync` gate policy.
+
+**Area:** Contract Authority / OpenAPI Publication / SOC Compliance Gate
+
+**Changes made:**
+
+1. **Regenerated OpenAPI contracts** (`make contracts-gen`)
+   - `contracts/core/openapi.json` now includes both `GET` and `POST` operations for `/field-assessment/engagements/{engagement_id}/questionnaires`.
+   - `schemas/api/openapi.json` mirrored from contracts/core (same content per `refresh_contract_authority.py` design).
+   - GET operation includes: correct path, `governance:read` security requirement, `list[QuestionnaireResponse]` response schema, engagement path parameter.
+
+2. **Refreshed contract authority markers** (`scripts/refresh_contract_authority.py`)
+   - `BLUEPRINT_STAGED.md` `Contract-Authority-SHA256` marker updated to match regenerated OpenAPI.
+   - `CONTRACT.md` marker updated identically.
+   - SHA256: `961883e9995ab79822b34b10a9cdcefc6698466a025aa008c47d97786b0a3300`
+
+3. **Regenerated route inventory** (`make route-inventory-generate`)
+   - `tools/ci/route_inventory.json` — added `GET /field-assessment/engagements/{engagement_id}/questionnaires`
+   - `tools/ci/route_inventory_summary.json` — updated
+   - `tools/ci/contract_routes.json` — updated
+   - `tools/ci/plane_registry_snapshot.json` — updated
+   - `tools/ci/topology.sha256` — updated
+
+4. **SOC execution gates doc updated** (`docs/SOC_EXECUTION_GATES_2026-02-15.md`)
+   - PR 28 entry added per `soc-review-sync` gate policy (required because `tools/ci/` critical files changed).
+   - Security posture documented: `governance:read`-only, no write paths, tenant-scoped queries, no schema migrations.
+
+**ProviderResponse.text fix status (BLOCKER 4):**
+- `services/field_assessment/executive_summary.py` reads `resp.text` first via `getattr(resp, "text", None)`.
+- Falls back to `resp.content` only as compatibility layer.
+- All invalid/empty/non-JSON responses fall back deterministically — report generation never blocks.
+- 17 executive summary tests all pass.
+
+**Files touched (addendum only):**
+- `contracts/core/openapi.json` — GET route published
+- `schemas/api/openapi.json` — mirrored from contracts/core
+- `BLUEPRINT_STAGED.md` — contract authority SHA256 updated
+- `CONTRACT.md` — contract authority SHA256 updated
+- `tools/ci/route_inventory.json` + `route_inventory_summary.json` + `contract_routes.json` + `plane_registry_snapshot.json` + `topology.sha256` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 28 security review entry added
+- `docs/ai/PR_FIX_LOG.md` — this addendum entry
+
+**Validation:**
+- `ruff check .` → no issues
+- `ruff format --check .` → all files formatted
+- `mypy services/field_assessment/executive_summary.py api/field_assessment.py --ignore-missing-imports` → no issues
+- `pytest tests/test_executive_summary.py tests/test_questionnaire.py` → 44 passed
+- `make fg-contract` → all contract gates passed
+- `make fg-fast` → 398 passed, 2 skipped; all gates passed
+- `grep '"get"' contracts/core/openapi.json` after path → confirmed `get` and `post` both present
