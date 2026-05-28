@@ -12647,3 +12647,48 @@ pure-logic (4).
 `tools/ci/route_inventory.json`.
 
 **Validation:** `make fg-lint` clean; `make portal-lint` clean; `pytest tests/test_finding_closed_loop.py` 14/14 pass; `make fg-contract` pass.
+
+---
+
+# PR 33 — Risk Posture Dashboard + Quick Fixes
+
+**Date:** 2026-05-28
+**Branch:** feat/risk-posture-dashboard-pr33
+**Scope:** Portal frontend (dashboard) + dependency fix + findings UX fix
+
+## Summary
+
+Three changes shipped together:
+
+1. **Risk posture dashboard** — Portal home page gains four live panels when an engagement is active: NIST AI RMF coverage bar, finding severity strip, NIST function heatmap (GOVERN/MAP/MEASURE/MANAGE), immediate actions callout.
+2. **reportlab dependency** — Added `reportlab>=4.0.0` to `requirements.txt`, unblocking the PDF export button that was returning 501.
+3. **Remediation steps in findings page** — `explanation.remediation_steps` now rendered inline in the expanded finding card, below framework impact tags.
+
+## Changes
+
+### 1. requirements.txt — reportlab dependency
+
+`reportlab>=4.0.0` added. The `export_pdf_bytes()` function in `services/governance/report/serialization.py` already imports it conditionally and raises `ExportUnavailableError` (→ HTTP 501) when missing. This change makes the import succeed.
+
+No schema changes, no auth changes, no migration required.
+
+**File:** `requirements.txt`
+
+### 2. apps/portal/app/page.tsx — risk posture dashboard
+
+Pure frontend composition from three existing endpoints:
+- `getRemediationRoadmap()` → coverage bar + immediate actions
+- `listFindings()` (paginated up to 500 via `fetchAllFindings()`) → severity strip
+- `listQuestionnaires()` → NIST function heatmap
+
+`isCurrent` cleanup flag guards against stale fetches on engagement switch.
+
+**File:** `apps/portal/app/page.tsx`
+
+### 3. apps/portal/app/findings/page.tsx — remediation steps
+
+`explanation.remediation_steps` rendered as a numbered list inside the expanded finding card, below `framework_impact` tags. Displayed only when the array is non-empty.
+
+**File:** `apps/portal/app/findings/page.tsx`
+
+**Validation:** `make portal-lint` clean; `make fg-lint` clean.

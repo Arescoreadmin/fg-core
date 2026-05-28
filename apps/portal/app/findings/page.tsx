@@ -126,6 +126,22 @@ function FindingCard({
                 </div>
               )}
 
+              {explanation.remediation_steps.length > 0 && (
+                <div className="rounded border border-border bg-surface-3 p-3 space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted uppercase tracking-wider">
+                    Remediation steps
+                  </p>
+                  <ol className="space-y-1.5 pl-1">
+                    {explanation.remediation_steps.map((step, i) => (
+                      <li key={i} className="flex gap-2 text-xs text-foreground leading-relaxed">
+                        <span className="shrink-0 font-semibold text-muted w-4">{i + 1}.</span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
               {explanation.explanation_confidence < 0.7 && (
                 <p className="text-[11px] text-amber-300">
                   Explanation based on finding metadata — limited scan evidence available.
