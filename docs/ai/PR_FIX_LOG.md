@@ -12236,3 +12236,119 @@ New `finding_explainer.py` service resolves scan evidence for a normalized findi
 - `mypy services/field_assessment/executive_summary.py api/field_assessment.py --ignore-missing-imports` → no issues found
 - `pytest tests/test_executive_summary.py` → 17 passed
 - `make fg-fast` → 415 passed (398 + 17 new), pr-fix-log green
+
+---
+
+### 2026-05-27 — PR 28: NIST Control Coverage Matrix
+
+**Branch:** `feat/coverage-matrix-pr28`
+
+**PR/context:** PR 28 — NIST AI RMF control coverage matrix with per-control evidence fusion
+
+**Area:** Field Assessment / Portal / API
+
+**Summary of changes:**
+
+1. **Coverage list endpoint** (`api/field_assessment.py`)
+   - New `GET /engagements/{engagement_id}/questionnaires` route, `governance:read`-gated.
+   - Returns `list[QuestionnaireResponse]` with evidence fusion fields added to each `QuestionnaireResponseItem`.
+   - `_build_scan_counts()`: queries all `FaNormalizedFinding` for the engagement, normalises `nist_ai_rmf_mappings` via `normalize_nist_control()`, returns `{control_id: count}` map.
+   - `_fuse_response_item()`: computes `evidence_sources` (`["questionnaire"]` + `"scan"` when scan findings map to control), `scan_finding_count`, and `fused_confidence` (weighted blend of manual confidence + scan signal).
+   - `_questionnaire_to_response()` updated to accept `scan_counts: dict[str, int] | None`; existing callers unaffected (default `None`).
+
+2. **Store layer** (`services/field_assessment/questionnaire_store.py`)
+   - New `list_questionnaires(db, *, engagement_id, tenant_id)` store function; ordered by `created_at`.
+
+3. **`QuestionnaireResponseItem` extended** (`api/field_assessment.py`)
+   - Added `evidence_sources: list[str] = []`, `scan_finding_count: int = 0`, `fused_confidence: float | None = None`.
+   - All new fields have defaults — fully backward-compatible with existing callers and report consumers.
+
+4. **Portal types** (`apps/portal/lib/portalApi.ts`)
+   - Added `ResponseStatus` union type, `QuestionnaireControlResponse`, `Questionnaire` interfaces.
+   - Added `listQuestionnaires(engagementId)` method to `portalApi`.
+
+5. **Portal nav** (`apps/portal/app/layout.tsx`)
+   - Added "Coverage" link between "Reports" and "Attestation".
+
+6. **Portal coverage page** (`apps/portal/app/coverage/page.tsx`)
+   - Previously untracked file now has all required types supplied via `portalApi.ts`.
+   - No changes to page logic; types fix resolves TypeScript compilation errors.
+
+**Safety and validation constraints:**
+- New endpoint is `governance:read` (not `write`) — correct for client-facing read-only portal consumption.
+- Evidence fusion is purely additive: no existing data is mutated; `confidence_score` field unchanged; `fused_confidence` is a computed view field only.
+- Tenant isolation: `list_questionnaires` scopes by `(engagement_id, tenant_id)`; `_build_scan_counts` scopes by same pair.
+- `_build_scan_counts` fetches only `id + nist_ai_rmf_mappings` logically (SQLAlchemy loads only what's needed); no findings data reaches the client.
+- Route registered after all `/{questionnaire_id}` sub-routes to avoid FastAPI path shadowing.
+
+**Files touched:**
+- `api/field_assessment.py` — new list route, `_fuse_response_item`, `_build_scan_counts`, `QuestionnaireResponseItem` fields, `list_questionnaires` import
+- `services/field_assessment/questionnaire_store.py` — `list_questionnaires` store function
+- `apps/portal/lib/portalApi.ts` — `ResponseStatus`, `QuestionnaireControlResponse`, `Questionnaire` types + `listQuestionnaires()`
+- `apps/portal/app/layout.tsx` — "Coverage" nav link
+- `tests/test_questionnaire.py` — 7 new coverage matrix tests appended
+- `ROADMAP.md` — PR 28 row added; P1 #7 marked done
+
+**Validation:**
+- `ruff check .` → no issues
+- `ruff format --check .` → all files formatted
+- `mypy api/field_assessment.py services/field_assessment/questionnaire_store.py --ignore-missing-imports` → no issues
+- `pytest tests/test_questionnaire.py` → all tests pass (existing + 7 new)
+- `make fg-fast` → pr-fix-log green
+
+---
+
+### 2026-05-28 — PR 28 Addendum: Contract Authority + OpenAPI GET Route Publication
+
+**Branch:** `feat/coverage-matrix-pr28`
+
+**Repair context:** CI/contract gate caught that the PR 28 commit did not include fully regenerated contracts or updated authority markers after the new `GET /engagements/{id}/questionnaires` route was added. Additionally, the `tools/ci/` inventory files required a SOC review doc update per `soc-review-sync` gate policy.
+
+**Area:** Contract Authority / OpenAPI Publication / SOC Compliance Gate
+
+**Changes made:**
+
+1. **Regenerated OpenAPI contracts** (`make contracts-gen`)
+   - `contracts/core/openapi.json` now includes both `GET` and `POST` operations for `/field-assessment/engagements/{engagement_id}/questionnaires`.
+   - `schemas/api/openapi.json` mirrored from contracts/core (same content per `refresh_contract_authority.py` design).
+   - GET operation includes: correct path, `governance:read` security requirement, `list[QuestionnaireResponse]` response schema, engagement path parameter.
+
+2. **Refreshed contract authority markers** (`scripts/refresh_contract_authority.py`)
+   - `BLUEPRINT_STAGED.md` `Contract-Authority-SHA256` marker updated to match regenerated OpenAPI.
+   - `CONTRACT.md` marker updated identically.
+   - SHA256: `961883e9995ab79822b34b10a9cdcefc6698466a025aa008c47d97786b0a3300`
+
+3. **Regenerated route inventory** (`make route-inventory-generate`)
+   - `tools/ci/route_inventory.json` — added `GET /field-assessment/engagements/{engagement_id}/questionnaires`
+   - `tools/ci/route_inventory_summary.json` — updated
+   - `tools/ci/contract_routes.json` — updated
+   - `tools/ci/plane_registry_snapshot.json` — updated
+   - `tools/ci/topology.sha256` — updated
+
+4. **SOC execution gates doc updated** (`docs/SOC_EXECUTION_GATES_2026-02-15.md`)
+   - PR 28 entry added per `soc-review-sync` gate policy (required because `tools/ci/` critical files changed).
+   - Security posture documented: `governance:read`-only, no write paths, tenant-scoped queries, no schema migrations.
+
+**ProviderResponse.text fix status (BLOCKER 4):**
+- `services/field_assessment/executive_summary.py` reads `resp.text` first via `getattr(resp, "text", None)`.
+- Falls back to `resp.content` only as compatibility layer.
+- All invalid/empty/non-JSON responses fall back deterministically — report generation never blocks.
+- 17 executive summary tests all pass.
+
+**Files touched (addendum only):**
+- `contracts/core/openapi.json` — GET route published
+- `schemas/api/openapi.json` — mirrored from contracts/core
+- `BLUEPRINT_STAGED.md` — contract authority SHA256 updated
+- `CONTRACT.md` — contract authority SHA256 updated
+- `tools/ci/route_inventory.json` + `route_inventory_summary.json` + `contract_routes.json` + `plane_registry_snapshot.json` + `topology.sha256` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 28 security review entry added
+- `docs/ai/PR_FIX_LOG.md` — this addendum entry
+
+**Validation:**
+- `ruff check .` → no issues
+- `ruff format --check .` → all files formatted
+- `mypy services/field_assessment/executive_summary.py api/field_assessment.py --ignore-missing-imports` → no issues
+- `pytest tests/test_executive_summary.py tests/test_questionnaire.py` → 44 passed
+- `make fg-contract` → all contract gates passed
+- `make fg-fast` → 398 passed, 2 skipped; all gates passed
+- `grep '"get"' contracts/core/openapi.json` after path → confirmed `get` and `post` both present

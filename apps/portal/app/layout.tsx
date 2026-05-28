@@ -12,6 +12,7 @@ const NAV_LINKS = [
   { href: '/', label: 'Overview' },
   { href: '/findings', label: 'Findings' },
   { href: '/reports', label: 'Reports' },
+  { href: '/coverage', label: 'Coverage' },
   { href: '/attestation', label: 'Attestation' },
   { href: '/remediation', label: 'Remediation' },
   { href: '/continuity', label: 'Continuity' },

@@ -11735,6 +11735,14 @@
             "title": "Control Name",
             "type": "string"
           },
+          "evidence_sources": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Sources",
+            "type": "array"
+          },
           "evidence_text": {
             "anyOf": [
               {
@@ -11746,6 +11754,17 @@
             ],
             "title": "Evidence Text"
           },
+          "fused_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fused Confidence"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -11753,6 +11772,11 @@
           "response_status": {
             "title": "Response Status",
             "type": "string"
+          },
+          "scan_finding_count": {
+            "default": 0,
+            "title": "Scan Finding Count",
+            "type": "integer"
           },
           "updated_at": {
             "title": "Updated At",
@@ -33746,6 +33770,67 @@
       }
     },
     "/field-assessment/engagements/{engagement_id}/questionnaires": {
+      "get": {
+        "description": "List all questionnaires for an engagement with per-control evidence fusion.\n\nReturns questionnaire responses augmented with scan finding counts per control\nso callers can show a confidence-weighted coverage matrix without a second request.",
+        "operationId": "list_questionnaires_route_field_assessment_engagements__engagement_id__questionnaires_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QuestionnaireResponse"
+                  },
+                  "title": "Response List Questionnaires Route Field Assessment Engagements  Engagement Id  Questionnaires Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Questionnaires Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
       "post": {
         "description": "Idempotent questionnaire initialization.\n\nCreates a new questionnaire pre-seeded with all framework controls.\nIf one already exists for this engagement+framework, returns it unchanged.",
         "operationId": "create_or_get_questionnaire_field_assessment_engagements__engagement_id__questionnaires_post",

@@ -4254,3 +4254,37 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/route_inventory.json` + related — regenerated
 - `docs/ai/PR_FIX_LOG.md` — updated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
+### PR 28 — NIST Control Coverage Matrix + Evidence Fusion (2026-05-28)
+
+**Critical files changed:** `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`
+
+**Routes added (1):**
+- `GET /field-assessment/engagements/{engagement_id}/questionnaires` — list all questionnaires for engagement with per-control evidence fusion, `governance:read`
+
+**Security posture:**
+- New route gates on `governance:read` scope via `require_scopes`.
+- All queries scope by `(engagement_id, tenant_id)` — cross-tenant and cross-engagement access returns 404.
+- No new write paths: the endpoint is strictly read-only; evidence fusion is computed in memory from already-accessible `FaNormalizedFinding` + `FaQuestionnaireResponse` rows.
+- Three new computed fields added to `QuestionnaireResponseItem` (`evidence_sources`, `scan_finding_count`, `fused_confidence`) — all derived from data already accessible to `governance:read` callers.
+- `_build_scan_counts` queries findings scoped to `(engagement_id, tenant_id)` only — no cross-engagement data leaks.
+- No new auth scopes, no DB schema changes, no migration required.
+
+**Artifacts regenerated:**
+- Route inventory regenerated via `make route-inventory-generate`
+- OpenAPI contracts regenerated via `make contracts-gen`
+- Contract authority markers updated in `BLUEPRINT_STAGED.md` + `CONTRACT.md`
+
+**Files touched:**
+- `api/field_assessment.py` — new list route, `_fuse_response_item`, `_build_scan_counts`, `QuestionnaireResponseItem` extended
+- `services/field_assessment/questionnaire_store.py` — `list_questionnaires` store function
+- `apps/portal/lib/portalApi.ts` — types + `listQuestionnaires()` method
+- `apps/portal/app/layout.tsx` — Coverage nav link
+- `apps/portal/app/coverage/page.tsx` — previously gitignored; now tracked
+- `.gitignore` + `apps/portal/.gitignore` — scoped `coverage/` → `/coverage/`
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
+- `tools/ci/route_inventory.json` + related — regenerated
+- `docs/ai/PR_FIX_LOG.md` — PR 28 entry added
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry

@@ -208,6 +208,42 @@ export interface ContinuityGapsResponse {
   total: number;
 }
 
+export type ResponseStatus =
+  | 'implemented'
+  | 'partial'
+  | 'not_implemented'
+  | 'not_assessed'
+  | 'not_applicable';
+
+export interface QuestionnaireControlResponse {
+  id: string;
+  control_id: string;
+  category: string;
+  control_name: string;
+  response_status: ResponseStatus;
+  evidence_text: string | null;
+  confidence_score: number | null;
+  assessor_id: string | null;
+  updated_at: string;
+  evidence_sources: string[];
+  scan_finding_count: number;
+  fused_confidence: number | null;
+}
+
+export interface Questionnaire {
+  id: string;
+  engagement_id: string;
+  framework: string;
+  framework_version: string;
+  status: string;
+  submitted_at: string | null;
+  submitted_by: string | null;
+  schema_version: string;
+  created_at: string;
+  updated_at: string;
+  responses: QuestionnaireControlResponse[];
+}
+
 // ─── API Client ───────────────────────────────────────────────────────────────
 
 export const portalApi = {
@@ -306,5 +342,10 @@ export const portalApi = {
       qs.set('days_overdue_min', String(params.days_overdue_min));
     const q = qs.toString();
     return request(`/governance/assets/continuity-gaps${q ? `?${q}` : ''}`);
+  },
+
+  // Coverage matrix
+  listQuestionnaires(engagementId: string): Promise<Questionnaire[]> {
+    return request(`/field-assessment/engagements/${engagementId}/questionnaires`);
   },
 } as const;

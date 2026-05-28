@@ -3926,6 +3926,7 @@ from services.field_assessment.questionnaire_store import (  # noqa: E402
     get_coverage,
     get_or_create_questionnaire,
     get_questionnaire,
+    list_questionnaires,
     list_responses,
     normalize_nist_control,  # noqa: F401 — exported for test access
     submit_questionnaire,
@@ -3949,6 +3950,9 @@ class QuestionnaireResponseItem(BaseModel):
     confidence_score: float | None
     assessor_id: str | None
     updated_at: str
+    evidence_sources: list[str] = []
+    scan_finding_count: int = 0
+    fused_confidence: float | None = None
 
 
 class QuestionnaireResponse(BaseModel):
@@ -3996,12 +4000,71 @@ class QuestionnaireCoverageResponse(BaseModel):
     by_category: dict[str, dict[str, int]]
 
 
+def _fuse_response_item(
+    r: FaQuestionnaireResponse,
+    scan_count: int,
+) -> QuestionnaireResponseItem:
+    sources: list[str] = ["questionnaire"]
+    if scan_count > 0:
+        sources.append("scan")
+
+    fused: float | None = None
+    if r.confidence_score is not None:
+        if scan_count > 0:
+            fused = round(min(1.0, r.confidence_score + 0.1 * min(scan_count, 3)), 3)
+        else:
+            fused = r.confidence_score
+    elif scan_count > 0:
+        fused = round(min(0.7, 0.3 + 0.1 * scan_count), 3)
+
+    return QuestionnaireResponseItem(
+        id=r.id,
+        control_id=r.control_id,
+        category=r.category,
+        control_name=r.control_name,
+        response_status=r.response_status,
+        evidence_text=r.evidence_text,
+        confidence_score=r.confidence_score,
+        assessor_id=r.assessor_id,
+        updated_at=r.updated_at,
+        evidence_sources=sources,
+        scan_finding_count=scan_count,
+        fused_confidence=fused,
+    )
+
+
+def _build_scan_counts(
+    db: Session,
+    *,
+    engagement_id: str,
+    tenant_id: str,
+) -> dict[str, int]:
+    """Return {canonical_control_id: finding_count} for all findings in an engagement."""
+    findings = list(
+        db.scalars(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.engagement_id == engagement_id,
+                FaNormalizedFinding.tenant_id == tenant_id,
+            )
+        )
+    )
+    counts: dict[str, int] = {}
+    for f in findings:
+        for raw in f.nist_ai_rmf_mappings or []:
+            cid = normalize_nist_control(raw)
+            if cid:
+                counts[cid] = counts.get(cid, 0) + 1
+    return counts
+
+
 def _questionnaire_to_response(
     q: FaQuestionnaire,
     responses: list[FaQuestionnaireResponse],
     *,
     already_existed: bool = False,
+    scan_counts: dict[str, int] | None = None,
 ) -> QuestionnaireResponse:
+    sc = scan_counts or {}
     return QuestionnaireResponse(
         id=q.id,
         engagement_id=q.engagement_id,
@@ -4013,20 +4076,7 @@ def _questionnaire_to_response(
         schema_version=q.schema_version,
         created_at=q.created_at,
         updated_at=q.updated_at,
-        responses=[
-            QuestionnaireResponseItem(
-                id=r.id,
-                control_id=r.control_id,
-                category=r.category,
-                control_name=r.control_name,
-                response_status=r.response_status,
-                evidence_text=r.evidence_text,
-                confidence_score=r.confidence_score,
-                assessor_id=r.assessor_id,
-                updated_at=r.updated_at,
-            )
-            for r in responses
-        ],
+        responses=[_fuse_response_item(r, sc.get(r.control_id, 0)) for r in responses],
         already_existed=already_existed,
     )
 
@@ -4258,3 +4308,38 @@ def get_questionnaire_coverage(
         )
     cov = get_coverage(db, questionnaire_id=questionnaire_id, tenant_id=tenant_id)
     return QuestionnaireCoverageResponse(questionnaire_id=questionnaire_id, **cov)
+
+
+@router.get(
+    "/engagements/{engagement_id}/questionnaires",
+    response_model=list[QuestionnaireResponse],
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_questionnaires_route(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[QuestionnaireResponse]:
+    """List all questionnaires for an engagement with per-control evidence fusion.
+
+    Returns questionnaire responses augmented with scan finding counts per control
+    so callers can show a confidence-weighted coverage matrix without a second request.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    qs = list_questionnaires(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    if not qs:
+        return []
+    scan_counts = _build_scan_counts(
+        db, engagement_id=engagement_id, tenant_id=tenant_id
+    )
+    result = []
+    for q in qs:
+        responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
+        result.append(_questionnaire_to_response(q, responses, scan_counts=scan_counts))
+    return result
