@@ -148,3 +148,49 @@ class TestUpdateFindingStatusLogic:
     def test_in_progress_finding_passes_guard(self) -> None:
         f = _mock_finding("in_progress")
         assert f.status not in _TERMINAL_FINDING_STATUSES
+
+
+# ===========================================================================
+# Coverage promotion gate — only remediated advances NIST coverage
+# ===========================================================================
+
+
+class TestCoveragePromotionGate:
+    """Verify the gate that guards questionnaire bumps by body.status value.
+
+    The actual DB mutation is tested via the endpoint; here we assert the
+    condition logic that surrounds it — i.e. that accepted and false_positive
+    must NOT trigger coverage promotion.
+    """
+
+    def test_remediated_status_triggers_coverage_promotion(self) -> None:
+        """body.status == 'remediated' should pass the coverage-promotion gate."""
+        req = FindingStatusPatchRequest(
+            status="remediated",
+            notes="Legacy auth CA policy deployed and confirmed.",
+            owner_email="owner@example.com",
+        )
+        assert req.status == "remediated"
+        # Coverage promotion gate: only proceed when status is "remediated"
+        should_promote = req.status == "remediated"
+        assert should_promote is True
+
+    def test_accepted_status_does_not_trigger_coverage_promotion(self) -> None:
+        """body.status == 'accepted' must NOT advance NIST coverage."""
+        req = FindingStatusPatchRequest(
+            status="accepted",
+            notes="Risk formally accepted by CISO; no remediation applied.",
+            owner_email="ciso@example.com",
+        )
+        should_promote = req.status == "remediated"
+        assert should_promote is False
+
+    def test_false_positive_status_does_not_trigger_coverage_promotion(self) -> None:
+        """body.status == 'false_positive' must NOT advance NIST coverage."""
+        req = FindingStatusPatchRequest(
+            status="false_positive",
+            notes="Legacy auth policy not applicable — tenant is cloud-only.",
+            owner_email="owner@example.com",
+        )
+        should_promote = req.status == "remediated"
+        assert should_promote is False

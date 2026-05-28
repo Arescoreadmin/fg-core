@@ -1608,28 +1608,35 @@ def patch_finding_status_route(
         pass  # duplicate link is acceptable — idempotent
 
     # 3 — Bump questionnaire responses for matched NIST controls.
+    # Only remediated findings represent actual implementation evidence.
+    # accepted / false_positive do not advance control coverage.
     controls_updated = 0
-    nist_controls: set[str] = set()
-    for raw in finding.nist_ai_rmf_mappings or []:
-        cid = normalize_nist_control(raw)
-        if cid:
-            nist_controls.add(cid)
+    if body.status == "remediated":
+        nist_controls: set[str] = set()
+        for raw in finding.nist_ai_rmf_mappings or []:
+            cid = normalize_nist_control(raw)
+            if cid:
+                nist_controls.add(cid)
 
-    if nist_controls:
-        qs = list_questionnaires(db, engagement_id=engagement_id, tenant_id=tenant_id)
-        for q in qs:
-            responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
-            for r in responses:
-                if r.control_id in nist_controls and r.response_status in (
-                    "not_implemented",
-                    "not_assessed",
-                ):
-                    r.response_status = "partial"
-                    r.updated_at = utc_iso8601_z_now()
-                    controls_updated += 1
-            if controls_updated:
-                q.updated_at = utc_iso8601_z_now()
-        db.flush()
+        if nist_controls:
+            qs = list_questionnaires(
+                db, engagement_id=engagement_id, tenant_id=tenant_id
+            )
+            for q in qs:
+                responses = list_responses(
+                    db, questionnaire_id=q.id, tenant_id=tenant_id
+                )
+                for r in responses:
+                    if r.control_id in nist_controls and r.response_status in (
+                        "not_implemented",
+                        "not_assessed",
+                    ):
+                        r.response_status = "partial"
+                        r.updated_at = utc_iso8601_z_now()
+                        controls_updated += 1
+                if controls_updated:
+                    q.updated_at = utc_iso8601_z_now()
+            db.flush()
 
     # 4 — Update finding status.
     updated_finding = update_finding_status(
