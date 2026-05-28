@@ -1,5 +1,3 @@
-const path = require('path');
-
 // Derive just the origin from NEXT_PUBLIC_API_URL so that connect-src allows
 // client-side fetches from lib/api.ts to the admin-gateway even when it is
 // served on a different host or port than the console (e.g. localhost:18001).
@@ -29,28 +27,15 @@ const cspHeader = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
   transpilePackages: ['@fg/ui'],
 
-  // Ensure webpack resolves @fg/ui's deps (class-variance-authority, clsx,
-  // @radix-ui/*, etc.) from this package's node_modules even when the source
-  // files are outside the console directory (e.g. packages/ui in Docker).
-  webpack(config) {
-    config.resolve.modules = [
-      path.resolve(__dirname, 'node_modules'),
-      ...config.resolve.modules,
-    ];
-    return config;
-  },
-
   async rewrites() {
-    // All API traffic — including assessment and report endpoints — routes
-    // through the single fg-core admin-gateway. No separate assessment or
-    // report service processes are needed.
+    // Docker: admin-gateway; Vercel/production: CORE_API_URL env var.
+    const upstream = (process.env.CORE_API_URL || 'http://admin-gateway:8080').replace(/\/$/, '');
     return [
       {
         source: '/api/:path*',
-        destination: 'http://admin-gateway:8080/:path*',
+        destination: `${upstream}/:path*`,
       },
     ];
   },

@@ -204,7 +204,7 @@ function SeverityStrip({
   counts: SeverityCounts;
   engagementId: string;
 }) {
-  const sevs: SeverityKey[] = ['critical', 'high', 'medium', 'low'];
+  const sevs: (keyof SeverityCounts)[] = ['critical', 'high', 'medium', 'low'];
   const total = sevs.reduce((s, k) => s + counts[k], 0);
 
   return (
