@@ -12236,3 +12236,62 @@ New `finding_explainer.py` service resolves scan evidence for a normalized findi
 - `mypy services/field_assessment/executive_summary.py api/field_assessment.py --ignore-missing-imports` → no issues found
 - `pytest tests/test_executive_summary.py` → 17 passed
 - `make fg-fast` → 415 passed (398 + 17 new), pr-fix-log green
+
+---
+
+### 2026-05-27 — PR 28: NIST Control Coverage Matrix
+
+**Branch:** `feat/coverage-matrix-pr28`
+
+**PR/context:** PR 28 — NIST AI RMF control coverage matrix with per-control evidence fusion
+
+**Area:** Field Assessment / Portal / API
+
+**Summary of changes:**
+
+1. **Coverage list endpoint** (`api/field_assessment.py`)
+   - New `GET /engagements/{engagement_id}/questionnaires` route, `governance:read`-gated.
+   - Returns `list[QuestionnaireResponse]` with evidence fusion fields added to each `QuestionnaireResponseItem`.
+   - `_build_scan_counts()`: queries all `FaNormalizedFinding` for the engagement, normalises `nist_ai_rmf_mappings` via `normalize_nist_control()`, returns `{control_id: count}` map.
+   - `_fuse_response_item()`: computes `evidence_sources` (`["questionnaire"]` + `"scan"` when scan findings map to control), `scan_finding_count`, and `fused_confidence` (weighted blend of manual confidence + scan signal).
+   - `_questionnaire_to_response()` updated to accept `scan_counts: dict[str, int] | None`; existing callers unaffected (default `None`).
+
+2. **Store layer** (`services/field_assessment/questionnaire_store.py`)
+   - New `list_questionnaires(db, *, engagement_id, tenant_id)` store function; ordered by `created_at`.
+
+3. **`QuestionnaireResponseItem` extended** (`api/field_assessment.py`)
+   - Added `evidence_sources: list[str] = []`, `scan_finding_count: int = 0`, `fused_confidence: float | None = None`.
+   - All new fields have defaults — fully backward-compatible with existing callers and report consumers.
+
+4. **Portal types** (`apps/portal/lib/portalApi.ts`)
+   - Added `ResponseStatus` union type, `QuestionnaireControlResponse`, `Questionnaire` interfaces.
+   - Added `listQuestionnaires(engagementId)` method to `portalApi`.
+
+5. **Portal nav** (`apps/portal/app/layout.tsx`)
+   - Added "Coverage" link between "Reports" and "Attestation".
+
+6. **Portal coverage page** (`apps/portal/app/coverage/page.tsx`)
+   - Previously untracked file now has all required types supplied via `portalApi.ts`.
+   - No changes to page logic; types fix resolves TypeScript compilation errors.
+
+**Safety and validation constraints:**
+- New endpoint is `governance:read` (not `write`) — correct for client-facing read-only portal consumption.
+- Evidence fusion is purely additive: no existing data is mutated; `confidence_score` field unchanged; `fused_confidence` is a computed view field only.
+- Tenant isolation: `list_questionnaires` scopes by `(engagement_id, tenant_id)`; `_build_scan_counts` scopes by same pair.
+- `_build_scan_counts` fetches only `id + nist_ai_rmf_mappings` logically (SQLAlchemy loads only what's needed); no findings data reaches the client.
+- Route registered after all `/{questionnaire_id}` sub-routes to avoid FastAPI path shadowing.
+
+**Files touched:**
+- `api/field_assessment.py` — new list route, `_fuse_response_item`, `_build_scan_counts`, `QuestionnaireResponseItem` fields, `list_questionnaires` import
+- `services/field_assessment/questionnaire_store.py` — `list_questionnaires` store function
+- `apps/portal/lib/portalApi.ts` — `ResponseStatus`, `QuestionnaireControlResponse`, `Questionnaire` types + `listQuestionnaires()`
+- `apps/portal/app/layout.tsx` — "Coverage" nav link
+- `tests/test_questionnaire.py` — 7 new coverage matrix tests appended
+- `ROADMAP.md` — PR 28 row added; P1 #7 marked done
+
+**Validation:**
+- `ruff check .` → no issues
+- `ruff format --check .` → all files formatted
+- `mypy api/field_assessment.py services/field_assessment/questionnaire_store.py --ignore-missing-imports` → no issues
+- `pytest tests/test_questionnaire.py` → all tests pass (existing + 7 new)
+- `make fg-fast` → pr-fix-log green

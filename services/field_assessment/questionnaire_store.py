@@ -101,7 +101,7 @@ def normalize_nist_control(mapping: Any) -> str | None:
     if isinstance(mapping, str):
         raw = mapping.strip()
         if raw.startswith(_NIST_PREFIX):
-            return raw[len(_NIST_PREFIX):]
+            return raw[len(_NIST_PREFIX) :]
         return raw or None
 
     if isinstance(mapping, dict):
@@ -116,7 +116,7 @@ def normalize_nist_control(mapping: Any) -> str | None:
             raw = mapping["control_id"]
             if isinstance(raw, str) and raw.strip():
                 s = raw.strip()
-                return s[len(_NIST_PREFIX):] if s.startswith(_NIST_PREFIX) else s
+                return s[len(_NIST_PREFIX) :] if s.startswith(_NIST_PREFIX) else s
 
     return None
 
@@ -269,6 +269,24 @@ def list_responses(
                 FaQuestionnaireResponse.questionnaire_id == questionnaire_id,
                 FaQuestionnaireResponse.tenant_id == tenant_id,
             )
+        )
+    )
+
+
+def list_questionnaires(
+    db: Session,
+    *,
+    engagement_id: str,
+    tenant_id: str,
+) -> list[FaQuestionnaire]:
+    return list(
+        db.scalars(
+            select(FaQuestionnaire)
+            .where(
+                FaQuestionnaire.engagement_id == engagement_id,
+                FaQuestionnaire.tenant_id == tenant_id,
+            )
+            .order_by(FaQuestionnaire.created_at)
         )
     )
 

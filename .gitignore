@@ -10,7 +10,7 @@ node_modules/
 .idea/
 .vscode/
 .claude/
-coverage/
+/coverage/
 pytest_cache/
 supervisor-sidecar/supervisor-sidecar
 

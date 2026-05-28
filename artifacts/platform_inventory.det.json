@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 380,
+    "contract_count": 388,
     "contract_only": [],
-    "runtime_count": 485,
+    "runtime_count": 492,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -57,7 +57,6 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
-      "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain",
       "GET /metrics",
       "GET /ui/ai",
       "GET /ui/ai/experience",
@@ -142,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "2c6b7ed0a7d329bb94f7c041bc98d1baf166d5199c55abe6c51b5a208f6eec40",
+  "governance_fingerprint": "84a6156ed02a5477a58091190f402d13729fda4e09947d86debc02991980432f",
   "planes": [
     {
       "compat": {
@@ -448,6 +447,7 @@
       "GET /field-assessment/engagements/{engagement_id}",
       "GET /field-assessment/engagements/{engagement_id}/audit-events",
       "GET /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}",
+      "GET /field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/status",
       "GET /field-assessment/engagements/{engagement_id}/connector-schedules",
       "GET /field-assessment/engagements/{engagement_id}/document-analyses",
       "GET /field-assessment/engagements/{engagement_id}/drift-report",
@@ -460,6 +460,8 @@
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain",
       "GET /field-assessment/engagements/{engagement_id}/next-actions",
       "GET /field-assessment/engagements/{engagement_id}/observations",
+      "GET /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}",
+      "GET /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/coverage",
       "GET /field-assessment/engagements/{engagement_id}/readiness-drift",
       "GET /field-assessment/engagements/{engagement_id}/reports",
       "GET /field-assessment/engagements/{engagement_id}/reports/{version}",
@@ -516,6 +518,7 @@
       "GET /rag/retrieval-policy",
       "GET /rag/uploads",
       "GET /status",
+      "PATCH /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/responses/{control_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/status",
       "PATCH /governance/assets/{asset_id}",
       "PATCH /governance/workflows/{workflow_id}/transition",
@@ -617,12 +620,15 @@
       "POST /field-assessment/engagements",
       "POST /field-assessment/engagements/{engagement_id}/baseline",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
       "POST /field-assessment/engagements/{engagement_id}/connector-schedules",
       "POST /field-assessment/engagements/{engagement_id}/document-analyses",
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",
       "POST /field-assessment/engagements/{engagement_id}/observations",
       "POST /field-assessment/engagements/{engagement_id}/promote",
+      "POST /field-assessment/engagements/{engagement_id}/questionnaires",
+      "POST /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/submit",
       "POST /field-assessment/engagements/{engagement_id}/reports",
       "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-approve",
       "POST /field-assessment/engagements/{engagement_id}/reports/{version}/verify",

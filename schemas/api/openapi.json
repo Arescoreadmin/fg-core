@@ -11735,6 +11735,14 @@
             "title": "Control Name",
             "type": "string"
           },
+          "evidence_sources": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Sources",
+            "type": "array"
+          },
           "evidence_text": {
             "anyOf": [
               {
@@ -11746,6 +11754,17 @@
             ],
             "title": "Evidence Text"
           },
+          "fused_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fused Confidence"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -11753,6 +11772,11 @@
           "response_status": {
             "title": "Response Status",
             "type": "string"
+          },
+          "scan_finding_count": {
+            "default": 0,
+            "title": "Scan Finding Count",
+            "type": "integer"
           },
           "updated_at": {
             "title": "Updated At",
