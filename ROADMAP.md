@@ -51,7 +51,8 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | PR 21 | FA Portal — Bug Fixes | ✅ merged | Portal attestation/continuity UI fixes + CI pass |
 | PR 22 | Finding Explainer | ✅ merged (#390) | Plain-language finding explanations, LRU cache, provenance manifest |
 | PR 27 | Executive Summary | ✅ merged | AI-generated narrative section in report; risk posture + key concerns; console + portal |
-| PR 28 | NIST Control Coverage Matrix | 🔄 in progress | Per-control evidence fusion (questionnaire + scan); coverage matrix in portal; `governance:read`-gated list endpoint |
+| PR 28 | NIST Control Coverage Matrix | ✅ merged | Per-control evidence fusion (questionnaire + scan); coverage matrix in portal; `governance:read`-gated list endpoint |
+| PR 29 | HIPAA + SOC 2 Playbooks | 🔄 in progress | Dedicated HIPAA and SOC 2 governance execution playbooks; Privacy/Security Officer gates (HIPAA); Executive Sponsor + 8 document class gates (SOC 2); annual evidence freshness on all policy docs |
 
 ---
 
@@ -75,7 +76,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 |---|------|-------|----|--------|
 | 6 | **Executive summary in report** — currently no narrative opening section for client PDF | — | PR 27 | ✅ done — `executive_summary` section in report JSON; Claude narrative with risk posture + key concerns; graceful template fallback; rendered in console ReportViewer and portal inline view |
 | 7 | **NIST control coverage matrix** — portal view: which controls have evidence, which are gaps | — | PR 28 | ✅ done — `GET /engagements/{id}/questionnaires` with evidence fusion (questionnaire + scan counts per control); `governance:read`-gated; portal Coverage page + nav link |
-| 8 | **HIPAA playbook** — `services/field_assessment/playbooks.py` HIPAA falls back to `comprehensive`; banking clients need dedicated gates | — | — | ⬜ not started |
+| 8 | **HIPAA + SOC 2 playbooks** — dedicated governance execution playbooks for healthcare and commercial compliance | — | PR 29 | ✅ done — `HIPAA_PLAYBOOK` (Privacy + Security Officer gates, 7 HIPAA document classes, BAA no-expiry) + `SOC2_PLAYBOOK` (Executive Sponsor gate, 8 Trust Service Criteria document classes, 6 observation domains, annual freshness) |
 | 9 | **Portal engagement selector UI** — findings page currently requires engagement ID in URL, no picker | — | — | ⬜ not started |
 | 10 | **Remediation roadmap in portal** — sequenced, owned remediation steps with priority ordering | — | — | ⬜ not started |
 | 11 | **Azure AD app pre-registration guide** — required API scopes + admin consent walkthrough for MS Graph scan setup | — | PR 25 | ✅ done — `docs/operators/azure_ad_app_setup.md`: create app, 7 delegated permissions, public client flow, scan walkthrough, troubleshooting |

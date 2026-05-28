@@ -12352,3 +12352,109 @@ New `finding_explainer.py` service resolves scan evidence for a normalized findi
 - `make fg-contract` → all contract gates passed
 - `make fg-fast` → 398 passed, 2 skipped; all gates passed
 - `grep '"get"' contracts/core/openapi.json` after path → confirmed `get` and `post` both present
+
+---
+
+### 2026-05-28 — PR 29: HIPAA Dedicated Governance Playbook
+
+**Branch:** `feat/hipaa-playbook-pr29`
+
+**PR/context:** PR 29 — Dedicated HIPAA execution playbook replacing the `comprehensive` fallback
+
+**Area:** Services / Field Assessment / Playbooks
+
+**Summary of changes:**
+
+1. **`HIPAA_PLAYBOOK`** (`services/field_assessment/playbooks.py`)
+   - New `FieldAssessmentPlaybook` instance with `playbook_id = "field_assessment.hipaa.v1"`.
+   - `_PLAYBOOKS` registry updated: `"hipaa"` now maps directly to `HIPAA_PLAYBOOK` instead of falling back to `comprehensive`.
+   - `_FALLBACK_PLAYBOOK_BY_ASSESSMENT_TYPE` updated: `"hipaa"` entry removed (now in primary registry).
+
+2. **Required document classes (7):**
+   - `hipaa_baa` — Business Associate Agreement (required by §164.308)
+   - `hipaa_phi_inventory` — Protected Health Information inventory
+   - `hipaa_risk_analysis` — Annual HIPAA Security Rule risk analysis (§164.308(a)(1))
+   - `hipaa_sanction_policy` — Workforce sanction policy (§164.308(a)(1)(ii)(C))
+   - `hipaa_access_control_policy` — Access control and workforce authorization policy
+   - `incident_response` — Breach notification procedures
+   - `training_records` — Workforce HIPAA training records
+
+3. **Required interview roles (3):**
+   - `privacy_officer` — HIPAA-mandated Privacy Official
+   - `security_officer` — HIPAA-mandated Security Official
+   - `compliance_owner` — Compliance oversight
+
+4. **Required observation domains (5):**
+   - `phi_handling`, `breach_response`, `access_management`, `audit_logging`, `training_compliance`
+
+5. **Blocking gates (14):**
+   - Includes HIPAA-specific document and interview gates.
+   - Standard evidence/finding/remediation gates inherited from governance pattern.
+   - `interview.privacy_officer.required` and `interview.security_officer.required` block `evidence_collected` transition.
+
+6. **Evidence freshness:**
+   - `hipaa_risk_analysis`: 365 days — annual recertification required
+   - `hipaa_phi_inventory`: 365 days — annual review
+   - `hipaa_sanction_policy`: 365 days — annual review
+   - `hipaa_baa`: `freshness_days=None` — BAAs have no calendar expiry (valid until terminated)
+   - `incident_response`, `training_records`: 365 days
+
+**Safety and validation constraints:**
+- `HIPAA_PLAYBOOK` is a frozen dataclass — immutable at runtime; no modification possible.
+- `get_playbook("hipaa")` dispatch is case-insensitive (`.strip().lower()`).
+- All other `get_playbook()` calls are unaffected — `ai_governance`, `comprehensive`, `cmmc`, `soc2`, `iso27001` dispatch is unchanged.
+- No API routes, DB schemas, auth scopes, or tenant isolation logic modified.
+
+**Files touched:**
+- `services/field_assessment/playbooks.py` — `HIPAA_PLAYBOOK` definition; registry update; fallback map update
+- `tests/test_playbook_hipaa.py` (new — 43 tests)
+- `ROADMAP.md` — PR 29 row added; P1 #8 marked done
+
+**Validation:**
+- `ruff check .` → no issues
+- `ruff format --check .` → all files formatted
+- `pytest tests/test_playbook_hipaa.py tests/test_playbook_progress.py` → 52 passed
+- `make fg-fast` → all gates passed
+
+---
+
+### 2026-05-28 — PR 29 Extension: SOC 2 Dedicated Governance Playbook
+
+**Branch:** `feat/hipaa-playbook-pr29`
+
+**PR/context:** PR 29 extension — `SOC2_PLAYBOOK` added alongside `HIPAA_PLAYBOOK`
+
+**Area:** Services / Field Assessment / Playbooks
+
+**Summary of changes:**
+
+1. **`SOC2_PLAYBOOK`** (`services/field_assessment/playbooks.py`)
+   - New frozen `FieldAssessmentPlaybook` with `playbook_id = "field_assessment.soc2.v1"`.
+   - `_PLAYBOOKS` registry updated: `"soc2"` now maps to `SOC2_PLAYBOOK`; removed from fallback map.
+
+2. **Required document classes (8):** `security_policy`, `access_control_policy`, `incident_response`, `change_management`, `vendor_risk`, `business_continuity`, `cryptography_policy`, `risk_assessment`
+
+3. **Required interview roles (4):** `executive_sponsor`, `security_owner`, `compliance_owner`, `system_owner`
+
+4. **Required observation domains (6):** `logical_access`, `change_management`, `incident_response`, `availability_monitoring`, `vendor_management`, `encryption`
+
+5. **Blocking gates (14):** AICPA Trust Service Criteria document + interview gates + standard evidence gates
+
+6. **Evidence freshness:** all policy documents 365 days; all block `report_generation` and `delivered`
+
+**Safety constraints:**
+- No API routes, DB schemas, auth scopes, or tenant isolation logic modified.
+- `SOC2_PLAYBOOK` is frozen — immutable at runtime.
+- `get_playbook("soc2")` dispatch is case-insensitive.
+- All existing playbooks unaffected.
+
+**Files touched:**
+- `services/field_assessment/playbooks.py` — `SOC2_PLAYBOOK` definition; registry + fallback map update
+- `tests/test_playbook_hipaa.py` — 34 SOC 2 tests added (77 total)
+- `ROADMAP.md` — P1 #8 updated to reflect HIPAA + SOC 2
+
+**Validation:**
+- `ruff check .` → no issues
+- `ruff format --check .` → all files formatted
+- `pytest tests/test_playbook_hipaa.py` → 77 passed
+- `make fg-fast` → all gates passed
