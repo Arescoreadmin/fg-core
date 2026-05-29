@@ -144,14 +144,14 @@ export default function FieldAssessmentListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('__all__');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const page = await fieldAssessmentApi.listEngagements(
-        statusFilter ? { status: statusFilter } : undefined,
+        statusFilter !== '__all__' ? { status: statusFilter } : undefined,
       );
       setEngagements(page.items);
     } catch (e) {
@@ -191,7 +191,7 @@ export default function FieldAssessmentListPage() {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All</SelectItem>
+              <SelectItem value="__all__">All</SelectItem>
               {(['scheduled','pre_visit','in_progress','evidence_collected','report_generation','delivered','remediation','monitoring','closed','cancelled'] as const).map((s) => (
                 <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, ' ')}</SelectItem>
               ))}
