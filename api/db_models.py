@@ -3512,3 +3512,54 @@ class ReadinessAuditEventRecord(Base):
     timestamp: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+# ─── Workforce Intelligence (PR 36) ──────────────────────────────────────────
+
+class TenantUser(Base):
+    __tablename__ = "tenant_users"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "email", name="uq_tenant_users_tenant_email"),
+        Index("ix_tenant_users_tenant_id", "tenant_id"),
+        Index("ix_tenant_users_invite_token", "invite_token"),
+    )
+
+    id: Mapped[Any] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    email: Mapped[Any] = mapped_column(String(256), nullable=False)
+    display_name: Mapped[Any] = mapped_column(String(256), nullable=False)
+    role: Mapped[Any] = mapped_column(String(32), nullable=False, default="user")
+    invite_token: Mapped[Any] = mapped_column(String(128), nullable=True, unique=True)
+    invite_expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    last_active_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class AIQueryLog(Base):
+    __tablename__ = "ai_query_log"
+    __table_args__ = (
+        Index("ix_ai_query_log_tenant_id", "tenant_id"),
+        Index("ix_ai_query_log_user_id", "user_id"),
+        Index("ix_ai_query_log_tenant_created", "tenant_id", "created_at"),
+    )
+
+    id: Mapped[Any] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    user_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    user_email: Mapped[Any] = mapped_column(String(256), nullable=True)
+    session_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    query_text: Mapped[Any] = mapped_column(Text, nullable=False)
+    response_text: Mapped[Any] = mapped_column(Text, nullable=True)
+    provider: Mapped[Any] = mapped_column(String(64), nullable=True)
+    model: Mapped[Any] = mapped_column(String(128), nullable=True)
+    prompt_tokens: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    completion_tokens: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    policy_decision: Mapped[Any] = mapped_column(String(32), nullable=False, default="allow")
+    subject_category: Mapped[Any] = mapped_column(String(64), nullable=True)
+    work_relevance: Mapped[Any] = mapped_column(String(32), nullable=True)
+    sensitivity_flags: Mapped[Any] = mapped_column(JSON, nullable=False, default=list, server_default=text("'[]'"))
+    risk_signals: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    classified_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)

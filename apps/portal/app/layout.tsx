@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { href: '/attestation', label: 'Attestation' },
   { href: '/remediation', label: 'Remediation' },
   { href: '/continuity', label: 'Continuity' },
+  { href: '/assistant', label: 'AI Assistant' },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

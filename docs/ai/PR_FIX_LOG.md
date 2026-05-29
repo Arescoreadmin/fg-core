@@ -12692,3 +12692,120 @@ Pure frontend composition from three existing endpoints:
 **File:** `apps/portal/app/findings/page.tsx`
 
 **Validation:** `make portal-lint` clean; `make fg-lint` clean.
+
+---
+
+# PR 36 — Workforce Intelligence: Per-User AI Attribution, Risk Profiling, and Admin Dashboard
+
+**Date:** 2026-05-28
+**Branch:** feat/workforce-intelligence-pr36
+**Scope:** Backend (api/*, migrations, auth layer, tenant isolation) + Portal (session, BFF, UI) + Console (UI)
+
+## Does this PR move us from measuring declared intent to measuring actual behavior?
+
+**Yes — unambiguously.** Every prior PR measures what clients *said* they do (questionnaire responses, attestations, remediation commitments). This PR measures what employees *actually do* with AI — every query, classified, risk-scored, and reviewable by the tenant admin with a tamper-evident audit chain behind it. This is the first PR that captures live behavioral signals at the individual user level.
+
+It is also load-bearing infrastructure for the Workforce Intelligence product line: the `ai_query_log` table, the per-user risk scoring function, and the classification pipeline are the data substrate for every future workforce feature.
+
+## Summary
+
+Six coordinated changes:
+
+1. **Migrations 0068–0069** — `tenant_users` (per-user identity registry) + `ai_query_log` (per-query attribution with subject classification)
+2. **Backend workforce router** (`api/workforce.py`) — user invite/manage endpoints + risk profile leaderboard + query activity drill-down
+3. **Chat endpoint attribution** (`api/ui_ai_console.py`) — reads `X-FG-User-ID` / `X-FG-User-Email` headers; writes every successful chat to `ai_query_log` with heuristic subject/sensitivity classification
+4. **Portal session extension** (`apps/portal/lib/session.ts`) — adds user identity payload (userId, email, displayName, role) to HMAC-signed session token; backward-compatible with existing password-only sessions
+5. **Portal UI** — `/accept-invite` page for invite-token login; `/assistant` governed AI workspace; BFF extended to forward `X-FG-User-ID` + `X-FG-User-Email` from session; `/ui/ai/chat` added to proxy whitelist
+6. **Console UI** — `/dashboard/workforce` with risk leaderboard, user management tab, and per-user activity drawer (query history, expandable responses, sensitivity flags)
+
+## Changes
+
+### 1. migrations/postgres/0068_tenant_users.sql
+
+New table `tenant_users`: id (UUID), tenant_id, email, display_name, role (user|admin|auditor), invite_token (single-use, nullable after acceptance), invite_expires_at, active, last_active_at, timestamps.
+
+Unique constraint on (tenant_id, email). Index on invite_token for O(1) lookup at login.
+
+**Auth impact:** Introduces the per-user identity layer. Invite tokens are single-use (cleared on acceptance). No password storage — token-gated first login only.
+
+### 2. migrations/postgres/0069_ai_query_log.sql
+
+New table `ai_query_log`: id, tenant_id, user_id (FK to tenant_users.id, nullable for operator queries), user_email (denormalized), session_id, query_text, response_text, provider, model, token counts, policy_decision, subject_category, work_relevance, sensitivity_flags (JSONB array), risk_signals (JSONB), classified_at, created_at.
+
+Indexes on (tenant_id), (user_id), (tenant_id, created_at DESC), (user_id, created_at DESC).
+
+**Tenant isolation:** Every row carries tenant_id. All workforce API queries filter by `require_bound_tenant()`.
+
+### 3. api/workforce.py (new)
+
+Router prefix `/workforce`, tag `workforce`. Six endpoints:
+
+- `POST /workforce/users` — invite user (admin:write). Generates UUID user_id + 32-byte invite token. Returns invite URL hint.
+- `GET /workforce/users` — list all users for tenant with invite_pending flag.
+- `PATCH /workforce/users/{user_id}` — update active/role/display_name.
+- `GET /workforce/risk-profiles` — compute risk scores for all active users from last 30 days of ai_query_log. Risk score formula: `min(violations×15,30) + (personal_ratio×25) + min(sensitive×5,20) + min(pii×8,16) + min(competitor×6,12)`, normalized 0–100.
+- `GET /workforce/users/{user_id}/activity` — paginated query history + per-user risk profile.
+- `POST /workforce/users/accept-invite` — validates invite token, clears it (one-time use), returns user identity for session creation.
+
+Registered in `api/main.py`.
+
+### 4. api/ui_ai_console.py (extended)
+
+Added `_classify_query()` — zero-latency heuristic classification using keyword dictionaries. Returns (subject_category, work_relevance, sensitivity_flags). No LLM call, no added latency.
+
+Added `_log_query()` — writes to `ai_query_log` after every successful `/ui/ai/chat` response. Non-fatal: any DB error is caught and rolled back without breaking the chat response.
+
+In `ai_chat()`: reads `X-FG-User-ID` and `X-FG-User-Email` request headers → passes to `_log_query()`. These headers are injected server-side by the portal BFF from the session token; never from the request body.
+
+### 5. apps/portal/lib/session.ts (extended)
+
+Added `SessionUser` interface and `createUserSessionToken(user)` — creates a JSON payload HMAC-signed session (same PORTAL_SESSION_SECRET, same 8hr TTL). Added `getSessionUser(token)` — decodes and verifies the user payload. Backward-compatible: legacy `ok:{exp}` tokens still verify via `verifySessionToken()`.
+
+### 6. apps/portal/app/api/auth/accept-invite/route.ts (new)
+
+POST endpoint: receives `{ invite_token }`, exchanges with backend `/workforce/users/accept-invite`, receives user identity, creates user session token, sets `fg_portal_session` cookie. Redirects to `/` on success.
+
+### 7. apps/portal/app/api/core/[...path]/route.ts (extended)
+
+- Added `ui/ai/chat` to PROXY_RULES (POST allowed)
+- Reads `fg_portal_session` cookie → `getSessionUser()` → injects `X-FG-User-ID` and `X-FG-User-Email` headers on every proxied request
+
+### 8. apps/portal/app/assistant/page.tsx (new)
+
+Governed AI workspace for portal users. Features: message thread, starter prompts, policy-error display (AI_INPUT_POLICY_BLOCKED → friendly message), per-message metadata (provider, model, tokens, policy decision). Device ID persisted to localStorage per user. All queries routed through BFF with user attribution.
+
+### 9. apps/portal/app/accept-invite/page.tsx (new)
+
+Single-page invite acceptance flow. Reads `?token=` from URL, calls `/api/auth/accept-invite`, redirects to portal home on success. Added `/accept-invite` to portal middleware public prefixes.
+
+### 10. apps/console/app/dashboard/workforce/page.tsx (new)
+
+Two-tab dashboard:
+- **Risk Profiles** — leaderboard sorted by risk score, columns: user, band badge, score, queries, violations, personal %, PII hits, last active. "Review" button opens activity drawer.
+- **User Management** — invite/deactivate/reactivate controls.
+
+Activity drawer: risk summary cards, paginated query log with subject category, work relevance, sensitivity flag chips, expandable response text.
+
+Invite result panel: generates the portal accept-invite URL (substitutes `console.` → `app.` in hostname) for the operator to share.
+
+### 11. apps/console/lib/workforceApi.ts (new)
+
+Typed API client for all workforce endpoints. Types: TenantUser, InviteResult, RiskProfile, QueryRecord, UserActivity.
+
+### 12. apps/console/components/layout/Sidebar.tsx (extended)
+
+Added "Workforce" nav group with "Workforce Intel" link to `/dashboard/workforce`.
+
+## Contracts / Configuration
+
+No new env vars required. Uses existing CORE_API_KEY, CORE_TENANT_ID, PORTAL_SESSION_SECRET.
+
+The `X-FG-User-ID` and `X-FG-User-Email` headers are internal BFF→backend headers; never client-facing.
+
+## Tenant Isolation
+
+All backend queries are scoped by `require_bound_tenant()`. The `ai_query_log` table carries `tenant_id` on every row. No cross-tenant reads are possible through the workforce router.
+
+## Validation
+
+`npm run build` clean for both `apps/portal` and `apps/console`. Backend imports verified (`api/workforce.py` registered in `main.py`). Migrations are additive (CREATE TABLE IF NOT EXISTS, no destructive ops).

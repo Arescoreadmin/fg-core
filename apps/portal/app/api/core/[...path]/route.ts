@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { COOKIE_NAME, getSessionUser } from '@/lib/session';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.CORE_API_KEY;
@@ -27,6 +28,7 @@ function checkRateLimit(key: string): boolean {
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'governance/assets', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'field-assessment/engagements', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'ui/ai/chat', methods: new Set(['POST']) },
 ];
 
 // Explicit write paths allowed through the portal BFF.
@@ -121,6 +123,14 @@ async function proxyToCore(
   headers.set('X-Tenant-ID', CORE_TENANT_ID);
   headers.set('X-Request-ID', requestId);
   headers.set('X-Portal-Source', 'client-portal');
+
+  // Forward user identity from session for workforce attribution (PR 36).
+  const sessionToken = request.cookies.get(COOKIE_NAME)?.value;
+  const sessionUser = await getSessionUser(sessionToken);
+  if (sessionUser) {
+    headers.set('X-FG-User-ID', sessionUser.userId);
+    headers.set('X-FG-User-Email', sessionUser.email);
+  }
 
   const contentType = request.headers.get('content-type');
   if (
