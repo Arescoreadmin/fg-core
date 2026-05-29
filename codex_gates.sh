@@ -51,11 +51,15 @@ echo "==> Gates: basic secret scan (cheap tripwire)"
 # - codex_gates.sh itself, because it contains the detection patterns.
 # - .claude/worktrees/**, because Claude/Codex scratch worktrees can contain detector regexes and stale generated code.
 # - services/ai_plane_extension/policy_engine.py, because it contains re.compile deny-list patterns, not secrets.
+# - apps/**/node_modules/**, because third-party JS libs (e.g. jose) contain PEM marker strings for key validation.
+# - apps/**/.next/**, because Next.js build artifacts bundle those same strings via source maps.
 rg -n --hidden --no-ignore-vcs \
   --glob '!codex_gates.sh' \
   --glob '!.claude/worktrees/**' \
   --glob '!services/ai_plane_extension/policy_engine.py' \
   --glob '!.venv/**' \
+  --glob '!apps/**/node_modules/**' \
+  --glob '!apps/**/.next/**' \
   "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY|BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
   . && { echo "ERROR: possible secret detected (see matches above)"; exit 1; } || true
 
