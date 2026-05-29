@@ -3939,7 +3939,9 @@ def export_engagement_report_route(
     tenant_id = _resolve_caller_tenant(request)
 
     try:
-        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+        engagement = get_engagement(
+            db, engagement_id=engagement_id, tenant_id=tenant_id
+        )
     except EngagementNotFound as exc:
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
@@ -3967,6 +3969,7 @@ def export_engagement_report_route(
 
     # format == "pdf"
     report_data = record.report_json or {}
+    exec_summary = report_data.get("executive_summary")
     try:
         gov_report = deserialize_report(report_data)
     except (ValueError, KeyError):
@@ -3979,7 +3982,11 @@ def export_engagement_report_route(
         )
 
     try:
-        pdf_bytes = export_pdf_bytes(gov_report)
+        pdf_bytes = export_pdf_bytes(
+            gov_report,
+            executive_summary=exec_summary if isinstance(exec_summary, dict) else None,
+            engagement_name=engagement.client_name,
+        )
     except ExportUnavailableError:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,

@@ -61,6 +61,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | PR 35 | Portal Field Assessment Workspace | ✅ merged | `/engagement` list + `/engagement/[id]` tabbed detail (Overview, Scans, Documents, Observations, Evidence, History); 7 new portalApi methods; "Assessment" nav link |
 | PR 36 | Workforce Intelligence | ✅ merged | Per-user AI query attribution; `tenant_users` + `ai_query_log` tables; subject-matter classification; risk scoring; workforce admin dashboard in console; AI workspace in portal |
 | PR 37 | Risk History + Keywords + Alerting | ✅ merged | Daily risk score snapshots with Recharts trend chart; tenant-configurable keyword triggers (contains/exact/word_boundary/prefix/regex + case sensitivity); threshold-based alert rules with cooldown + fired-alerts audit log; keyword backtest/preview against historical queries; Keywords + Alerts tabs in workforce dashboard |
+| PR 38 | Executive PDF Export | 🔄 in progress | Client-ready multi-page PDF: cover page, AI executive summary (advisory-labeled), confidence assessment, severity-sorted findings, remediation plan, framework coverage, evidence appendix, per-page footer with manifest hash; replaces raw-data stub |
 
 ---
 
@@ -98,7 +99,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | 14 | `remediation_priority` scoring | Needs impact × exploitability formula decision |
 | 15 | Evidence freshness degradation | Reduce confidence score as evidence ages |
 | 16 | Cross-finding correlation | Surface related findings in explanation panel |
-| 17 | Executive PDF export | WeasyPrint or Playwright → signed PDF |
+| 17 | Executive PDF export | PR 38 🔄 — reportlab, client-ready layout, advisory executive summary |
 | 18 | Portal rate limiter → Redis | Current in-memory `_rlBuckets` bypassed in multi-node |
 | 19 | Dedicated CMMC/SOC2/ISO27001 playbooks | Currently all fall back to comprehensive |
 | 20 | Operator onboarding runbook | Step-by-step: tenant create → scan → promote → report |
