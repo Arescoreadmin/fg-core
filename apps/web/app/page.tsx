@@ -95,6 +95,9 @@ export default function Home() {
               Compliance delivery,{' '}
               <span className="text-frost-400">end-to-end</span>
             </h1>
+            <p className="text-base font-mono tracking-widest text-frost-400/80 uppercase">
+              Trust but Verify
+            </p>
             <p className="text-lg text-gray-400 max-w-xl mx-auto leading-relaxed">
               FrostGate is the field assessment and AI governance platform for compliance-driven
               organizations. Automate evidence collection, enforce NIST controls, and deliver
