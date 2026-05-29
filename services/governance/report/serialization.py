@@ -446,20 +446,29 @@ def export_html(report: GovernanceReport) -> str:
 # ---------------------------------------------------------------------------
 
 
-def export_pdf_bytes(report: GovernanceReport) -> bytes:
-    """Export the governance report as a PDF document using reportlab.
+def export_pdf_bytes(
+    report: GovernanceReport,
+    *,
+    executive_summary: dict[str, Any] | None = None,
+    engagement_name: str | None = None,
+) -> bytes:
+    """Export the governance report as a client-ready PDF using reportlab.
 
     Raises ExportUnavailableError if reportlab is not installed.
-    Includes all deterministic sections: findings, remediations,
-    evidence appendix, confidence breakdown, manifest hash.
-    No AI prose.
+    executive_summary is advisory-only AI narrative — labeled as such and excluded
+    from the manifest hash computation.
     """
     try:
-        from reportlab.lib import colors  # noqa: PLC0415
+        from reportlab.lib import colors as _colors  # noqa: PLC0415
         from reportlab.lib.pagesizes import letter  # noqa: PLC0415
-        from reportlab.lib.styles import getSampleStyleSheet  # noqa: PLC0415
+        from reportlab.lib.styles import (  # noqa: PLC0415
+            ParagraphStyle,
+            getSampleStyleSheet,
+        )
         from reportlab.lib.units import inch  # noqa: PLC0415
         from reportlab.platypus import (  # noqa: PLC0415
+            KeepTogether,
+            PageBreak,
             Paragraph,
             SimpleDocTemplate,
             Spacer,
@@ -473,161 +482,490 @@ def export_pdf_bytes(report: GovernanceReport) -> bytes:
 
     import io  # noqa: PLC0415
 
+    # ── Layout constants ───────────────────────────────────────────────────────
+    W, _H = letter
+    MARGIN = 0.85 * inch
+    CONTENT_W = W - 2 * MARGIN  # 6.8 inch on letter
+
+    _SEV_COLORS: dict[str, Any] = {
+        "critical": _colors.HexColor("#dc2626"),
+        "high": _colors.HexColor("#ea580c"),
+        "medium": _colors.HexColor("#ca8a04"),
+        "low": _colors.HexColor("#16a34a"),
+    }
+    _SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter)
-    styles = getSampleStyleSheet()
-    story = []
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        leftMargin=MARGIN,
+        rightMargin=MARGIN,
+        topMargin=MARGIN,
+        bottomMargin=MARGIN + 0.25 * inch,
+    )
+    base = getSampleStyleSheet()
+    _h2 = ParagraphStyle(
+        "_h2", parent=base["Heading2"], fontSize=12, spaceBefore=14, spaceAfter=5
+    )
+    _normal = ParagraphStyle("_normal", parent=base["Normal"], fontSize=9, leading=13)
+    _small = ParagraphStyle(
+        "_small",
+        parent=base["Normal"],
+        fontSize=8,
+        leading=11,
+        textColor=_colors.HexColor("#374151"),
+    )
+    _muted = ParagraphStyle(
+        "_muted",
+        parent=base["Normal"],
+        fontSize=7.5,
+        leading=11,
+        textColor=_colors.HexColor("#6b7280"),
+    )
+    _advisory = ParagraphStyle(
+        "_advisory",
+        parent=base["Italic"],
+        fontSize=8,
+        leading=11,
+        textColor=_colors.HexColor("#b45309"),
+    )
+    _label = ParagraphStyle(
+        "_label",
+        parent=base["Normal"],
+        fontSize=8,
+        leading=11,
+        fontName="Helvetica-Bold",
+        textColor=_colors.HexColor("#374151"),
+    )
 
-    # Title
-    story.append(Paragraph("FrostGate Governance Report", styles["Title"]))
-    story.append(Spacer(1, 0.2 * inch))
+    digest = report.manifest_hash
+    client_label = engagement_name or report.tenant_id
 
-    # Header table
-    header_data = [
+    # Page footer callback — runs on every page
+    def _footer(canvas: Any, doc: Any) -> None:
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(_colors.HexColor("#9ca3af"))
+        canvas.setStrokeColor(_colors.HexColor("#e5e7eb"))
+        canvas.line(MARGIN, 0.62 * inch, W - MARGIN, 0.62 * inch)
+        canvas.drawString(
+            MARGIN, 0.42 * inch, f"FrostGate Field Assessment  ·  {client_label}"
+        )
+        canvas.drawCentredString(W / 2, 0.42 * inch, f"SHA-256: {digest[:24]}…")
+        canvas.drawRightString(W - MARGIN, 0.42 * inch, f"Page {doc.page}")
+        canvas.restoreState()
+
+    story: list[Any] = []
+
+    # ── Cover page ─────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 1.2 * inch))
+    story.append(
+        Paragraph(
+            "FrostGate",
+            ParagraphStyle(
+                "_cover_title",
+                parent=base["Title"],
+                fontSize=28,
+                spaceAfter=4,
+                textColor=_colors.HexColor("#1e3a5f"),
+            ),
+        )
+    )
+    story.append(
+        Paragraph(
+            "Field Assessment Report",
+            ParagraphStyle(
+                "_cover_sub",
+                parent=base["Normal"],
+                fontSize=15,
+                spaceAfter=8,
+                textColor=_colors.HexColor("#6b7280"),
+            ),
+        )
+    )
+    # Blue rule
+    story.append(
+        Table(
+            [[""]],
+            colWidths=[CONTENT_W],
+            rowHeights=[3],
+            style=TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), _colors.HexColor("#3b82f6")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]
+            ),
+        )
+    )
+    story.append(Spacer(1, 0.25 * inch))
+
+    cover_rows = []
+    if engagement_name:
+        cover_rows.append(["Client", engagement_name])
+    cover_rows += [
         ["Report ID", report.report_id],
         ["Assessment ID", report.assessment_id],
-        ["Tenant ID", report.tenant_id],
-        ["Version", str(report.version)],
-        ["Schema Version", report.schema_version],
-        ["Generated At", report.generated_at],
+        ["Version", f"v{report.version}"],
+        ["Generated", report.generated_at],
+        ["Schema", report.schema_version],
     ]
-    t = Table(header_data, colWidths=[1.5 * inch, 5 * inch])
-    t.setStyle(
+    cover_t = Table(cover_rows, colWidths=[1.3 * inch, CONTENT_W - 1.3 * inch])
+    cover_t.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("TEXTCOLOR", (0, 0), (0, -1), _colors.HexColor("#374151")),
+                ("GRID", (0, 0), (-1, -1), 0.3, _colors.HexColor("#e5e7eb")),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
             ]
         )
     )
-    story.append(t)
-    story.append(Spacer(1, 0.2 * inch))
+    story.append(cover_t)
+    story.append(Spacer(1, 0.25 * inch))
+    story.append(Paragraph("Manifest Hash (SHA-256)", _label))
+    story.append(
+        Paragraph(
+            f"<font name='Courier' size='8'>{digest}</font>",
+            _normal,
+        )
+    )
+    story.append(Spacer(1, 0.5 * inch))
+    story.append(
+        Paragraph(
+            "CONFIDENTIAL — This document contains sensitive security assessment findings. "
+            "Distribution is restricted to authorized personnel of the client organization. "
+            "Deterministic findings, evidence, and framework mappings are cryptographically "
+            "bound to the manifest hash above. AI-generated narrative sections are labeled "
+            "advisory-only and are not part of the evidence record.",
+            _muted,
+        )
+    )
+    story.append(PageBreak())
 
-    # Confidence
-    story.append(Paragraph("Confidence Score", styles["Heading2"]))
-    conf_data = [
-        ["Overall", f"{report.confidence.overall:.4f}"],
-        ["Evidence Completeness", f"{report.confidence.evidence_completeness:.4f}"],
-        ["Evidence Freshness", f"{report.confidence.evidence_freshness:.4f}"],
-        ["Control Coverage", f"{report.confidence.control_coverage:.4f}"],
-        ["Reviewer Validated", "Yes" if report.confidence.reviewer_validated else "No"],
-        [
-            "Degradation Reasons",
-            "; ".join(report.confidence.degradation_reasons) or "None",
-        ],
+    # ── Executive summary (advisory — not deterministic) ──────────────────────
+    if executive_summary and isinstance(executive_summary, dict):
+        narrative = str(executive_summary.get("narrative") or "").strip()
+        if narrative:
+            posture = str(executive_summary.get("risk_posture") or "").strip().lower()
+            key_concerns: list[Any] = executive_summary.get("key_concerns") or []
+
+            block: list[Any] = [
+                Paragraph("Executive Summary", _h2),
+                Paragraph(
+                    "Advisory only — AI-generated narrative. Not included in manifest hash.",
+                    _advisory,
+                ),
+                Spacer(1, 0.08 * inch),
+            ]
+            if posture:
+                p_color = _SEV_COLORS.get(posture, _colors.HexColor("#6b7280"))
+                block.append(
+                    Table(
+                        [[posture.upper() + " RISK"]],
+                        colWidths=[1.1 * inch],
+                        style=TableStyle(
+                            [
+                                ("BACKGROUND", (0, 0), (-1, -1), p_color),
+                                ("TEXTCOLOR", (0, 0), (-1, -1), _colors.white),
+                                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                            ]
+                        ),
+                    )
+                )
+                block.append(Spacer(1, 0.08 * inch))
+
+            block.append(Paragraph(narrative, _normal))
+
+            if isinstance(key_concerns, list) and key_concerns:
+                block.append(Spacer(1, 0.08 * inch))
+                block.append(
+                    Paragraph(
+                        "Key Concerns",
+                        ParagraphStyle(
+                            "_kc",
+                            parent=base["Heading3"],
+                            fontSize=10,
+                            spaceBefore=4,
+                            spaceAfter=3,
+                        ),
+                    )
+                )
+                for concern in key_concerns:
+                    block.append(Paragraph(f"• {str(concern)}", _normal))
+
+            block.append(PageBreak())
+            story.extend(block)
+
+    # ── Confidence assessment ──────────────────────────────────────────────────
+    conf = report.confidence
+    story.append(Paragraph("Confidence Assessment", _h2))
+    conf_rows = [
+        ["Metric", "Score"],
+        ["Overall Confidence", f"{conf.overall:.1%}"],
+        ["Evidence Completeness", f"{conf.evidence_completeness:.1%}"],
+        ["Evidence Freshness", f"{conf.evidence_freshness:.1%}"],
+        ["Control Coverage", f"{conf.control_coverage:.1%}"],
+        ["Reviewer Validated", "Yes" if conf.reviewer_validated else "No"],
     ]
-    ct = Table(conf_data, colWidths=[2 * inch, 4.5 * inch])
-    ct.setStyle(
+    if conf.degradation_reasons:
+        conf_rows.append(["Degradation Factors", "; ".join(conf.degradation_reasons)])
+    conf_t = Table(conf_rows, colWidths=[2.1 * inch, CONTENT_W - 2.1 * inch])
+    conf_t.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("BACKGROUND", (0, 0), (-1, 0), _colors.HexColor("#1e3a5f")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), _colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("BACKGROUND", (0, 1), (0, -1), _colors.HexColor("#f3f4f6")),
+                ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("GRID", (0, 0), (-1, -1), 0.3, _colors.HexColor("#e5e7eb")),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
             ]
         )
     )
-    story.append(ct)
+    story.append(conf_t)
     story.append(Spacer(1, 0.2 * inch))
 
-    # Findings
-    story.append(Paragraph(f"Findings ({len(report.findings)})", styles["Heading2"]))
-    if report.findings:
-        for f in report.findings:
-            fw_refs = "; ".join(
-                f"{fm.framework}: {fm.control_ref}" for fm in f.framework_mappings
+    # ── Findings ────────────────────────────────────────────────────────────────
+    sorted_findings = sorted(
+        report.findings,
+        key=lambda f: (_SEV_ORDER.get(f.severity.lower(), 99), f.finding_id),
+    )
+    story.append(Paragraph(f"Findings  ({len(sorted_findings)})", _h2))
+    if sorted_findings:
+        for f in sorted_findings:
+            sev_color = _SEV_COLORS.get(f.severity.lower(), _colors.HexColor("#6b7280"))
+            fw_refs = (
+                "; ".join(
+                    f"{fm.framework}: {fm.control_ref}" for fm in f.framework_mappings
+                )
+                or "—"
             )
-            finding_data = [
-                ["Finding ID", f.finding_id],
-                ["Control ID", f.control_id],
-                ["Domain", f.domain],
-                ["Severity", f.severity.upper()],
-                ["Gap Classification", f.gap_classification],
-                ["Confidence", f"{f.confidence:.3f}"],
-                ["Framework Mappings", fw_refs or "None"],
-                ["Description", f.description],
+            hdr_style = ParagraphStyle(
+                "_fhdr",
+                fontSize=9,
+                fontName="Helvetica-Bold",
+                textColor=_colors.white,
+                leading=12,
+            )
+            hdr = Table(
+                [
+                    [
+                        Paragraph(
+                            f"{f.severity.upper()}  ·  {f.control_id}  ·  {f.domain}",
+                            hdr_style,
+                        )
+                    ]
+                ],
+                colWidths=[CONTENT_W],
+                style=TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, -1), sev_color),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                        ("TOPPADDING", (0, 0), (-1, -1), 5),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ]
+                ),
+            )
+            body_rows = [
+                [
+                    Paragraph("Finding ID", _label),
+                    Paragraph(
+                        f"<font name='Courier' size='7'>{f.finding_id}</font>", _muted
+                    ),
+                ],
+                [
+                    Paragraph("Gap Classification", _label),
+                    Paragraph(f.gap_classification, _small),
+                ],
+                [
+                    Paragraph("Confidence", _label),
+                    Paragraph(f"{f.confidence:.3f}", _small),
+                ],
+                [Paragraph("Framework Mappings", _label), Paragraph(fw_refs, _small)],
+                [Paragraph("Description", _label), Paragraph(f.description, _small)],
             ]
-            ft = Table(finding_data, colWidths=[1.5 * inch, 5 * inch])
-            ft.setStyle(
+            body_t = Table(
+                body_rows,
+                colWidths=[1.4 * inch, CONTENT_W - 1.4 * inch],
+            )
+            body_t.setStyle(
                 TableStyle(
                     [
-                        ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
-                        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                        ("FONTSIZE", (0, 0), (-1, -1), 8),
-                        ("TOPPADDING", (0, 0), (-1, -1), 3),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                        ("GRID", (0, 0), (-1, -1), 0.3, _colors.HexColor("#e5e7eb")),
+                        ("BACKGROUND", (0, 0), (0, -1), _colors.HexColor("#f9fafb")),
+                        ("TOPPADDING", (0, 0), (-1, -1), 4),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
                     ]
                 )
             )
-            story.append(ft)
-            story.append(Spacer(1, 0.1 * inch))
+            story.append(KeepTogether([hdr, body_t, Spacer(1, 0.1 * inch)]))
     else:
-        story.append(Paragraph("No findings.", styles["Normal"]))
+        story.append(Paragraph("No findings recorded.", _normal))
 
-    story.append(Spacer(1, 0.1 * inch))
+    story.append(Spacer(1, 0.15 * inch))
 
-    # Evidence appendix
+    # ── Remediation plan ────────────────────────────────────────────────────────
+    story.append(Paragraph(f"Remediation Plan  ({len(report.remediations)})", _h2))
+    if report.remediations:
+        rem_header = [["Priority", "Severity", "Controls", "Evidence Gaps", "Impact"]]
+        rem_rows = []
+        for r in report.remediations:
+            controls = ", ".join(r.linked_controls) or "—"
+            gaps = "; ".join(r.evidence_gaps) or "None"
+            rem_rows.append(
+                [
+                    Paragraph(r.priority, _small),
+                    Paragraph(r.severity.upper(), _small),
+                    Paragraph(controls, _small),
+                    Paragraph(gaps, _small),
+                    Paragraph(r.operational_impact, _small),
+                ]
+            )
+        rem_t = Table(
+            rem_header + rem_rows,
+            colWidths=[0.7 * inch, 0.7 * inch, 1.35 * inch, 1.7 * inch, 2.35 * inch],
+        )
+        rem_t.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), _colors.HexColor("#1e3a5f")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), _colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 0.3, _colors.HexColor("#e5e7eb")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ]
+            )
+        )
+        story.append(rem_t)
+    else:
+        story.append(Paragraph("No remediation items.", _normal))
+
+    story.append(Spacer(1, 0.15 * inch))
+
+    # ── Framework coverage summary ──────────────────────────────────────────────
+    if report.framework_summary:
+        story.append(Paragraph("Framework Coverage", _h2))
+        fw_rows = [["Framework", "Controls Mapped"]]
+        for fw, controls in sorted(report.framework_summary.items()):
+            fw_rows.append(
+                [
+                    Paragraph(fw, _small),
+                    Paragraph(", ".join(controls) if controls else "—", _small),
+                ]
+            )
+        fw_t = Table(fw_rows, colWidths=[1.8 * inch, CONTENT_W - 1.8 * inch])
+        fw_t.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), _colors.HexColor("#374151")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), _colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 0.3, _colors.HexColor("#e5e7eb")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ]
+            )
+        )
+        story.append(fw_t)
+        story.append(Spacer(1, 0.15 * inch))
+
+    # ── Evidence appendix ───────────────────────────────────────────────────────
     story.append(
         Paragraph(
-            f"Evidence Appendix ({len(report.evidence_appendix)} items)",
-            styles["Heading2"],
+            f"Evidence Appendix  ({len(report.evidence_appendix)} items)",
+            _h2,
         )
     )
     if report.evidence_appendix:
-        ev_data = [["Evidence ID", "Source", "State", "Freshness", "Classification"]]
+        ev_header = [["Evidence ID", "Source", "State", "Freshness", "Classification"]]
+        ev_rows = []
         for ref in report.evidence_appendix:
             freshness = (
                 f"{ref.freshness_days}d"
                 if ref.freshness_days is not None
                 else "unknown"
             )
-            ev_data.append(
+            short_id = (
+                ref.evidence_id[:14] + "…"
+                if len(ref.evidence_id) > 14
+                else ref.evidence_id
+            )
+            ev_rows.append(
                 [
-                    ref.evidence_id[:12] + "…"
-                    if len(ref.evidence_id) > 12
-                    else ref.evidence_id,
-                    ref.source,
-                    ref.validation_state.value,
-                    freshness,
-                    ref.classification,
+                    Paragraph(
+                        f"<font name='Courier' size='7'>{short_id}</font>", _muted
+                    ),
+                    Paragraph(ref.source, _small),
+                    Paragraph(ref.validation_state.value, _small),
+                    Paragraph(freshness, _small),
+                    Paragraph(ref.classification, _small),
                 ]
             )
-        evt = Table(
-            ev_data,
-            colWidths=[1.5 * inch, 1.5 * inch, 1 * inch, 0.8 * inch, 1.7 * inch],
+        ev_t = Table(
+            ev_header + ev_rows,
+            colWidths=[1.6 * inch, 1.4 * inch, 0.9 * inch, 0.75 * inch, 2.15 * inch],
         )
-        evt.setStyle(
+        ev_t.setStyle(
             TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("BACKGROUND", (0, 0), (-1, 0), _colors.HexColor("#374151")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), _colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                     ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 0.3, _colors.HexColor("#e5e7eb")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ]
             )
         )
-        story.append(evt)
+        story.append(ev_t)
     else:
-        story.append(Paragraph("No evidence references.", styles["Normal"]))
+        story.append(Paragraph("No evidence references.", _normal))
 
-    story.append(Spacer(1, 0.3 * inch))
-
-    # Manifest hash footer
-    story.append(Paragraph("Manifest Hash (SHA-256)", styles["Heading2"]))
+    # ── Verification ────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 0.35 * inch))
+    story.append(Paragraph("Verification", _h2))
     story.append(
         Paragraph(
-            f"<font name='Courier' size=9>{report.manifest_hash}</font>",
-            styles["Normal"],
+            f"<font name='Courier' size='8'>{digest}</font>",
+            _normal,
         )
     )
     story.append(Spacer(1, 0.1 * inch))
     story.append(
         Paragraph(
-            "This report was generated deterministically. AI narrative is advisory-only "
-            "and isolated from all deterministic truth fields above.",
-            styles["Normal"],
+            "This report was generated deterministically. The manifest hash above uniquely "
+            "identifies all deterministic findings, evidence references, framework mappings, "
+            "and remediations. Any AI-generated narrative in this document is labeled "
+            "advisory-only and is not included in the manifest hash computation.",
+            _muted,
         )
     )
 
-    doc.build(story)
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buf.getvalue()

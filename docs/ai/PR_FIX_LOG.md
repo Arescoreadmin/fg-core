@@ -12853,3 +12853,38 @@ New types: `RiskSnapshot`, `TenantKeyword`, `AlertRule`, `FiredAlert`, `Backtest
 
 ## Validation
 TypeScript: `npx tsc --noEmit` clean on `apps/console`. Ruff lint + format clean. Backend imports verified. `GATES_MODE=fast make fg-fast` passes all gates.
+
+---
+
+# PR 38 — Executive PDF Export
+
+## Summary
+
+Replaces the raw-data PDF stub with a client-ready, multi-page reportlab PDF. Cover page, executive summary (advisory-labeled), confidence assessment, severity-sorted findings, remediation plan, framework coverage, evidence appendix, and per-page footer with manifest hash. No new routes, migrations, or frontend changes — the "Export PDF" buttons in the console `ReportExportBar` and portal reports page already called this endpoint.
+
+**PR design gate:** Load-bearing delivery infrastructure. The deterministic evidence record already existed (findings, remediations, evidence, framework mappings, manifest hash). This PR makes it deliverable to a client in a signed PDF they can take into a board meeting — the final mile of the evidence chain reaching the stakeholder.
+
+## Backend
+
+### services/governance/report/serialization.py
+Replaced `export_pdf_bytes(report)` with `export_pdf_bytes(report, *, executive_summary=None, engagement_name=None)`.
+
+New PDF structure:
+- **Cover page**: FrostGate title, client name (from `engagement.client_name`), report ID, assessment ID, version, generated timestamp, manifest hash, confidentiality notice. Blue rule separator.
+- **Executive summary** (if present): advisory label, risk posture badge (severity-colored), narrative text, key concerns list. On its own page. Explicitly labeled "Advisory only — AI-generated narrative. Not included in manifest hash."
+- **Confidence assessment**: table with overall, evidence completeness, freshness, control coverage, reviewer validated, degradation factors.
+- **Findings**: sorted by severity (critical → high → medium → low). Each finding uses a severity-colored header bar + body table with `Paragraph` objects for long-text wrapping. `KeepTogether` prevents header/body page splits.
+- **Remediation plan**: table with priority, severity, linked controls, evidence gaps, operational impact.
+- **Framework coverage**: table of framework → mapped controls.
+- **Evidence appendix**: table with evidence ID, source, validation state, freshness, classification.
+- **Verification footer**: full manifest hash + determinism disclaimer.
+- **Per-page footer**: client label, truncated SHA-256, page number.
+
+### api/field_assessment.py
+`export_engagement_report_route`: captures `engagement` return value from `get_engagement()` (previously discarded), extracts `executive_summary` from `report_data` dict, passes both to `export_pdf_bytes`.
+
+## No migrations, no new routes, no frontend changes
+The Export PDF button in console `ReportExportBar` and portal `reports/page.tsx` already called `GET /engagements/{id}/reports/{version}/export?format=pdf`. No schema changes.
+
+## Validation
+Smoke-tested: `export_pdf_bytes(report, executive_summary=..., engagement_name=...)` generates a valid `%PDF-1.4` document (7864 bytes on sample data). Ruff lint + format clean on both modified files.
