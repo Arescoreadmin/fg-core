@@ -1028,9 +1028,55 @@
       "route_prefixes": [
         "/ui"
       ]
+    },
+    {
+      "allowed_dependency_categories": [
+        "auth",
+        "tenant",
+        "db",
+        "rate"
+      ],
+      "auth_class": {
+        "allow_unscoped_keys": false,
+        "require_any_scope": true,
+        "required_scope_prefixes": [
+          "admin:"
+        ],
+        "tenant_binding_required": true
+      },
+      "auth_exempt_routes": [],
+      "bootstrap_routes": [],
+      "docs_routes": [],
+      "global_routes": [],
+      "maturity_tag": "production-grade",
+      "plane_id": "workforce",
+      "public_routes": [
+        {
+          "class_name": "auth_exempt",
+          "expires_at": "",
+          "justification": "Invite-token exchange: the invite token IS the credential. 32-byte URL-safe random, 72h TTL, single-use (cleared on acceptance). Tenant isolation enforced implicitly: DB lookup returns nothing for tokens not belonging to the caller's tenant. Role assigned by the inviting admin at creation time; accepting user cannot escalate.",
+          "method": "POST",
+          "path": "/workforce/users/accept-invite",
+          "permanent": true
+        }
+      ],
+      "required_ci_gates": [
+        "check_plane_registry",
+        "route-inventory-audit"
+      ],
+      "required_make_targets": [
+        "soc-invariants"
+      ],
+      "required_route_invariants": [
+        "auth",
+        "tenant_bound"
+      ],
+      "route_prefixes": [
+        "/workforce"
+      ]
     }
   ],
-  "generated_at": "2026-05-28T16:20:32.500669+00:00",
+  "generated_at": "2026-05-29T10:01:27.213636+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

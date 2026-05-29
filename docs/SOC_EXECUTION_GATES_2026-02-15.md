@@ -1,3 +1,37 @@
+## 2026-05-29 — PR 36 plane registry: workforce plane definition
+
+**Classification:** Additive plane registry entry. No auth logic changes. No new routes added (routes already existed from PR 36). Plane registry now formally acknowledges and classifies all 6 workforce routes.
+
+**SOC review:**
+- `services/plane_registry/registry.py`: Added `PlaneDef(plane_id="workforce")` with:
+  - `route_prefixes=("/workforce",)`
+  - `auth_class` requires `admin:` scope prefix, tenant binding required
+  - `public_routes` entry for `POST /workforce/users/accept-invite` classified as `auth_exempt` with full justification: 32-byte URL-safe invite token, 72h TTL, single-use (cleared atomically on acceptance), tenant isolation via DB token lookup, role set by inviting admin at creation time
+- No route surface changes — routes already existed and were in the contract. This entry resolves the registry gap.
+- `tools/ci/plane_registry_snapshot.json`, `contract_routes.json`, `route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`: regenerated to reflect new plane definition. Contents are deterministic output of registry + runtime app.
+
+**Files touched:**
+- `services/plane_registry/registry.py` — new workforce PlaneDef
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+
+## 2026-05-29 — PR 36 CI repair: public_paths + workforce route inventory
+
+**Classification:** Security path amendment + route inventory update. Adds one public-path exemption for the invite-token exchange endpoint. No new write paths to existing data beyond what PR 36 already established. No schema changes. No auth flow changes.
+
+**SOC review:**
+- `api/security/public_paths.py`: Added `/workforce/users/accept-invite` to `PUBLIC_PATHS_EXACT`. This endpoint accepts a single-use invite token (32-byte URL-safe random, 72h TTL) as its sole credential — no prior session or API key exists for an invitee. Tenant isolation is enforced implicitly: the DB lookup `WHERE invite_token = :token` returns nothing if the token does not belong to the caller's tenant. Token is single-use and cleared atomically on acceptance, preventing replay. No privilege escalation: role is set by the inviting admin at invite creation time, not by the accepting user.
+- No wildcards or prefix exemptions added — exact path only.
+- `api/workforce.py`: 6 routes added to inventory (5 admin:write gated, 1 public invite exchange). No route bypasses existing tenant-binding checks.
+- Route inventory regenerated via `make route-inventory-generate`.
+
+**Files touched:**
+- `api/security/public_paths.py` — added `/workforce/users/accept-invite` to `PUBLIC_PATHS_EXACT`
+- `tools/ci/route_inventory.json` — regenerated
+
 ## 2026-05-27 — PR 20: Governance Topology Workspace UI
 
 **Classification:** New read-only UI surface + 3 additive backend routes. No schema migrations. No auth logic changes. No new DB tables. Touches: `api/governance_graph.py`, `apps/console/` (new files only), `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`.

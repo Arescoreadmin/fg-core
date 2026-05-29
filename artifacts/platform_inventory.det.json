@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 389,
+    "contract_count": 391,
     "contract_only": [],
-    "runtime_count": 493,
+    "runtime_count": 495,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "5c1141a01c0f54de71daec84f5ce65dcc355da8cda4e0b5c84fe8a60e4c5eafb",
+  "governance_fingerprint": "93bf065c4a20253a552267714a58c471c15b1322fa2411df11f1e11303635353",
   "planes": [
     {
       "compat": {
@@ -464,6 +464,7 @@
       "GET /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}",
       "GET /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/coverage",
       "GET /field-assessment/engagements/{engagement_id}/readiness-drift",
+      "GET /field-assessment/engagements/{engagement_id}/remediation-roadmap",
       "GET /field-assessment/engagements/{engagement_id}/reports",
       "GET /field-assessment/engagements/{engagement_id}/reports/{version}",
       "GET /field-assessment/engagements/{engagement_id}/reports/{version}/export",
@@ -519,6 +520,7 @@
       "GET /rag/retrieval-policy",
       "GET /rag/uploads",
       "GET /status",
+      "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/responses/{control_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/status",
       "PATCH /governance/assets/{asset_id}",

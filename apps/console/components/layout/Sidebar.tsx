@@ -18,6 +18,7 @@ import {
   Radio,
   MessageSquare,
   Settings,
+  Users,
   LogOut,
   X,
 } from 'lucide-react';
@@ -72,6 +73,12 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Audit & Forensics', href: '/dashboard/forensics',  icon: Microscope },
       { label: 'Decisions',       href: '/dashboard/decisions',     icon: ShieldCheck },
       { label: 'Evaluation Lab',  href: '/dashboard/evaluation',    icon: FlaskConical },
+    ],
+  },
+  {
+    label: 'Workforce',
+    items: [
+      { label: 'Workforce Intel', href: '/dashboard/workforce',     icon: Users },
     ],
   },
   {

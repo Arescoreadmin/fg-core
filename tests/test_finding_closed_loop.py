@@ -53,12 +53,13 @@ class TestFindingStatusPatchRequest:
         assert req.status == "false_positive"
 
     def test_invalid_status_rejected(self) -> None:
+        payload: dict[str, Any] = {
+            "status": "open",  # not a terminal status
+            "notes": "Should fail.",
+            "owner_email": "owner@example.com",
+        }
         with pytest.raises(ValidationError):
-            FindingStatusPatchRequest(
-                status="open",  # not a terminal status
-                notes="Should fail.",
-                owner_email="owner@example.com",
-            )
+            FindingStatusPatchRequest.model_validate(payload)
 
     def test_empty_notes_rejected(self) -> None:
         with pytest.raises(ValidationError):

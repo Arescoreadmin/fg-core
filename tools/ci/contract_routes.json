@@ -2345,9 +2345,45 @@
       "path": "/v1/status",
       "scopes": [],
       "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/risk-profiles",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/users",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/users",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/users/accept-invite",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/workforce/users/{user_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/users/{user_id}/activity",
+      "scopes": [],
+      "source": "contract"
     }
   ],
-  "generated_at": "2026-05-28T16:20:32.504072+00:00",
+  "generated_at": "2026-05-29T10:01:27.217324+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

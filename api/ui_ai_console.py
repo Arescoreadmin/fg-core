@@ -42,6 +42,210 @@ router = APIRouter(prefix="/ui", tags=["ui-ai"])
 admin_router = APIRouter(prefix="/admin", tags=["ui-ai-admin"])
 
 DEVICE_COOKIE = "fg_device_id"
+
+# ─── Workforce query attribution (PR 36) ─────────────────────────────────────
+
+_SUBJECT_KEYWORDS: dict[str, list[str]] = {
+    "legal": [
+        "lawsuit",
+        "litigation",
+        "attorney",
+        "counsel",
+        "contract",
+        "liability",
+        "subpoena",
+        "deposition",
+    ],
+    "financial": [
+        "budget",
+        "salary",
+        "compensation",
+        "bonus",
+        "payroll",
+        "revenue",
+        "profit",
+        "invoice",
+        "expense",
+    ],
+    "hr": [
+        "performance review",
+        "termination",
+        "hire",
+        "fired",
+        "resignation",
+        "benefits",
+        "hr",
+        "employee",
+    ],
+    "medical": [
+        "diagnosis",
+        "prescription",
+        "hipaa",
+        "patient",
+        "symptoms",
+        "treatment",
+        "medication",
+        "doctor",
+    ],
+    "competitor": [
+        "competitor",
+        "competing",
+        "rival",
+        "market share",
+        "vs ",
+        " vs.",
+        "compared to",
+        "better than",
+    ],
+    "compliance": [
+        "gdpr",
+        "ccpa",
+        "nist",
+        "sox",
+        "pci",
+        "hipaa",
+        "cmmc",
+        "ffiec",
+        "regulation",
+        "audit",
+    ],
+    "technical": [
+        "code",
+        "api",
+        "function",
+        "debug",
+        "error",
+        "deploy",
+        "database",
+        "server",
+        "algorithm",
+    ],
+    "personal": [
+        "my wife",
+        "my husband",
+        "my kids",
+        "my family",
+        "vacation",
+        "personal",
+        "dating",
+        "recipe",
+    ],
+}
+
+_SENSITIVITY_PATTERNS: dict[str, list[str]] = {
+    "contains_pii": [
+        "social security",
+        "ssn",
+        "date of birth",
+        "dob",
+        "passport",
+        "driver license",
+        "credit card",
+    ],
+    "competitor_mention": _SUBJECT_KEYWORDS["competitor"],
+    "medical_content": _SUBJECT_KEYWORDS["medical"],
+    "financial_sensitive": [
+        "salary",
+        "compensation",
+        "tax return",
+        "bank account",
+        "routing number",
+    ],
+    "hr_sensitive": [
+        "fired",
+        "termination",
+        "performance improvement",
+        "pip",
+        "layoff",
+    ],
+}
+
+
+def _classify_query(query_text: str) -> tuple[str, str, list[str]]:
+    """Lightweight heuristic classification — no network call."""
+    lower = query_text.lower()
+
+    # Subject category
+    subject_category = "other"
+    for category, keywords in _SUBJECT_KEYWORDS.items():
+        if any(kw in lower for kw in keywords):
+            subject_category = category
+            break
+
+    # Work relevance
+    if subject_category == "personal":
+        work_relevance = "personal"
+    elif subject_category in ("technical", "compliance", "legal", "financial"):
+        work_relevance = "on_task"
+    else:
+        work_relevance = "tangential"
+
+    # Sensitivity flags
+    flags: list[str] = []
+    for flag, patterns in _SENSITIVITY_PATTERNS.items():
+        if any(p in lower for p in patterns):
+            flags.append(flag)
+
+    return subject_category, work_relevance, flags
+
+
+def _log_query(
+    db: Session,
+    *,
+    tenant_id: str,
+    user_id: str | None,
+    user_email: str | None,
+    session_id: str,
+    query_text: str,
+    response_text: str,
+    provider: str,
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    policy_decision: str,
+) -> None:
+    """Write one row to ai_query_log with heuristic classification."""
+    subject_category, work_relevance, sensitivity_flags = _classify_query(query_text)
+    try:
+        db.execute(
+            text("""
+                INSERT INTO ai_query_log
+                    (id, tenant_id, user_id, user_email, session_id,
+                     query_text, response_text, provider, model,
+                     prompt_tokens, completion_tokens, policy_decision,
+                     subject_category, work_relevance, sensitivity_flags,
+                     risk_signals, classified_at, created_at)
+                VALUES
+                    (:id, :tenant_id, :user_id, :user_email, :session_id,
+                     :query_text, :response_text, :provider, :model,
+                     :prompt_tokens, :completion_tokens, :policy_decision,
+                     :subject_category, :work_relevance, :sensitivity_flags,
+                     '{}', NOW(), NOW())
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "user_email": user_email,
+                "session_id": session_id,
+                "query_text": query_text,
+                "response_text": response_text,
+                "provider": provider,
+                "model": model,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "policy_decision": policy_decision,
+                "subject_category": subject_category,
+                "work_relevance": work_relevance,
+                "sensitivity_flags": json.dumps(sensitivity_flags),
+            },
+        )
+        db.commit()
+    except Exception:
+        # Non-fatal — never let logging failure break the chat response.
+        db.rollback()
+
+
 CONTRACTS_ROOT = Path("contracts/ai")
 
 
@@ -1196,6 +1400,24 @@ def ai_chat(
             "quota_charge_mode": quota_charge_mode,
         },
         request=request,
+    )
+
+    # Workforce attribution — log every successful query with user identity.
+    fg_user_id = request.headers.get("X-FG-User-ID") or None
+    fg_user_email = request.headers.get("X-FG-User-Email") or None
+    _log_query(
+        db,
+        tenant_id=tenant_id,
+        user_id=fg_user_id,
+        user_email=fg_user_email,
+        session_id=session_id,
+        query_text=payload.message,
+        response_text=output,
+        provider=provider,
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        policy_decision="allow",
     )
 
     return {

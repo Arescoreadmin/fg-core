@@ -72,6 +72,7 @@ from api.agent_enrollment import router as agent_enrollment_router
 from api.agent_phase2 import admin_router as agent_phase2_admin_router
 from api.agent_phase2 import router as agent_phase2_router
 from api.agent_tokens import router as agent_tokens_router
+from api.workforce import router as workforce_router
 from api.assessments import router as assessments_router
 from api.rag_retrieval_policy import router as rag_retrieval_policy_router
 from api.rag_corpus_console import router as rag_corpus_console_router
@@ -589,6 +590,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ai_plane_extension_router)
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
+    app.include_router(workforce_router)
 
     if not _is_production_runtime():
         app.include_router(ui_router)
@@ -1021,6 +1023,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
         app.include_router(ai_plane_extension_router)
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
+    app.include_router(workforce_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)

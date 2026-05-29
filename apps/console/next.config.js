@@ -27,6 +27,7 @@ const cspHeader = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   transpilePackages: ['@fg/ui'],
 
   async rewrites() {
