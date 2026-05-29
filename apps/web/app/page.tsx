@@ -1,5 +1,3 @@
-import Image from 'next/image';
-
 const METRICS = [
   { value: '69',   label: 'NIST AI RMF Controls' },
   { value: '5',    label: 'Compliance Frameworks' },
@@ -59,7 +57,6 @@ export default function Home() {
       <header className="fixed top-0 inset-x-0 z-50 border-b border-[#1c1c1c] bg-[#080808]/90 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/logo.svg" alt="FrostGate" width={36} height={36} />
             <span className="font-display text-lg font-semibold tracking-widest text-[#d0d0d0] uppercase">
               FrostGate
             </span>
@@ -87,14 +84,6 @@ export default function Home() {
       <main>
         {/* ── HERO ──────────────────────────────────────────────────── */}
         <section className="relative min-h-screen flex flex-col justify-center overflow-hidden px-8 pt-16">
-          {/* Background shield — large, ghosted, anchored right */}
-          <div
-            className="absolute right-[-6%] top-1/2 -translate-y-1/2 opacity-[0.06] pointer-events-none select-none"
-            aria-hidden="true"
-          >
-            <Image src="/logo.svg" alt="" width={640} height={768} priority />
-          </div>
-
           {/* Faint horizontal grid lines */}
           <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
             {[25, 50, 75].map((pct) => (
@@ -208,13 +197,6 @@ export default function Home() {
 
         {/* ── MISSION ──────────────────────────────────────────────── */}
         <section id="mission" className="py-40 px-8 border-y border-[#1c1c1c] relative overflow-hidden">
-          <div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03]"
-            aria-hidden="true"
-          >
-            <Image src="/logo.svg" alt="" width={900} height={1080} />
-          </div>
-
           <div className="relative max-w-7xl mx-auto text-center">
             <p className="text-[10px] tracking-[0.26em] uppercase text-[#333] mb-8">Mission</p>
             <h2
@@ -263,7 +245,6 @@ export default function Home() {
       <footer className="border-t border-[#1c1c1c] py-10 px-8">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <Image src="/logo.svg" alt="FrostGate" width={22} height={22} className="opacity-30" />
             <span className="text-[10px] tracking-[0.18em] uppercase text-[#2e2e2e]">
               © {new Date().getFullYear()} FrostGate
             </span>
