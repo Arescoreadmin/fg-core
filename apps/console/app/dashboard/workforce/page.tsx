@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AreaChart,
   Area,
@@ -369,15 +369,15 @@ function KeywordsTab() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
-  function load() {
+  const load = useCallback(() => {
     setLoading(true);
     workforceApi.listKeywords()
       .then((r) => setKeywords(r.items))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   async function save() {
     if (!kw.trim() || !flagValue.trim()) { setError('Keyword and flag value are required.'); return; }
@@ -589,7 +589,7 @@ function AlertsTab() {
   const [cooldown, setCooldown] = useState('24');
   const [saving, setSaving] = useState(false);
 
-  function load() {
+  const load = useCallback(() => {
     setLoading(true);
     Promise.allSettled([
       workforceApi.listAlertRules(),
@@ -599,9 +599,9 @@ function AlertsTab() {
       if (aRes.status === 'fulfilled') setAlerts(aRes.value.items);
       setLoading(false);
     });
-  }
+  }, [showDismissed]);
 
-  useEffect(() => { load(); }, [showDismissed]);
+  useEffect(() => { load(); }, [load]);
 
   async function saveRule() {
     if (!ruleName.trim()) { setError('Rule name is required.'); return; }
@@ -804,7 +804,7 @@ export default function WorkforcePage() {
   const [inviteResult, setInviteResult] = useState<{ token: string; email: string } | null>(null);
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
 
-  function loadData() {
+  const loadData = useCallback(() => {
     setLoading(true);
     Promise.allSettled([
       workforceApi.listRiskProfiles(),
@@ -814,9 +814,9 @@ export default function WorkforcePage() {
       if (uRes.status === 'fulfilled') setUsers(uRes.value.items);
       setLoading(false);
     });
-  }
+  }, []);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const criticalCount = profiles.filter((p) => p.risk_band === 'critical').length;
   const highCount = profiles.filter((p) => p.risk_band === 'high').length;
