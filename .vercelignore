@@ -1,0 +1,16 @@
+node_modules
+.git
+.venv
+__pycache__
+*.pyc
+.env
+.DS_Store
+.idea
+.vscode
+.claude
+coverage
+.pytest_cache
+dist
+build
+*.egg-info
+api/__pycache__
