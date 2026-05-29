@@ -9,8 +9,8 @@ export default auth(function middleware(req: NextRequest & { auth: unknown }) {
   const isAuthenticated = !!(req as { auth?: unknown }).auth;
   const { pathname } = req.nextUrl;
 
-  // always allow auth callbacks and static assets
-  if (pathname.startsWith('/api/auth')) return NextResponse.next();
+  // always allow auth routes and the login page itself
+  if (pathname.startsWith('/api/auth') || pathname === '/login') return NextResponse.next();
 
   // redirect unauthenticated users to login
   if (!isAuthenticated) {
