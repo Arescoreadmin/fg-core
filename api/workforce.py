@@ -792,7 +792,7 @@ def create_keyword(
                 (:id, :tenant_id, :keyword, :match_type, :case_sensitive,
                  :flag_value, :flag_type, :action, :description, :created_by,
                  TRUE, NOW(), NOW())
-            ON CONFLICT ON CONSTRAINT uq_tenant_keyword DO NOTHING
+            ON CONFLICT (tenant_id, keyword, flag_value) WHERE active = TRUE DO NOTHING
         """),
         {
             "id": kw_id,
