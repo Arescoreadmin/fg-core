@@ -773,8 +773,8 @@ billing-evidence-verify: venv
 db-postgres-up:
 	@$(MAKE) -s require-docker
 	@if [ ! -f .env ]; then \
-		printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" \
-			"$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "devredis" "dev-agent-key" "http://localhost:13000" "dev-nats-token" "dev-api-key" "dev-webhook-secret" > .env; \
+		printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_APP_USER=%s\nPOSTGRES_APP_PASSWORD=%s\nPOSTGRES_APP_DB=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" \
+			"$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "$(APP_DB_USER)" "$(APP_DB_PASSWORD)" "$(POSTGRES_DB)" "devredis" "dev-agent-key" "http://localhost:13000" "dev-nats-token" "dev-api-key" "dev-webhook-secret" > .env; \
 	fi
 	@POSTGRES_USER="$(POSTGRES_USER)" POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" POSTGRES_DB="$(POSTGRES_DB)" \
 		docker compose down -v --remove-orphans || true
@@ -801,11 +801,15 @@ db-postgres-up:
 	@docker compose exec -T postgres psql -U "$(APP_DB_USER)" -d "$(POSTGRES_DB)" \
 		-c "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user;"
 
-db-postgres-migrate: venv
-	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --apply
+db-postgres-migrate:
+	@$(MAKE) -s require-docker
+	@POSTGRES_APP_USER="$(APP_DB_USER)" POSTGRES_APP_PASSWORD="$(APP_DB_PASSWORD)" POSTGRES_APP_DB="$(POSTGRES_DB)" \
+		docker compose run --rm --no-deps frostgate-migrate
 
-db-postgres-assert: venv
-	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --assert
+db-postgres-assert:
+	@$(MAKE) -s require-docker
+	@POSTGRES_APP_USER="$(APP_DB_USER)" POSTGRES_APP_PASSWORD="$(APP_DB_PASSWORD)" POSTGRES_APP_DB="$(POSTGRES_DB)" \
+		docker compose run --rm --no-deps frostgate-migrate
 
 db-postgres-test: venv
 	@FG_DB_URL="$(APP_DB_URL_COMPOSE)" FG_DB_BACKEND="postgres" FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/postgres -rs

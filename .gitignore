@@ -15,6 +15,7 @@ pytest_cache/
 supervisor-sidecar/supervisor-sidecar
 
 supervisor-sidecar/supervisor-sidecar
+docker-compose.override.yml
 # Python
 .venv/
 __pycache__/
@@ -193,3 +194,10 @@ tools/ci/plane_registry_snapshot.sha256
 tools/ci/topology.sha256
 .env.ci
 *.swp
+.vercel
+.env*
+
+# Local Vercel linkage
+.vercel/
+api/.vercel/
+.varcel/
