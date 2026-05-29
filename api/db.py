@@ -75,6 +75,11 @@ def _db_url(*, sqlite_path: Optional[str] = None) -> str:
 
     db_url = (os.getenv("FG_DB_URL") or "").strip()
     if db_url:
+        # psycopg3 requires postgresql+psycopg:// scheme; normalize bare URLs
+        if db_url.startswith("postgres://"):
+            db_url = "postgresql+psycopg://" + db_url[len("postgres://"):]
+        elif db_url.startswith("postgresql://"):
+            db_url = "postgresql+psycopg://" + db_url[len("postgresql://"):]
         return db_url
 
     resolved = _resolve_sqlite_path(sqlite_path)
