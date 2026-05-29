@@ -21,10 +21,10 @@ export async function createSessionToken(): Promise<string> {
   const key = await getKey();
   if (!key) throw new Error('PORTAL_SESSION_SECRET not configured');
   const exp = Date.now() + SESSION_TTL_MS;
-  const payload = `ok:${exp}`;
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  const payloadB64 = btoa(`ok:${exp}`);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadB64));
   const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  return `${btoa(payload)}.${sigB64}`;
+  return `${payloadB64}.${sigB64}`;
 }
 
 // ─── User-identity session (invite token login) ───────────────────────────────

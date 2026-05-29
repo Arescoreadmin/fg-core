@@ -369,16 +369,19 @@ def get_user_activity(
 
 # ─── Accept invite (portal login) ────────────────────────────────────────────
 
+class _AcceptInviteBody(BaseModel):
+    invite_token: str
+
+
 @router.post("/users/accept-invite")
 def accept_invite(
-    request: Request,
+    body: _AcceptInviteBody,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
     """Validate an invite token and return user identity for session creation.
     Called by the portal BFF, not exposed directly to clients.
     """
-    body = request.state._body if hasattr(request.state, "_body") else {}
-    token = (body.get("invite_token") or "").strip()
+    token = body.invite_token.strip()
     if not token:
         raise http_error(400, "INVITE_TOKEN_REQUIRED", "invite_token is required.")
 
