@@ -2348,6 +2348,66 @@
     },
     {
       "method": "GET",
+      "path": "/workforce/alert-rules",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/alert-rules",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/workforce/alert-rules/{rule_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/workforce/alert-rules/{rule_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/alerts",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/alerts/{alert_id}/dismiss",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/keywords",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/keywords",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/keywords/preview",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/workforce/keywords/{keyword_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/workforce/risk-profiles",
       "scopes": [],
       "source": "contract"
@@ -2381,9 +2441,15 @@
       "path": "/workforce/users/{user_id}/activity",
       "scopes": [],
       "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/users/{user_id}/risk-history",
+      "scopes": [],
+      "source": "contract"
     }
   ],
-  "generated_at": "2026-05-29T10:01:27.217324+00:00",
+  "generated_at": "2026-05-29T13:58:51.536925+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

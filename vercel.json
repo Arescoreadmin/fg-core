@@ -1,7 +1,0 @@
-{
-  "framework": "nextjs",
-  "installCommand": "cd apps/console && npm install",
-  "buildCommand": "cd apps/console && npm run build",
-  "outputDirectory": "apps/console/.next",
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- apps/console"
-}

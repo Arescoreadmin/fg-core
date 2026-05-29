@@ -30,12 +30,18 @@
       "plane": "rbac",
       "suggested_fix": "Add SOC gate mapping entry for plane.",
       "type": "missing_soc_gate_reference"
+    },
+    {
+      "details": "plane id not referenced in SOC gate artifact",
+      "plane": "workforce",
+      "suggested_fix": "Add SOC gate mapping entry for plane.",
+      "type": "missing_soc_gate_reference"
     }
   ],
   "governance": {
-    "contract_count": 391,
+    "contract_count": 408,
     "contract_only": [],
-    "runtime_count": 495,
+    "runtime_count": 512,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +147,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "93bf065c4a20253a552267714a58c471c15b1322fa2411df11f1e11303635353",
+  "governance_fingerprint": "41801c32634fc2950480a3f99679f174bf0f3536348fdf106896f860521a946f",
   "planes": [
     {
       "compat": {
@@ -285,6 +291,18 @@
       ],
       "route_prefixes": [
         "/ui"
+      ]
+    },
+    {
+      "compat": {
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
+      },
+      "plane_id": "workforce",
+      "required_make_targets": [
+        "soc-invariants"
+      ],
+      "route_prefixes": [
+        "/workforce"
       ]
     }
   ],
@@ -802,6 +820,25 @@
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
       "POST /ui/devices/{device_id}/enable"
+    ],
+    "workforce": [
+      "DELETE /workforce/alert-rules/{rule_id}",
+      "DELETE /workforce/keywords/{keyword_id}",
+      "GET /workforce/alert-rules",
+      "GET /workforce/alerts",
+      "GET /workforce/keywords",
+      "GET /workforce/risk-profiles",
+      "GET /workforce/users",
+      "GET /workforce/users/{user_id}/activity",
+      "GET /workforce/users/{user_id}/risk-history",
+      "PATCH /workforce/alert-rules/{rule_id}",
+      "PATCH /workforce/users/{user_id}",
+      "POST /workforce/alert-rules",
+      "POST /workforce/alerts/{alert_id}/dismiss",
+      "POST /workforce/keywords",
+      "POST /workforce/keywords/preview",
+      "POST /workforce/users",
+      "POST /workforce/users/accept-invite"
     ]
   }
 }

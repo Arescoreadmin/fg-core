@@ -10,6 +10,7 @@
 - `rbac` targets=security-regression-gates
 - `security` targets=security-regression-gates
 - `ui` targets=test-quality-gate
+- `workforce` targets=soc-invariants
 
 ## Enterprise readiness checklist status
 - artifact_policy_enforced: PASS

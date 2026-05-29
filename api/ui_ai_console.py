@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -161,16 +162,80 @@ _SENSITIVITY_PATTERNS: dict[str, list[str]] = {
 }
 
 
-def _classify_query(query_text: str) -> tuple[str, str, list[str]]:
-    """Lightweight heuristic classification — no network call."""
+def _keyword_matches(
+    text_val: str, kw: str, match_type: str, case_sensitive: bool
+) -> bool:
+    """Apply smart keyword matching. Returns True if kw matches text_val."""
+    flags = 0 if case_sensitive else re.IGNORECASE
+    t = text_val if case_sensitive else text_val.lower()
+    k = kw if case_sensitive else kw.lower()
+    if match_type == "contains":
+        return k in t
+    if match_type == "exact":
+        return t.strip() == k.strip()
+    if match_type == "prefix":
+        return t.startswith(k)
+    if match_type == "word_boundary":
+        try:
+            return bool(re.search(rf"\b{re.escape(kw)}\b", text_val, flags))
+        except re.error:
+            return False
+    if match_type == "regex":
+        try:
+            return bool(re.search(kw, text_val, flags))
+        except re.error:
+            return False
+    return k in t
+
+
+def _classify_query(
+    query_text: str,
+    tenant_keywords: list[dict] | None = None,
+) -> tuple[str, str, list[str]]:
+    """Lightweight heuristic classification — no network call.
+
+    tenant_keywords: rows from tenant_keywords table for the current tenant.
+    Tenant-defined rules extend (never replace) the built-in dictionaries.
+    """
     lower = query_text.lower()
 
-    # Subject category
+    # Subject category — built-in first
     subject_category = "other"
     for category, keywords in _SUBJECT_KEYWORDS.items():
         if any(kw in lower for kw in keywords):
             subject_category = category
             break
+
+    # Sensitivity flags — built-in first
+    flags: list[str] = []
+    for flag, patterns in _SENSITIVITY_PATTERNS.items():
+        if any(p in lower for p in patterns):
+            flags.append(flag)
+
+    # Apply tenant keyword overrides
+    if tenant_keywords:
+        for tkw in tenant_keywords:
+            if not _keyword_matches(
+                query_text,
+                tkw["keyword"],
+                tkw.get("match_type", "contains"),
+                bool(tkw.get("case_sensitive", False)),
+            ):
+                continue
+            flag_type = tkw.get("flag_type", "sensitivity")
+            flag_value = tkw.get("flag_value", "")
+            action = tkw.get("action", "flag")
+
+            if flag_type == "subject" and subject_category == "other":
+                subject_category = flag_value
+            elif flag_type in ("sensitivity", "custom"):
+                tag = flag_value
+                if action == "block":
+                    tag = f"blocked:{flag_value}"
+                elif action == "escalate":
+                    tag = f"escalate:{flag_value}"
+                if tag not in flags:
+                    flags.append(tag)
 
     # Work relevance
     if subject_category == "personal":
@@ -180,13 +245,33 @@ def _classify_query(query_text: str) -> tuple[str, str, list[str]]:
     else:
         work_relevance = "tangential"
 
-    # Sensitivity flags
-    flags: list[str] = []
-    for flag, patterns in _SENSITIVITY_PATTERNS.items():
-        if any(p in lower for p in patterns):
-            flags.append(flag)
-
     return subject_category, work_relevance, flags
+
+
+def _load_tenant_keywords(db: Session, tenant_id: str) -> list[dict]:
+    """Load active tenant keyword rules from DB. Returns [] on any error."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT keyword, match_type, case_sensitive, flag_value, flag_type, action
+                FROM tenant_keywords
+                WHERE tenant_id = :t AND active = TRUE
+            """),
+            {"t": tenant_id},
+        ).fetchall()
+        return [
+            {
+                "keyword": r.keyword,
+                "match_type": r.match_type,
+                "case_sensitive": r.case_sensitive,
+                "flag_value": r.flag_value,
+                "flag_type": r.flag_type,
+                "action": r.action,
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
 
 
 def _log_query(
@@ -205,7 +290,10 @@ def _log_query(
     policy_decision: str,
 ) -> None:
     """Write one row to ai_query_log with heuristic classification."""
-    subject_category, work_relevance, sensitivity_flags = _classify_query(query_text)
+    tenant_keywords = _load_tenant_keywords(db, tenant_id)
+    subject_category, work_relevance, sensitivity_flags = _classify_query(
+        query_text, tenant_keywords
+    )
     try:
         db.execute(
             text("""

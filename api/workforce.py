@@ -10,6 +10,7 @@ auth layer, and Postgres substrate.
 
 from __future__ import annotations
 
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -313,6 +314,14 @@ def list_risk_profiles(
         )
 
     profiles.sort(key=lambda p: p["risk_score"], reverse=True)
+
+    # Organic snapshot capture: one upsert per user per day on leaderboard load
+    for profile in profiles:
+        _upsert_snapshot(db, tenant_id, profile["user_id"], profile)
+
+    # Fire threshold-based alerts (cooldown enforced inside helper)
+    _fire_alerts(db, tenant_id, profiles)
+
     return {"items": profiles, "total": len(profiles), "period_days": _RISK_WINDOW_DAYS}
 
 
@@ -463,3 +472,626 @@ def accept_invite(
         "display_name": row.display_name,
         "role": row.role,
     }
+
+
+# ─── PR 37 additions: risk history · keywords · alerts ───────────────────────
+
+# ── Pydantic models ────────────────────────────────────────────────────────────
+
+
+class KeywordPayload(BaseModel):
+    keyword: str
+    match_type: str = "contains"
+    case_sensitive: bool = False
+    flag_value: str
+    flag_type: str = "sensitivity"
+    action: str = "flag"
+    description: str | None = None
+
+    @field_validator("match_type")
+    @classmethod
+    def _valid_match_type(cls, v: str) -> str:
+        if v not in {"contains", "exact", "word_boundary", "prefix", "regex"}:
+            raise ValueError(
+                "match_type must be contains|exact|word_boundary|prefix|regex"
+            )
+        return v
+
+    @field_validator("action")
+    @classmethod
+    def _valid_action(cls, v: str) -> str:
+        if v not in {"flag", "block", "escalate"}:
+            raise ValueError("action must be flag|block|escalate")
+        return v
+
+    @field_validator("keyword")
+    @classmethod
+    def _not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("keyword must not be empty")
+        return v.strip()
+
+
+class AlertRulePayload(BaseModel):
+    name: str
+    threshold_score: float | None = None
+    threshold_band: str | None = None
+    cooldown_hours: int = 24
+    active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def _not_empty_name(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("name must not be empty")
+        return v.strip()
+
+
+# ── Snapshot helper ────────────────────────────────────────────────────────────
+
+
+def _upsert_snapshot(
+    db: Session, tenant_id: str, user_id: str, profile: dict[str, Any]
+) -> None:
+    """Upsert one risk_score_snapshots row for today (UTC). Non-fatal on error."""
+    today_str = _now().strftime("%Y-%m-%d")
+    try:
+        existing = db.execute(
+            text("""
+                SELECT id FROM risk_score_snapshots
+                WHERE tenant_id = :t AND user_id = :u
+                  AND DATE(captured_at AT TIME ZONE 'UTC') = :today
+            """),
+            {"t": tenant_id, "u": user_id, "today": today_str},
+        ).fetchone()
+
+        if existing:
+            db.execute(
+                text("""
+                    UPDATE risk_score_snapshots
+                    SET risk_score = :risk_score, risk_band = :risk_band,
+                        total_queries = :total_queries, policy_violations = :policy_violations,
+                        personal_ratio = :personal_ratio,
+                        sensitive_topic_count = :sensitive_topic_count,
+                        pii_query_count = :pii_query_count,
+                        competitor_query_count = :competitor_query_count,
+                        active_days = :active_days, captured_at = NOW()
+                    WHERE id = :id
+                """),
+                {
+                    "id": existing.id,
+                    "risk_score": profile["risk_score"],
+                    "risk_band": profile["risk_band"],
+                    "total_queries": profile["total_queries"],
+                    "policy_violations": profile["policy_violations"],
+                    "personal_ratio": profile["personal_ratio"],
+                    "sensitive_topic_count": profile["sensitive_topic_count"],
+                    "pii_query_count": profile["pii_query_count"],
+                    "competitor_query_count": profile["competitor_query_count"],
+                    "active_days": profile["active_days"],
+                },
+            )
+        else:
+            db.execute(
+                text("""
+                    INSERT INTO risk_score_snapshots
+                        (id, tenant_id, user_id, risk_score, risk_band,
+                         total_queries, policy_violations, personal_ratio,
+                         sensitive_topic_count, pii_query_count, competitor_query_count,
+                         active_days, period_days, captured_at)
+                    VALUES
+                        (:id, :tenant_id, :user_id, :risk_score, :risk_band,
+                         :total_queries, :policy_violations, :personal_ratio,
+                         :sensitive_topic_count, :pii_query_count, :competitor_query_count,
+                         :active_days, :period_days, NOW())
+                """),
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": tenant_id,
+                    "user_id": user_id,
+                    "risk_score": profile["risk_score"],
+                    "risk_band": profile["risk_band"],
+                    "total_queries": profile["total_queries"],
+                    "policy_violations": profile["policy_violations"],
+                    "personal_ratio": profile["personal_ratio"],
+                    "sensitive_topic_count": profile["sensitive_topic_count"],
+                    "pii_query_count": profile["pii_query_count"],
+                    "competitor_query_count": profile["competitor_query_count"],
+                    "active_days": profile["active_days"],
+                    "period_days": profile["period_days"],
+                },
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+# ── Alert fire helper ──────────────────────────────────────────────────────────
+
+
+def _fire_alerts(db: Session, tenant_id: str, profiles: list[dict[str, Any]]) -> None:
+    """Check active alert rules and fire for matching users (respects cooldown)."""
+    rules = db.execute(
+        text("""
+            SELECT id, threshold_score, threshold_band, cooldown_hours
+            FROM risk_alert_rules
+            WHERE tenant_id = :t AND active = TRUE
+        """),
+        {"t": tenant_id},
+    ).fetchall()
+
+    if not rules:
+        return
+
+    for rule in rules:
+        bands = (
+            {b.strip() for b in rule.threshold_band.split(",")}
+            if rule.threshold_band
+            else set()
+        )
+        for p in profiles:
+            score_hit = rule.threshold_score is not None and p["risk_score"] >= float(
+                rule.threshold_score
+            )
+            band_hit = bool(bands) and p["risk_band"] in bands
+            if not (score_hit or band_hit):
+                continue
+
+            # Cooldown check: last firing for this rule+user within cooldown window
+            last = db.execute(
+                text("""
+                    SELECT fired_at FROM risk_alerts_fired
+                    WHERE rule_id = :rule_id AND user_id = :user_id
+                    ORDER BY fired_at DESC LIMIT 1
+                """),
+                {"rule_id": rule.id, "user_id": p["user_id"]},
+            ).fetchone()
+
+            if last:
+                cooldown_delta = timedelta(hours=rule.cooldown_hours)
+                if (
+                    _now() - last.fired_at.replace(tzinfo=timezone.utc)
+                ) < cooldown_delta:
+                    continue
+
+            try:
+                db.execute(
+                    text("""
+                        INSERT INTO risk_alerts_fired
+                            (id, tenant_id, rule_id, user_id, user_email,
+                             risk_score, risk_band, fired_at)
+                        VALUES
+                            (:id, :tenant_id, :rule_id, :user_id, :user_email,
+                             :risk_score, :risk_band, NOW())
+                    """),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "tenant_id": tenant_id,
+                        "rule_id": rule.id,
+                        "user_id": p["user_id"],
+                        "user_email": p.get("email"),
+                        "risk_score": p["risk_score"],
+                        "risk_band": p["risk_band"],
+                    },
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+
+
+# ── Risk history endpoint ──────────────────────────────────────────────────────
+
+
+@router.get(
+    "/users/{user_id}/risk-history",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+def get_risk_history(
+    user_id: str,
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+    days: int = 30,
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+    since = (_now() - timedelta(days=max(1, min(days, 365)))).isoformat()
+
+    rows = db.execute(
+        text("""
+            SELECT risk_score, risk_band, total_queries, policy_violations,
+                   personal_ratio, captured_at
+            FROM risk_score_snapshots
+            WHERE tenant_id = :t AND user_id = :u AND captured_at >= :since
+            ORDER BY captured_at ASC
+        """),
+        {"t": tenant_id, "u": user_id, "since": since},
+    ).fetchall()
+
+    return {
+        "user_id": user_id,
+        "history": [
+            {
+                "date": r.captured_at.strftime("%Y-%m-%d"),
+                "risk_score": float(r.risk_score),
+                "risk_band": r.risk_band,
+                "total_queries": r.total_queries,
+                "policy_violations": r.policy_violations,
+                "personal_ratio": float(r.personal_ratio),
+            }
+            for r in rows
+        ],
+        "period_days": days,
+    }
+
+
+# ── Keyword CRUD ───────────────────────────────────────────────────────────────
+
+
+@router.get("/keywords", dependencies=[Depends(require_scopes("admin:write"))])
+def list_keywords(
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+    rows = db.execute(
+        text("""
+            SELECT id, keyword, match_type, case_sensitive, flag_value, flag_type,
+                   action, description, created_by, active, created_at
+            FROM tenant_keywords
+            WHERE tenant_id = :t AND active = TRUE
+            ORDER BY created_at DESC
+        """),
+        {"t": tenant_id},
+    ).fetchall()
+
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "keyword": r.keyword,
+                "match_type": r.match_type,
+                "case_sensitive": r.case_sensitive,
+                "flag_value": r.flag_value,
+                "flag_type": r.flag_type,
+                "action": r.action,
+                "description": r.description,
+                "created_by": r.created_by,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rows
+        ],
+        "total": len(rows),
+    }
+
+
+@router.post("/keywords", dependencies=[Depends(require_scopes("admin:write"))])
+def create_keyword(
+    payload: KeywordPayload,
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+
+    # Validate regex at creation time so we don't store broken patterns
+    if payload.match_type == "regex":
+        try:
+            re.compile(payload.keyword)
+        except re.error as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error("INVALID_REGEX", f"Invalid regex: {exc}"),
+            ) from exc
+
+    kw_id = str(uuid.uuid4())
+    db.execute(
+        text("""
+            INSERT INTO tenant_keywords
+                (id, tenant_id, keyword, match_type, case_sensitive,
+                 flag_value, flag_type, action, description, created_by,
+                 active, created_at, updated_at)
+            VALUES
+                (:id, :tenant_id, :keyword, :match_type, :case_sensitive,
+                 :flag_value, :flag_type, :action, :description, :created_by,
+                 TRUE, NOW(), NOW())
+            ON CONFLICT (tenant_id, keyword, flag_value) WHERE active = TRUE DO NOTHING
+        """),
+        {
+            "id": kw_id,
+            "tenant_id": tenant_id,
+            "keyword": payload.keyword,
+            "match_type": payload.match_type,
+            "case_sensitive": payload.case_sensitive,
+            "flag_value": payload.flag_value,
+            "flag_type": payload.flag_type,
+            "action": payload.action,
+            "description": payload.description,
+            "created_by": getattr(request.state, "user_email", None),
+        },
+    )
+    db.commit()
+    return {"id": kw_id, "ok": True}
+
+
+@router.delete(
+    "/keywords/{keyword_id}", dependencies=[Depends(require_scopes("admin:write"))]
+)
+def delete_keyword(
+    keyword_id: str,
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+    db.execute(
+        text("""
+            UPDATE tenant_keywords SET active = FALSE, updated_at = NOW()
+            WHERE tenant_id = :t AND id = :id
+        """),
+        {"t": tenant_id, "id": keyword_id},
+    )
+    db.commit()
+    return {"ok": True}
+
+
+# ── Keyword preview/backtest ───────────────────────────────────────────────────
+
+
+class _BacktestPayload(BaseModel):
+    keyword: str
+    match_type: str = "contains"
+    case_sensitive: bool = False
+    limit: int = 100
+
+
+@router.post("/keywords/preview", dependencies=[Depends(require_scopes("admin:write"))])
+def preview_keyword(
+    payload: _BacktestPayload,
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> dict[str, Any]:
+    """Return matching queries from the last `limit` rows for this tenant."""
+    tenant_id = require_bound_tenant(request)
+    limit = max(1, min(payload.limit, 500))
+
+    rows = db.execute(
+        text("""
+            SELECT id, query_text, user_id, created_at
+            FROM ai_query_log
+            WHERE tenant_id = :t
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """),
+        {"t": tenant_id, "limit": limit},
+    ).fetchall()
+
+    kw = payload.keyword
+    flags = re.IGNORECASE if not payload.case_sensitive else 0
+
+    def _matches(text_val: str) -> bool:
+        t = text_val if payload.case_sensitive else text_val.lower()
+        k = kw if payload.case_sensitive else kw.lower()
+        if payload.match_type == "contains":
+            return k in t
+        if payload.match_type == "exact":
+            return t == k
+        if payload.match_type == "word_boundary":
+            try:
+                return bool(re.search(rf"\b{re.escape(kw)}\b", text_val, flags))
+            except re.error:
+                return False
+        if payload.match_type == "prefix":
+            return t.startswith(k)
+        if payload.match_type == "regex":
+            try:
+                return bool(re.search(kw, text_val, flags))
+            except re.error:
+                return False
+        return False
+
+    matches = [
+        {
+            "query_id": r.id,
+            "query_text": r.query_text[:200],
+            "user_id": r.user_id,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+        if _matches(r.query_text)
+    ]
+
+    return {
+        "matched": len(matches),
+        "scanned": len(rows),
+        "matches": matches[:50],
+    }
+
+
+# ── Alert rule CRUD ────────────────────────────────────────────────────────────
+
+
+@router.get("/alert-rules", dependencies=[Depends(require_scopes("admin:write"))])
+def list_alert_rules(
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+    rows = db.execute(
+        text("""
+            SELECT id, name, threshold_score, threshold_band,
+                   cooldown_hours, active, created_at
+            FROM risk_alert_rules
+            WHERE tenant_id = :t
+            ORDER BY created_at DESC
+        """),
+        {"t": tenant_id},
+    ).fetchall()
+
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "threshold_score": float(r.threshold_score)
+                if r.threshold_score is not None
+                else None,
+                "threshold_band": r.threshold_band,
+                "cooldown_hours": r.cooldown_hours,
+                "active": r.active,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rows
+        ],
+        "total": len(rows),
+    }
+
+
+@router.post("/alert-rules", dependencies=[Depends(require_scopes("admin:write"))])
+def create_alert_rule(
+    payload: AlertRulePayload,
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+    if payload.threshold_score is None and not payload.threshold_band:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "RULE_NEEDS_CONDITION",
+                "At least one of threshold_score or threshold_band must be set.",
+            ),
+        )
+    rule_id = str(uuid.uuid4())
+    db.execute(
+        text("""
+            INSERT INTO risk_alert_rules
+                (id, tenant_id, name, threshold_score, threshold_band,
+                 cooldown_hours, active, created_at, updated_at)
+            VALUES
+                (:id, :tenant_id, :name, :threshold_score, :threshold_band,
+                 :cooldown_hours, :active, NOW(), NOW())
+        """),
+        {
+            "id": rule_id,
+            "tenant_id": tenant_id,
+            "name": payload.name,
+            "threshold_score": payload.threshold_score,
+            "threshold_band": payload.threshold_band,
+            "cooldown_hours": payload.cooldown_hours,
+            "active": payload.active,
+        },
+    )
+    db.commit()
+    return {"id": rule_id, "ok": True}
+
+
+@router.patch(
+    "/alert-rules/{rule_id}", dependencies=[Depends(require_scopes("admin:write"))]
+)
+def update_alert_rule(
+    rule_id: str,
+    payload: AlertRulePayload,
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+    db.execute(
+        text("""
+            UPDATE risk_alert_rules
+            SET name = :name, threshold_score = :threshold_score,
+                threshold_band = :threshold_band, cooldown_hours = :cooldown_hours,
+                active = :active, updated_at = NOW()
+            WHERE tenant_id = :t AND id = :id
+        """),
+        {
+            "t": tenant_id,
+            "id": rule_id,
+            "name": payload.name,
+            "threshold_score": payload.threshold_score,
+            "threshold_band": payload.threshold_band,
+            "cooldown_hours": payload.cooldown_hours,
+            "active": payload.active,
+        },
+    )
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete(
+    "/alert-rules/{rule_id}", dependencies=[Depends(require_scopes("admin:write"))]
+)
+def delete_alert_rule(
+    rule_id: str,
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+    db.execute(
+        text("DELETE FROM risk_alert_rules WHERE tenant_id = :t AND id = :id"),
+        {"t": tenant_id, "id": rule_id},
+    )
+    db.commit()
+    return {"ok": True}
+
+
+# ── Fired alerts ───────────────────────────────────────────────────────────────
+
+
+@router.get("/alerts", dependencies=[Depends(require_scopes("admin:write"))])
+def list_alerts(
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+    dismissed: bool = False,
+    limit: int = 50,
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+    rows = db.execute(
+        text("""
+            SELECT f.id, f.rule_id, r.name AS rule_name,
+                   f.user_id, f.user_email, f.risk_score, f.risk_band,
+                   f.dismissed, f.dismissed_at, f.fired_at
+            FROM risk_alerts_fired f
+            JOIN risk_alert_rules r ON r.id = f.rule_id
+            WHERE f.tenant_id = :t AND f.dismissed = :dismissed
+            ORDER BY f.fired_at DESC
+            LIMIT :limit
+        """),
+        {"t": tenant_id, "dismissed": dismissed, "limit": min(limit, 200)},
+    ).fetchall()
+
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "rule_id": r.rule_id,
+                "rule_name": r.rule_name,
+                "user_id": r.user_id,
+                "user_email": r.user_email,
+                "risk_score": float(r.risk_score),
+                "risk_band": r.risk_band,
+                "dismissed": r.dismissed,
+                "dismissed_at": r.dismissed_at.isoformat() if r.dismissed_at else None,
+                "fired_at": r.fired_at.isoformat(),
+            }
+            for r in rows
+        ],
+        "total": len(rows),
+    }
+
+
+@router.post(
+    "/alerts/{alert_id}/dismiss", dependencies=[Depends(require_scopes("admin:write"))]
+)
+def dismiss_alert(
+    alert_id: str,
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> dict[str, Any]:
+    tenant_id = require_bound_tenant(request)
+    db.execute(
+        text("""
+            UPDATE risk_alerts_fired
+            SET dismissed = TRUE, dismissed_at = NOW()
+            WHERE tenant_id = :t AND id = :id
+        """),
+        {"t": tenant_id, "id": alert_id},
+    )
+    db.commit()
+    return {"ok": True}
