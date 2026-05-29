@@ -187,7 +187,7 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             )
 
         request.state.auth = result
-        request.state.tenant_id = result.tenant_id
+        request.state.tenant_id = result.tenant_id or requested_tenant or None
         request.state.tenant_is_key_bound = bool(result.tenant_id)
 
         resp = await call_next(request)
