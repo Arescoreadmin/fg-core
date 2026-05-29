@@ -291,6 +291,89 @@ export interface Questionnaire {
   responses: QuestionnaireControlResponse[];
 }
 
+export interface EngagementDetail extends EngagementSummary {
+  client_domain: string | null;
+  assessor_id: string;
+  scheduled_date: string | null;
+  engagement_metadata: Record<string, unknown> | null;
+  schema_version: string;
+}
+
+export interface EngagementCounts {
+  engagement_id: string;
+  scan_results: number;
+  document_analyses: number;
+  field_observations: number;
+  normalized_findings: number;
+  evidence_links: number;
+  open_findings: number;
+  critical_findings: number;
+  findings_by_severity: Record<string, number>;
+}
+
+export interface ScanResult {
+  id: string;
+  engagement_id: string;
+  source_type: string;
+  schema_version: string;
+  collected_at: string;
+  evidence_hash: string;
+  object_count: number;
+  finding_count: number | null;
+  created_at: string;
+}
+
+export interface EngagementDocument {
+  id: string;
+  engagement_id: string;
+  document_name: string;
+  document_classification: string;
+  document_hash: string | null;
+  version_label: string | null;
+  approved_by: string | null;
+  approval_date: string | null;
+  freshness_date: string | null;
+  analysis_findings: string[];
+  gaps_identified: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Observation {
+  id: string;
+  engagement_id: string;
+  domain: string;
+  observation_type: 'gap' | 'strength' | 'concern' | 'finding' | 'note' | 'interview';
+  severity: string;
+  title: string;
+  description: string;
+  interview_role: string | null;
+  linked_finding_ids: string[];
+  assessor_id: string;
+  created_at: string;
+}
+
+export interface EvidenceLink {
+  id: string;
+  engagement_id: string;
+  source_entity_type: string;
+  source_entity_id: string;
+  evidence_entity_type: string;
+  evidence_entity_id: string;
+  link_metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface AuditEvent {
+  id: string;
+  engagement_id: string;
+  event_type: string;
+  actor: string;
+  reason_code: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
 // ─── API Client ───────────────────────────────────────────────────────────────
 
 export const portalApi = {
@@ -411,5 +494,47 @@ export const portalApi = {
       `/field-assessment/engagements/${engagementId}/findings/${findingId}`,
       { method: 'PATCH', body: JSON.stringify(payload) },
     );
+  },
+
+  // Engagement detail
+  getEngagement(engagementId: string): Promise<EngagementDetail> {
+    return request(`/field-assessment/engagements/${engagementId}`);
+  },
+
+  getEngagementSummary(engagementId: string): Promise<EngagementCounts> {
+    return request(`/field-assessment/engagements/${engagementId}/summary`);
+  },
+
+  // Scans (read-only)
+  listScans(engagementId: string): Promise<ScanResult[]> {
+    return request(`/field-assessment/engagements/${engagementId}/scan-results`);
+  },
+
+  // Documents (read-only)
+  listDocuments(engagementId: string): Promise<EngagementDocument[]> {
+    return request(`/field-assessment/engagements/${engagementId}/document-analyses`);
+  },
+
+  // Observations & interviews (read-only)
+  listObservations(
+    engagementId: string,
+    params?: { observation_type?: string },
+  ): Promise<Observation[]> {
+    const qs = new URLSearchParams();
+    if (params?.observation_type) qs.set('observation_type', params.observation_type);
+    const q = qs.toString();
+    return request(
+      `/field-assessment/engagements/${engagementId}/observations${q ? `?${q}` : ''}`,
+    );
+  },
+
+  // Evidence links (read-only)
+  listEvidenceLinks(engagementId: string): Promise<EvidenceLink[]> {
+    return request(`/field-assessment/engagements/${engagementId}/evidence-links`);
+  },
+
+  // Audit trail (read-only)
+  listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
+    return request(`/field-assessment/engagements/${engagementId}/audit-events`);
   },
 } as const;
