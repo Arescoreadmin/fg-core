@@ -31,7 +31,12 @@ const nextConfig = {
   transpilePackages: ['@fg/ui'],
 
   async rewrites() {
-    // Docker: admin-gateway; Vercel/production: CORE_API_URL env var.
+    // On Vercel, the BFF proxy at /app/api/core/[...path]/route.ts handles all
+    // backend traffic with API-key injection, rate limiting, and tenant scoping.
+    // The catch-all rewrite is only needed in Docker where admin-gateway routes
+    // all /api/* traffic. Without this guard, the rewrite fires before dynamic
+    // catch-all routes and intercepts /api/core/* and /api/auth/* on Vercel.
+    if (process.env.VERCEL) return [];
     const upstream = (process.env.CORE_API_URL || 'http://admin-gateway:8080').replace(/\/$/, '');
     return [
       {
