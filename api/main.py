@@ -590,6 +590,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ai_plane_extension_router)
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
+    app.include_router(workforce_router)
 
     if not _is_production_runtime():
         app.include_router(ui_router)
@@ -601,7 +602,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ui_compliance_dashboard_router)
         app.include_router(ui_ai_router)
         app.include_router(ui_ai_admin_router)
-        app.include_router(workforce_router)
         if _testing_control_tower_enabled():
             app.include_router(ui_testing_control_tower_router)
 
@@ -1023,6 +1023,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
         app.include_router(ai_plane_extension_router)
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
+    app.include_router(workforce_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)

@@ -46,22 +46,118 @@ DEVICE_COOKIE = "fg_device_id"
 # ─── Workforce query attribution (PR 36) ─────────────────────────────────────
 
 _SUBJECT_KEYWORDS: dict[str, list[str]] = {
-    "legal":       ["lawsuit", "litigation", "attorney", "counsel", "contract", "liability", "subpoena", "deposition"],
-    "financial":   ["budget", "salary", "compensation", "bonus", "payroll", "revenue", "profit", "invoice", "expense"],
-    "hr":          ["performance review", "termination", "hire", "fired", "resignation", "benefits", "hr", "employee"],
-    "medical":     ["diagnosis", "prescription", "hipaa", "patient", "symptoms", "treatment", "medication", "doctor"],
-    "competitor":  ["competitor", "competing", "rival", "market share", "vs ", " vs.", "compared to", "better than"],
-    "compliance":  ["gdpr", "ccpa", "nist", "sox", "pci", "hipaa", "cmmc", "ffiec", "regulation", "audit"],
-    "technical":   ["code", "api", "function", "debug", "error", "deploy", "database", "server", "algorithm"],
-    "personal":    ["my wife", "my husband", "my kids", "my family", "vacation", "personal", "dating", "recipe"],
+    "legal": [
+        "lawsuit",
+        "litigation",
+        "attorney",
+        "counsel",
+        "contract",
+        "liability",
+        "subpoena",
+        "deposition",
+    ],
+    "financial": [
+        "budget",
+        "salary",
+        "compensation",
+        "bonus",
+        "payroll",
+        "revenue",
+        "profit",
+        "invoice",
+        "expense",
+    ],
+    "hr": [
+        "performance review",
+        "termination",
+        "hire",
+        "fired",
+        "resignation",
+        "benefits",
+        "hr",
+        "employee",
+    ],
+    "medical": [
+        "diagnosis",
+        "prescription",
+        "hipaa",
+        "patient",
+        "symptoms",
+        "treatment",
+        "medication",
+        "doctor",
+    ],
+    "competitor": [
+        "competitor",
+        "competing",
+        "rival",
+        "market share",
+        "vs ",
+        " vs.",
+        "compared to",
+        "better than",
+    ],
+    "compliance": [
+        "gdpr",
+        "ccpa",
+        "nist",
+        "sox",
+        "pci",
+        "hipaa",
+        "cmmc",
+        "ffiec",
+        "regulation",
+        "audit",
+    ],
+    "technical": [
+        "code",
+        "api",
+        "function",
+        "debug",
+        "error",
+        "deploy",
+        "database",
+        "server",
+        "algorithm",
+    ],
+    "personal": [
+        "my wife",
+        "my husband",
+        "my kids",
+        "my family",
+        "vacation",
+        "personal",
+        "dating",
+        "recipe",
+    ],
 }
 
 _SENSITIVITY_PATTERNS: dict[str, list[str]] = {
-    "contains_pii":        ["social security", "ssn", "date of birth", "dob", "passport", "driver license", "credit card"],
-    "competitor_mention":  _SUBJECT_KEYWORDS["competitor"],
-    "medical_content":     _SUBJECT_KEYWORDS["medical"],
-    "financial_sensitive": ["salary", "compensation", "tax return", "bank account", "routing number"],
-    "hr_sensitive":        ["fired", "termination", "performance improvement", "pip", "layoff"],
+    "contains_pii": [
+        "social security",
+        "ssn",
+        "date of birth",
+        "dob",
+        "passport",
+        "driver license",
+        "credit card",
+    ],
+    "competitor_mention": _SUBJECT_KEYWORDS["competitor"],
+    "medical_content": _SUBJECT_KEYWORDS["medical"],
+    "financial_sensitive": [
+        "salary",
+        "compensation",
+        "tax return",
+        "bank account",
+        "routing number",
+    ],
+    "hr_sensitive": [
+        "fired",
+        "termination",
+        "performance improvement",
+        "pip",
+        "layoff",
+    ],
 }
 
 
@@ -148,6 +244,8 @@ def _log_query(
     except Exception:
         # Non-fatal — never let logging failure break the chat response.
         db.rollback()
+
+
 CONTRACTS_ROOT = Path("contracts/ai")
 
 

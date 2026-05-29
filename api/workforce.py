@@ -7,6 +7,7 @@ All endpoints require admin:write scope and tenant isolation.
 Not standalone: requires tenant_users + ai_query_log tables (migrations 0068–0069),
 auth layer, and Postgres substrate.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -14,14 +15,14 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, EmailStr, field_validator
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, field_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.deps import tenant_db_required
-from api.errors import http_error
+from api.error_contracts import api_error
 
 router = APIRouter(prefix="/workforce", tags=["workforce"])
 
@@ -29,6 +30,7 @@ _INVITE_TTL_HOURS = 72
 _RISK_WINDOW_DAYS = 30
 
 # ─── Pydantic models ──────────────────────────────────────────────────────────
+
 
 class InviteUserPayload(BaseModel):
     email: str
@@ -57,6 +59,7 @@ class UpdateUserPayload(BaseModel):
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -140,6 +143,7 @@ def _compute_risk_profile(db: Session, tenant_id: str, user_id: str) -> dict[str
 
 # ─── User management ──────────────────────────────────────────────────────────
 
+
 @router.post("/users", dependencies=[Depends(require_scopes("admin:write"))])
 def invite_user(
     payload: InviteUserPayload,
@@ -153,7 +157,12 @@ def invite_user(
         {"t": tenant_id, "e": payload.email.lower()},
     ).fetchone()
     if existing:
-        raise http_error(409, "USER_ALREADY_EXISTS", "A user with that email already exists.")
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "USER_ALREADY_EXISTS", "A user with that email already exists."
+            ),
+        )
 
     user_id = str(uuid.uuid4())
     invite_token = secrets.token_urlsafe(32)
@@ -215,7 +224,9 @@ def list_users(
                 "role": r.role,
                 "active": r.active,
                 "invite_pending": bool(r.invite_pending),
-                "last_active_at": r.last_active_at.isoformat() if r.last_active_at else None,
+                "last_active_at": r.last_active_at.isoformat()
+                if r.last_active_at
+                else None,
                 "created_at": r.created_at.isoformat(),
             }
             for r in rows
@@ -238,7 +249,9 @@ def update_user(
         {"t": tenant_id, "u": user_id},
     ).fetchone()
     if not row:
-        raise http_error(404, "USER_NOT_FOUND", "User not found.")
+        raise HTTPException(
+            status_code=404, detail=api_error("USER_NOT_FOUND", "User not found.")
+        )
 
     updates: list[str] = ["updated_at = NOW()"]
     params: dict[str, Any] = {"tenant_id": tenant_id, "user_id": user_id}
@@ -254,7 +267,9 @@ def update_user(
         params["display_name"] = payload.display_name
 
     db.execute(
-        text(f"UPDATE tenant_users SET {', '.join(updates)} WHERE tenant_id=:tenant_id AND id=:user_id"),
+        text(
+            f"UPDATE tenant_users SET {', '.join(updates)} WHERE tenant_id=:tenant_id AND id=:user_id"
+        ),
         params,
     )
     db.commit()
@@ -262,6 +277,7 @@ def update_user(
 
 
 # ─── Risk profiles ────────────────────────────────────────────────────────────
+
 
 @router.get("/risk-profiles", dependencies=[Depends(require_scopes("admin:write"))])
 def list_risk_profiles(
@@ -283,20 +299,26 @@ def list_risk_profiles(
     profiles = []
     for u in users:
         profile = _compute_risk_profile(db, tenant_id, u.id)
-        profiles.append({
-            "user_id": u.id,
-            "email": u.email,
-            "display_name": u.display_name,
-            "role": u.role,
-            "last_active_at": u.last_active_at.isoformat() if u.last_active_at else None,
-            **profile,
-        })
+        profiles.append(
+            {
+                "user_id": u.id,
+                "email": u.email,
+                "display_name": u.display_name,
+                "role": u.role,
+                "last_active_at": u.last_active_at.isoformat()
+                if u.last_active_at
+                else None,
+                **profile,
+            }
+        )
 
     profiles.sort(key=lambda p: p["risk_score"], reverse=True)
     return {"items": profiles, "total": len(profiles), "period_days": _RISK_WINDOW_DAYS}
 
 
-@router.get("/users/{user_id}/activity", dependencies=[Depends(require_scopes("admin:write"))])
+@router.get(
+    "/users/{user_id}/activity", dependencies=[Depends(require_scopes("admin:write"))]
+)
 def get_user_activity(
     user_id: str,
     request: Request,
@@ -307,11 +329,15 @@ def get_user_activity(
     tenant_id = require_bound_tenant(request)
 
     user = db.execute(
-        text("SELECT id, email, display_name, role FROM tenant_users WHERE tenant_id=:t AND id=:u"),
+        text(
+            "SELECT id, email, display_name, role FROM tenant_users WHERE tenant_id=:t AND id=:u"
+        ),
         {"t": tenant_id, "u": user_id},
     ).fetchone()
     if not user:
-        raise http_error(404, "USER_NOT_FOUND", "User not found.")
+        raise HTTPException(
+            status_code=404, detail=api_error("USER_NOT_FOUND", "User not found.")
+        )
 
     queries = db.execute(
         text("""
@@ -327,10 +353,13 @@ def get_user_activity(
         {"tenant_id": tenant_id, "user_id": user_id, "limit": limit, "offset": offset},
     ).fetchall()
 
-    total = db.execute(
-        text("SELECT COUNT(*) FROM ai_query_log WHERE tenant_id=:t AND user_id=:u"),
-        {"t": tenant_id, "u": user_id},
-    ).scalar() or 0
+    total = (
+        db.execute(
+            text("SELECT COUNT(*) FROM ai_query_log WHERE tenant_id=:t AND user_id=:u"),
+            {"t": tenant_id, "u": user_id},
+        ).scalar()
+        or 0
+    )
 
     risk = _compute_risk_profile(db, tenant_id, user_id)
 
@@ -356,7 +385,9 @@ def get_user_activity(
                 "subject_category": q.subject_category,
                 "work_relevance": q.work_relevance,
                 "sensitivity_flags": q.sensitivity_flags or [],
-                "classified_at": q.classified_at.isoformat() if q.classified_at else None,
+                "classified_at": q.classified_at.isoformat()
+                if q.classified_at
+                else None,
                 "created_at": q.created_at.isoformat(),
             }
             for q in queries
@@ -368,6 +399,7 @@ def get_user_activity(
 
 
 # ─── Accept invite (portal login) ────────────────────────────────────────────
+
 
 class _AcceptInviteBody(BaseModel):
     invite_token: str
@@ -383,7 +415,10 @@ def accept_invite(
     """
     token = body.invite_token.strip()
     if not token:
-        raise http_error(400, "INVITE_TOKEN_REQUIRED", "invite_token is required.")
+        raise HTTPException(
+            status_code=400,
+            detail=api_error("INVITE_TOKEN_REQUIRED", "invite_token is required."),
+        )
 
     row = db.execute(
         text("""
@@ -395,11 +430,20 @@ def accept_invite(
     ).fetchone()
 
     if not row:
-        raise http_error(401, "INVITE_INVALID", "Invalid or expired invite token.")
+        raise HTTPException(
+            status_code=401,
+            detail=api_error("INVITE_INVALID", "Invalid or expired invite token."),
+        )
     if not row.active:
-        raise http_error(403, "USER_INACTIVE", "This user account is deactivated.")
+        raise HTTPException(
+            status_code=403,
+            detail=api_error("USER_INACTIVE", "This user account is deactivated."),
+        )
     if row.invite_expires_at and row.invite_expires_at < _now():
-        raise http_error(401, "INVITE_EXPIRED", "This invite link has expired.")
+        raise HTTPException(
+            status_code=401,
+            detail=api_error("INVITE_EXPIRED", "This invite link has expired."),
+        )
 
     # Clear the invite token (one-time use) and record last_active_at
     db.execute(

@@ -8437,9 +8437,108 @@
       "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/workforce.py",
+      "method": "GET",
+      "path": "/workforce/risk-profiles",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/workforce.py",
+      "method": "GET",
+      "path": "/workforce/users",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/workforce.py",
+      "method": "POST",
+      "path": "/workforce/users",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "tenant"
+      ],
+      "file": "api/workforce.py",
+      "method": "POST",
+      "path": "/workforce/users/accept-invite",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/workforce.py",
+      "method": "PATCH",
+      "path": "/workforce/users/{user_id}",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/workforce.py",
+      "method": "GET",
+      "path": "/workforce/users/{user_id}/activity",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
     }
   ],
-  "generated_at": "2026-05-28T16:20:32.494025+00:00",
+  "generated_at": "2026-05-29T09:25:01.536042+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
