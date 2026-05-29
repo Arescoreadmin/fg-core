@@ -8446,8 +8446,8 @@
       "file": "api/workforce.py",
       "method": "GET",
       "path": "/workforce/risk-profiles",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "workforce",
+      "plane_id": "workforce",
       "scoped": true,
       "scopes": [
         "admin:write"
@@ -8463,8 +8463,8 @@
       "file": "api/workforce.py",
       "method": "GET",
       "path": "/workforce/users",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "workforce",
+      "plane_id": "workforce",
       "scoped": true,
       "scopes": [
         "admin:write"
@@ -8480,8 +8480,8 @@
       "file": "api/workforce.py",
       "method": "POST",
       "path": "/workforce/users",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "workforce",
+      "plane_id": "workforce",
       "scoped": true,
       "scopes": [
         "admin:write"
@@ -8496,8 +8496,8 @@
       "file": "api/workforce.py",
       "method": "POST",
       "path": "/workforce/users/accept-invite",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "workforce",
+      "plane_id": "workforce",
       "scoped": false,
       "scopes": [],
       "source": "runtime-ast",
@@ -8511,8 +8511,8 @@
       "file": "api/workforce.py",
       "method": "PATCH",
       "path": "/workforce/users/{user_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "workforce",
+      "plane_id": "workforce",
       "scoped": true,
       "scopes": [
         "admin:write"
@@ -8528,8 +8528,8 @@
       "file": "api/workforce.py",
       "method": "GET",
       "path": "/workforce/users/{user_id}/activity",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "workforce",
+      "plane_id": "workforce",
       "scoped": true,
       "scopes": [
         "admin:write"
@@ -8538,7 +8538,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-05-29T09:25:01.536042+00:00",
+  "generated_at": "2026-05-29T10:01:27.207795+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

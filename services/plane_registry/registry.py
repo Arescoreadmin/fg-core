@@ -574,6 +574,33 @@ PLANE_REGISTRY: list[PlaneDef] = [
         ),
     ),
     PlaneDef(
+        plane_id="workforce",
+        route_prefixes=("/workforce",),
+        allowed_dependency_categories=("auth", "tenant", "db", "rate"),
+        required_make_targets=("soc-invariants",),
+        required_ci_gates=COMMON_GATES,
+        maturity_tag="production-grade",
+        required_route_invariants=("auth", "tenant_bound"),
+        auth_class=AuthClass(
+            required_scope_prefixes=("admin:",),
+            require_any_scope=True,
+            tenant_binding_required=True,
+        ),
+        public_routes=(
+            ex(
+                "POST",
+                "/workforce/users/accept-invite",
+                "auth_exempt",
+                "Invite-token exchange: the invite token IS the credential. "
+                "32-byte URL-safe random, 72h TTL, single-use (cleared on acceptance). "
+                "Tenant isolation enforced implicitly: DB lookup returns nothing for "
+                "tokens not belonging to the caller's tenant. Role assigned by the "
+                "inviting admin at creation time; accepting user cannot escalate.",
+                permanent=True,
+            ),
+        ),
+    ),
+    PlaneDef(
         plane_id="ui",
         route_prefixes=("/ui",),
         allowed_dependency_categories=("auth", "tenant", "rate"),

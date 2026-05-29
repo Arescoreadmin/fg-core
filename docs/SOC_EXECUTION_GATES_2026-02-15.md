@@ -1,3 +1,23 @@
+## 2026-05-29 — PR 36 plane registry: workforce plane definition
+
+**Classification:** Additive plane registry entry. No auth logic changes. No new routes added (routes already existed from PR 36). Plane registry now formally acknowledges and classifies all 6 workforce routes.
+
+**SOC review:**
+- `services/plane_registry/registry.py`: Added `PlaneDef(plane_id="workforce")` with:
+  - `route_prefixes=("/workforce",)`
+  - `auth_class` requires `admin:` scope prefix, tenant binding required
+  - `public_routes` entry for `POST /workforce/users/accept-invite` classified as `auth_exempt` with full justification: 32-byte URL-safe invite token, 72h TTL, single-use (cleared atomically on acceptance), tenant isolation via DB token lookup, role set by inviting admin at creation time
+- No route surface changes — routes already existed and were in the contract. This entry resolves the registry gap.
+- `tools/ci/plane_registry_snapshot.json`, `contract_routes.json`, `route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`: regenerated to reflect new plane definition. Contents are deterministic output of registry + runtime app.
+
+**Files touched:**
+- `services/plane_registry/registry.py` — new workforce PlaneDef
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+
 ## 2026-05-29 — PR 36 CI repair: public_paths + workforce route inventory
 
 **Classification:** Security path amendment + route inventory update. Adds one public-path exemption for the invite-token exchange endpoint. No new write paths to existing data beyond what PR 36 already established. No schema changes. No auth flow changes.

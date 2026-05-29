@@ -99,7 +99,7 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 391,
+  "contract_count": 397,
   "contract_only": [],
   "plane_coverage": {
     "agent": 14,
@@ -111,7 +111,7 @@
     "rbac": 5,
     "security": 6,
     "ui": 47,
-    "unmapped": 6
+    "workforce": 6
   },
   "removed": [],
   "runtime_count": 501,
@@ -180,10 +180,6 @@
     "GET /ui/provider/routing",
     "GET /ui/scopes",
     "GET /ui/token",
-    "GET /workforce/risk-profiles",
-    "GET /workforce/users",
-    "GET /workforce/users/{user_id}/activity",
-    "PATCH /workforce/users/{user_id}",
     "POST /admin/agent/commands/issue",
     "POST /admin/agent/devices/{device_id}/disable",
     "POST /admin/agent/devices/{device_id}/enable",
@@ -213,18 +209,9 @@
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
     "POST /ui/devices/{device_id}/enable",
-    "POST /workforce/users",
-    "POST /workforce/users/accept-invite",
     "PUT /admin/agent/version-floor",
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": [
-    "GET /workforce/risk-profiles",
-    "GET /workforce/users",
-    "GET /workforce/users/{user_id}/activity",
-    "PATCH /workforce/users/{user_id}",
-    "POST /workforce/users",
-    "POST /workforce/users/accept-invite"
-  ]
+  "unauthorized_runtime_only": []
 }
