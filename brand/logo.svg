@@ -1,0 +1,201 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 620" role="img" aria-label="FrostGate">
+  <defs>
+
+    <!-- ── FILTERS ───────────────────────────────────────────────── -->
+
+    <!-- Overall drop shadow on the shield -->
+    <filter id="f-shadow" x="-16%" y="-10%" width="132%" height="128%">
+      <feDropShadow dx="0" dy="6" stdDeviation="16" flood-color="#000000" flood-opacity="0.78"/>
+    </filter>
+
+    <!-- Subtle fractal-noise metal texture blended over each half -->
+    <filter id="f-metal" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.72 0.85" numOctaves="4" seed="12" result="noise"/>
+      <feColorMatrix type="saturate" values="0" in="noise" result="grey"/>
+      <feComponentTransfer in="grey" result="dimmed">
+        <feFuncA type="linear" slope="0.09"/>
+      </feComponentTransfer>
+      <feBlend in="SourceGraphic" in2="dimmed" mode="overlay" result="blended"/>
+      <feComposite in="blended" in2="SourceGraphic" operator="in"/>
+    </filter>
+
+    <!-- ── GRADIENTS ─────────────────────────────────────────────── -->
+
+    <!-- Dark metallic outer border -->
+    <linearGradient id="g-border" x1="26" y1="42" x2="474" y2="522" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#323232"/>
+      <stop offset="45%"  stop-color="#181818"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </linearGradient>
+
+    <!-- Steel blue — left half; light source upper-left -->
+    <linearGradient id="g-blue" x1="46" y1="62" x2="250" y2="504" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#7ba5be"/>
+      <stop offset="28%"  stop-color="#487290"/>
+      <stop offset="62%"  stop-color="#1e4258"/>
+      <stop offset="100%" stop-color="#0a1b28"/>
+    </linearGradient>
+
+    <!-- Rust red — right half; light source upper-right -->
+    <linearGradient id="g-rust" x1="454" y1="62" x2="250" y2="504" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#bf5e48"/>
+      <stop offset="28%"  stop-color="#8e3226"/>
+      <stop offset="62%"  stop-color="#511410"/>
+      <stop offset="100%" stop-color="#1a0504"/>
+    </linearGradient>
+
+    <!-- Top-edge specular sheen on the inner fill -->
+    <linearGradient id="g-sheen" x1="0" y1="62" x2="0" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="rgba(255,255,255,0.11)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+
+    <!-- Metallic wordmark (light to dark, top to bottom) -->
+    <linearGradient id="g-text" x1="0" y1="548" x2="0" y2="592" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#888888"/>
+      <stop offset="50%"  stop-color="#5c5c5c"/>
+      <stop offset="100%" stop-color="#363636"/>
+    </linearGradient>
+
+    <!-- ── CLIP PATHS ─────────────────────────────────────────────── -->
+
+    <!-- Inner fill area used to clip the metal texture rect -->
+    <clipPath id="c-inner">
+      <path d="M 250,504 L 46,334 L 46,82 Q 46,62 68,62 L 432,62 Q 454,62 454,82 L 454,334 Z"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!--  SHIELD                                                        -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <g filter="url(#f-shadow)">
+
+    <!-- OUTER BORDER — dark metallic frame -->
+    <path
+      d="M 250,522
+         L 26,344
+         L 26,76
+         Q 26,42 62,42
+         L 438,42
+         Q 474,42 474,76
+         L 474,344
+         Z"
+      fill="url(#g-border)"
+    />
+
+    <!-- INNER LEFT — steel blue -->
+    <path
+      d="M 250,504
+         L 46,334
+         L 46,82
+         Q 46,62 68,62
+         L 250,62
+         Z"
+      fill="url(#g-blue)"
+    />
+
+    <!-- INNER RIGHT — rust red -->
+    <path
+      d="M 250,62
+         L 432,62
+         Q 454,62 454,82
+         L 454,334
+         L 250,504
+         Z"
+      fill="url(#g-rust)"
+    />
+
+    <!-- METAL TEXTURE — noise overlay on both halves -->
+    <rect
+      x="46" y="62" width="408" height="442"
+      fill="rgba(160,160,160,1)"
+      clip-path="url(#c-inner)"
+      filter="url(#f-metal)"
+    />
+
+    <!-- SPECULAR SHEEN — top-edge highlight -->
+    <path
+      d="M 250,504
+         L 46,334
+         L 46,82
+         Q 46,62 68,62
+         L 432,62
+         Q 454,62 454,82
+         L 454,334
+         Z"
+      fill="url(#g-sheen)"
+    />
+
+    <!-- INNER BEVEL LINE — thin rim tracing inside the border -->
+    <path
+      d="M 250,504
+         L 46,334
+         L 46,82
+         Q 46,62 68,62
+         L 432,62
+         Q 454,62 454,82
+         L 454,334
+         Z"
+      fill="none"
+      stroke="rgba(255,255,255,0.07)"
+      stroke-width="1.5"
+    />
+
+    <!-- CENTER DIVIDER RIDGE -->
+    <!-- Primary shadow groove -->
+    <line x1="250.5" y1="42"  x2="250.5" y2="504" stroke="rgba(0,0,0,0.90)" stroke-width="4" stroke-linecap="round"/>
+    <!-- Slight highlight on the left edge of the groove -->
+    <line x1="248.5" y1="62"  x2="248.5" y2="504" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-linecap="round"/>
+
+    <!-- ── CENTER EMBLEM ──────────────────────────────────────── -->
+    <g transform="translate(250,283)">
+      <!-- Dark backing disc -->
+      <circle r="23" fill="#0c0c0c" opacity="0.80"/>
+      <!-- Outer ring -->
+      <circle r="23" fill="none" stroke="#464646" stroke-width="1.6"/>
+      <!-- Inner ring (subtle depth) -->
+      <circle r="18" fill="none" stroke="rgba(110,110,110,0.28)" stroke-width="0.8"/>
+
+      <!-- Mini shield — mirrors the outer shield shape at 1/12 scale -->
+      <path
+        d="M 0,16
+           L -10.5,9
+           L -10.5,-5.5
+           Q -10.5,-11 -5.5,-11
+           L 5.5,-11
+           Q 10.5,-11 10.5,-5.5
+           L 10.5,9
+           Z"
+        fill="none"
+        stroke="rgba(190,190,190,0.62)"
+        stroke-width="1.3"
+        stroke-linejoin="round"
+        stroke-linecap="round"
+      />
+
+      <!-- Diamond pip at shield center -->
+      <path
+        d="M 0,0 L 3.5,3.5 L 0,7 L -3.5,3.5 Z"
+        fill="rgba(210,210,210,0.48)"
+      />
+    </g>
+
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!--  WORDMARK                                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <text
+    x="250"
+    y="588"
+    text-anchor="middle"
+    font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+    font-size="44"
+    font-weight="900"
+    textLength="390"
+    lengthAdjust="spacing"
+    fill="url(#g-text)"
+  >FROSTGATE</text>
+
+</svg>
