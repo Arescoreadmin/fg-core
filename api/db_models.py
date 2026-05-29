@@ -18,6 +18,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -3582,5 +3583,116 @@ class AIQueryLog(Base):
     )
     classified_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class RiskScoreSnapshot(Base):
+    __tablename__ = "risk_score_snapshots"
+    __table_args__ = (
+        Index("idx_risk_snapshot_user_date", "tenant_id", "user_id", "captured_at"),
+        # Expression-based unique index (per-user per-day) is created by migration 0070.
+        # Not representable as a SQLAlchemy UniqueConstraint.
+    )
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    user_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    risk_score: Mapped[Any] = mapped_column(Numeric(5, 1), nullable=False, default=0)
+    risk_band: Mapped[Any] = mapped_column(String(32), nullable=False, default="low")
+    total_queries: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    policy_violations: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    personal_ratio: Mapped[Any] = mapped_column(
+        Numeric(5, 3), nullable=False, default=0
+    )
+    sensitive_topic_count: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    pii_query_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    competitor_query_count: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    active_days: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    period_days: Mapped[Any] = mapped_column(Integer, nullable=False, default=30)
+    captured_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class TenantKeyword(Base):
+    __tablename__ = "tenant_keywords"
+    __table_args__ = (Index("idx_tenant_keyword_tenant", "tenant_id", "active"),)
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    keyword: Mapped[Any] = mapped_column(Text, nullable=False)
+    match_type: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="contains"
+    )
+    case_sensitive: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    flag_value: Mapped[Any] = mapped_column(Text, nullable=False)
+    flag_type: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="sensitivity"
+    )
+    action: Mapped[Any] = mapped_column(String(32), nullable=False, default="flag")
+    description: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Any] = mapped_column(String(256), nullable=True)
+    active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class RiskAlertRule(Base):
+    __tablename__ = "risk_alert_rules"
+    __table_args__ = (Index("idx_alert_rules_tenant", "tenant_id", "active"),)
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    name: Mapped[Any] = mapped_column(Text, nullable=False)
+    threshold_score: Mapped[Any] = mapped_column(Numeric(5, 1), nullable=True)
+    threshold_band: Mapped[Any] = mapped_column(Text, nullable=True)
+    cooldown_hours: Mapped[Any] = mapped_column(Integer, nullable=False, default=24)
+    active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class RiskAlertFired(Base):
+    __tablename__ = "risk_alerts_fired"
+    __table_args__ = (
+        Index("idx_alerts_fired_tenant", "tenant_id", "fired_at"),
+        Index("idx_alerts_fired_rule_user", "rule_id", "user_id", "fired_at"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    rule_id: Mapped[Any] = mapped_column(
+        String(128),
+        ForeignKey("risk_alert_rules.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    user_email: Mapped[Any] = mapped_column(String(256), nullable=True)
+    risk_score: Mapped[Any] = mapped_column(Numeric(5, 1), nullable=False)
+    risk_band: Mapped[Any] = mapped_column(String(32), nullable=False)
+    dismissed: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    dismissed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    fired_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

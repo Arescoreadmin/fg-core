@@ -12809,3 +12809,47 @@ All backend queries are scoped by `require_bound_tenant()`. The `ai_query_log` t
 ## Validation
 
 `npm run build` clean for both `apps/portal` and `apps/console`. Backend imports verified (`api/workforce.py` registered in `main.py`). Migrations are additive (CREATE TABLE IF NOT EXISTS, no destructive ops).
+
+---
+
+# PR 37 — Risk Score History + Tenant Keyword Triggers + Threshold Alerting + Smart Matching + Backtest
+
+## Summary
+
+Completes the workforce intelligence feature to a full 9/10. Adds: daily risk score snapshots with trend visualization; tenant-configurable keyword triggers with five smart matching modes; threshold-based alert rules with cooldown and audit log; keyword backtest against historical queries.
+
+## Migrations
+
+- `migrations/postgres/0070_risk_score_snapshots.sql` — one row per user per day (upserted on admin leaderboard load); expression-based unique index on `(tenant_id, user_id, DATE(captured_at AT TIME ZONE 'UTC'))`
+- `migrations/postgres/0071_tenant_keywords.sql` — keyword triggers with `match_type`, `case_sensitive`, `flag_type`, `action`; unique index on `(tenant_id, keyword, flag_value)` WHERE active
+- `migrations/postgres/0072_risk_alert_rules.sql` — `risk_alert_rules` + `risk_alerts_fired`; fired alerts FK to rules with `ON DELETE CASCADE`
+
+## Backend
+
+### api/db_models.py
+Added `Numeric` to SQLAlchemy imports. Added four ORM models: `RiskScoreSnapshot`, `TenantKeyword`, `RiskAlertRule`, `RiskAlertFired`.
+
+### api/workforce.py
+Added `import re`. New Pydantic models: `KeywordPayload`, `AlertRulePayload`, `_BacktestPayload`. New helpers: `_upsert_snapshot()` (check-then-upsert snapshot for today), `_fire_alerts()` (check rules with cooldown). Modified `list_risk_profiles` to call both helpers after computing profiles. New endpoints: `GET /users/{user_id}/risk-history`, `GET/POST /keywords`, `DELETE /keywords/{id}`, `POST /keywords/preview`, `GET/POST /alert-rules`, `PATCH/DELETE /alert-rules/{id}`, `GET /alerts`, `POST /alerts/{id}/dismiss`.
+
+### api/ui_ai_console.py
+Added `import re`. New `_keyword_matches()` helper for smart matching (contains/exact/word_boundary/prefix/regex, case-sensitivity flag). Modified `_classify_query()` to accept optional `tenant_keywords` list — tenant rules extend (never replace) built-in dictionaries. Added `_load_tenant_keywords()` which fetches from DB with silent error fallback. Modified `_log_query()` to call `_load_tenant_keywords()` and pass results to `_classify_query()`.
+
+## Frontend
+
+### apps/console/lib/workforceApi.ts
+New types: `RiskSnapshot`, `TenantKeyword`, `AlertRule`, `FiredAlert`, `BacktestResult`. New API methods: `getRiskHistory`, `listKeywords`, `createKeyword`, `deleteKeyword`, `previewKeyword`, `listAlertRules`, `createAlertRule`, `updateAlertRule`, `deleteAlertRule`, `listAlerts`, `dismissAlert`.
+
+### apps/console/app/dashboard/workforce/page.tsx
+- `RiskTrendChart` component: loads `getRiskHistory`, renders Recharts `AreaChart` with gradient fill, color-coded by current risk band, inserted above stats grid in `ActivityDrawer`
+- `KeywordsTab` component: keyword table + add form (keyword, match_type, case_sensitive, flag_value, flag_type, action, description) + delete + preview/backtest panel showing matched count + sample queries
+- `AlertsTab` component: alert rules table (create/pause/delete) + fired alerts table (dismiss) + dismissed toggle
+- Page: added `'keywords' | 'alerts'` tabs; `KeywordsTab` and `AlertsTab` manage their own data fetching independently of the main page load
+
+## Contracts / SOC
+- OpenAPI contract regenerated; Contract-Authority-SHA256 updated in `BLUEPRINT_STAGED.md` + `CONTRACT.md`
+- Route inventory regenerated via `make route-inventory-generate`
+- SOC review entry added to `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+
+## Validation
+TypeScript: `npx tsc --noEmit` clean on `apps/console`. Ruff lint + format clean. Backend imports verified. `GATES_MODE=fast make fg-fast` passes all gates.

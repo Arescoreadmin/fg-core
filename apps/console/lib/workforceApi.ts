@@ -1,5 +1,5 @@
 /**
- * workforceApi.ts — Console API client for Workforce Intelligence (PR 36)
+ * workforceApi.ts — Console API client for Workforce Intelligence (PR 36 + 37)
  */
 
 const BASE = '/api/core';
@@ -82,6 +82,62 @@ export interface UserActivity {
   total: number;
 }
 
+export interface RiskSnapshot {
+  date: string;
+  risk_score: number;
+  risk_band: string;
+  total_queries: number;
+  policy_violations: number;
+  personal_ratio: number;
+}
+
+export interface TenantKeyword {
+  id: string;
+  keyword: string;
+  match_type: 'contains' | 'exact' | 'word_boundary' | 'prefix' | 'regex';
+  case_sensitive: boolean;
+  flag_value: string;
+  flag_type: 'sensitivity' | 'subject' | 'custom';
+  action: 'flag' | 'block' | 'escalate';
+  description: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  threshold_score: number | null;
+  threshold_band: string | null;
+  cooldown_hours: number;
+  active: boolean;
+  created_at: string;
+}
+
+export interface FiredAlert {
+  id: string;
+  rule_id: string;
+  rule_name: string;
+  user_id: string;
+  user_email: string | null;
+  risk_score: number;
+  risk_band: string;
+  dismissed: boolean;
+  dismissed_at: string | null;
+  fired_at: string;
+}
+
+export interface BacktestResult {
+  matched: number;
+  scanned: number;
+  matches: Array<{
+    query_id: string;
+    query_text: string;
+    user_id: string;
+    created_at: string;
+  }>;
+}
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const workforceApi = {
@@ -117,5 +173,71 @@ export const workforceApi = {
     if (params?.offset != null) qs.set('offset', String(params.offset));
     const q = qs.toString();
     return req(`/workforce/users/${userId}/activity${q ? `?${q}` : ''}`);
+  },
+
+  getRiskHistory(userId: string, days = 30): Promise<{ user_id: string; history: RiskSnapshot[]; period_days: number }> {
+    return req(`/workforce/users/${userId}/risk-history?days=${days}`);
+  },
+
+  listKeywords(): Promise<{ items: TenantKeyword[]; total: number }> {
+    return req('/workforce/keywords');
+  },
+
+  createKeyword(payload: {
+    keyword: string;
+    match_type: string;
+    case_sensitive: boolean;
+    flag_value: string;
+    flag_type: string;
+    action: string;
+    description?: string;
+  }): Promise<{ id: string; ok: boolean }> {
+    return req('/workforce/keywords', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  deleteKeyword(keywordId: string): Promise<{ ok: boolean }> {
+    return req(`/workforce/keywords/${keywordId}`, { method: 'DELETE' });
+  },
+
+  previewKeyword(payload: {
+    keyword: string;
+    match_type: string;
+    case_sensitive: boolean;
+    limit?: number;
+  }): Promise<BacktestResult> {
+    return req('/workforce/keywords/preview', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  listAlertRules(): Promise<{ items: AlertRule[]; total: number }> {
+    return req('/workforce/alert-rules');
+  },
+
+  createAlertRule(payload: {
+    name: string;
+    threshold_score?: number | null;
+    threshold_band?: string | null;
+    cooldown_hours?: number;
+    active?: boolean;
+  }): Promise<{ id: string; ok: boolean }> {
+    return req('/workforce/alert-rules', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  updateAlertRule(
+    ruleId: string,
+    payload: { name: string; threshold_score?: number | null; threshold_band?: string | null; cooldown_hours?: number; active?: boolean },
+  ): Promise<{ ok: boolean }> {
+    return req(`/workforce/alert-rules/${ruleId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  deleteAlertRule(ruleId: string): Promise<{ ok: boolean }> {
+    return req(`/workforce/alert-rules/${ruleId}`, { method: 'DELETE' });
+  },
+
+  listAlerts(dismissed = false, limit = 50): Promise<{ items: FiredAlert[]; total: number }> {
+    return req(`/workforce/alerts?dismissed=${dismissed}&limit=${limit}`);
+  },
+
+  dismissAlert(alertId: string): Promise<{ ok: boolean }> {
+    return req(`/workforce/alerts/${alertId}/dismiss`, { method: 'POST' });
   },
 } as const;

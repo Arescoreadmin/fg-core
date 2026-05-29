@@ -59,7 +59,8 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | PR 33 | Risk Posture Dashboard | ✅ merged | Home page risk intelligence: NIST coverage bar (current vs projected), finding severity strip, NIST function heatmap (GOVERN/MAP/MEASURE/MANAGE), immediate actions callout; `reportlab` dependency added (unblocks PDF export); remediation steps rendered in findings page explainer |
 | PR 34 | Console Auth Gate | ✅ merged | Auth0 OIDC login protection on console via next-auth v5; middleware protects all routes; SessionProvider + sign-out in sidebar |
 | PR 35 | Portal Field Assessment Workspace | ✅ merged | `/engagement` list + `/engagement/[id]` tabbed detail (Overview, Scans, Documents, Observations, Evidence, History); 7 new portalApi methods; "Assessment" nav link |
-| PR 36 | Workforce Intelligence | 🔄 in progress | Per-user AI query attribution; `tenant_users` + `ai_query_log` tables; subject-matter classification; risk scoring; workforce admin dashboard in console; AI workspace in portal |
+| PR 36 | Workforce Intelligence | ✅ merged | Per-user AI query attribution; `tenant_users` + `ai_query_log` tables; subject-matter classification; risk scoring; workforce admin dashboard in console; AI workspace in portal |
+| PR 37 | Risk History + Keywords + Alerting | ✅ merged | Daily risk score snapshots with Recharts trend chart; tenant-configurable keyword triggers (contains/exact/word_boundary/prefix/regex + case sensitivity); threshold-based alert rules with cooldown + fired-alerts audit log; keyword backtest/preview against historical queries; Keywords + Alerts tabs in workforce dashboard |
 
 ---
 

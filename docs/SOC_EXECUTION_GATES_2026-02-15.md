@@ -4402,3 +4402,49 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tools/ci/route_inventory.json` — regenerated
 - `docs/ai/PR_FIX_LOG.md` — updated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+---
+
+## 2026-05-29 — PR 37: risk history + tenant keywords + alert rules route additions
+
+**Classification:** Additive — new workforce routes, all under existing `/workforce` prefix with existing `admin:write` scope gate. Tenant isolation unchanged. No auth logic changes.
+
+**Routes added (all require `admin:write` scope, tenant-bound):**
+- `GET /workforce/users/{user_id}/risk-history` — read risk score snapshots for a user
+- `GET /workforce/keywords` — list active tenant keyword triggers
+- `POST /workforce/keywords` — create a keyword trigger (regex validated at save time)
+- `DELETE /workforce/keywords/{keyword_id}` — soft-delete a keyword
+- `POST /workforce/keywords/preview` — backtest keyword against last N query logs (read-only)
+- `GET /workforce/alert-rules` — list alert rules
+- `POST /workforce/alert-rules` — create alert rule
+- `PATCH /workforce/alert-rules/{rule_id}` — update alert rule
+- `DELETE /workforce/alert-rules/{rule_id}` — delete alert rule (hard delete, cascades to fired alerts)
+- `GET /workforce/alerts` — list fired alerts
+- `POST /workforce/alerts/{alert_id}/dismiss` — dismiss a fired alert
+
+**No new public routes** — `POST /workforce/users/accept-invite` remains the only public workforce endpoint.
+
+**Security review:**
+- All new routes inherit existing `admin:write` scope + `require_bound_tenant()` check.
+- Keyword preview is read-only; returns only `query_text[:200]` truncated excerpts.
+- Alert rule delete cascades to `risk_alerts_fired` via FK `ON DELETE CASCADE`.
+- Regex patterns validated with `re.compile()` before storage — malformed patterns rejected with 422.
+- No tenant_id accepted in request body; all operations scope to `require_bound_tenant(request)`.
+- `_fire_alerts()` runs on leaderboard load with cooldown enforced via `fired_at` timestamp.
+- New ORM models all tenant-scoped via `tenant_id` column.
+
+**Artifacts regenerated:**
+- Route inventory regenerated via `make route-inventory-generate`
+- OpenAPI contracts regenerated via `make fg-contract`
+- Contract authority markers updated in `BLUEPRINT_STAGED.md` + `CONTRACT.md`
+
+**Files touched:**
+- `migrations/postgres/0070_risk_score_snapshots.sql`, `0071_tenant_keywords.sql`, `0072_risk_alert_rules.sql`
+- `api/db_models.py` — 4 new ORM models + `Numeric` import
+- `api/workforce.py` — 11 new endpoints + helpers + Pydantic models
+- `api/ui_ai_console.py` — tenant keyword smart matching in `_classify_query()` / `_log_query()`
+- `apps/console/lib/workforceApi.ts` — new types + API methods
+- `apps/console/app/dashboard/workforce/page.tsx` — trend chart + Keywords + Alerts tabs
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
+- `tools/ci/route_inventory.json` + related artifacts — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry

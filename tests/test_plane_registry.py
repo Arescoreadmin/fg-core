@@ -19,6 +19,7 @@ EXPECTED_PLANES = {
     "ui",
     "security",
     "rbac",
+    "workforce",
 }
 
 FORBIDDEN_LEGACY_DISABLED = (
