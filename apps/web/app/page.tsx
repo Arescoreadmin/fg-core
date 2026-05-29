@@ -1,193 +1,194 @@
-const METRICS = [
-  { value: '69',   label: 'NIST AI RMF Controls' },
-  { value: '5',    label: 'Compliance Frameworks' },
-  { value: '100%', label: 'Cryptographic Evidence Chain' },
-  { value: 'EOL',  label: 'Vendor Lock-in' },
-];
-
-const CAPABILITIES = [
-  {
-    index: '01',
-    label: 'FIELD ASSESSMENT',
-    title: 'End-to-end engagement substrate',
-    lines: [
-      'Scan ingestion & evidence anchoring',
-      'Cryptographically signed PDF reports',
-      'Finding lifecycle with closed-loop resolution',
-    ],
-  },
-  {
-    index: '02',
-    label: 'AI GOVERNANCE',
-    title: 'NIST AI RMF enforcement',
-    lines: [
-      '69-control structured questionnaire',
-      'Continuous drift detection & delta alerts',
-      'Per-control coverage matrix',
-    ],
-  },
-  {
-    index: '03',
-    label: 'CONNECTOR PLATFORM',
-    title: 'Automated evidence ingestion',
-    lines: [
-      'MS Graph / Azure AD native integration',
-      'Device-code auth — no credentials stored',
-      'Multi-framework scan dispatch',
-    ],
-  },
-  {
-    index: '04',
-    label: 'CLIENT PORTAL',
-    title: 'Risk intelligence delivery',
-    lines: [
-      'Executive risk posture dashboard',
-      'Phased remediation roadmap',
-      'Attestation workflow & compliance delta',
-    ],
-  },
-];
+import Image from 'next/image';
 
 const FRAMEWORKS = ['NIST AI RMF', 'HIPAA', 'SOC 2', 'CMMC', 'ISO 27001'];
+
+const FEATURES = [
+  {
+    icon: '⚡',
+    title: 'Field Assessment Substrate',
+    body: 'End-to-end engagement management — scan ingestion, evidence collection, playbook execution, and signed report delivery in one platform.',
+  },
+  {
+    icon: '🛡',
+    title: 'AI Governance Enforcement',
+    body: 'Map NIST AI RMF controls to your evidence base. Continuous drift detection surfaces compliance gaps before they become audit findings.',
+  },
+  {
+    icon: '📊',
+    title: 'Executive Risk Posture',
+    body: 'AI-generated narrative summaries, severity-sorted findings, and a remediation roadmap — client-ready in minutes, not weeks.',
+  },
+  {
+    icon: '🔗',
+    title: 'Connector Framework',
+    body: 'Native MS Graph / Azure AD integration with device-code auth. Scan your tenant, pull NIST controls, and ingest findings automatically.',
+  },
+];
+
+const STEPS = [
+  {
+    n: '01',
+    title: 'Create an Engagement',
+    body: 'Spin up a client engagement, assign an assessor, and select your compliance framework.',
+  },
+  {
+    n: '02',
+    title: 'Collect Evidence',
+    body: 'Run automated connector scans, complete the NIST questionnaire, and upload supporting documents — all anchored to findings.',
+  },
+  {
+    n: '03',
+    title: 'Deliver the Report',
+    body: 'Generate a signed PDF with executive summary, severity findings, remediation roadmap, and framework coverage matrix.',
+  },
+];
 
 export default function Home() {
   return (
     <>
-      {/* ── NAVIGATION ─────────────────────────────────────────────── */}
-      <header className="fixed top-0 inset-x-0 z-50 border-b border-[#1c1c1c] bg-[#080808]/90 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-8 h-16 flex items-center justify-between">
+      {/* Nav */}
+      <header className="fixed top-0 inset-x-0 z-50 border-b border-white/10 bg-[#0d0d0d]/85 backdrop-blur">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="font-display text-lg font-semibold tracking-widest text-[#d0d0d0] uppercase">
+            <Image src="/logo.svg" alt="FrostGate" width={32} height={32} className="rounded" />
+            <span className="text-sm font-semibold tracking-widest uppercase text-gray-200">
               FrostGate
             </span>
           </div>
-          <nav className="flex items-center gap-8">
-            <a href="#capabilities" className="hidden md:block text-xs tracking-[0.14em] uppercase text-[#666] hover:text-[#c0c0c0] transition-colors">
-              Capabilities
+          <nav className="flex items-center gap-6">
+            <a href="#features" className="hidden sm:block text-sm text-gray-400 hover:text-gray-200 transition-colors">
+              Features
             </a>
-            <a href="#mission" className="hidden md:block text-xs tracking-[0.14em] uppercase text-[#666] hover:text-[#c0c0c0] transition-colors">
-              Mission
+            <a href="#how-it-works" className="hidden sm:block text-sm text-gray-400 hover:text-gray-200 transition-colors">
+              How it works
             </a>
-            <a href="https://console.frostgate.ai" className="hidden md:block text-xs tracking-[0.14em] uppercase text-[#666] hover:text-[#c0c0c0] transition-colors">
-              Sign In
+            <a href="https://console.frostgate.ai" className="text-sm text-gray-300 hover:text-white transition-colors">
+              Sign in
             </a>
             <a
               href="https://console.frostgate.ai"
-              className="text-xs tracking-[0.14em] uppercase font-medium px-5 py-2 border border-[#3a3a3a] text-[#c0c0c0] hover:border-[#606060] hover:text-white transition-colors"
+              className="text-sm font-medium px-4 py-1.5 rounded bg-steel-600 text-white hover:bg-steel-500 transition-colors border border-steel-500/40"
             >
-              Console →
+              Get started
             </a>
           </nav>
         </div>
       </header>
 
       <main>
-        {/* ── HERO ──────────────────────────────────────────────────── */}
-        <section className="relative min-h-screen flex flex-col justify-center overflow-hidden px-8 pt-16">
-          {/* Faint horizontal grid lines */}
-          <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-            {[25, 50, 75].map((pct) => (
-              <div
-                key={pct}
-                className="absolute inset-x-0 border-t border-white/[0.025]"
-                style={{ top: `${pct}%` }}
+        {/* Hero */}
+        <section className="pt-40 pb-24 px-6">
+          <div className="max-w-3xl mx-auto text-center space-y-6">
+            {/* Shield logo — large */}
+            <div className="flex justify-center">
+              <Image
+                src="/logo.svg"
+                alt="FrostGate Shield"
+                width={96}
+                height={96}
+                className="rounded-xl drop-shadow-[0_0_24px_rgba(61,111,149,0.35)]"
               />
-            ))}
-          </div>
-
-          <div className="relative max-w-7xl mx-auto w-full">
-            <p className="text-xs tracking-[0.22em] uppercase text-steel-400 mb-6 font-medium">
-              Field Assessment · AI Governance · Compliance
-            </p>
-
-            <h1
-              className="font-display font-bold uppercase leading-none tracking-tight text-white"
-              style={{ fontSize: 'clamp(56px, 9vw, 112px)' }}
-            >
-              Field<br />Assessment<br />
-              <span className="text-[#2e2e2e]">Redefined.</span>
-            </h1>
-
-            <div className="my-10 w-24 h-px bg-steel-500" />
-
-            <p className="text-[#666] text-lg font-light max-w-xl leading-relaxed">
-              AI-governed compliance delivery for organizations that cannot afford to fail.
-              One platform from first scan to signed report.
-            </p>
-
-            <div className="mt-12 flex flex-wrap gap-4">
-              <a
-                href="https://console.frostgate.ai"
-                className="px-8 py-3.5 bg-white text-black text-sm tracking-[0.10em] uppercase font-semibold hover:bg-[#d4d4d4] transition-colors"
-              >
-                Access Console
-              </a>
-              <a
-                href="#capabilities"
-                className="px-8 py-3.5 border border-[#2a2a2a] text-[#666] text-sm tracking-[0.10em] uppercase font-medium hover:border-[#444] hover:text-[#aaa] transition-colors"
-              >
-                View Capabilities ↓
-              </a>
             </div>
 
-            <div className="mt-16 flex flex-wrap gap-x-8 gap-y-2">
-              {FRAMEWORKS.map((fw) => (
-                <span key={fw} className="text-xs tracking-[0.14em] uppercase text-[#303030] font-mono">
-                  {fw}
-                </span>
+            <div className="inline-flex items-center gap-2 text-xs font-medium px-3 py-1 rounded-full border border-steel-500/30 bg-steel-500/10 text-steel-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-steel-400 animate-pulse" />
+              Field Assessment · AI Governance · Compliance
+            </div>
+
+            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
+              Compliance delivery,{' '}
+              <span className="text-steel-400">end-to-end</span>
+            </h1>
+
+            {/* Motto */}
+            <p className="text-sm font-mono tracking-[0.3em] text-rust-400 uppercase">
+              Trust but Verify
+            </p>
+
+            <p className="text-lg text-gray-400 max-w-xl mx-auto leading-relaxed">
+              FrostGate is the field assessment and AI governance platform for compliance-driven
+              organizations. Automate evidence collection, enforce NIST controls, and deliver
+              client-ready reports — in one substrate.
+            </p>
+
+            <div className="flex flex-wrap gap-3 justify-center pt-2">
+              <a
+                href="https://console.frostgate.ai"
+                className="px-6 py-2.5 rounded bg-steel-600 text-white font-medium hover:bg-steel-500 transition-colors border border-steel-500/30"
+              >
+                Open console
+              </a>
+              <a
+                href="#how-it-works"
+                className="px-6 py-2.5 rounded border border-white/10 text-gray-300 font-medium hover:border-white/20 hover:text-white transition-colors"
+              >
+                See how it works
+              </a>
+            </div>
+          </div>
+
+          {/* Framework badges */}
+          <div className="max-w-2xl mx-auto mt-16 flex flex-wrap gap-2 justify-center">
+            {FRAMEWORKS.map((fw) => (
+              <span
+                key={fw}
+                className="text-xs font-mono px-3 py-1 rounded border border-steel-700/60 bg-steel-900/40 text-steel-300"
+              >
+                {fw}
+              </span>
+            ))}
+          </div>
+        </section>
+
+        {/* Divider */}
+        <div className="h-px max-w-6xl mx-auto bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+        {/* Features */}
+        <section id="features" className="py-24 px-6">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-14 space-y-3">
+              <h2 className="text-2xl font-semibold text-white">Everything your team needs</h2>
+              <p className="text-gray-400 max-w-lg mx-auto text-sm">
+                From first scan to signed report — built for assessors who need speed without
+                sacrificing rigor.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {FEATURES.map((f) => (
+                <div
+                  key={f.title}
+                  className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-3 hover:border-steel-600/50 transition-colors"
+                >
+                  <div className="text-2xl">{f.icon}</div>
+                  <h3 className="font-semibold text-white">{f.title}</h3>
+                  <p className="text-sm text-gray-400 leading-relaxed">{f.body}</p>
+                </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* ── METRICS BAND ─────────────────────────────────────────── */}
-        <div className="border-y border-[#1c1c1c] bg-[#0f0f0f]">
-          <div className="max-w-7xl mx-auto px-8 py-14 grid grid-cols-2 md:grid-cols-4 gap-10 md:gap-0 md:divide-x md:divide-[#1c1c1c]">
-            {METRICS.map((m) => (
-              <div key={m.label} className="md:px-10 first:pl-0 last:pr-0">
-                <p className="font-display text-5xl font-bold text-white tracking-tight">{m.value}</p>
-                <p className="mt-2 text-[10px] tracking-[0.16em] uppercase text-[#444]">{m.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Divider */}
+        <div className="h-px max-w-6xl mx-auto bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-        {/* ── CAPABILITIES ─────────────────────────────────────────── */}
-        <section id="capabilities" className="py-32 px-8">
-          <div className="max-w-7xl mx-auto">
-            <div className="mb-16 flex items-end justify-between gap-8 border-b border-[#1c1c1c] pb-8">
-              <h2 className="font-display text-4xl font-bold uppercase tracking-tight text-white">
-                Platform Capabilities
-              </h2>
-              <p className="text-[#444] text-sm max-w-xs text-right hidden md:block leading-relaxed">
-                Every component purpose-built for compliance delivery at enterprise scale.
+        {/* How it works */}
+        <section id="how-it-works" className="py-24 px-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-14 space-y-3">
+              <h2 className="text-2xl font-semibold text-white">Three steps to delivery</h2>
+              <p className="text-gray-400 text-sm">
+                A complete assessment lifecycle managed in one place.
               </p>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 border border-[#1c1c1c] divide-y md:divide-y-0 divide-[#1c1c1c]">
-              {CAPABILITIES.map((c, i) => (
-                <div
-                  key={c.index}
-                  className={`p-10 hover:bg-[#0f0f0f] transition-colors${i < 2 ? ' md:border-b border-[#1c1c1c]' : ''}${i % 2 === 0 ? ' md:border-r border-[#1c1c1c]' : ''}`}
-                >
-                  <div className="flex items-start gap-6">
-                    <span className="font-display text-5xl font-bold text-[#191919] leading-none shrink-0 select-none">
-                      {c.index}
-                    </span>
-                    <div>
-                      <p className="text-[10px] tracking-[0.22em] uppercase text-steel-400 mb-2 font-medium">
-                        {c.label}
-                      </p>
-                      <h3 className="text-white font-medium text-base mb-5 leading-snug">{c.title}</h3>
-                      <ul className="space-y-2.5">
-                        {c.lines.map((line) => (
-                          <li key={line} className="text-[#484848] text-sm flex items-start gap-2.5">
-                            <span className="text-[#2a2a2a] mt-px shrink-0 font-mono">—</span>
-                            {line}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+            <div className="space-y-6">
+              {STEPS.map((s) => (
+                <div key={s.n} className="flex gap-6 rounded-xl border border-white/10 bg-white/5 p-6">
+                  <span className="text-3xl font-bold font-mono text-rust-700/70 shrink-0 pt-0.5">
+                    {s.n}
+                  </span>
+                  <div className="space-y-1">
+                    <h3 className="font-semibold text-white">{s.title}</h3>
+                    <p className="text-sm text-gray-400 leading-relaxed">{s.body}</p>
                   </div>
                 </div>
               ))}
@@ -195,73 +196,40 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── MISSION ──────────────────────────────────────────────── */}
-        <section id="mission" className="py-40 px-8 border-y border-[#1c1c1c] relative overflow-hidden">
-          <div className="relative max-w-7xl mx-auto text-center">
-            <p className="text-[10px] tracking-[0.26em] uppercase text-[#333] mb-8">Mission</p>
-            <h2
-              className="font-display font-bold uppercase text-white leading-none tracking-tight"
-              style={{ fontSize: 'clamp(48px, 7vw, 96px)' }}
-            >
-              Trust But Verify.
+        {/* CTA */}
+        <section className="py-24 px-6">
+          <div className="max-w-2xl mx-auto text-center rounded-2xl border border-steel-700/40 bg-steel-900/30 px-8 py-16 space-y-6">
+            <Image src="/logo.svg" alt="FrostGate" width={56} height={56} className="mx-auto rounded-lg" />
+            <h2 className="text-2xl font-semibold text-white">
+              Ready to run your first assessment?
             </h2>
-            <div className="mx-auto mt-10 w-16 h-px bg-rust-500" />
-            <p className="mt-10 text-[#484848] text-lg font-light max-w-2xl mx-auto leading-relaxed">
-              Assertions without evidence are exposure. FrostGate enforces a closed loop
-              between claim and proof — every finding anchored, every control mapped,
-              every report signed.
+            <p className="font-mono text-xs tracking-[0.25em] text-rust-400 uppercase">
+              Trust but Verify
             </p>
-          </div>
-        </section>
-
-        {/* ── FINAL CTA ─────────────────────────────────────────────── */}
-        <section className="py-40 px-8">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12">
-            <div>
-              <p className="text-[10px] tracking-[0.22em] uppercase text-[#333] mb-4">Operator Access</p>
-              <h2 className="font-display text-6xl font-bold uppercase text-white tracking-tight leading-none">
-                Ready to<br />Deploy?
-              </h2>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4 shrink-0">
-              <a
-                href="https://console.frostgate.ai"
-                className="px-10 py-4 bg-white text-black text-sm tracking-[0.12em] uppercase font-semibold hover:bg-[#d4d4d4] transition-colors text-center"
-              >
-                Open Console
-              </a>
-              <a
-                href="https://app.frostgate.ai"
-                className="px-10 py-4 border border-[#222] text-[#555] text-sm tracking-[0.12em] uppercase font-medium hover:border-[#3a3a3a] hover:text-[#888] transition-colors text-center"
-              >
-                Client Portal
-              </a>
-            </div>
+            <p className="text-gray-400 text-sm max-w-sm mx-auto">
+              Get started with FrostGate. Connect your tenant and begin collecting evidence in
+              minutes.
+            </p>
+            <a
+              href="https://console.frostgate.ai"
+              className="inline-block px-8 py-3 rounded bg-steel-600 text-white font-medium hover:bg-steel-500 transition-colors border border-steel-500/30"
+            >
+              Open the console
+            </a>
           </div>
         </section>
       </main>
 
-      {/* ── FOOTER ────────────────────────────────────────────────── */}
-      <footer className="border-t border-[#1c1c1c] py-10 px-8">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] tracking-[0.18em] uppercase text-[#2e2e2e]">
-              © {new Date().getFullYear()} FrostGate
-            </span>
+      {/* Footer */}
+      <footer className="border-t border-white/10 py-8 px-6">
+        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4 text-xs text-gray-600">
+          <div className="flex items-center gap-2">
+            <Image src="/logo.svg" alt="FrostGate" width={18} height={18} className="rounded opacity-60" />
+            <span>© {new Date().getFullYear()} FrostGate. All rights reserved.</span>
           </div>
-          <div className="flex gap-8">
-            {[
-              ['Console', 'https://console.frostgate.ai'],
-              ['Client Portal', 'https://app.frostgate.ai'],
-            ].map(([label, href]) => (
-              <a
-                key={label}
-                href={href}
-                className="text-[10px] tracking-[0.16em] uppercase text-[#2e2e2e] hover:text-[#555] transition-colors"
-              >
-                {label}
-              </a>
-            ))}
+          <div className="flex gap-6">
+            <a href="https://console.frostgate.ai" className="hover:text-gray-400 transition-colors">Console</a>
+            <a href="https://app.frostgate.ai" className="hover:text-gray-400 transition-colors">Client Portal</a>
           </div>
         </div>
       </footer>

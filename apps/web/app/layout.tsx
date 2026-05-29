@@ -2,13 +2,14 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'FrostGate',
+  title: 'FrostGate — AI Governance & Compliance',
   description:
-    'Field assessment and AI governance platform for compliance-driven organizations. NIST AI RMF, HIPAA, SOC 2, CMMC, ISO 27001.',
+    'Field assessment and AI governance platform for compliance-driven organizations. NIST AI RMF, HIPAA, SOC 2, CMMC, and ISO 27001.',
   metadataBase: new URL('https://frostgate.ai'),
   openGraph: {
-    title: 'FrostGate',
-    description: 'Field assessment and AI governance platform.',
+    title: 'FrostGate — AI Governance & Compliance',
+    description:
+      'Field assessment and AI governance platform for compliance-driven organizations.',
     url: 'https://frostgate.ai',
     siteName: 'FrostGate',
     type: 'website',
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-bg text-[#f0f0f0] font-sans antialiased">{children}</body>
+      <body className="bg-gray-950 text-gray-100 font-sans antialiased">{children}</body>
     </html>
   );
 }
