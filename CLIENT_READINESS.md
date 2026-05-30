@@ -54,8 +54,8 @@ Check each item when verified or completed. Do not begin the client engagement u
 - [x] **C3** `docs/operators/first_client_prep.md` — full pre-flight checklist with 75–90 min time block
 - [x] **C4** `docs/CONNECTOR_CROSSREF.md` — client technology → connector → data → findings matrix
 - [ ] **C5** `docs/operators/console_user_guide.md` — verify it covers all connector scan panels added in PRs 40–45 (9 panels total)
-- [ ] **C6** **Client engagement letter** — one-page document (not code) to give the client before the assessment covering: what FrostGate accesses, data retained, retention period, how to access the portal, and what happens after. See F6 (DPA) for the governance version.
-- [ ] **C7** **Post-engagement follow-up email template** — send after the engagement: portal URL, key findings summary, how to mark remediations resolved, next check-in date
+- [x] **C6** **Client engagement letter** — `docs/operators/letters/`: proposal (#1), authorization (#2), data handling notice (#3) (done 2026-05-30)
+- [x] **C7** **Post-engagement follow-up email template** — `docs/operators/letters/`: report delivery (#4), 30-day follow-up (#5), close-out (#6) (done 2026-05-30)
 - [x] **C8** ROADMAP.md updated — confidence degradation (#15), remediation scoring (#14), onboarding runbook (#20), connector crossref (#21), PDF disclosure (#22), FA policy (#23), CLIENT_READINESS.md (#24) all logged (done 2026-05-30)
 
 ---
