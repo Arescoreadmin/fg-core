@@ -12,9 +12,9 @@ Check each item when verified or completed. Do not begin the client engagement u
 
 *Verify these before the engagement. They should already be deployed (PR 39).*
 
-- [ ] **A1** Railway API responds — `https://api-production-6d47.up.railway.app/health` returns 200
-- [ ] **A2** Console loads at `console.frostgate.ai` — Auth0 login page renders without errors
-- [ ] **A3** Portal loads at `app.frostgate.ai` — password prompt appears
+- [x] **A1** Railway API responds — `https://api-production-6d47.up.railway.app/health` returns 200 (confirmed 2026-05-30)
+- [x] **A2** Console loads at `console.frostgate.ai` — Auth0 login page renders without errors (confirmed 2026-05-30)
+- [x] **A3** Portal loads at `app.frostgate.ai` — password prompt appears (confirmed 2026-05-30)
 - [ ] **A4** Railway env vars confirmed (open Railway → API service → Variables):
   - [ ] `FG_MSAL_CLIENT_ID` set and non-empty
   - [ ] `FG_ACKNOWLEDGMENT_KEY` set
@@ -32,7 +32,7 @@ Check each item when verified or completed. Do not begin the client engagement u
   - [ ] `CORE_API_URL`, `CORE_API_KEY`, `CORE_TENANT_ID`
 - [ ] **A7** Postgres migrations current — Railway logs show migration assert passing on startup
 - [ ] **A8** Redis reachable — no `redis connection refused` in Railway logs
-- [ ] **A9** _(P0)_ **Uptime monitoring** — UptimeRobot or BetterUptime (free tier) pointed at `/health`; alerts to your phone/email if Railway goes down mid-engagement
+- [x] **A9** **Uptime monitoring** — UptimeRobot monitoring all 3 services: Railway API (`/health`), console (`console.frostgate.ai`), portal (`app.frostgate.ai/api/health`) (done 2026-05-30)
 - [ ] **A10** Railway Hobby plan headroom checked — memory and CPU are not near limits before a live engagement
 
 ---
@@ -40,7 +40,7 @@ Check each item when verified or completed. Do not begin the client engagement u
 ## B. Monitoring & Alerting
 
 - [ ] **B1** Prometheus alert rules reviewed — `deploy/prometheus/alerts.yml` exists; note these are not yet wired to Railway (Hobby plan has no scrape endpoint)
-- [ ] **B2** _(P0)_ **Basic uptime check** — same as A9; single `/health` ping with SMS/email alert is the minimum
+- [x] **B2** **Basic uptime check** — same as A9; done 2026-05-30
 - [ ] **B3** **Error alerting** — Sentry or Rollbar free tier wired to Railway; catches silent crashes in report generation or scan runners without requiring you to watch logs
 - [ ] **B4** Anthropic API credit verified — sufficient balance for report generation; check `platform.anthropic.com` usage dashboard
 - [ ] **B5** Railway logs bookmarked — keep Railway dashboard open in a tab during the engagement as the fallback observability surface
