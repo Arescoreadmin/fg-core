@@ -56,6 +56,12 @@ from services.field_assessment.connectors.endpoint_inventory_bridge import (
 from services.field_assessment.connectors.network_scan_bridge import (
     import_network_scan,
 )
+from services.field_assessment.connectors.dns_email_bridge import (
+    import_dns_email_scan,
+)
+from services.field_assessment.connectors.web_headers_bridge import (
+    import_web_headers_scan,
+)
 from services.field_assessment.models import (
     AssessmentType,
     DocumentClassification,
@@ -2734,6 +2740,229 @@ def initiate_network_scan(
         run_id=run_id,
         status="scanning",
         target_count=len(body.target_hosts),
+    )
+
+
+# ---------------------------------------------------------------------------
+# DNS & Email Security connector
+# ---------------------------------------------------------------------------
+
+
+class DnsEmailScanInitiateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    domains: list[str] = Field(..., min_length=1, max_length=50)
+    dkim_selectors: list[str] | None = None
+    operator_name: str | None = None
+    operator_org: str | None = None
+
+
+class DnsEmailScanInitiateResponse(BaseModel):
+    run_id: str
+    status: str
+    domain_count: int
+
+
+def _dns_email_scan_background(
+    *,
+    run_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    domains: list[str],
+    dkim_selectors: list[str] | None,
+    actor: str,
+) -> None:
+    def _set(**kw: Any) -> None:
+        with _MSGRAPH_RUNS_LOCK:
+            _MSGRAPH_RUNS[run_id].update(kw)
+
+    try:
+        _set(status="scanning")
+        from services.connectors.dns_email.runner import run as run_dns_email
+
+        scan_result = run_dns_email(domains=domains, dkim_selectors=dkim_selectors)
+
+        _set(status="importing")
+        from api.db import get_sessionmaker
+
+        SessionLocal = get_sessionmaker()
+        db = SessionLocal()
+        try:
+            result = import_dns_email_scan(
+                db=db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result=scan_result,
+                actor=actor,
+            )
+            db.commit()
+            _set(status="complete", scan_result_id=result.scan_result_id)
+        except Exception as exc:
+            log.error("dns_email_scan_background: import failed — %s", exc)
+            db.rollback()
+            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
+        finally:
+            db.close()
+    except Exception as exc:
+        log.error("dns_email_scan_background: scan failed — %s", exc)
+        _set(status="failed", error=str(exc)[:200])
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/dns-email/initiate",
+    response_model=DnsEmailScanInitiateResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def initiate_dns_email_scan(
+    engagement_id: str,
+    request: Request,
+    body: DnsEmailScanInitiateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth_ctx_db_session),
+) -> DnsEmailScanInitiateResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    run_id = str(_uuid_module.uuid4())
+    with _MSGRAPH_RUNS_LOCK:
+        _MSGRAPH_RUNS[run_id] = {
+            "status": "scanning",
+            "user_code": None,
+            "verification_uri": None,
+            "error": None,
+            "scan_result_id": None,
+        }
+
+    background_tasks.add_task(
+        _dns_email_scan_background,
+        run_id=run_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        domains=body.domains,
+        dkim_selectors=body.dkim_selectors,
+        actor=actor,
+    )
+
+    return DnsEmailScanInitiateResponse(
+        run_id=run_id,
+        status="scanning",
+        domain_count=len(body.domains),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Web Security Headers connector
+# ---------------------------------------------------------------------------
+
+
+class WebHeadersScanInitiateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    targets: list[str] = Field(..., min_length=1, max_length=50)
+    operator_name: str | None = None
+    operator_org: str | None = None
+
+
+class WebHeadersScanInitiateResponse(BaseModel):
+    run_id: str
+    status: str
+    target_count: int
+
+
+def _web_headers_scan_background(
+    *,
+    run_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    targets: list[str],
+    actor: str,
+) -> None:
+    def _set(**kw: Any) -> None:
+        with _MSGRAPH_RUNS_LOCK:
+            _MSGRAPH_RUNS[run_id].update(kw)
+
+    try:
+        _set(status="scanning")
+        from services.connectors.web_headers.runner import run as run_web_headers
+
+        scan_result = run_web_headers(targets=targets)
+
+        _set(status="importing")
+        from api.db import get_sessionmaker
+
+        SessionLocal = get_sessionmaker()
+        db = SessionLocal()
+        try:
+            result = import_web_headers_scan(
+                db=db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result=scan_result,
+                actor=actor,
+            )
+            db.commit()
+            _set(status="complete", scan_result_id=result.scan_result_id)
+        except Exception as exc:
+            log.error("web_headers_scan_background: import failed — %s", exc)
+            db.rollback()
+            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
+        finally:
+            db.close()
+    except Exception as exc:
+        log.error("web_headers_scan_background: scan failed — %s", exc)
+        _set(status="failed", error=str(exc)[:200])
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/web-headers/initiate",
+    response_model=WebHeadersScanInitiateResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def initiate_web_headers_scan(
+    engagement_id: str,
+    request: Request,
+    body: WebHeadersScanInitiateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth_ctx_db_session),
+) -> WebHeadersScanInitiateResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    run_id = str(_uuid_module.uuid4())
+    with _MSGRAPH_RUNS_LOCK:
+        _MSGRAPH_RUNS[run_id] = {
+            "status": "scanning",
+            "user_code": None,
+            "verification_uri": None,
+            "error": None,
+            "scan_result_id": None,
+        }
+
+    background_tasks.add_task(
+        _web_headers_scan_background,
+        run_id=run_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        targets=body.targets,
+        actor=actor,
+    )
+
+    return WebHeadersScanInitiateResponse(
+        run_id=run_id,
+        status="scanning",
+        target_count=len(body.targets),
     )
 
 

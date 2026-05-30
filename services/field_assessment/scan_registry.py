@@ -36,6 +36,8 @@ SUPPORTED_SCHEMA_VERSIONS: dict[str, set[str]] = {
     ScanSourceType.NETWORK_SCAN.value: {"1.0"},
     ScanSourceType.ENDPOINT_INVENTORY.value: {"1.0"},
     ScanSourceType.OAUTH_INVENTORY.value: {"1.0", "1.1"},
+    ScanSourceType.DNS_EMAIL.value: {"1.0"},
+    ScanSourceType.WEB_HEADERS.value: {"1.0"},
 }
 
 # ---------------------------------------------------------------------------
@@ -64,6 +66,8 @@ REQUIRED_FIELDS: dict[str, dict[str, type]] = {
     ScanSourceType.NETWORK_SCAN.value: {"hosts": list},
     ScanSourceType.ENDPOINT_INVENTORY.value: {"endpoints": list},
     ScanSourceType.OAUTH_INVENTORY.value: {"apps": list},
+    ScanSourceType.DNS_EMAIL.value: {"domains": list},
+    ScanSourceType.WEB_HEADERS.value: {"targets": list},
 }
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,8 @@ import { MsgraphScanPanel } from '@/components/field-assessment/MsgraphScanPanel
 import { OauthInventoryScanPanel } from '@/components/field-assessment/OauthInventoryScanPanel';
 import { EndpointInventoryScanPanel } from '@/components/field-assessment/EndpointInventoryScanPanel';
 import { NetworkScanPanel } from '@/components/field-assessment/NetworkScanPanel';
+import { DnsEmailScanPanel } from '@/components/field-assessment/DnsEmailScanPanel';
+import { WebHeadersScanPanel } from '@/components/field-assessment/WebHeadersScanPanel';
 import { DocumentRegistrationPanel } from '@/components/field-assessment/DocumentRegistrationPanel';
 import { ObservationForm } from '@/components/field-assessment/ObservationForm';
 import { InterviewForm } from '@/components/field-assessment/InterviewForm';
@@ -435,6 +437,42 @@ export default function EngagementWorkspacePage() {
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
                     <NetworkScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border-border">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run DNS &amp; Email Security Scan</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      DMARC, SPF, DKIM, MX, and DNSSEC — no authentication required
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <DnsEmailScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border-border">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run Web Security Headers Scan</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      HSTS, CSP, X-Frame-Options, Referrer-Policy — no authentication required
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <WebHeadersScanPanel
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});

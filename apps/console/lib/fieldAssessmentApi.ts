@@ -808,6 +808,20 @@ export const fieldAssessmentApi = {
     });
   },
 
+  initiateDnsEmailScan(engagementId: string, payload: { domains: string[]; dkim_selectors?: string[] }): Promise<{ run_id: string; status: string; domain_count: number }> {
+    return request(`/engagements/${engagementId}/connector-runs/dns-email/initiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  initiateWebHeadersScan(engagementId: string, payload: { targets: string[] }): Promise<{ run_id: string; status: string; target_count: number }> {
+    return request(`/engagements/${engagementId}/connector-runs/web-headers/initiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // Audit events (read-only — append-only server-side)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/engagements/${engagementId}/audit-events`);

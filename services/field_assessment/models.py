@@ -37,6 +37,8 @@ class ScanSourceType(str, Enum):
     NETWORK_SCAN = "network_scan"
     ENDPOINT_INVENTORY = "endpoint_inventory"
     OAUTH_INVENTORY = "oauth_inventory"
+    DNS_EMAIL = "dns_email"
+    WEB_HEADERS = "web_headers"
 
 
 class FindingSeverity(str, Enum):
