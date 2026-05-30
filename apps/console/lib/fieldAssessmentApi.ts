@@ -829,6 +829,13 @@ export const fieldAssessmentApi = {
     });
   },
 
+  initiateSharepointScan(engagementId: string, payload: MsgraphScanInitiatePayload): Promise<MsgraphScanInitiated> {
+    return request(`/engagements/${engagementId}/connector-runs/sharepoint/initiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // Audit events (read-only — append-only server-side)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/engagements/${engagementId}/audit-events`);

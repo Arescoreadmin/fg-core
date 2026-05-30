@@ -40,6 +40,7 @@ class ScanSourceType(str, Enum):
     DNS_EMAIL = "dns_email"
     WEB_HEADERS = "web_headers"
     ENTRA_GOVERNANCE = "entra_governance"
+    SHAREPOINT_ONEDRIVE = "sharepoint_onedrive"
 
 
 class FindingSeverity(str, Enum):
