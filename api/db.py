@@ -1328,6 +1328,10 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
             from api.db_migrations import assert_migrations_applied  # noqa
 
             assert_migrations_applied(engine)
+        # Create ORM-managed tables not covered by numbered SQL migrations (e.g. FA
+        # substrate tables). checkfirst=True skips tables that already exist, so
+        # this is safe to call on any Postgres database at any time.
+        Base.metadata.create_all(bind=engine, checkfirst=True)
 
     # Optional sanity check
     try:
