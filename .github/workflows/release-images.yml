@@ -69,7 +69,7 @@ jobs:
           print(f"FG_WEBHOOK_SECRET={tok(32)}")
           print(f"FG_ENCRYPTION_KEY={tok(32)}")
           print(f"FG_JWT_SECRET={tok(32)}")
-          print("FG_ENV=ci")
+          print("FG_ENV=dev")
           PY
 
       - name: Verify generated env is populated
