@@ -182,13 +182,13 @@ class TestPaginationBlocker3:
         def fake_list(**kwargs: Any) -> list[Any]:
             o = kwargs.get("offset", 0)
             if o == 0:
-                # All high severity — score = 3*8+0+0 = 24 → short_term
+                # high MFA: base=30 + exploitability=12 + confidence=0 + source=0 = 42 → short_term
                 return [
                     _finding(finding_type="MFA-001", severity="high")
                     for _ in range(100)
                 ]
             if o == 100:
-                # All critical — score = 4*8+0+0 = 32 → immediate
+                # critical CA: base=40 + exploitability=10 + confidence=0 + source=0 = 50 → immediate
                 return [
                     _finding(finding_type="CA-001", severity="critical")
                     for _ in range(20)
