@@ -17,6 +17,7 @@ import { DnsEmailScanPanel } from '@/components/field-assessment/DnsEmailScanPan
 import { WebHeadersScanPanel } from '@/components/field-assessment/WebHeadersScanPanel';
 import { EntraGovernanceScanPanel } from '@/components/field-assessment/EntraGovernanceScanPanel';
 import { SharepointScanPanel } from '@/components/field-assessment/SharepointScanPanel';
+import { OauthRiskScanPanel } from '@/components/field-assessment/OauthRiskScanPanel';
 import { DocumentRegistrationPanel } from '@/components/field-assessment/DocumentRegistrationPanel';
 import { ObservationForm } from '@/components/field-assessment/ObservationForm';
 import { InterviewForm } from '@/components/field-assessment/InterviewForm';
@@ -439,6 +440,24 @@ export default function EngagementWorkspacePage() {
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
                     <OauthInventoryScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border-border mb-4">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run OAuth Risk Deep Scan</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Device-code flow — illicit consent grants, AI tool data access, write-all permissions
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <OauthRiskScanPanel
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});

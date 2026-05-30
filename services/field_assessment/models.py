@@ -41,6 +41,7 @@ class ScanSourceType(str, Enum):
     WEB_HEADERS = "web_headers"
     ENTRA_GOVERNANCE = "entra_governance"
     SHAREPOINT_ONEDRIVE = "sharepoint_onedrive"
+    OAUTH_RISK = "oauth_risk"
 
 
 class FindingSeverity(str, Enum):
