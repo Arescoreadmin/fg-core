@@ -63,6 +63,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | PR 37 | Risk History + Keywords + Alerting | ✅ merged | Daily risk score snapshots with Recharts trend chart; tenant-configurable keyword triggers (contains/exact/word_boundary/prefix/regex + case sensitivity); threshold-based alert rules with cooldown + fired-alerts audit log; keyword backtest/preview against historical queries; Keywords + Alerts tabs in workforce dashboard |
 | PR 38 | Executive PDF Export | ✅ merged | Client-ready multi-page PDF: cover page, AI executive summary (advisory-labeled), confidence assessment, severity-sorted findings, remediation plan, framework coverage, evidence appendix, per-page footer with manifest hash; replaces raw-data stub |
 | PR 39 | Production Deployment Fixes | ✅ merged | FA tables created on Postgres startup (`create_all checkfirst`); auth gate injects BFF header tenant into result to satisfy security gate; federated Auth0 sign-out via route handler (`/api/auth/logout`); middleware makes landing page public + uses pathname callbackUrl; Railway GitHub auto-deploy + CI fixes (pr-base-mainline skip on push, release-images FG_ENV, scorecard drift) |
+| PR 40 | Three New Scan Connectors | 🔄 in progress | OAuth Inventory (MS Graph device-code: app registrations, service principals, OAuth grants); Endpoint Inventory (MS Graph device-code: Azure AD devices + Intune); Network Scan (pure Python: port scan + TLS inspection for 20 ports including AI model server ports); 3 bridges, 3 API endpoints, 3 console scan panels |
 
 ---
 

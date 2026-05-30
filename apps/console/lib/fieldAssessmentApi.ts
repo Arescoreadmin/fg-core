@@ -787,6 +787,27 @@ export const fieldAssessmentApi = {
     return request(`/engagements/${engagementId}/connector-runs/${runId}/status`);
   },
 
+  initiateOauthInventoryScan(engagementId: string, payload: MsgraphScanInitiatePayload): Promise<MsgraphScanInitiated> {
+    return request(`/engagements/${engagementId}/connector-runs/oauth-inventory/initiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  initiateEndpointInventoryScan(engagementId: string, payload: MsgraphScanInitiatePayload): Promise<MsgraphScanInitiated> {
+    return request(`/engagements/${engagementId}/connector-runs/endpoint-inventory/initiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  initiateNetworkScan(engagementId: string, payload: { target_hosts: string[] }): Promise<{ run_id: string; status: string; target_count: number }> {
+    return request(`/engagements/${engagementId}/connector-runs/network-scan/initiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // Audit events (read-only — append-only server-side)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/engagements/${engagementId}/audit-events`);

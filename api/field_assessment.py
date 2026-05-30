@@ -47,6 +47,15 @@ from services.field_assessment.connectors.msgraph_bridge import (
     ConnectorTenantMismatch,
     import_msgraph_scan_result,
 )
+from services.field_assessment.connectors.oauth_inventory_bridge import (
+    import_oauth_inventory_scan,
+)
+from services.field_assessment.connectors.endpoint_inventory_bridge import (
+    import_endpoint_inventory_scan,
+)
+from services.field_assessment.connectors.network_scan_bridge import (
+    import_network_scan,
+)
 from services.field_assessment.models import (
     AssessmentType,
     DocumentClassification,
@@ -2334,6 +2343,397 @@ def initiate_msgraph_scan(
         verification_uri=flow["verification_uri"],
         expires_in=flow.get("expires_in", 900),
         message=flow.get("message", ""),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Route — OAuth Inventory scan (MSAL device-code, MS Graph)
+# ---------------------------------------------------------------------------
+
+
+def _oauth_inventory_scan_background(
+    *,
+    run_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    msal_app: Any,
+    flow: dict[str, Any],
+    actor: str,
+) -> None:
+    def _set(**kw: Any) -> None:
+        with _MSGRAPH_RUNS_LOCK:
+            _MSGRAPH_RUNS[run_id].update(kw)
+
+    try:
+        _set(status="authenticating")
+        token_result = msal_app.acquire_token_by_device_flow(flow)
+        if "access_token" not in token_result:
+            _set(
+                status="failed",
+                error=token_result.get("error_description", "Token acquisition failed"),
+            )
+            return
+
+        _set(status="scanning")
+        from services.connectors.oauth_inventory.runner import run_oauth_inventory
+
+        scan_result = run_oauth_inventory(
+            access_token=token_result["access_token"],
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+        )
+
+        _set(status="importing")
+        from api.db import get_sessionmaker
+
+        SessionLocal = get_sessionmaker()
+        db = SessionLocal()
+        try:
+            result = import_oauth_inventory_scan(
+                db=db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result=scan_result,
+                actor=actor,
+            )
+            db.commit()
+            _set(status="complete", scan_result_id=result.scan_result_id)
+        except Exception as exc:
+            log.error("oauth_inventory_background: import failed — %s", exc)
+            db.rollback()
+            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
+        finally:
+            db.close()
+    except Exception as exc:
+        log.error("oauth_inventory_background: scan failed — %s", exc)
+        _set(status="failed", error=str(exc)[:200])
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/oauth-inventory/initiate",
+    response_model=MsgraphScanInitiateResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def initiate_oauth_inventory_scan(
+    engagement_id: str,
+    request: Request,
+    body: MsgraphScanInitiateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth_ctx_db_session),
+) -> MsgraphScanInitiateResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    if not client_id:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+        )
+    try:
+        import msal  # type: ignore[import-untyped]
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error("MSAL_NOT_INSTALLED", "msal package is not installed"),
+        )
+
+    authority = f"https://login.microsoftonline.com/{body.azure_tenant_id}"
+    msal_app = msal.PublicClientApplication(client_id, authority=authority)
+    flow = msal_app.initiate_device_flow(scopes=list(_MSGRAPH_AUTHORIZED_SCOPES))
+    if "user_code" not in flow:
+        raise HTTPException(
+            status_code=502,
+            detail=api_error(
+                "DEVICE_FLOW_FAILED",
+                flow.get("error_description", "Device flow initiation failed"),
+            ),
+        )
+
+    run_id = str(_uuid_module.uuid4())
+    with _MSGRAPH_RUNS_LOCK:
+        _MSGRAPH_RUNS[run_id] = {
+            "status": "pending_auth",
+            "user_code": flow["user_code"],
+            "verification_uri": flow["verification_uri"],
+            "error": None,
+            "scan_result_id": None,
+        }
+
+    background_tasks.add_task(
+        _oauth_inventory_scan_background,
+        run_id=run_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        msal_app=msal_app,
+        flow=flow,
+        actor=actor,
+    )
+
+    return MsgraphScanInitiateResponse(
+        run_id=run_id,
+        user_code=flow["user_code"],
+        verification_uri=flow["verification_uri"],
+        expires_in=flow.get("expires_in", 900),
+        message=flow.get("message", ""),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Route — Endpoint Inventory scan (MSAL device-code, MS Graph)
+# ---------------------------------------------------------------------------
+
+
+def _endpoint_inventory_scan_background(
+    *,
+    run_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    msal_app: Any,
+    flow: dict[str, Any],
+    actor: str,
+) -> None:
+    def _set(**kw: Any) -> None:
+        with _MSGRAPH_RUNS_LOCK:
+            _MSGRAPH_RUNS[run_id].update(kw)
+
+    try:
+        _set(status="authenticating")
+        token_result = msal_app.acquire_token_by_device_flow(flow)
+        if "access_token" not in token_result:
+            _set(
+                status="failed",
+                error=token_result.get("error_description", "Token acquisition failed"),
+            )
+            return
+
+        _set(status="scanning")
+        from services.connectors.endpoint_inventory.runner import run_endpoint_inventory
+
+        scan_result = run_endpoint_inventory(
+            access_token=token_result["access_token"],
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+        )
+
+        _set(status="importing")
+        from api.db import get_sessionmaker
+
+        SessionLocal = get_sessionmaker()
+        db = SessionLocal()
+        try:
+            result = import_endpoint_inventory_scan(
+                db=db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result=scan_result,
+                actor=actor,
+            )
+            db.commit()
+            _set(status="complete", scan_result_id=result.scan_result_id)
+        except Exception as exc:
+            log.error("endpoint_inventory_background: import failed — %s", exc)
+            db.rollback()
+            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
+        finally:
+            db.close()
+    except Exception as exc:
+        log.error("endpoint_inventory_background: scan failed — %s", exc)
+        _set(status="failed", error=str(exc)[:200])
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",
+    response_model=MsgraphScanInitiateResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def initiate_endpoint_inventory_scan(
+    engagement_id: str,
+    request: Request,
+    body: MsgraphScanInitiateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth_ctx_db_session),
+) -> MsgraphScanInitiateResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    if not client_id:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+        )
+    try:
+        import msal  # type: ignore[import-untyped]
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error("MSAL_NOT_INSTALLED", "msal package is not installed"),
+        )
+
+    authority = f"https://login.microsoftonline.com/{body.azure_tenant_id}"
+    msal_app = msal.PublicClientApplication(client_id, authority=authority)
+    flow = msal_app.initiate_device_flow(scopes=list(_MSGRAPH_AUTHORIZED_SCOPES))
+    if "user_code" not in flow:
+        raise HTTPException(
+            status_code=502,
+            detail=api_error(
+                "DEVICE_FLOW_FAILED",
+                flow.get("error_description", "Device flow initiation failed"),
+            ),
+        )
+
+    run_id = str(_uuid_module.uuid4())
+    with _MSGRAPH_RUNS_LOCK:
+        _MSGRAPH_RUNS[run_id] = {
+            "status": "pending_auth",
+            "user_code": flow["user_code"],
+            "verification_uri": flow["verification_uri"],
+            "error": None,
+            "scan_result_id": None,
+        }
+
+    background_tasks.add_task(
+        _endpoint_inventory_scan_background,
+        run_id=run_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        msal_app=msal_app,
+        flow=flow,
+        actor=actor,
+    )
+
+    return MsgraphScanInitiateResponse(
+        run_id=run_id,
+        user_code=flow["user_code"],
+        verification_uri=flow["verification_uri"],
+        expires_in=flow.get("expires_in", 900),
+        message=flow.get("message", ""),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Route — Network Scan (pure Python, no auth required)
+# ---------------------------------------------------------------------------
+
+
+class NetworkScanInitiateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_hosts: list[str] = Field(..., min_length=1, max_length=50)
+    operator_name: str | None = None
+    operator_org: str | None = None
+
+
+class NetworkScanInitiateResponse(BaseModel):
+    run_id: str
+    status: str
+    target_count: int
+
+
+def _network_scan_background(
+    *,
+    run_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    target_hosts: list[str],
+    actor: str,
+) -> None:
+    def _set(**kw: Any) -> None:
+        with _MSGRAPH_RUNS_LOCK:
+            _MSGRAPH_RUNS[run_id].update(kw)
+
+    try:
+        _set(status="scanning")
+        from services.connectors.network_scan.runner import run_network_scan
+
+        scan_result = run_network_scan(
+            target_hosts=target_hosts,
+            engagement_id=engagement_id,
+        )
+
+        _set(status="importing")
+        from api.db import get_sessionmaker
+
+        SessionLocal = get_sessionmaker()
+        db = SessionLocal()
+        try:
+            result = import_network_scan(
+                db=db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result=scan_result,
+                actor=actor,
+            )
+            db.commit()
+            _set(status="complete", scan_result_id=result.scan_result_id)
+        except Exception as exc:
+            log.error("network_scan_background: import failed — %s", exc)
+            db.rollback()
+            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
+        finally:
+            db.close()
+    except Exception as exc:
+        log.error("network_scan_background: scan failed — %s", exc)
+        _set(status="failed", error=str(exc)[:200])
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/network-scan/initiate",
+    response_model=NetworkScanInitiateResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def initiate_network_scan(
+    engagement_id: str,
+    request: Request,
+    body: NetworkScanInitiateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth_ctx_db_session),
+) -> NetworkScanInitiateResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    run_id = str(_uuid_module.uuid4())
+    with _MSGRAPH_RUNS_LOCK:
+        _MSGRAPH_RUNS[run_id] = {
+            "status": "scanning",
+            "user_code": None,
+            "verification_uri": None,
+            "error": None,
+            "scan_result_id": None,
+        }
+
+    background_tasks.add_task(
+        _network_scan_background,
+        run_id=run_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        target_hosts=body.target_hosts,
+        actor=actor,
+    )
+
+    return NetworkScanInitiateResponse(
+        run_id=run_id,
+        status="scanning",
+        target_count=len(body.target_hosts),
     )
 
 

@@ -10,6 +10,9 @@ import { StatusTransitionBar } from '@/components/field-assessment/StatusTransit
 import { GuidedExecutionPanel } from '@/components/field-assessment/GuidedExecutionPanel';
 import { ScanImportPanel } from '@/components/field-assessment/ScanImportPanel';
 import { MsgraphScanPanel } from '@/components/field-assessment/MsgraphScanPanel';
+import { OauthInventoryScanPanel } from '@/components/field-assessment/OauthInventoryScanPanel';
+import { EndpointInventoryScanPanel } from '@/components/field-assessment/EndpointInventoryScanPanel';
+import { NetworkScanPanel } from '@/components/field-assessment/NetworkScanPanel';
 import { DocumentRegistrationPanel } from '@/components/field-assessment/DocumentRegistrationPanel';
 import { ObservationForm } from '@/components/field-assessment/ObservationForm';
 import { InterviewForm } from '@/components/field-assessment/InterviewForm';
@@ -378,6 +381,60 @@ export default function EngagementWorkspacePage() {
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
                     <MsgraphScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border-border mb-4">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run OAuth Inventory Scan</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Device-code flow — enumerates OAuth apps, grants, and service principals
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <OauthInventoryScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border-border mb-4">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run Endpoint Inventory Scan</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Device-code flow — enumerates Azure AD devices and Intune managed endpoints
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <EndpointInventoryScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border-border mb-4">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run Network Scan</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Port scan + TLS inspection — no authentication required
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <NetworkScanPanel
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
