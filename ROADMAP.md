@@ -62,6 +62,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | PR 36 | Workforce Intelligence | ✅ merged | Per-user AI query attribution; `tenant_users` + `ai_query_log` tables; subject-matter classification; risk scoring; workforce admin dashboard in console; AI workspace in portal |
 | PR 37 | Risk History + Keywords + Alerting | ✅ merged | Daily risk score snapshots with Recharts trend chart; tenant-configurable keyword triggers (contains/exact/word_boundary/prefix/regex + case sensitivity); threshold-based alert rules with cooldown + fired-alerts audit log; keyword backtest/preview against historical queries; Keywords + Alerts tabs in workforce dashboard |
 | PR 38 | Executive PDF Export | ✅ merged | Client-ready multi-page PDF: cover page, AI executive summary (advisory-labeled), confidence assessment, severity-sorted findings, remediation plan, framework coverage, evidence appendix, per-page footer with manifest hash; replaces raw-data stub |
+| PR 39 | Production Deployment Fixes | ✅ merged | FA tables created on Postgres startup (`create_all checkfirst`); auth gate injects BFF header tenant into result to satisfy security gate; federated Auth0 sign-out via route handler (`/api/auth/logout`); middleware makes landing page public + uses pathname callbackUrl; Railway GitHub auto-deploy + CI fixes (pr-base-mainline skip on push, release-images FG_ENV, scorecard drift) |
 
 ---
 
@@ -115,4 +116,4 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-05-29 (PR 38 complete; all Phase 1 + Phase 2 P0/P1 done)*
+*Last updated: 2026-05-30 (PR 39 complete; production live — field assessment + Auth0 sign-out working)*
