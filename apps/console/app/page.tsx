@@ -151,7 +151,7 @@ export default function LandingPage() {
             <a href="#industries" className="hover:text-foreground transition-colors">Industries</a>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/dashboard">
+            <Link href="/login">
               <Button variant="outline" size="sm">Sign In</Button>
             </Link>
             <Link href="/onboarding">
