@@ -868,7 +868,15 @@ class _ReadinessBuilder:
                 finding, "remediation_hint"
             ):
                 no_remediation.append(finding_id)
-            confidence = int(_value(finding, "confidence_score") or 0)
+            from services.field_assessment.confidence import degrade_confidence
+
+            base_confidence = int(_value(finding, "confidence_score") or 0)
+            updated_at = _str(finding, "updated_at")
+            confidence = (
+                degrade_confidence(base_confidence, updated_at)
+                if updated_at
+                else base_confidence
+            )
             if confidence < 60:
                 low_confidence.append(finding_id)
 

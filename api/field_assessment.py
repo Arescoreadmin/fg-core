@@ -411,6 +411,7 @@ class FindingResponse(BaseModel):
     description: str
     source_attribution: str
     confidence_score: int
+    evidence_age_days: int = 0
     framework_mappings: list[Any]
     nist_ai_rmf_mappings: list[Any]
     evidence_ref_ids: list[Any]
@@ -783,6 +784,13 @@ def _finding_to_response(f: FaNormalizedFinding) -> FindingResponse:
         compute_priority_score,
         compute_effort_level,
     )
+    from services.field_assessment.confidence import (
+        degrade_confidence,
+        evidence_age_days,
+    )
+
+    age = evidence_age_days(f.updated_at)
+    effective_confidence = degrade_confidence(f.confidence_score, f.updated_at)
 
     return FindingResponse(
         id=f.id,
@@ -795,7 +803,8 @@ def _finding_to_response(f: FaNormalizedFinding) -> FindingResponse:
         title=f.title,
         description=f.description,
         source_attribution=f.source_attribution,
-        confidence_score=f.confidence_score,
+        confidence_score=effective_confidence,
+        evidence_age_days=age,
         framework_mappings=f.framework_mappings or [],
         nist_ai_rmf_mappings=f.nist_ai_rmf_mappings or [],
         evidence_ref_ids=f.evidence_ref_ids or [],
@@ -4624,7 +4633,9 @@ def _build_engagement_report_json(
         offset += 100
 
     # Derive synthetic domain scores from normalized findings
-    # Maps confidence_score (0-100, higher=better) → domain score
+    # Maps effective confidence (0-100, decay-adjusted) → domain score
+    from services.field_assessment.confidence import degrade_confidence as _degrade
+
     domain_scores: dict[str, list[float]] = {}
     for f in all_findings:
         mappings = f.framework_mappings or []
@@ -4636,7 +4647,8 @@ def _build_engagement_report_json(
             )
         else:
             domain_key = "data_governance"
-        domain_scores.setdefault(domain_key, []).append(float(f.confidence_score))
+        effective = _degrade(f.confidence_score, f.updated_at)
+        domain_scores.setdefault(domain_key, []).append(float(effective))
 
     scores: dict[str, float] = {}
     for domain, values in domain_scores.items():
