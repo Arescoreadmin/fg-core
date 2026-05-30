@@ -186,14 +186,13 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
                 "denied_tenant",
             )
 
-        effective_tenant = result.tenant_id or requested_tenant or None
+        # For global-key + BFF-supplied tenant header: inject the header
+        # tenant into result so the assignment below remains result.tenant_id.
+        if result.reason == "global_key" and not result.tenant_id and requested_tenant:
+            result.tenant_id = requested_tenant
         request.state.auth = result
-        request.state.tenant_id = effective_tenant
-        # Mark as bound when key has an explicit tenant, or when the global key
-        # is used with a caller-supplied tenant header (dev/BFF use only).
-        request.state.tenant_is_key_bound = bool(result.tenant_id) or bool(
-            result.reason == "global_key" and effective_tenant
-        )
+        request.state.tenant_id = result.tenant_id
+        request.state.tenant_is_key_bound = bool(result.tenant_id)
 
         resp = await call_next(request)
         return self._stamp(resp, request, "protected")
