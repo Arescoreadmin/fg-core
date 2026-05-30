@@ -15,6 +15,7 @@ import { EndpointInventoryScanPanel } from '@/components/field-assessment/Endpoi
 import { NetworkScanPanel } from '@/components/field-assessment/NetworkScanPanel';
 import { DnsEmailScanPanel } from '@/components/field-assessment/DnsEmailScanPanel';
 import { WebHeadersScanPanel } from '@/components/field-assessment/WebHeadersScanPanel';
+import { EntraGovernanceScanPanel } from '@/components/field-assessment/EntraGovernanceScanPanel';
 import { DocumentRegistrationPanel } from '@/components/field-assessment/DocumentRegistrationPanel';
 import { ObservationForm } from '@/components/field-assessment/ObservationForm';
 import { InterviewForm } from '@/components/field-assessment/InterviewForm';
@@ -383,6 +384,24 @@ export default function EngagementWorkspacePage() {
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
                     <MsgraphScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border-border mb-4">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run Entra ID Governance Scan</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Device-code flow — PIM roles, Access Reviews, Identity Protection, Conditional Access
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <EntraGovernanceScanPanel
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});

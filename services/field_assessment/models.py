@@ -39,6 +39,7 @@ class ScanSourceType(str, Enum):
     OAUTH_INVENTORY = "oauth_inventory"
     DNS_EMAIL = "dns_email"
     WEB_HEADERS = "web_headers"
+    ENTRA_GOVERNANCE = "entra_governance"
 
 
 class FindingSeverity(str, Enum):

@@ -822,6 +822,13 @@ export const fieldAssessmentApi = {
     });
   },
 
+  initiateEntraGovernanceScan(engagementId: string, payload: MsgraphScanInitiatePayload): Promise<MsgraphScanInitiated> {
+    return request(`/engagements/${engagementId}/connector-runs/entra-governance/initiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // Audit events (read-only — append-only server-side)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/engagements/${engagementId}/audit-events`);

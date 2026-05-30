@@ -38,6 +38,7 @@ SUPPORTED_SCHEMA_VERSIONS: dict[str, set[str]] = {
     ScanSourceType.OAUTH_INVENTORY.value: {"1.0", "1.1"},
     ScanSourceType.DNS_EMAIL.value: {"1.0"},
     ScanSourceType.WEB_HEADERS.value: {"1.0"},
+    ScanSourceType.ENTRA_GOVERNANCE.value: {"1.0"},
 }
 
 # ---------------------------------------------------------------------------
@@ -68,6 +69,7 @@ REQUIRED_FIELDS: dict[str, dict[str, type]] = {
     ScanSourceType.OAUTH_INVENTORY.value: {"apps": list},
     ScanSourceType.DNS_EMAIL.value: {"domains": list},
     ScanSourceType.WEB_HEADERS.value: {"targets": list},
+    ScanSourceType.ENTRA_GOVERNANCE.value: {"role_assignments": list},
 }
 
 # ---------------------------------------------------------------------------
