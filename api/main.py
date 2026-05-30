@@ -223,7 +223,31 @@ ring_router = _optional_router("api.ring_router", "router")
 roe_router = _optional_router("api.roe_engine", "router")
 
 
+def _init_sentry() -> None:
+    dsn = os.getenv("SENTRY_DSN", "").strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk  # noqa: PLC0415
+        from sentry_sdk.integrations.fastapi import FastApiIntegration  # noqa: PLC0415
+        from sentry_sdk.integrations.starlette import StarletteIntegration  # noqa: PLC0415
+        from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
+
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=os.getenv("FG_ENV", "unknown"),
+            release=APP_VERSION,
+            traces_sample_rate=0.0,  # errors only — no performance tracing
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            ignore_errors=[_HTTPException],  # 4xx client errors are not bugs
+        )
+        log.info("sentry initialized env=%s", os.getenv("FG_ENV", "unknown"))
+    except ImportError:
+        log.warning("sentry-sdk not installed; error reporting disabled")
+
+
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
+    _init_sentry()
     resolved_auth_enabled = (
         _resolve_auth_enabled_from_env() if auth_enabled is None else bool(auth_enabled)
     )
