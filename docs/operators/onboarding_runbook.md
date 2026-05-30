@@ -1,7 +1,7 @@
 # Operator Onboarding Runbook
 
 **For:** FrostGate operators running a client field assessment engagement.  
-**Time:** ~30 minutes setup + scan time (scan itself takes 5–15 minutes).  
+**Time:** ~45–75 minutes (setup + scans + questionnaire + report).  
 **Result:** Client receives a PDF report and portal access to track remediation.
 
 ---
@@ -9,13 +9,16 @@
 ## Overview — What you will do
 
 ```
-1. One-time setup   — Azure AD app registration in client tenant
+1. One-time setup    — Azure AD app registration in client tenant
 2. Create engagement — Name the client and set assessment type in console
-3. Run scan         — MS Graph device-code scan (operator authenticates)
-4. Fill questionnaire — NIST AI RMF controls: mark what scan couldn't see
-5. Generate report  — AI executive summary + findings compiled into PDF
-6. Deliver          — Transition to Delivered; share portal with client
+3. Run scans         — 8 connectors across identity, network, DNS, web, and cloud data
+4. Fill questionnaire — NIST AI RMF controls: mark what scans couldn't see
+5. Generate report   — AI executive summary + findings compiled into PDF
+6. Deliver           — Transition to Delivered; share portal with client
 ```
+
+**Connector quick reference:** See [`docs/CONNECTOR_CROSSREF.md`](../CONNECTOR_CROSSREF.md) for a full
+table of what each connector requires and what findings it generates.
 
 ---
 
@@ -49,9 +52,30 @@ Summary:
    - Redirect URI: leave blank
 3. Copy the **Application (client) ID** → set as `FG_MSAL_CLIENT_ID` in Railway
 4. Copy the **Directory (tenant) ID** → you will paste this in Step 3
-5. **API permissions → Add → Microsoft Graph → Delegated:**
-   `User.Read.All`, `Directory.Read.All`, `Policy.Read.All`, `Application.Read.All`,
-   `AuditLog.Read.All`, `Reports.Read.All`, `InformationProtectionPolicy.Read`
+5. **API permissions → Add → Microsoft Graph → Delegated** — add all of the following:
+
+   | Permission | Used by |
+   |---|---|
+   | `User.Read.All` | MS Graph core |
+   | `Directory.Read.All` | MS Graph core, Entra Governance, SharePoint, OAuth Risk |
+   | `Policy.Read.All` | MS Graph core, Entra Governance |
+   | `Application.Read.All` | MS Graph core, OAuth Inventory, OAuth Risk |
+   | `AuditLog.Read.All` | MS Graph core, OAuth Risk |
+   | `Reports.Read.All` | MS Graph core |
+   | `InformationProtectionPolicy.Read` | MS Graph core |
+   | `AccessReview.Read.All` | Entra Governance (P2 feature — add regardless) |
+   | `IdentityRiskyUser.Read.All` | Entra Governance (P2 feature) |
+   | `IdentityRiskEvent.Read.All` | Entra Governance (P2 feature) |
+   | `RoleEligibilitySchedule.Read.Directory` | Entra Governance (P2 feature) |
+   | `RoleAssignmentSchedule.Read.Directory` | Entra Governance (P2 feature) |
+   | `Sites.Read.All` | SharePoint & OneDrive |
+   | `Files.Read.All` | SharePoint & OneDrive |
+   | `DeviceManagementManagedDevices.Read.All` | Endpoint Inventory (Intune — P1 feature) |
+
+   > P2-gated permissions (`AccessReview`, `IdentityRiskyUser`, etc.) are safe to add on any tenant —
+   > the connector handles 403 gracefully and skips those sections. Add all 15 permissions now so you
+   > never need to revisit the app registration mid-engagement.
+
 6. Click **Grant admin consent**
 7. **Authentication → Advanced settings → Allow public client flows → Yes → Save**
 
@@ -79,27 +103,128 @@ After setting `FG_MSAL_CLIENT_ID` in Railway, trigger a Railway redeploy.
 
 ---
 
-## Step 3 — Run the MS Graph scan
+## Step 3 — Run scans
 
-1. In the engagement, click the **Scans** tab
-2. In the **Run MS Graph Scan** panel:
-   - Paste the **Directory (tenant) ID** from Step 1
-   - Enter your name as Operator Name (shows on the signed receipt)
-   - Enter `FrostGate` as Operator Org
-   - Click **Run MS Graph Scan**
-3. A device code appears (e.g. `ABC-123-XYZ`). You have 15 minutes.
-4. Open `https://microsoft.com/devicelogin` in a browser signed in to the client's tenant
-5. Enter the code → sign in → **Accept** the permissions
-6. Watch the console status: `Waiting` → `Running` → `Importing` → **Scan complete**
-7. Navigate to the **Findings** tab — normalised findings appear automatically
+Run connectors in two passes: **no-auth first** (no client involvement), then **MS Graph** (client admin authenticates).
 
-> If the scan times out or shows partial results, click **Run MS Graph Scan** again and re-authenticate. Findings from the first scan are preserved; the second scan adds or updates.
+### Which connectors to run
+
+| Connector | Requires | When to run |
+|---|---|---|
+| DNS & Email Security | Domain name | Always |
+| Web Security Headers | Public URL | Always if client has a website |
+| Network Scan | IP / hostname list | If client has known external-facing hosts |
+| MS Graph Core | M365 tenant | Always (M365 clients) |
+| OAuth Inventory | M365 tenant | Always (M365 clients) |
+| OAuth Risk | M365 tenant | Always (M365 clients) |
+| Endpoint Inventory | M365 + Intune | Run if client has Intune; gracefully skips Intune data without it |
+| Entra Governance | M365 + Azure AD P1/P2 | Run for identity/access focus; P2 gates auto-handled |
+| SharePoint & OneDrive | M365 + SharePoint license | Run if client uses SharePoint or OneDrive |
+
+For a full assessment run all connectors. For a scoped engagement see
+[`docs/CONNECTOR_CROSSREF.md`](../CONNECTOR_CROSSREF.md) — Connector Combination Guide section.
+
+---
+
+### 3a — No-auth connectors (run first, no client present required)
+
+These connectors run immediately with no device-code flow. Run them before the client meeting.
+
+**DNS & Email Security**
+
+1. In the engagement **Scans** tab, find **DNS & Email Security**
+2. Enter the client's domain(s), one per line (e.g. `volusiabank.com`)
+3. Optionally add custom DKIM selectors if the client uses non-standard ones
+4. Click **Run DNS & Email Scan** — completes in ~30 seconds
+5. Findings appear immediately: DMARC policy, SPF, DKIM coverage, DNSSEC
+
+**Web Security Headers**
+
+1. Find **Web Security Headers** in the Scans tab
+2. Enter target URLs, one per line (include `https://` prefix, e.g. `https://volusiabank.com`)
+3. Click **Run Web Headers Scan** — completes in ~20 seconds per URL
+4. Findings appear: HSTS, CSP, X-Frame-Options, plain HTTP detection
+
+**Network Scan**
+
+1. Find **Network Scan** in the Scans tab
+2. Enter IP addresses, hostnames, or CIDR ranges (up to /28 expanded inline, 50 hosts max)
+3. Click **Run Network Scan** — probes 20 ports per host, ~2–5 minutes for 10 hosts
+4. Findings appear: unsafe services (RDP/VNC/Telnet/FTP), bad TLS, AI model server ports exposed
+
+---
+
+### 3b — MS Graph connectors (device-code, client admin required)
+
+All MS Graph connectors use the same device-code pattern. Each connector initiates its own
+device-code flow — the client admin must authenticate once per connector.
+
+**Efficient approach:** Run connectors sequentially. Start the next one as soon as the previous
+scan reaches **Importing** status (the active window is already closed).
+
+**MS Graph Core Scan** *(run first)*
+
+1. In the Scans tab, find **Run MS Graph Scan**
+2. Paste the **Directory (tenant) ID** from Step 1
+3. Enter Operator Name and `FrostGate` as Operator Org
+4. Click **Run MS Graph Scan**
+5. Device code appears — you have 15 minutes:
+   - Open `https://microsoft.com/devicelogin` (client admin's browser)
+   - Enter the code → sign in → **Accept**
+6. Status: `Waiting` → `Running` → `Importing` → **Scan complete**
+7. Findings: MFA gaps, CA policy posture, OAuth grants, AI signals, guest exposure, privileged roles
+
+> If the scan times out, click **Run MS Graph Scan** again. Findings from the first scan are
+> preserved; the second scan adds or updates.
+
+**OAuth Inventory** *(run after MS Graph Core)*
+
+1. Find **OAuth Inventory Scan** in the Scans tab
+2. Paste the tenant ID, enter operator details
+3. Same device-code flow as above
+4. Findings: admin-consented OAuth grants, unverified publisher apps, broad-scope applications
+
+**OAuth Risk (Deep Scan)** *(high value — run on every M365 client)*
+
+1. Find **OAuth Risk Scan** in the Scans tab
+2. Paste the tenant ID, enter operator details
+3. Same device-code flow
+4. Findings: illicit consent grants (the consent phishing attack pattern), over-privileged app permissions,
+   AI tools (ChatGPT, Claude, Copilot, Gemini, etc.) with access to Mail/Files/Calendar
+
+**Endpoint Inventory**
+
+1. Find **Endpoint Inventory Scan** in the Scans tab
+2. Paste the tenant ID, enter operator details
+3. Same device-code flow
+4. Findings: non-compliant/unmanaged/stale devices, unencrypted managed devices
+5. Note: Intune data requires Intune license — connector completes cleanly without it but
+   compliance/encryption findings will be absent
+
+**Entra ID Governance**
+
+1. Find **Entra Governance Scan** in the Scans tab
+2. Paste the tenant ID, enter operator details
+3. Same device-code flow
+4. Findings: permanent Global Admin assignments, CA policy gaps (legacy auth, MFA enforcement),
+   stale PIM eligible assignments (P2), unmediated high-risk users (P2), access review gaps (P2)
+
+**SharePoint & OneDrive Data Exposure**
+
+1. Find **SharePoint Scan** in the Scans tab
+2. Paste the tenant ID, enter operator details
+3. Same device-code flow
+4. Findings: anonymous "anyone with link" sharing, external sharing with non-tenant users,
+   guest user file access
+5. Note: requires SharePoint license — connector fails gracefully if SharePoint is not licensed
 
 ---
 
 ## Step 4 — Complete the NIST questionnaire
 
-The MS Graph scan covers technical controls. The questionnaire captures what the scan cannot see: policies, training, governance decisions.
+The scan suite covers technical controls across identity, network, DNS, cloud data, and web security.
+The questionnaire captures what scans cannot see: policies, training, governance decisions, and
+organisational context.
 
 1. In the engagement, click the **Scans** tab → scroll to **NIST AI RMF Questionnaire**
    (or navigate to the **Questionnaire** section if shown in a separate tab)
@@ -229,10 +354,15 @@ Variables for the portal (set in the portal deployment environment):
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Scan panel shows `MSAL_NOT_CONFIGURED` | `FG_MSAL_CLIENT_ID` not set in Railway | Add env var, redeploy Railway |
-| Device code page shows `AADSTS65001` | Admin consent not granted | Repeat Step 1 → grant admin consent |
+| Any MS Graph panel shows `MSAL_NOT_CONFIGURED` | `FG_MSAL_CLIENT_ID` not set in Railway | Add env var, redeploy Railway |
+| Device code page shows `AADSTS65001` | Admin consent not granted | Repeat Step 1 → grant admin consent for all 15 permissions |
 | Device code page shows `AADSTS7000218` | Public client flow not enabled | Step 1 → Authentication → Allow public client flows → Yes |
-| Scan stuck at `Running` for > 15 min | Timeout | Re-run scan — partial findings are preserved |
+| MS Graph scan stuck at `Running` for > 15 min | Timeout | Re-run scan — partial findings are preserved |
+| Entra Governance shows no PIM/Identity Protection data | Tenant is on Azure AD Free or P1 — P2 required | Expected; document the gap. Connector completes cleanly. |
+| Endpoint Inventory shows no compliance/encryption data | Intune not licensed or `DeviceManagementManagedDevices.Read.All` not granted | Confirm Intune license; check app registration permissions |
+| SharePoint scan shows `Sites.Read.All` error | Permission not granted or SharePoint not licensed | Confirm SharePoint license; re-grant admin consent |
+| DNS scan shows `DKIM not detected` for all selectors | Client uses a non-standard DKIM selector | Ask client for their DKIM selector name; re-run with custom selector |
+| Network scan shows all ports closed | Firewall blocking TCP probes | Cross-reference with client's internal port list; note in findings |
 | Status transition blocked | Readiness gates not met | Check gate status in the status badge tooltip |
 | Report generation fails | `FG_ANTHROPIC_API_KEY` not set or quota exceeded | Check Railway env vars and Anthropic usage |
 | PDF download returns 501 | `reportlab` not installed | Add `reportlab` to `requirements.txt` and redeploy |
@@ -242,4 +372,4 @@ Variables for the portal (set in the portal deployment environment):
 ---
 
 *FrostGate — AI Governance for Regulated Industries*  
-*See also: [`azure_ad_app_setup.md`](azure_ad_app_setup.md)*
+*See also: [`azure_ad_app_setup.md`](azure_ad_app_setup.md) · [`../CONNECTOR_CROSSREF.md`](../CONNECTOR_CROSSREF.md)*

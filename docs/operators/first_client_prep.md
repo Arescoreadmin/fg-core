@@ -32,7 +32,7 @@ Run through every item below before the client meeting starts. Do not begin the 
 - [ ] You have the client's **Directory (tenant) ID** written down or on clipboard.
 - [ ] The FrostGate app is registered in the **client's** Azure AD tenant (not your own tenant).
 - [ ] The `FG_MSAL_CLIENT_ID` in Railway matches the **Application (client) ID** of that registration.
-- [ ] All 7 delegated Microsoft Graph permissions are present on the app:
+- [ ] All 15 delegated Microsoft Graph permissions are present on the app:
   - [ ] `User.Read.All`
   - [ ] `Directory.Read.All`
   - [ ] `Policy.Read.All`
@@ -40,8 +40,19 @@ Run through every item below before the client meeting starts. Do not begin the 
   - [ ] `AuditLog.Read.All`
   - [ ] `Reports.Read.All`
   - [ ] `InformationProtectionPolicy.Read`
+  - [ ] `AccessReview.Read.All`
+  - [ ] `IdentityRiskyUser.Read.All`
+  - [ ] `IdentityRiskEvent.Read.All`
+  - [ ] `RoleEligibilitySchedule.Read.Directory`
+  - [ ] `RoleAssignmentSchedule.Read.Directory`
+  - [ ] `Sites.Read.All`
+  - [ ] `Files.Read.All`
+  - [ ] `DeviceManagementManagedDevices.Read.All`
 - [ ] **Admin consent** has been granted for all permissions (green checkmarks in the API permissions blade).
 - [ ] **Authentication → Advanced settings → Allow public client flows** is set to **Yes**.
+
+> P2-gated permissions (AccessReview, IdentityRiskyUser, etc.) are safe on any tenant — connectors
+> handle 403 gracefully. Add all 15 now so you never revisit this mid-engagement.
 
 > If any of these are missing, complete them now via `docs/operators/azure_ad_app_setup.md` before proceeding.
 
@@ -53,7 +64,12 @@ Run through every item below before the client meeting starts. Do not begin the 
 - [ ] Navigate to **Field Assessments** in the sidebar — the list loads without error.
 - [ ] Create a test engagement (client name: `[TEST]`, any domain) — it saves and opens.
 - [ ] Advance status from **Scheduled** → **In Progress** — the badge updates.
-- [ ] Click the **Scans** tab — the MS Graph scan panel is visible and shows no `MSAL_NOT_CONFIGURED` error.
+- [ ] Click the **Scans** tab — confirm all connector panels are visible:
+  - [ ] MS Graph Core scan panel shows no `MSAL_NOT_CONFIGURED` error
+  - [ ] DNS & Email Security panel is present
+  - [ ] Web Security Headers panel is present
+  - [ ] Network Scan panel is present
+  - [ ] OAuth Inventory, OAuth Risk, Endpoint Inventory, Entra Governance, SharePoint panels present
 - [ ] Click the **Questionnaire** tab (or scroll to it in the Scans tab) — 69 NIST AI RMF controls load.
 - [ ] Delete the test engagement (or leave it with a `[TEST]` label — do not use it for the real engagement).
 
@@ -61,10 +77,14 @@ Run through every item below before the client meeting starts. Do not begin the 
 
 ## 4. MS Graph Scan Readiness
 
-- [ ] Confirmed with client: a **Global Administrator** or **Application Administrator** will be present (or available by phone/video) for the scan authentication step.
+- [ ] Confirmed with client: a **Global Administrator** or **Application Administrator** will be present (or available by phone/video) for the MS Graph scan authentication steps.
 - [ ] You have the client's **Directory (tenant) ID** (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
 - [ ] `https://microsoft.com/devicelogin` is reachable from the machine you will use during the engagement — open it now and confirm the page loads.
 - [ ] You have a browser session ready that can authenticate into the client's Azure AD tenant (your admin credential or the client admin's device).
+- [ ] You have the client's **primary domain** and any secondary domains for the DNS & Email scan.
+- [ ] You have the client's **public-facing URLs** for the Web Security Headers scan.
+- [ ] You have any known **external IP ranges or hostnames** for the Network Scan (if in scope).
+- [ ] No-auth scans (DNS, Web Headers, Network) are ready to run before the client meeting — confirm you have the domain/URL/IP list.
 
 ---
 
@@ -88,16 +108,29 @@ Run through every item below before the client meeting starts. Do not begin the 
 
 ## 7. Day-of Checklist
 
-Have these ready when the client meeting starts:
+**Before the meeting** (no client required):
+
+- [ ] Run DNS & Email Security scan — have client domain(s) ready.
+- [ ] Run Web Security Headers scan — have public URLs ready.
+- [ ] Run Network Scan if in scope — have IP/hostname list ready.
+- [ ] All three no-auth scans show **Scan complete** in the Scans tab before the meeting starts.
+
+**When the meeting starts:**
 
 - [ ] `console.frostgate.ai` is open and you are signed in.
 - [ ] The real engagement is created with the client's name and domain — status is **In Progress**.
 - [ ] Client's **tenant ID** is on clipboard or written down.
 - [ ] A browser tab is open to `https://microsoft.com/devicelogin` (or ready to open in seconds).
-- [ ] The client admin who will authenticate the MS Graph scan is confirmed present.
+- [ ] The client admin who will authenticate MS Graph scans is confirmed present.
 - [ ] Portal URL and password are ready to copy-paste at report delivery time.
 - [ ] `onboarding_runbook.md` is open in a second window for step-by-step reference.
-- [ ] You have ~60–90 minutes blocked (scan: 5–15 min; questionnaire walkthrough: 20–40 min; report generation: 1–2 min; delivery: 5 min).
+- [ ] You have ~75–90 minutes blocked:
+  - No-auth scans (done pre-meeting): 5–10 min
+  - MS Graph Core + OAuth Inventory + OAuth Risk: ~25 min (5 min each incl. auth)
+  - Endpoint Inventory + Entra Governance + SharePoint: ~20 min
+  - Questionnaire walkthrough: 20–40 min
+  - Report generation + review: 3–5 min
+  - Delivery: 5 min
 
 ---
 

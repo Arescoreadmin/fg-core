@@ -44,17 +44,29 @@ subsequent scans.
 
 2. Search for and add each permission below. All are **delegated** (not application).
 
-   | Permission | Purpose |
-   |---|---|
-   | `User.Read.All` | Enumerate users, MFA registration state |
-   | `Directory.Read.All` | Read directory objects (groups, roles, devices) |
-   | `Policy.Read.All` | Read conditional access and auth policies |
-   | `Application.Read.All` | Enumerate enterprise apps and OAuth consents |
-   | `AuditLog.Read.All` | Read sign-in and audit logs |
-   | `Reports.Read.All` | Read usage and MFA reports |
-   | `InformationProtectionPolicy.Read` | Read sensitivity label policies |
+   | Permission | Connector(s) | Notes |
+   |---|---|---|
+   | `User.Read.All` | MS Graph Core | Users, MFA registration state |
+   | `Directory.Read.All` | MS Graph Core, Entra Governance, SharePoint, OAuth Risk | Directory objects: groups, roles, devices |
+   | `Policy.Read.All` | MS Graph Core, Entra Governance | Conditional access and auth policies |
+   | `Application.Read.All` | MS Graph Core, OAuth Inventory, OAuth Risk | Enterprise apps and service principals |
+   | `AuditLog.Read.All` | MS Graph Core, OAuth Risk | Sign-in and audit logs |
+   | `Reports.Read.All` | MS Graph Core | Usage and MFA reports |
+   | `InformationProtectionPolicy.Read` | MS Graph Core | Sensitivity label policies |
+   | `AccessReview.Read.All` | Entra Governance | Access review definitions (P2 feature) |
+   | `IdentityRiskyUser.Read.All` | Entra Governance | Identity Protection risky users (P2 feature) |
+   | `IdentityRiskEvent.Read.All` | Entra Governance | Identity risk events (P2 feature) |
+   | `RoleEligibilitySchedule.Read.Directory` | Entra Governance | PIM eligible role schedules (P2 feature) |
+   | `RoleAssignmentSchedule.Read.Directory` | Entra Governance | PIM active role schedules (P2 feature) |
+   | `Sites.Read.All` | SharePoint & OneDrive | SharePoint sites and drives |
+   | `Files.Read.All` | SharePoint & OneDrive | Drive items and sharing links |
+   | `DeviceManagementManagedDevices.Read.All` | Endpoint Inventory | Intune device compliance and encryption (P1 feature) |
 
-3. After adding all seven, click **Grant admin consent for [tenant name]** at the
+   > **P2/P1-gated permissions** (`AccessReview`, `IdentityRiskyUser`, `RoleEligibilitySchedule`,
+   > `DeviceManagementManagedDevices`, etc.) are safe to add on any tenant tier. The connectors handle
+   > 403 responses gracefully — they skip the gated data and complete cleanly. Add all 15 now.
+
+3. After adding all fifteen, click **Grant admin consent for [tenant name]** at the
    top of the permissions list.
 
 4. Confirm. All permissions should show a green tick and status **Granted for [tenant name]**.
