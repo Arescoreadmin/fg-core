@@ -446,11 +446,65 @@ def export_html(report: GovernanceReport) -> str:
 # ---------------------------------------------------------------------------
 
 
+# Maps ScanSourceType.value → (display name, data categories accessed)
+_CONNECTOR_DATA_COLLECTED: dict[str, tuple[str, str]] = {
+    "microsoft_graph": (
+        "Microsoft 365 (MS Graph)",
+        "User accounts, MFA registration status, conditional access policies, "
+        "guest user list, sign-in audit logs, usage reports",
+    ),
+    "oauth_inventory": (
+        "OAuth App Inventory (MS Graph)",
+        "App registrations, service principals, delegated and application "
+        "permission grants, OAuth consent records",
+    ),
+    "oauth_risk": (
+        "OAuth Risk Analysis (MS Graph)",
+        "User-consented OAuth grants to third-party apps, AI tool data access "
+        "patterns, over-privileged application permissions, publisher verification status",
+    ),
+    "endpoint_inventory": (
+        "Endpoint Inventory (MS Graph / Intune)",
+        "Azure AD device list, Intune enrollment and compliance status, "
+        "OS version and patch level (aggregate — no personal device data)",
+    ),
+    "entra_governance": (
+        "Entra ID Governance (MS Graph)",
+        "PIM role assignments (permanent vs eligible), Global Admin count, "
+        "access review coverage, identity protection risky users (P2 tenants), "
+        "conditional access policy list",
+    ),
+    "sharepoint_onedrive": (
+        "SharePoint & OneDrive (MS Graph)",
+        "Site external sharing settings, anonymous link presence, external "
+        "domain user access — sampled across up to 30 sites and 3 drives. "
+        "File content is never read.",
+    ),
+    "dns_email": (
+        "DNS & Email Security (public DNS)",
+        "DMARC policy record, SPF record, DKIM selector probing (public DNS "
+        "only), MX record presence, DNSSEC validation — all publicly visible",
+    ),
+    "web_headers": (
+        "Web Security Headers (unauthenticated HTTP HEAD)",
+        "HTTP response headers on public-facing URLs: HSTS, CSP, "
+        "X-Frame-Options, X-Content-Type-Options, Referrer-Policy — "
+        "no authenticated requests made",
+    ),
+    "network_scan": (
+        "Network Scan (TCP port scan)",
+        "Open TCP ports, TLS certificate metadata (issuer, expiry, SANs), "
+        "service banner text on in-scope IP ranges/hosts",
+    ),
+}
+
+
 def export_pdf_bytes(
     report: GovernanceReport,
     *,
     executive_summary: dict[str, Any] | None = None,
     engagement_name: str | None = None,
+    data_disclosure: dict[str, Any] | None = None,
 ) -> bytes:
     """Export the governance report as a client-ready PDF using reportlab.
 
@@ -866,11 +920,14 @@ def export_pdf_bytes(
     if report.framework_summary:
         story.append(Paragraph("Framework Coverage", _h2))
         fw_rows = [["Framework", "Controls Mapped"]]
-        for fw, controls in sorted(report.framework_summary.items()):
+        for fw, framework_controls in sorted(report.framework_summary.items()):
             fw_rows.append(
                 [
                     Paragraph(fw, _small),
-                    Paragraph(", ".join(controls) if controls else "—", _small),
+                    Paragraph(
+                        ", ".join(framework_controls) if framework_controls else "—",
+                        _small,
+                    ),
                 ]
             )
         fw_t = Table(fw_rows, colWidths=[1.8 * inch, CONTENT_W - 1.8 * inch])
@@ -946,6 +1003,84 @@ def export_pdf_bytes(
         story.append(ev_t)
     else:
         story.append(Paragraph("No evidence references.", _normal))
+
+    # ── Data collection disclosure ───────────────────────────────────────────────
+    if data_disclosure:
+        story.append(Spacer(1, 0.25 * inch))
+        story.append(Paragraph("Data Collection Disclosure", _h2))
+        story.append(
+            Paragraph(
+                "This section discloses what FrostGate accessed during this assessment, "
+                "how that data is handled, and how long it is retained. It is included for "
+                "transparency and to support your organization's vendor review process.",
+                _small,
+            )
+        )
+        story.append(Spacer(1, 0.1 * inch))
+
+        connectors_run: list[str] = data_disclosure.get("connectors", [])
+        if connectors_run:
+            dc_header = [
+                [
+                    Paragraph("Connector", _label),
+                    Paragraph("Data Accessed", _label),
+                ]
+            ]
+            dc_rows = []
+            for src in connectors_run:
+                name, description = _CONNECTOR_DATA_COLLECTED.get(
+                    src, (src, "See operator for details.")
+                )
+                dc_rows.append(
+                    [Paragraph(name, _small), Paragraph(description, _small)]
+                )
+            dc_t = Table(
+                dc_header + dc_rows,
+                colWidths=[1.7 * inch, CONTENT_W - 1.7 * inch],
+            )
+            dc_t.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), _colors.HexColor("#1e3a5f")),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), _colors.white),
+                        ("FONTSIZE", (0, 0), (-1, -1), 8),
+                        ("GRID", (0, 0), (-1, -1), 0.3, _colors.HexColor("#e5e7eb")),
+                        ("TOPPADDING", (0, 0), (-1, -1), 5),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_colors.white, _colors.HexColor("#f9fafb")]),
+                    ]
+                )
+            )
+            story.append(dc_t)
+            story.append(Spacer(1, 0.1 * inch))
+
+        retention_days: int = data_disclosure.get("retention_days", 90)
+        redaction_mode: str = data_disclosure.get("redaction_mode", "strict")
+        collected_at: str = data_disclosure.get("collected_at", "")
+        operator_authorized: bool = data_disclosure.get("operator_authorized", False)
+
+        handling_parts = [
+            f"<b>Retention:</b> Assessment data is retained for {retention_days} days "
+            f"from the date of collection, after which it is purged from FrostGate systems.",
+            f"<b>Redaction:</b> Mode is set to <i>{redaction_mode}</i>. "
+            "Personally identifiable information in scan payloads is redacted before storage.",
+            "<b>Transmission:</b> All data is transmitted over HTTPS with TLS 1.2 or higher. "
+            "No scan data is shared with third parties.",
+        ]
+        if operator_authorized:
+            handling_parts.append(
+                "<b>Operator authorization:</b> The operator provided a signed acknowledgment "
+                "receipt prior to scanning, binding their identity to the scope of access. "
+                "The receipt is stored with this engagement record."
+            )
+        if collected_at:
+            handling_parts.append(f"<b>Assessment date:</b> {collected_at[:10]}")
+
+        for part in handling_parts:
+            story.append(Paragraph(part, _small))
+            story.append(Spacer(1, 0.04 * inch))
 
     # ── Verification ────────────────────────────────────────────────────────────
     story.append(Spacer(1, 0.35 * inch))

@@ -5070,11 +5070,40 @@ def export_engagement_report_route(
             ),
         )
 
+    # Build data disclosure — query distinct connectors that ran for this engagement.
+    scan_rows = db.execute(
+        select(
+            FaScanResult.source_type,
+            FaScanResult.collected_at,
+        )
+        .where(
+            FaScanResult.engagement_id == engagement_id,
+            FaScanResult.tenant_id == tenant_id,
+        )
+        .order_by(FaScanResult.collected_at.asc())
+    ).all()
+    seen: set[str] = set()
+    connectors_ordered: list[str] = []
+    for row in scan_rows:
+        if row.source_type not in seen:
+            seen.add(row.source_type)
+            connectors_ordered.append(row.source_type)
+    first_collected_at = scan_rows[0].collected_at if scan_rows else ""
+    operator_authorized = any(r.source_type == "microsoft_graph" for r in scan_rows)
+    data_disclosure = {
+        "connectors": connectors_ordered,
+        "collected_at": str(first_collected_at),
+        "retention_days": 90,
+        "redaction_mode": "strict",
+        "operator_authorized": operator_authorized,
+    }
+
     try:
         pdf_bytes = export_pdf_bytes(
             gov_report,
             executive_summary=exec_summary if isinstance(exec_summary, dict) else None,
             engagement_name=engagement.client_name,
+            data_disclosure=data_disclosure,
         )
     except ExportUnavailableError:
         raise HTTPException(

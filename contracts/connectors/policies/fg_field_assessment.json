@@ -1,0 +1,71 @@
+{
+  "enabled_connectors": [
+    "microsoft_graph",
+    "oauth_inventory",
+    "oauth_risk",
+    "endpoint_inventory",
+    "entra_governance",
+    "sharepoint_onedrive",
+    "dns_email",
+    "web_headers",
+    "network_scan"
+  ],
+  "connector_scopes": {
+    "microsoft_graph": [
+      "User.Read.All",
+      "Directory.Read.All",
+      "Policy.Read.All",
+      "Reports.Read.All",
+      "AuditLog.Read.All",
+      "InformationProtectionPolicy.Read"
+    ],
+    "oauth_inventory": [
+      "Application.Read.All",
+      "Directory.Read.All"
+    ],
+    "oauth_risk": [
+      "Application.Read.All",
+      "Directory.Read.All"
+    ],
+    "endpoint_inventory": [
+      "DeviceManagementManagedDevices.Read.All",
+      "Directory.Read.All"
+    ],
+    "entra_governance": [
+      "AccessReview.Read.All",
+      "IdentityRiskyUser.Read.All",
+      "IdentityRiskEvent.Read.All",
+      "RoleEligibilitySchedule.Read.Directory",
+      "RoleAssignmentSchedule.Read.Directory",
+      "Policy.Read.All",
+      "Directory.Read.All"
+    ],
+    "sharepoint_onedrive": [
+      "Sites.Read.All",
+      "Files.Read.All"
+    ],
+    "dns_email": [],
+    "web_headers": [],
+    "network_scan": []
+  },
+  "allowed_collections": ["field-assessment"],
+  "allowed_resources": {
+    "microsoft_graph": ["tenant:*"],
+    "oauth_inventory": ["tenant:*"],
+    "oauth_risk": ["tenant:*"],
+    "endpoint_inventory": ["tenant:*"],
+    "entra_governance": ["tenant:*"],
+    "sharepoint_onedrive": ["tenant:*"],
+    "dns_email": ["domain:*"],
+    "web_headers": ["url:*"],
+    "network_scan": ["host:*"]
+  },
+  "retention": {"days": 90},
+  "redaction_mode": "strict",
+  "rate_limits": {
+    "tenant_dispatch_per_minute": 10,
+    "connector_dispatch_per_minute": 5,
+    "failure_cooldown_threshold": 3,
+    "failure_cooldown_seconds": 300
+  }
+}

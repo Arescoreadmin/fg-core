@@ -103,13 +103,17 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 |---|------|-------|
 | 12 | Redis-backed explanation cache | Replace in-memory LRU; needed for multi-worker |
 | 13 | Explanation manifest persistence | Store `FindingExplanation` to DB alongside finding |
-| 14 | `remediation_priority` scoring | Needs impact × exploitability formula decision |
-| 15 | Evidence freshness degradation | Reduce confidence score as evidence ages |
+| 14 | `remediation_priority` scoring | ✅ done 2026-05-30 — 4-factor formula: severity base + exploitability class (by connector family) + confidence factor (integrates freshness degradation) + source bonus; `PHASE_IMMEDIATE_THRESHOLD=50`, `PHASE_SHORT_TERM_THRESHOLD=35`; effort mapping + step templates for all 9 connector families; 78 tests in `tests/test_remediation_scoring.py` |
+| 15 | Evidence freshness degradation | ✅ done 2026-05-30 — `services/field_assessment/confidence.py`; decay table: 0–30d: ±0, 31–60d: −5, 61–90d: −15, 91+d: −30, floor 30; applied at read time in `_finding_to_response()`, report domain aggregation, and readiness low-confidence gate; 22 tests in `tests/test_confidence_degradation.py` |
 | 16 | Cross-finding correlation | Surface related findings in explanation panel |
 | 17 | Executive PDF export | PR 38 ✅ merged |
 | 18 | Portal rate limiter → Redis | Current in-memory `_rlBuckets` bypassed in multi-node |
 | 19 | Dedicated CMMC/SOC2/ISO27001 playbooks | Currently all fall back to comprehensive |
-| 20 | Operator onboarding runbook | Step-by-step: tenant create → scan → promote → report |
+| 20 | Operator onboarding runbook | ✅ done 2026-05-30 — `docs/operators/onboarding_runbook.md` expanded: all 9 connectors, before-meeting (no-auth) + in-meeting split, P2-gated permission callout, full troubleshooting table |
+| 21 | Connector cross-reference doc | ✅ done 2026-05-30 — `docs/CONNECTOR_CROSSREF.md`: client technology → connector → MS Graph scopes → data collected → findings matrix; MS 365 license tier impact table; no-auth connector section; data gaps disclosure table |
+| 22 | PDF data collection disclosure appendix | ✅ done 2026-05-30 — New section in `export_pdf_bytes()`: per-connector data accessed table, retention/redaction/transmission statement, operator authorization note; populated from engagement scan results at export time |
+| 23 | FA connector policy file | ✅ done 2026-05-30 — `contracts/connectors/policies/fg_field_assessment.json`: all 9 FA connectors with MS Graph scopes, `retention.days=90`, `redaction_mode=strict`; replaces Slack/Google Drive placeholder |
+| 24 | First client readiness tracker | ✅ done 2026-05-30 — `CLIENT_READINESS.md` at repo root: 8-section checklist (infrastructure, monitoring, runbooks, policy, deliverables, governance, remediation tracking, dry-run script) with priority order and cross-references |
 
 ---
 

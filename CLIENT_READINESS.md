@@ -56,13 +56,13 @@ Check each item when verified or completed. Do not begin the client engagement u
 - [ ] **C5** `docs/operators/console_user_guide.md` — verify it covers all connector scan panels added in PRs 40–45 (9 panels total)
 - [ ] **C6** **Client engagement letter** — one-page document (not code) to give the client before the assessment covering: what FrostGate accesses, data retained, retention period, how to access the portal, and what happens after. See F6 (DPA) for the governance version.
 - [ ] **C7** **Post-engagement follow-up email template** — send after the engagement: portal URL, key findings summary, how to mark remediations resolved, next check-in date
-- [ ] **C8** ROADMAP.md updated — add shipped rows for: confidence degradation (P2 #15) and remediation priority scoring (P2 #14) built 2026-05-30
+- [x] **C8** ROADMAP.md updated — confidence degradation (#15), remediation scoring (#14), onboarding runbook (#20), connector crossref (#21), PDF disclosure (#22), FA policy (#23), CLIENT_READINESS.md (#24) all logged (done 2026-05-30)
 
 ---
 
 ## D. Connector Policy
 
-- [ ] **D1** _(P0)_ **FA connector policy file** — `contracts/connectors/policies/default.json` currently lists only Slack + Google Drive (placeholder). Create a real policy file covering all 9 FA connectors with their MS Graph scopes, retention window, and redaction mode. See `contracts/connectors/schema/policy.schema.json` for the required shape. Without this the policy enforcement layer either blocks connectors or is effectively bypassed.
+- [x] **D1** **FA connector policy file** — `contracts/connectors/policies/fg_field_assessment.json`: all 9 FA connectors with per-connector MS Graph scopes, `retention.days=90`, `redaction_mode=strict`, conservative rate limits. The `default.json` placeholder (Slack/Google Drive) remains for the RAG path; FA engagements should reference `fg_field_assessment` version. (done 2026-05-30)
 
 ---
 
@@ -79,7 +79,7 @@ Check each item when verified or completed. Do not begin the client engagement u
 - [x] **E7** Portal — plain-language finding explanations + remediation steps (PRs 22, 33)
 - [x] **E8** Portal — NIST coverage matrix with gap view (PR 28)
 - [x] **E9** Evidence freshness — confidence scores degrade as evidence ages; surfaced in portal and report (built 2026-05-30)
-- [ ] **E10** **"Data collected" appendix in PDF** — one paragraph in the report appendix listing: MS Graph scopes used, data categories collected, retention period. Clients in regulated industries will ask. See docs/CONNECTOR_CROSSREF.md for the scope list.
+- [x] **E10** **"Data collected" appendix in PDF** — `services/governance/report/serialization.py`: per-connector data accessed table, retention/redaction/transmission statement, operator authorization note; populated from engagement scan results at export time (done 2026-05-30)
 - [ ] **E11** **Secure credential delivery plan** — decide now how you hand the client `app.frostgate.ai` + the portal password. Options: 1Password share link, Bitwarden Send, verbal during meeting and written in follow-up. Do not send password and URL in the same plaintext message.
 
 ---
@@ -90,7 +90,7 @@ Check each item when verified or completed. Do not begin the client engagement u
 - [x] **F2** Immutable audit event trail — append-only `FaEngagementAuditEvent` on all write routes and status transitions
 - [x] **F3** Evidence hash chain — SHA-256 of every scan result's raw payload; tamper-evident
 - [x] **F4** Connector policy enforcement — `enforce_connector_allowed()` blocks unlisted connectors at 403
-- [ ] **F5** _(P0)_ **Real connector policy file** — same gap as D1; governance angle is that without it the policy layer doesn't reflect what FrostGate actually collects
+- [x] **F5** **Real connector policy file** — same as D1; done 2026-05-30
 - [ ] **F6** **Data Processing Agreement (DPA) template** — one-page document the client signs or verbally acknowledges before the scan. Not a hard blocker for first client if handled verbally + email, but required before scaling to multiple clients or regulated sectors
 - [ ] **F7** **Retention enforcement** — `retention.days` is defined in the policy schema but no scheduled job or API endpoint purges engagement data after the window. Post-first-client work.
 
