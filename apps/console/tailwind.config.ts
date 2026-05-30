@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -10,22 +11,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: '#05070A',
-        foreground: '#E9EEF5',
+        background: 'var(--background)',
+        foreground: 'var(--foreground)',
         primary: {
-          DEFAULT: '#FF5A1F',
-          hover: '#CC4919',
-          foreground: '#FFFFFF',
+          DEFAULT: 'var(--primary)',
+          hover: 'var(--primary-hover)',
+          foreground: 'var(--primary-foreground)',
         },
-        border: '#0B3A4A',
+        border: 'var(--border)',
         muted: {
-          DEFAULT: '#94A3B8',
-          foreground: '#CBD5E1',
+          DEFAULT: 'var(--muted)',
+          foreground: 'var(--muted-foreground)',
         },
         surface: {
-          DEFAULT: '#0D1117',
-          2: '#161B22',
-          3: '#1C2333',
+          DEFAULT: 'var(--surface)',
+          2: 'var(--surface-2)',
+          3: 'var(--surface-3)',
         },
         success: '#22C55E',
         warning: '#F59E0B',
@@ -39,24 +40,11 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: [
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
-          'Arial',
-          'sans-serif',
-        ],
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+        sans: ['-apple-system','BlinkMacSystemFont','Segoe UI','Roboto','Helvetica Neue','Arial','sans-serif'],
+        mono: ['ui-monospace','SFMono-Regular','Menlo','Monaco','Consolas','monospace'],
       },
       borderRadius: {
-        DEFAULT: '8px',
-        sm: '4px',
-        md: '8px',
-        lg: '12px',
-        xl: '16px',
-        '2xl': '24px',
+        DEFAULT: '8px', sm: '4px', md: '8px', lg: '12px', xl: '16px', '2xl': '24px',
       },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-in-out',
@@ -64,14 +52,8 @@ const config: Config = {
         pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
       keyframes: {
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-        slideUp: {
-          '0%': { transform: 'translateY(8px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
+        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+        slideUp: { '0%': { transform: 'translateY(8px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
       },
     },
   },

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { FrostGateShield } from '@/components/governance/FrostGateShield';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface NavItem {
   label: string;
@@ -157,6 +158,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       </nav>
 
       <div className="border-t border-border px-4 py-3">
+        <ThemeToggle />
         <button
           type="button"
           onClick={() => { window.location.href = '/api/auth/logout'; }}
