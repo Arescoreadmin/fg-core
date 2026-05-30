@@ -9,13 +9,23 @@ export default auth(function middleware(req: NextRequest & { auth: unknown }) {
   const isAuthenticated = !!(req as { auth?: unknown }).auth;
   const { pathname } = req.nextUrl;
 
-  // always allow auth routes and the login page itself
-  if (pathname.startsWith('/api/auth') || pathname === '/login') return NextResponse.next();
+  // Public paths — never require auth
+  const isPublic =
+    pathname === '/' ||
+    pathname === '/login' ||
+    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/products');
 
-  // redirect unauthenticated users to login
+  if (isPublic) return NextResponse.next();
+
+  // redirect unauthenticated users to login, defaulting back to /dashboard
   if (!isAuthenticated) {
     const loginUrl = new URL('/login', req.url);
-    loginUrl.searchParams.set('callbackUrl', req.url);
+    // Only carry the callbackUrl forward for real app routes, not the landing page
+    if (pathname !== '/') {
+      loginUrl.searchParams.set('callbackUrl', pathname);
+    }
     return NextResponse.redirect(loginUrl);
   }
 
