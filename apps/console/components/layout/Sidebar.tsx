@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { federatedSignOut } from '@/app/actions/auth';
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -160,7 +159,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       <div className="border-t border-border px-4 py-3">
         <button
           type="button"
-          onClick={() => federatedSignOut()}
+          onClick={() => { window.location.href = '/api/auth/logout'; }}
           className="mb-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-muted hover:bg-surface-2 hover:text-foreground transition-colors"
         >
           <LogOut className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
