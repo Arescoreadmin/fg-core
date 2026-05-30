@@ -3117,9 +3117,10 @@ def initiate_entra_governance_scan(
 
     return MsgraphScanInitiateResponse(
         run_id=run_id,
-        status="pending_auth",
         user_code=flow["user_code"],
         verification_uri=flow["verification_uri"],
+        expires_in=flow.get("expires_in", 900),
+        message=flow.get("message", ""),
     )
 
 
@@ -3261,9 +3262,10 @@ def initiate_sharepoint_scan(
 
     return MsgraphScanInitiateResponse(
         run_id=run_id,
-        status="pending_auth",
         user_code=flow["user_code"],
         verification_uri=flow["verification_uri"],
+        expires_in=flow.get("expires_in", 900),
+        message=flow.get("message", ""),
     )
 
 
@@ -3405,9 +3407,10 @@ def initiate_oauth_risk_scan(
 
     return MsgraphScanInitiateResponse(
         run_id=run_id,
-        status="pending_auth",
         user_code=flow["user_code"],
         verification_uri=flow["verification_uri"],
+        expires_in=flow.get("expires_in", 900),
+        message=flow.get("message", ""),
     )
 
 

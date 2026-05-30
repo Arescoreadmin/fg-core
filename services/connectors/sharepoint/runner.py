@@ -21,13 +21,16 @@ _MAX_PERMISSION_CHECKS_PER_DRIVE = 15
 _ANONYMOUS_CRITICAL_THRESHOLD = 10
 
 
-def _get(access_token: str, path: str, params: dict[str, str] | None = None) -> list[dict[str, Any]]:
+def _get(
+    access_token: str, path: str, params: dict[str, str] | None = None
+) -> list[dict[str, Any]]:
     import httpx
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    url: str | None = f"{_GRAPH_BASE}{path}"
+    base: str = f"{_GRAPH_BASE}{path}"
     if params:
-        url += "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        base = base + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+    url: str | None = base
 
     results: list[dict[str, Any]] = []
     pages = 0
@@ -74,7 +77,9 @@ def _get_tenant_domain(access_token: str) -> str:
 def _is_external(email: str, tenant_domain: str) -> bool:
     if not email or not tenant_domain:
         return False
-    return not email.lower().endswith(f"@{tenant_domain}") and not email.lower().endswith(f".{tenant_domain}")
+    return not email.lower().endswith(
+        f"@{tenant_domain}"
+    ) and not email.lower().endswith(f".{tenant_domain}")
 
 
 def _check_permissions(
@@ -86,10 +91,19 @@ def _check_permissions(
     tenant_domain: str,
 ) -> dict[str, Any]:
     try:
-        perms = _get(access_token, f"/drives/{drive_id}/items/{item_id}/permissions",
-                     {"$select": "id,roles,link,grantedTo,grantedToV2,expirationDateTime"})
+        perms = _get(
+            access_token,
+            f"/drives/{drive_id}/items/{item_id}/permissions",
+            {"$select": "id,roles,link,grantedTo,grantedToV2,expirationDateTime"},
+        )
     except Exception:
-        return {"item_id": item_id, "item_name": item_name, "anonymous": False, "external_users": [], "org_wide": False}
+        return {
+            "item_id": item_id,
+            "item_name": item_name,
+            "anonymous": False,
+            "external_users": [],
+            "org_wide": False,
+        }
 
     anonymous = False
     org_wide = False
@@ -118,7 +132,9 @@ def _check_permissions(
             external_users.append(email)
 
         # Check grantedToV2 identities array
-        for identity in (perm.get("grantedToIdentitiesV2") or perm.get("grantedToIdentities") or []):
+        for identity in (
+            perm.get("grantedToIdentitiesV2") or perm.get("grantedToIdentities") or []
+        ):
             u = identity.get("user") or {}
             em = u.get("email") or u.get("userPrincipalName") or ""
             if em and _is_external(em, tenant_domain) and em not in external_users:
@@ -146,8 +162,10 @@ def _scan_drive(
         items = _get(
             access_token,
             f"/drives/{drive_id}/root/children",
-            {"$select": "id,name,webUrl,shared,file,folder,size,createdBy,lastModifiedDateTime",
-             "$top": str(_MAX_ITEMS_PER_DRIVE)},
+            {
+                "$select": "id,name,webUrl,shared,file,folder,size,createdBy,lastModifiedDateTime",
+                "$top": str(_MAX_ITEMS_PER_DRIVE),
+            },
         )
     except Exception as exc:
         log.warning("sharepoint: failed to list drive %s: %s", drive_id, exc)
@@ -196,20 +214,30 @@ def _build_findings(
     no_expiry = [i for i in all_shared if i.get("no_expiry_links")]
 
     if anonymous_items:
-        severity = "critical" if len(anonymous_items) >= _ANONYMOUS_CRITICAL_THRESHOLD else "high"
+        severity = (
+            "critical"
+            if len(anonymous_items) >= _ANONYMOUS_CRITICAL_THRESHOLD
+            else "high"
+        )
         names = ", ".join(i["item_name"] for i in anonymous_items[:5])
-        suffix = f" (and {len(anonymous_items) - 5} more)" if len(anonymous_items) > 5 else ""
-        findings.append({
-            "type": "anonymous_sharing_links",
-            "severity": severity,
-            "title": f"Anonymous 'Anyone with the Link' Sharing Active ({len(anonymous_items)} item(s))",
-            "description": (
-                f"{len(anonymous_items)} file(s)/folder(s) are shared via 'Anyone with the link' — "
-                f"no authentication required to access these items: {names}{suffix}. "
-                f"If any of these contain AI training data, proprietary datasets, or PII, "
-                f"this represents a data exfiltration risk with no audit trail."
-            ),
-        })
+        suffix = (
+            f" (and {len(anonymous_items) - 5} more)"
+            if len(anonymous_items) > 5
+            else ""
+        )
+        findings.append(
+            {
+                "type": "anonymous_sharing_links",
+                "severity": severity,
+                "title": f"Anonymous 'Anyone with the Link' Sharing Active ({len(anonymous_items)} item(s))",
+                "description": (
+                    f"{len(anonymous_items)} file(s)/folder(s) are shared via 'Anyone with the link' — "
+                    f"no authentication required to access these items: {names}{suffix}. "
+                    f"If any of these contain AI training data, proprietary datasets, or PII, "
+                    f"this represents a data exfiltration risk with no audit trail."
+                ),
+            }
+        )
 
     if external_items:
         unique_domains: set[str] = set()
@@ -219,52 +247,60 @@ def _build_findings(
                 if len(parts) == 2:
                     unique_domains.add(parts[1].lower())
         domain_str = ", ".join(sorted(unique_domains)[:5])
-        findings.append({
-            "type": "external_user_sharing",
-            "severity": "high",
-            "title": f"Files Shared with External Users ({len(external_items)} item(s), {len(unique_domains)} domain(s))",
-            "description": (
-                f"{len(external_items)} item(s) are shared with users outside the tenant domain '{tenant_domain}'. "
-                f"External domains receiving access: {domain_str}. "
-                f"Verify each share is intentional and time-bounded with appropriate expiry."
-            ),
-        })
+        findings.append(
+            {
+                "type": "external_user_sharing",
+                "severity": "high",
+                "title": f"Files Shared with External Users ({len(external_items)} item(s), {len(unique_domains)} domain(s))",
+                "description": (
+                    f"{len(external_items)} item(s) are shared with users outside the tenant domain '{tenant_domain}'. "
+                    f"External domains receiving access: {domain_str}. "
+                    f"Verify each share is intentional and time-bounded with appropriate expiry."
+                ),
+            }
+        )
 
     if no_expiry:
-        findings.append({
-            "type": "sharing_links_no_expiry",
-            "severity": "medium",
-            "title": f"Sharing Links Without Expiration Date ({len(no_expiry)} item(s))",
-            "description": (
-                f"{len(no_expiry)} anonymous or external sharing link(s) have no expiration date set. "
-                f"Links that never expire remain active indefinitely even after the business need is gone. "
-                f"Set a maximum link lifetime policy in SharePoint admin center."
-            ),
-        })
+        findings.append(
+            {
+                "type": "sharing_links_no_expiry",
+                "severity": "medium",
+                "title": f"Sharing Links Without Expiration Date ({len(no_expiry)} item(s))",
+                "description": (
+                    f"{len(no_expiry)} anonymous or external sharing link(s) have no expiration date set. "
+                    f"Links that never expire remain active indefinitely even after the business need is gone. "
+                    f"Set a maximum link lifetime policy in SharePoint admin center."
+                ),
+            }
+        )
 
     if org_wide_items:
-        findings.append({
-            "type": "org_wide_sharing",
-            "severity": "low",
-            "title": f"Organization-Wide Sharing Links ({len(org_wide_items)} item(s))",
-            "description": (
-                f"{len(org_wide_items)} item(s) use 'People in your organization' sharing links, "
-                f"making them accessible to all authenticated internal users. "
-                f"Review whether broad internal sharing is appropriate for the content."
-            ),
-        })
+        findings.append(
+            {
+                "type": "org_wide_sharing",
+                "severity": "low",
+                "title": f"Organization-Wide Sharing Links ({len(org_wide_items)} item(s))",
+                "description": (
+                    f"{len(org_wide_items)} item(s) use 'People in your organization' sharing links, "
+                    f"making them accessible to all authenticated internal users. "
+                    f"Review whether broad internal sharing is appropriate for the content."
+                ),
+            }
+        )
 
     if not anonymous_items and not external_items and all_shared:
-        findings.append({
-            "type": "sharing_baseline_clean",
-            "severity": "info",
-            "title": "No Anonymous or External Sharing Detected in Sampled Files",
-            "description": (
-                f"Scanned {len(all_shared)} shared item(s) across {len(sites)} site(s). "
-                f"No anonymous links or external user access detected in the sampled scope. "
-                f"Note: scan covers root-level items only; deeply nested files were not inspected."
-            ),
-        })
+        findings.append(
+            {
+                "type": "sharing_baseline_clean",
+                "severity": "info",
+                "title": "No Anonymous or External Sharing Detected in Sampled Files",
+                "description": (
+                    f"Scanned {len(all_shared)} shared item(s) across {len(sites)} site(s). "
+                    f"No anonymous links or external user access detected in the sampled scope. "
+                    f"Note: scan covers root-level items only; deeply nested files were not inspected."
+                ),
+            }
+        )
 
     return findings
 
@@ -289,7 +325,11 @@ def run_sharepoint_scan(
         sites_raw = _get(
             access_token,
             "/sites",
-            {"$search": "*", "$select": "id,displayName,webUrl", "$top": str(_MAX_SITES)},
+            {
+                "$search": "*",
+                "$select": "id,displayName,webUrl",
+                "$top": str(_MAX_SITES),
+            },
         )[:_MAX_SITES]
     except Exception as exc:
         log.warning("sharepoint: failed to enumerate sites: %s", exc)
@@ -320,17 +360,21 @@ def run_sharepoint_scan(
         for drive in drives:
             drive_id = drive.get("id", "")
             drive_name = drive.get("name", drive_id)
-            result = _scan_drive(access_token, drive_id, drive_name, site_name, tenant_domain)
+            result = _scan_drive(
+                access_token, drive_id, drive_name, site_name, tenant_domain
+            )
             all_shared_items.extend(result.get("shared_items", []))
             drive_results.append(result)
 
-        sites_out.append({
-            "id": site_id,
-            "name": site_name,
-            "url": site_url,
-            "drives_scanned": len(drive_results),
-            "drives": drive_results,
-        })
+        sites_out.append(
+            {
+                "id": site_id,
+                "name": site_name,
+                "url": site_url,
+                "drives_scanned": len(drive_results),
+                "drives": drive_results,
+            }
+        )
 
     findings = _build_findings(sites_out, all_shared_items, tenant_domain)
 

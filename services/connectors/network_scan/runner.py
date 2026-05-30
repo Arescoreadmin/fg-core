@@ -13,12 +13,12 @@ from typing import Any
 
 # Ports to probe: common services + AI model server ports
 _PROBE_PORTS: list[int] = [
-    21,    # FTP
-    22,    # SSH
-    23,    # Telnet
-    25,    # SMTP
-    80,    # HTTP
-    443,   # HTTPS
+    21,  # FTP
+    22,  # SSH
+    23,  # Telnet
+    25,  # SMTP
+    80,  # HTTP
+    443,  # HTTPS
     3306,  # MySQL
     3389,  # RDP
     5432,  # PostgreSQL
@@ -29,7 +29,7 @@ _PROBE_PORTS: list[int] = [
     8443,  # HTTPS alt
     8888,  # Jupyter
     9200,  # Elasticsearch
-    11434, # Ollama
+    11434,  # Ollama
     7860,  # Gradio
     5000,  # Flask / MLflow
     6006,  # TensorBoard
@@ -59,13 +59,19 @@ def _check_tls(host: str) -> dict[str, Any]:
         with socket.create_connection((host, 443), timeout=_TLS_TIMEOUT) as raw:
             with ctx.wrap_socket(raw, server_hostname=host) as ssock:
                 cert = ssock.getpeercert()
-                expire_str = cert.get("notAfter", "")
-                if expire_str:
-                    import time
-                    expire_ts = ssl.cert_time_to_seconds(expire_str)
-                    result["expired"] = expire_ts < time.time()
-                    result["days_until_expiry"] = max(0, int((expire_ts - time.time()) / 86400))
-                result["valid"] = True
+                if not isinstance(cert, dict):
+                    result["valid"] = True
+                else:
+                    expire_str = cert.get("notAfter", "")
+                    if isinstance(expire_str, str) and expire_str:
+                        import time
+
+                        expire_ts = ssl.cert_time_to_seconds(expire_str)
+                        result["expired"] = expire_ts < time.time()
+                        result["days_until_expiry"] = max(
+                            0, int((expire_ts - time.time()) / 86400)
+                        )
+                    result["valid"] = True
     except ssl.SSLCertVerificationError as exc:
         result["error"] = str(exc)[:120]
     except ssl.SSLError as exc:
@@ -135,7 +141,9 @@ def run_network_scan(
         try:
             host_results.append(_scan_host(host))
         except Exception:
-            host_results.append({"host": host, "open_ports": [], "tls": {}, "error": "scan_failed"})
+            host_results.append(
+                {"host": host, "open_ports": [], "tls": {}, "error": "scan_failed"}
+            )
 
     findings: list[dict[str, Any]] = []
 
@@ -257,7 +265,9 @@ def run_network_scan(
         "hosts": host_results,
         "summary": {
             "total_hosts": len(host_results),
-            "hosts_with_open_ports": sum(1 for h in host_results if h.get("open_ports")),
+            "hosts_with_open_ports": sum(
+                1 for h in host_results if h.get("open_ports")
+            ),
             "total_open_ports": sum(len(h.get("open_ports", [])) for h in host_results),
         },
         "findings": findings,

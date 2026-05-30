@@ -12,13 +12,16 @@ _TIMEOUT = 30
 _STALE_DAYS = 90
 
 
-def _get_all(access_token: str, path: str, params: dict[str, str] | None = None) -> list[dict[str, Any]]:
+def _get_all(
+    access_token: str, path: str, params: dict[str, str] | None = None
+) -> list[dict[str, Any]]:
     import httpx
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    url: str | None = f"{_GRAPH_BASE}{path}"
+    base: str = f"{_GRAPH_BASE}{path}"
     if params:
-        url += "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        base = base + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+    url: str | None = base
 
     results: list[dict[str, Any]] = []
     pages = 0
@@ -69,7 +72,9 @@ def run_endpoint_inventory(
         intune_devices = _get_all(
             access_token,
             "/deviceManagement/managedDevices",
-            {"$select": "id,deviceName,operatingSystem,complianceState,lastSyncDateTime,isEncrypted"},
+            {
+                "$select": "id,deviceName,operatingSystem,complianceState,lastSyncDateTime,isEncrypted"
+            },
         )
     except Exception:
         intune_devices = []

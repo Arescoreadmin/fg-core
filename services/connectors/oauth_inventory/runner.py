@@ -11,13 +11,16 @@ _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 _TIMEOUT = 30
 
 
-def _get_all(access_token: str, path: str, params: dict[str, str] | None = None) -> list[dict[str, Any]]:
+def _get_all(
+    access_token: str, path: str, params: dict[str, str] | None = None
+) -> list[dict[str, Any]]:
     import httpx
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    url: str | None = f"{_GRAPH_BASE}{path}"
+    base: str = f"{_GRAPH_BASE}{path}"
     if params:
-        url += "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        base = base + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+    url: str | None = base
 
     results: list[dict[str, Any]] = []
     pages = 0
@@ -48,7 +51,9 @@ def run_oauth_inventory(
         app_regs = _get_all(
             access_token,
             "/applications",
-            {"$select": "id,appId,displayName,createdDateTime,signInAudience,requiredResourceAccess"},
+            {
+                "$select": "id,appId,displayName,createdDateTime,signInAudience,requiredResourceAccess"
+            },
         )
     except Exception:
         app_regs = []
