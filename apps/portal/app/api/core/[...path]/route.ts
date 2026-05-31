@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { COOKIE_NAME, getSessionUser } from '@/lib/session';
+import { getRedisClient } from '@/lib/redis';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.CORE_API_KEY;
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Module-level in-memory rate limiter.
-// For multi-node deployments replace with a Redis-backed store.
 const _rlBuckets = new Map<string, { count: number; resetAt: number }>();
 const RL_WINDOW_MS = Math.max(1000, parseInt(process.env.PORTAL_RL_WINDOW_MS || '60000', 10) || 60000);
 const RL_MAX_REQUESTS = Math.max(1, parseInt(process.env.PORTAL_RL_MAX_REQUESTS || '60', 10) || 60);
 
-function checkRateLimit(key: string): boolean {
+async function checkRateLimit(key: string): Promise<boolean> {
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const windowSec = Math.ceil(RL_WINDOW_MS / 1000);
+      const count = await redis.incr(key);
+      if (count === 1) await redis.expire(key, windowSec);
+      return count <= RL_MAX_REQUESTS;
+    } catch {
+      // Redis unavailable — fall through to in-memory
+    }
+  }
   const now = Date.now();
   const entry = _rlBuckets.get(key);
   if (!entry || now >= entry.resetAt) {
@@ -69,11 +79,15 @@ function isPrivateHost(hostname: string): boolean {
   if (hostname === '::1') return true;
   if (/^10\./.test(hostname)) return true;
   if (/^192\.168\./.test(hostname)) return true;
+  if (/^169\.254\./.test(hostname)) return true;
+  if (/^100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\./.test(hostname)) return true;
   const m = hostname.match(/^172\.(\d{1,3})\./);
   if (m) {
     const second = Number(m[1]);
     if (second >= 16 && second <= 31) return true;
   }
+  if (/^fe[89ab][0-9a-f]:/i.test(hostname)) return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(hostname)) return true;
   return false;
 }
 
@@ -172,7 +186,7 @@ async function handle(
     request.headers.get('x-real-ip') ||
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     'unknown';
-  if (!checkRateLimit(`portal:${clientIp}`)) {
+  if (!(await checkRateLimit(`portal:${clientIp}`))) {
     return jsonError('Too many requests', 429, requestId);
   }
 

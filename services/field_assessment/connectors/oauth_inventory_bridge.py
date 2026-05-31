@@ -62,7 +62,12 @@ def import_oauth_inventory_scan(
     for raw in raw_findings:
         finding_type = str(raw.get("finding_type") or "oauth.finding")
         control_id = str(raw.get("control_id") or "NIST-AI-RMF-GOVERN-1.2")
-        fm = [{"framework": "NIST-AI-RMF", "control": control_id.replace("NIST-AI-RMF-", "")}]
+        fm = [
+            {
+                "framework": "NIST-AI-RMF",
+                "control": control_id.replace("NIST-AI-RMF-", ""),
+            }
+        ]
         nist = _NIST_MAP.get(control_id, fm)
         create_finding(
             db,

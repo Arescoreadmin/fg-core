@@ -12,9 +12,10 @@ const STATUS_LABELS: Record<MsgraphRunStatus, string> = {
   importing: 'Importing findings…',
   complete: 'Scan complete',
   failed: 'Scan failed',
+  timeout: 'Scan timed out',
 };
 
-const TERMINAL_STATUSES: MsgraphRunStatus[] = ['complete', 'failed'];
+const TERMINAL_STATUSES: MsgraphRunStatus[] = ['complete', 'failed', 'timeout'];
 const POLL_INTERVAL_MS = 3000;
 
 interface Props {

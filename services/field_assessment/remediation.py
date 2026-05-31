@@ -107,10 +107,10 @@ _EFFORT_BY_FAMILY: dict[str, str] = {
 
 # Per-finding-type effort overrides (checked before family lookup).
 _EFFORT_BY_FINDING_TYPE: dict[str, str] = {
-    "endpoint.stale_devices": "low",           # bulk cleanup script
-    "endpoint.unmanaged_devices": "high",       # MDM enrollment campaign
+    "endpoint.stale_devices": "low",  # bulk cleanup script
+    "endpoint.unmanaged_devices": "high",  # MDM enrollment campaign
     "network.invalid_tls_certificates": "low",  # cert renewal, often automated
-    "oauth.unverified_publishers": "medium",    # app review process, not full removal
+    "oauth.unverified_publishers": "medium",  # app review process, not full removal
 }
 
 PHASE_IMMEDIATE = "immediate"
@@ -146,12 +146,14 @@ def _normalize_family(finding: Any) -> str:
     """
     raw = (getattr(finding, "finding_type", "") or "").lower()
     if raw.startswith("msgraph."):
-        raw = raw[len("msgraph."):]
+        raw = raw[len("msgraph.") :]
     return raw.split(".")[0].split("-")[0]
 
 
 def _get_exploitability_bonus(finding: Any) -> int:
-    return _EXPLOITABILITY_BY_FAMILY.get(_normalize_family(finding), _EXPLOITABILITY_DEFAULT)
+    return _EXPLOITABILITY_BY_FAMILY.get(
+        _normalize_family(finding), _EXPLOITABILITY_DEFAULT
+    )
 
 
 def _get_confidence_factor(finding: Any) -> int:
@@ -183,7 +185,7 @@ def _type_prefix(finding: Any) -> str:
     3. Fall back to '' (routes to generic template).
     """
     raw = getattr(finding, "finding_type", "") or ""
-    code = raw[len("msgraph."):] if raw.startswith("msgraph.") else raw
+    code = raw[len("msgraph.") :] if raw.startswith("msgraph.") else raw
 
     first = code.split("-")[0] if "-" in code else code
     if first in _KNOWN_FAMILIES:

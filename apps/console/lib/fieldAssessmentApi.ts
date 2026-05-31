@@ -320,7 +320,8 @@ export type MsgraphRunStatus =
   | 'scanning'
   | 'importing'
   | 'complete'
-  | 'failed';
+  | 'failed'
+  | 'timeout';
 
 export interface MsgraphRunStatusResult {
   run_id: string;

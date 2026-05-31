@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^3.9.1",
     "@tanstack/react-query": "^5.62.16",
     "clsx": "^2.1.1",
+    "ioredis": "^5.11.0",
     "lucide-react": "^0.469.0",
     "next": "14.2.5",
     "react": "^18.3.1",

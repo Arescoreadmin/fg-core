@@ -52,8 +52,8 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | PR 22 | Finding Explainer | ✅ merged (#390) | Plain-language finding explanations, LRU cache, provenance manifest |
 | PR 27 | Executive Summary | ✅ merged | AI-generated narrative section in report; risk posture + key concerns; console + portal |
 | PR 28 | NIST Control Coverage Matrix | ✅ merged | Per-control evidence fusion (questionnaire + scan); coverage matrix in portal; `governance:read`-gated list endpoint |
-| PR 29 | HIPAA + SOC 2 Playbooks | 🔄 in progress | Dedicated HIPAA and SOC 2 governance execution playbooks; Privacy/Security Officer gates (HIPAA); Executive Sponsor + 8 document class gates (SOC 2); annual evidence freshness on all policy docs |
-| PR 30 | Portal Engagement Selector | 🔄 in progress | localStorage-backed engagement persistence (`fg_portal_eid`); engagement selector hub on home page; auto-select single engagement; all 4 sub-pages fall back to stored ID when `?e=` param absent |
+| PR 29 | HIPAA + SOC 2 Playbooks | ✅ merged | Dedicated HIPAA and SOC 2 governance execution playbooks; Privacy/Security Officer gates (HIPAA); Executive Sponsor + 8 document class gates (SOC 2); annual evidence freshness on all policy docs |
+| PR 30 | Portal Engagement Selector | ✅ merged | localStorage-backed engagement persistence (`fg_portal_eid`); engagement selector hub on home page; auto-select single engagement; all 4 sub-pages fall back to stored ID when `?e=` param absent |
 | PR 31 | Remediation Roadmap v1 | ✅ merged | Priority scoring (severity × scan evidence × NIST coverage); 3-phase execution roadmap (0–30/31–60/61–90 days); per-phase compliance delta preview; quick-wins matrix (impact vs effort); step-by-step runbooks |
 | PR 32 | Remediation Closed Loop | ✅ merged | Client marks finding resolved with evidence notes; `FaFieldObservation` + `FaEvidenceLink` created; NIST questionnaire responses bumped `not_implemented`→`partial`; live roadmap refresh in portal |
 | PR 33 | Risk Posture Dashboard | ✅ merged | Home page risk intelligence: NIST coverage bar (current vs projected), finding severity strip, NIST function heatmap (GOVERN/MAP/MEASURE/MANAGE), immediate actions callout; `reportlab` dependency added (unblocks PDF export); remediation steps rendered in findings page explainer |
@@ -107,13 +107,20 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | 15 | Evidence freshness degradation | ✅ done 2026-05-30 — `services/field_assessment/confidence.py`; decay table: 0–30d: ±0, 31–60d: −5, 61–90d: −15, 91+d: −30, floor 30; applied at read time in `_finding_to_response()`, report domain aggregation, and readiness low-confidence gate; 22 tests in `tests/test_confidence_degradation.py` |
 | 16 | Cross-finding correlation | Surface related findings in explanation panel |
 | 17 | Executive PDF export | PR 38 ✅ merged |
-| 18 | Portal rate limiter → Redis | Current in-memory `_rlBuckets` bypassed in multi-node |
+| 18 | Portal rate limiter → Redis | ✅ done 2026-05-31 — `apps/portal/lib/redis.ts`: lazy `ioredis` client via `PORTAL_REDIS_URL`; `checkRateLimit()` uses Redis INCR+EXPIRE (atomic fixed-window) with in-memory `_rlBuckets` fallback when Redis is unavailable |
 | 19 | Dedicated CMMC/SOC2/ISO27001 playbooks | Currently all fall back to comprehensive |
 | 20 | Operator onboarding runbook | ✅ done 2026-05-30 — `docs/operators/onboarding_runbook.md` expanded: all 9 connectors, before-meeting (no-auth) + in-meeting split, P2-gated permission callout, full troubleshooting table |
 | 21 | Connector cross-reference doc | ✅ done 2026-05-30 — `docs/CONNECTOR_CROSSREF.md`: client technology → connector → MS Graph scopes → data collected → findings matrix; MS 365 license tier impact table; no-auth connector section; data gaps disclosure table |
 | 22 | PDF data collection disclosure appendix | ✅ done 2026-05-30 — New section in `export_pdf_bytes()`: per-connector data accessed table, retention/redaction/transmission statement, operator authorization note; populated from engagement scan results at export time |
 | 23 | FA connector policy file | ✅ done 2026-05-30 — `contracts/connectors/policies/fg_field_assessment.json`: all 9 FA connectors with MS Graph scopes, `retention.days=90`, `redaction_mode=strict`; replaces Slack/Google Drive placeholder |
 | 24 | First client readiness tracker | ✅ done 2026-05-30 — `CLIENT_READINESS.md` at repo root: 8-section checklist (infrastructure, monitoring, runbooks, policy, deliverables, governance, remediation tracking, dry-run script) with priority order and cross-references |
+| 25 | Production deployment — Railway prod mode | ✅ done 2026-05-31 — `FG_ENV=prod` enforced; satisfied all 20+ startup validators (compliance module flags, ring state dir, mission envelope, CORS, encryption key, JWT secret, request limits); `state/.gitkeep` + `models/.gitkeep` force-added; `mission_envelope.json` committed at repo root |
+| 26 | Health endpoint HEAD fix | ✅ done 2026-05-31 — `api/main.py`: removed duplicate `@app.get("/health")` at line 1097 that was shadowing the `api_route(methods=["GET","HEAD"])` registration; UptimeRobot HEAD checks now return 200 |
+| 27 | Stripe webhook endpoint | ✅ done 2026-05-31 — Created webhook endpoint in Stripe Dashboard (`/stripe/webhook`); `STRIPE_WEBHOOK_SECRET` (`whsec_`) set in Railway; CLIENT_READINESS A4 confirmed |
+| 28 | Azure AD app registration | ✅ done 2026-05-31 — Registered Azure AD app with 15 MS Graph delegated permissions + admin consent; public client flow enabled for device-code auth; `FG_MSAL_CLIENT_ID` set in Railway; CLIENT_READINESS A4 confirmed |
+| 29 | Console user guide — all 9 scan panels | ✅ done 2026-05-31 — `docs/operators/console_user_guide.md`: all 9 scan panels documented (DNS/Email, Web Headers, Network, MS Graph Core, OAuth Inventory, OAuth Risk, Endpoint Inventory, Entra Governance, SharePoint + OneDrive); auth flow, pre-meeting vs in-meeting split, P1/P2 license caveats |
+| 30 | Data Processing Agreement template | ✅ done 2026-05-31 — `contracts/dpa_template.md`: sub-processors table (Railway/Vercel/Anthropic/Auth0 with SOC 2 certs), 90-day retention, 72-hour breach notification, audit rights, dual signature blocks; F6 in CLIENT_READINESS |
+| 31 | Secure credential delivery plan | ✅ done 2026-05-31 — `docs/operators/credential_delivery.md`: three delivery options (1Password Share, Bitwarden Send, verbal); reset instructions; split-channel rule; E11 in CLIENT_READINESS |
 
 ---
 
@@ -126,4 +133,4 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-05-30 (PR 39 complete; production live — field assessment + Auth0 sign-out working)*
+*Last updated: 2026-05-31 (prod mode fully live on Railway; health HEAD fix; Stripe webhook; Azure AD app; console guide 9 panels; DPA template; credential delivery plan; portal Redis rate limiter)*

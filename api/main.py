@@ -695,7 +695,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 media_type=CONTENT_TYPE_LATEST,
             )
 
-    @app.api_route("/health", methods=["GET", "HEAD"])
+    @app.get("/health", operation_id="health_get")
     async def health(request: Request) -> dict[str, Any]:
         return {
             "status": "ok",
@@ -706,6 +706,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             "auth_enabled": bool(request.app.state.auth_enabled),
             "app_instance_id": request.app.state.app_instance_id,
         }
+
+    @app.head("/health", include_in_schema=False)
+    async def health_head() -> None:
+        return None
 
     @app.get(
         "/health/live",

@@ -1049,7 +1049,12 @@ def export_pdf_bytes(
                         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
                         ("LEFTPADDING", (0, 0), (-1, -1), 8),
                         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_colors.white, _colors.HexColor("#f9fafb")]),
+                        (
+                            "ROWBACKGROUNDS",
+                            (0, 1),
+                            (-1, -1),
+                            [_colors.white, _colors.HexColor("#f9fafb")],
+                        ),
                     ]
                 )
             )
@@ -1102,5 +1107,8 @@ def export_pdf_bytes(
         )
     )
 
-    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    try:
+        doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    except Exception as exc:
+        raise ExportUnavailableError(f"PDF rendering failed: {exc}") from exc
     return buf.getvalue()

@@ -16,16 +16,24 @@ CONNECTOR_TYPE = "dns_email"
 SCHEMA_VERSION = "1.0"
 
 _SEVERITY_NIST: dict[str, dict[str, list[dict[str, str]]]] = {
-    "missing_spf":        {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
-    "spf_permissive":     {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
-    "spf_no_all":         {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
-    "missing_dmarc":      {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
-    "dmarc_policy_none":  {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
-    "dmarc_partial_coverage": {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
-    "dmarc_no_reporting": {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
-    "no_dkim_found":      {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
-    "no_mx":              {"nist": [{"framework": "NIST-AI-RMF", "control": "MAP 1.6"}]},
-    "dnssec_not_enabled": {"nist": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}]},
+    "missing_spf": {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
+    "spf_permissive": {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
+    "spf_no_all": {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
+    "missing_dmarc": {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
+    "dmarc_policy_none": {
+        "nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]
+    },
+    "dmarc_partial_coverage": {
+        "nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]
+    },
+    "dmarc_no_reporting": {
+        "nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]
+    },
+    "no_dkim_found": {"nist": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]},
+    "no_mx": {"nist": [{"framework": "NIST-AI-RMF", "control": "MAP 1.6"}]},
+    "dnssec_not_enabled": {
+        "nist": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}]
+    },
 }
 
 _DEFAULT_NIST = [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}]

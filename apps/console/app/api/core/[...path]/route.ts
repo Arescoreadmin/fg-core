@@ -171,11 +171,15 @@ function isPrivateHost(hostname: string): boolean {
   if (hostname === '::1') return true;
   if (/^10\./.test(hostname)) return true;
   if (/^192\.168\./.test(hostname)) return true;
+  if (/^169\.254\./.test(hostname)) return true;
+  if (/^100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\./.test(hostname)) return true;
   const m = hostname.match(/^172\.(\d{1,3})\./);
   if (m) {
     const second = Number(m[1]);
     if (second >= 16 && second <= 31) return true;
   }
+  if (/^fe[89ab][0-9a-f]:/i.test(hostname)) return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(hostname)) return true;
   return false;
 }
 

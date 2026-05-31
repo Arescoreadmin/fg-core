@@ -16,19 +16,21 @@ CONNECTOR_TYPE = "web_headers"
 SCHEMA_VERSION = "1.0"
 
 _FINDING_NIST: dict[str, list[dict[str, str]]] = {
-    "missing_hsts":              [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
-    "hsts_short_maxage":         [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
-    "hsts_no_subdomains":        [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
-    "missing_csp":               [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
-    "csp_unsafe_inline":         [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
-    "csp_unsafe_eval":           [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
-    "csp_wildcard_source":       [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
-    "missing_x_frame_options":   [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
-    "missing_x_content_type":    [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
-    "missing_referrer_policy":   [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
-    "referrer_policy_unsafe":    [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
-    "missing_permissions_policy":[{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
-    "plain_http":                [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
+    "missing_hsts": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
+    "hsts_short_maxage": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
+    "hsts_no_subdomains": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
+    "missing_csp": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
+    "csp_unsafe_inline": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
+    "csp_unsafe_eval": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
+    "csp_wildcard_source": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
+    "missing_x_frame_options": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
+    "missing_x_content_type": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
+    "missing_referrer_policy": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
+    "referrer_policy_unsafe": [{"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
+    "missing_permissions_policy": [
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}
+    ],
+    "plain_http": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
 }
 
 _DEFAULT_NIST = [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}]

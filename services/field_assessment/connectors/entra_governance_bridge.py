@@ -17,29 +17,51 @@ SCHEMA_VERSION = "1.0"
 
 _FINDING_NIST: dict[str, list[dict[str, str]]] = {
     # PIM / role assignment findings → GOVERN 1.2 (roles + responsibilities)
-    "permanent_global_admin":          [{"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"},
-                                        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
-    "excessive_global_admins":         [{"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"}],
-    "permanent_privileged_role":       [{"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"},
-                                        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
-    "stale_pim_eligible_assignment":   [{"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"}],
+    "permanent_global_admin": [
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"},
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"},
+    ],
+    "excessive_global_admins": [{"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"}],
+    "permanent_privileged_role": [
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"},
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"},
+    ],
+    "stale_pim_eligible_assignment": [
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"}
+    ],
     # Access review findings
-    "no_access_reviews_configured":    [{"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"},
-                                        {"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
-    "access_reviews_missing_privileged_roles": [{"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"}],
-    "non_recurring_access_reviews":    [{"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"}],
+    "no_access_reviews_configured": [
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"},
+        {"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"},
+    ],
+    "access_reviews_missing_privileged_roles": [
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"}
+    ],
+    "non_recurring_access_reviews": [
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"}
+    ],
     # Identity protection findings
-    "unmediated_high_risk_users":      [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"},
-                                        {"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
-    "unmediated_medium_risk_users":    [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}],
+    "unmediated_high_risk_users": [
+        {"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"},
+        {"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"},
+    ],
+    "unmediated_medium_risk_users": [
+        {"framework": "NIST-AI-RMF", "control": "MANAGE 2.4"}
+    ],
     # Conditional access findings
-    "no_conditional_access_policies":  [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"},
-                                        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
-    "ca_policies_report_only":         [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
-    "legacy_auth_not_blocked":         [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"},
-                                        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
-    "no_mfa_conditional_access":       [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"},
-                                        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"}],
+    "no_conditional_access_policies": [
+        {"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"},
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"},
+    ],
+    "ca_policies_report_only": [{"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"}],
+    "legacy_auth_not_blocked": [
+        {"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"},
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"},
+    ],
+    "no_mfa_conditional_access": [
+        {"framework": "NIST-AI-RMF", "control": "MANAGE 2.2"},
+        {"framework": "NIST-AI-RMF", "control": "GOVERN 6.2"},
+    ],
 }
 
 _DEFAULT_NIST = [{"framework": "NIST-AI-RMF", "control": "GOVERN 1.2"}]
