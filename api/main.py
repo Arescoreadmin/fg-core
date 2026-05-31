@@ -1094,14 +1094,6 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     if governance_router is not None:
         app.include_router(governance_router)
 
-    @app.get("/health")
-    async def health() -> dict[str, str]:
-        return {
-            "status": "ok",
-            "service": app.state.service,
-            "version": app.state.app_version,
-        }
-
     @app.get("/health/live")
     async def health_live() -> dict[str, str]:
         return {"status": "live"}
