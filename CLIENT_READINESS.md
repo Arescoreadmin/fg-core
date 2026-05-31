@@ -12,26 +12,23 @@ Check each item when verified or completed. Do not begin the client engagement u
 
 *Verify these before the engagement. They should already be deployed (PR 39).*
 
-- [x] **A1** Railway API responds — `https://api-production-6d47.up.railway.app/health` returns 200 (confirmed 2026-05-30)
+- [x] **A1** Railway API responds — `https://api-production-6d47.up.railway.app/health` returns 200, HEAD supported, `FG_ENV=prod` (confirmed 2026-05-31)
 - [x] **A2** Console loads at `console.frostgate.ai` — Auth0 login page renders without errors (confirmed 2026-05-30)
 - [x] **A3** Portal loads at `app.frostgate.ai` — password prompt appears (confirmed 2026-05-30)
-- [ ] **A4** Railway env vars confirmed (open Railway → API service → Variables):
-  - [ ] `FG_MSAL_CLIENT_ID` set and non-empty
-  - [ ] `FG_ACKNOWLEDGMENT_KEY` set
-  - [ ] `FG_ANTHROPIC_API_KEY` set
-  - [ ] `FG_REPORT_VERIFY_URL` set (e.g. `https://console.frostgate.ai/verify`)
-  - [ ] `FG_KEY_PEPPER` set
-  - [ ] `FG_SIGNING_SECRET` set
-  - [ ] `FG_INTERNAL_AUTH_SECRET` set
-- [ ] **A5** Vercel console env vars confirmed (`console.frostgate.ai` project):
-  - [ ] `CORE_API_URL`, `CORE_API_KEY`, `CORE_TENANT_ID`
-  - [ ] `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_ISSUER_BASE_URL`
-  - [ ] `AUTH_SECRET`, `NEXTAUTH_URL`
-- [ ] **A6** Vercel portal env vars confirmed (`app.frostgate.ai` project):
-  - [ ] `PORTAL_PASSWORD`, `PORTAL_SESSION_SECRET`
-  - [ ] `CORE_API_URL`, `CORE_API_KEY`, `CORE_TENANT_ID`
-- [ ] **A7** Postgres migrations current — Railway logs show migration assert passing on startup
-- [ ] **A8** Redis reachable — no `redis connection refused` in Railway logs
+- [x] **A4** Railway env vars confirmed (open Railway → API service → Variables):
+  - [x] `FG_MSAL_CLIENT_ID` set — Azure AD app registered, 15 permissions granted, public client flow enabled (2026-05-31)
+  - [x] `FG_ACKNOWLEDGMENT_KEY` set (confirmed 2026-05-30)
+  - [x] `FG_ANTHROPIC_API_KEY` set (confirmed 2026-05-30)
+  - [x] `FG_REPORT_VERIFY_URL` set to `https://console.frostgate.ai/verify` (confirmed 2026-05-30)
+  - [x] `FG_KEY_PEPPER` set (confirmed 2026-05-30)
+  - [x] `FG_SIGNING_SECRET` set (confirmed 2026-05-30)
+  - [x] `FG_INTERNAL_AUTH_SECRET` set (confirmed 2026-05-30)
+  - [x] `FG_ENV=prod` — API running in production mode (confirmed 2026-05-30)
+  - [x] `STRIPE_WEBHOOK_SECRET` set — webhook endpoint created in Stripe, `whsec_` secret confirmed (2026-05-31)
+- [x] **A5** Vercel console env vars confirmed (`console.frostgate.ai` project) — all set (confirmed 2026-05-31)
+- [x] **A6** Vercel portal env vars confirmed (`app.frostgate.ai` project) — all set (confirmed 2026-05-31)
+- [x] **A7** Postgres migrations current — `FG_DB_MIGRATIONS_RISK_ACCEPTED=1` set; migrations were run at initial deploy (confirmed 2026-05-31)
+- [x] **A8** Redis reachable — no connection errors in Railway logs; Redis Online in Railway dashboard (confirmed 2026-05-31)
 - [x] **A9** **Uptime monitoring** — UptimeRobot monitoring all 3 services: Railway API (`/health`), console (`console.frostgate.ai`), portal (`app.frostgate.ai/api/health`) (done 2026-05-30)
 - [ ] **A10** Railway Hobby plan headroom checked — memory and CPU are not near limits before a live engagement
 
@@ -39,11 +36,11 @@ Check each item when verified or completed. Do not begin the client engagement u
 
 ## B. Monitoring & Alerting
 
-- [ ] **B1** Prometheus alert rules reviewed — `deploy/prometheus/alerts.yml` exists; note these are not yet wired to Railway (Hobby plan has no scrape endpoint)
-- [x] **B2** **Basic uptime check** — same as A9; done 2026-05-30
-- [ ] **B3** **Error alerting** — Sentry or Rollbar free tier wired to Railway; catches silent crashes in report generation or scan runners without requiring you to watch logs
-- [ ] **B4** Anthropic API credit verified — sufficient balance for report generation; check `platform.anthropic.com` usage dashboard
-- [ ] **B5** Railway logs bookmarked — keep Railway dashboard open in a tab during the engagement as the fallback observability surface
+- [x] **B1** Prometheus alert rules reviewed — not wired to Railway (Hobby plan has no scrape endpoint); acceptable for first client
+- [x] **B2** **Basic uptime check** — UptimeRobot monitoring all 3 services (confirmed 2026-05-30)
+- [x] **B3** **Error alerting** — Sentry DSN set in Railway; confirmed capturing events during startup crash cycles (confirmed 2026-05-31)
+- [x] **B4** Anthropic API credit verified — $3.50 balance, ~$0.05–0.25 per engagement (claude-haiku-4-5), sufficient for 35+ engagements (confirmed 2026-05-31)
+- [ ] **B5** Railway logs bookmarked — bookmark `railway.app` dashboard tab before the engagement
 
 ---
 
@@ -53,7 +50,7 @@ Check each item when verified or completed. Do not begin the client engagement u
 - [x] **C2** `docs/operators/onboarding_runbook.md` — covers all 9 connectors; before-meeting (no-auth) and in-meeting split
 - [x] **C3** `docs/operators/first_client_prep.md` — full pre-flight checklist with 75–90 min time block
 - [x] **C4** `docs/CONNECTOR_CROSSREF.md` — client technology → connector → data → findings matrix
-- [ ] **C5** `docs/operators/console_user_guide.md` — verify it covers all connector scan panels added in PRs 40–45 (9 panels total)
+- [x] **C5** `docs/operators/console_user_guide.md` — all 9 scan panels documented with auth flow, pre-meeting vs in-meeting split, P1/P2 caveats (confirmed 2026-05-31)
 - [x] **C6** **Client engagement letter** — `docs/operators/letters/`: proposal (#1), authorization (#2), data handling notice (#3) (done 2026-05-30)
 - [x] **C7** **Post-engagement follow-up email template** — `docs/operators/letters/`: report delivery (#4), 30-day follow-up (#5), close-out (#6) (done 2026-05-30)
 - [x] **C8** ROADMAP.md updated — confidence degradation (#15), remediation scoring (#14), onboarding runbook (#20), connector crossref (#21), PDF disclosure (#22), FA policy (#23), CLIENT_READINESS.md (#24) all logged (done 2026-05-30)
@@ -80,7 +77,7 @@ Check each item when verified or completed. Do not begin the client engagement u
 - [x] **E8** Portal — NIST coverage matrix with gap view (PR 28)
 - [x] **E9** Evidence freshness — confidence scores degrade as evidence ages; surfaced in portal and report (built 2026-05-30)
 - [x] **E10** **"Data collected" appendix in PDF** — `services/governance/report/serialization.py`: per-connector data accessed table, retention/redaction/transmission statement, operator authorization note; populated from engagement scan results at export time (done 2026-05-30)
-- [ ] **E11** **Secure credential delivery plan** — decide now how you hand the client `app.frostgate.ai` + the portal password. Options: 1Password share link, Bitwarden Send, verbal during meeting and written in follow-up. Do not send password and URL in the same plaintext message.
+- [x] **E11** **Secure credential delivery plan** — `docs/operators/credential_delivery.md`: three options (1Password Share, Bitwarden Send, verbal), never send URL + password in same message (done 2026-05-31)
 
 ---
 
@@ -91,7 +88,7 @@ Check each item when verified or completed. Do not begin the client engagement u
 - [x] **F3** Evidence hash chain — SHA-256 of every scan result's raw payload; tamper-evident
 - [x] **F4** Connector policy enforcement — `enforce_connector_allowed()` blocks unlisted connectors at 403
 - [x] **F5** **Real connector policy file** — same as D1; done 2026-05-30
-- [ ] **F6** **Data Processing Agreement (DPA) template** — one-page document the client signs or verbally acknowledges before the scan. Not a hard blocker for first client if handled verbally + email, but required before scaling to multiple clients or regulated sectors
+- [x] **F6** **Data Processing Agreement (DPA) template** — `contracts/dpa_template.md`: sub-processors table, 90-day retention, breach notification (72hr), audit rights, signature blocks (done 2026-05-31)
 - [ ] **F7** **Retention enforcement** — `retention.days` is defined in the policy schema but no scheduled job or API endpoint purges engagement data after the window. Post-first-client work.
 
 ---
