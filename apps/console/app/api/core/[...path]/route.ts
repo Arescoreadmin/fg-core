@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
-const CORE_API_KEY = process.env.CORE_API_KEY;
+const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ALLOW_TENANT_QUERY_OVERRIDE = NODE_ENV === 'development' && process.env.FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE === '1';
