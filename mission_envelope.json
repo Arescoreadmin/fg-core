@@ -1,0 +1,13 @@
+[
+  {
+    "mission_id": "fgc-mission-001",
+    "classification_level": "CUI",
+    "risk_tier": "tier-1",
+    "allowed_mitigations": ["block_ip"],
+    "budget_cap": 100,
+    "blast_radius_cap": 5,
+    "persona": "Sentinel",
+    "forensic_threshold": 0.95,
+    "model_version": "mvp"
+  }
+]

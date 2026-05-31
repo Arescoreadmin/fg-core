@@ -113,6 +113,9 @@ transferring
 
 # local runtime
 state/
+!state/.gitkeep
+models/
+!models/.gitkeep
 artifacts/
 .pytest_cache/
 __pycache__/
