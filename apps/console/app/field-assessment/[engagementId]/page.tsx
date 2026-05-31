@@ -108,6 +108,13 @@ export default function EngagementWorkspacePage() {
     }
   }, [engagementId]);
 
+  useEffect(() => {
+    if (!engagement) return;
+    const prev = document.title;
+    document.title = `${engagement.client_name} — FrostGate`;
+    return () => { document.title = prev; };
+  }, [engagement]);
+
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
     setSummaryError(null);

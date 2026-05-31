@@ -3,6 +3,26 @@ import { createSessionToken, COOKIE_NAME } from '@/lib/session';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 
+// 5 failed attempts per IP within 15 minutes triggers a lockout.
+const _loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const LOGIN_RL_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_RL_MAX = 5;
+
+function checkLoginRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = _loginAttempts.get(ip);
+  if (!entry || now >= entry.resetAt) {
+    _loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_RL_WINDOW_MS });
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= LOGIN_RL_MAX;
+}
+
+function clearLoginAttempts(ip: string) {
+  _loginAttempts.delete(ip);
+}
+
 function timingSafeEqual(a: string, b: string): boolean {
   const ea = new TextEncoder().encode(a);
   const eb = new TextEncoder().encode(b);
@@ -23,6 +43,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const clientIp =
+    req.headers.get('x-real-ip') ||
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown';
+
+  if (!checkLoginRateLimit(clientIp)) {
+    return NextResponse.json(
+      { error: 'Too many login attempts. Try again in a few minutes.' },
+      { status: 429 },
+    );
+  }
+
   let body: { password?: string };
   try {
     body = await req.json();
@@ -34,6 +66,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid password.' }, { status: 401 });
   }
 
+  clearLoginAttempts(clientIp);
   const token = await createSessionToken();
   const res = NextResponse.json({ ok: true });
   res.cookies.set(COOKIE_NAME, token, {
