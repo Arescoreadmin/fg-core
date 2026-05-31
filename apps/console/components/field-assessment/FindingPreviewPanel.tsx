@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { Button, Input } from '@fg/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { SeverityBadge } from './StatusBadge';
-import type { Finding } from '@/lib/fieldAssessmentApi';
+import { fieldAssessmentApi, type Finding } from '@/lib/fieldAssessmentApi';
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Open',
@@ -24,11 +25,56 @@ const STATUS_COLOR: Record<string, string> = {
 
 interface Props {
   findings: Finding[];
+  engagementId: string;
   loading?: boolean;
   error?: string | null;
+  onRemediationSaved?: () => void;
 }
 
-export function FindingPreviewPanel({ findings, loading, error }: Props) {
+function RemediationForm({ engagementId, finding, onSaved }: { engagementId: string; finding: Finding; onSaved?: () => void }) {
+  const [hint, setHint] = useState(finding.remediation_hint ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!hint.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await fieldAssessmentApi.patchFindingRemediation(engagementId, finding.id, hint.trim());
+      setSaved(true);
+      onSaved?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSave} className="space-y-2 border-t border-border pt-3 mt-2">
+      <p className="text-xs font-semibold text-muted uppercase tracking-wider">Remediation Guidance</p>
+      <Input
+        value={hint}
+        onChange={(e) => { setHint(e.target.value); setSaved(false); }}
+        placeholder="Describe remediation steps, owner, and timeline…"
+        disabled={saving}
+        className="text-xs"
+      />
+      {error && <p className="text-xs text-danger">{error}</p>}
+      <div className="flex items-center gap-2">
+        <Button type="submit" disabled={saving || !hint.trim()} className="h-7 text-xs px-3">
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        {saved && <span className="text-xs text-success">Saved</span>}
+      </div>
+    </form>
+  );
+}
+
+export function FindingPreviewPanel({ findings, engagementId, loading, error, onRemediationSaved }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   if (loading) {
     return (
@@ -173,10 +219,18 @@ export function FindingPreviewPanel({ findings, loading, error }: Props) {
                 </div>
               )}
 
-              {f.remediation_hint && (
+              {f.remediation_hint && !expanded && (
                 <p className="text-xs text-muted border-l-2 border-warning/40 pl-2 mt-1">
                   {f.remediation_hint}
                 </p>
+              )}
+
+              {expanded && (
+                <RemediationForm
+                  engagementId={engagementId}
+                  finding={f}
+                  onSaved={onRemediationSaved}
+                />
               )}
             </CardContent>
           </Card>

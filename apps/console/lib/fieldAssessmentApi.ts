@@ -748,6 +748,13 @@ export const fieldAssessmentApi = {
     return request(`/engagements/${engagementId}/findings/${findingId}`);
   },
 
+  patchFindingRemediation(engagementId: string, findingId: string, hint: string): Promise<{ finding_id: string; remediation_hint: string }> {
+    return request(`/engagements/${engagementId}/findings/${findingId}/remediation`, {
+      method: 'PATCH',
+      body: JSON.stringify({ remediation_hint: hint }),
+    });
+  },
+
   // Evidence links
   createEvidenceLink(engagementId: string, payload: CreateEvidenceLinkPayload): Promise<EvidenceLink> {
     return request(`/engagements/${engagementId}/evidence-links`, {

@@ -482,6 +482,12 @@ class FindingStatusPatchRequest(BaseModel):
     owner_email: str = Field(..., min_length=1)
 
 
+class FindingRemediationPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    remediation_hint: str = Field(..., min_length=1, max_length=2000)
+
+
 class FindingStatusPatchResponse(BaseModel):
     finding: FindingResponse
     observation_id: str
@@ -1704,6 +1710,46 @@ def patch_finding_status_route(
         observation_id=observation.id,
         questionnaire_controls_updated=controls_updated,
     )
+
+
+@router.patch(
+    "/engagements/{engagement_id}/findings/{finding_id}/remediation",
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def patch_finding_remediation_route(
+    engagement_id: str,
+    finding_id: str,
+    request: Request,
+    body: FindingRemediationPatchRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Set remediation_hint on a finding to satisfy the readiness gate."""
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    try:
+        finding = get_finding(
+            db,
+            finding_id=finding_id,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+        )
+    except FindingNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("FINDING_NOT_FOUND", exc.message)
+        )
+
+    finding.remediation_hint = body.remediation_hint
+    finding.updated_at = utc_iso8601_z_now()
+    db.commit()
+    db.refresh(finding)
+    return {"finding_id": finding_id, "remediation_hint": finding.remediation_hint}
 
 
 # ---------------------------------------------------------------------------

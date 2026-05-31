@@ -758,8 +758,10 @@ export default function EngagementWorkspacePage() {
                   <CardContent className="px-4 pb-4">
                     <FindingPreviewPanel
                       findings={findings}
+                      engagementId={engagementId}
                       loading={findingsLoading}
                       error={findingsError}
+                      onRemediationSaved={() => fieldAssessmentApi.listFindings(engagementId).then(r => setFindings(r.items)).catch(() => {})}
                     />
                   </CardContent>
                 </Card>
