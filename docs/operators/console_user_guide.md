@@ -365,20 +365,86 @@ Displays the scheduled date and any engagement metadata stored in the `engagemen
 
 ##### Scans
 
-Two panels:
+Ten panels total — nine scan runners and one manual import. Panels are ordered by recommended execution sequence: no-auth scans first (run pre-meeting), device-code scans second (run in-meeting with client admin present).
 
-**Run MS Graph Scan** — Triggers a Microsoft 365 scan via the MSAL device-code flow.
+---
 
-1. Click the trigger button in the **MsgraphScanPanel**.
-2. A device code and URL appear — open the URL in a browser and enter the code to authenticate.
-3. The panel polls the backend while the scan runs.
-4. On completion, scan results appear in the list below.
+**Run MS Graph Scan** *(device-code flow)*
 
-The MS Graph scan checks 39 NIST AI RMF controls across the Microsoft 365 tenant.
+Authenticates via browser device code and scans the Microsoft 365 tenant for MFA status, Conditional Access policies, guest accounts, and AI governance controls. Checks 39 NIST AI RMF controls.
+
+1. Enter the client **Tenant ID** (Directory ID from Azure Portal).
+2. Click **Run MS Graph Scan**.
+3. A device code and URL appear — open the URL, sign in with a Global Admin account, enter the code, and accept the consent prompt.
+4. The panel polls while the scan runs (~2–5 min). Results appear in the scan list on completion.
+
+---
+
+**Run Entra ID Governance Scan** *(device-code flow)*
+
+Scans PIM role assignments, Access Review definitions, Identity Protection risky users, and Conditional Access policy gaps. Requires Azure AD P2 for full results; P1 tenants complete with partial data.
+
+Same authentication flow as MS Graph Scan — use the same tenant ID and admin session.
+
+---
+
+**Run SharePoint & OneDrive Scan** *(device-code flow)*
+
+Enumerates SharePoint sites and OneDrive drives for anonymous sharing links, external sharing enabled at tenant level, and links with no expiry. Surfaces data-access risk for AI tools with Files.Read.All grants.
+
+Same authentication flow as MS Graph Scan.
+
+---
+
+**Run OAuth Inventory Scan** *(device-code flow)*
+
+Enumerates all OAuth app registrations, enterprise applications, and service principal consent grants in the tenant. Maps which apps have access to what data scopes. Output is used as input to the OAuth Risk scan.
+
+Same authentication flow as MS Graph Scan.
+
+---
+
+**Run OAuth Risk Deep Scan** *(device-code flow)*
+
+Analyzes OAuth grants for high-risk patterns: illicit consent grants, AI tools with broad data access (Mail.Read, Files.ReadWrite.All), write-all permission grants, and apps with no expiry. Run after OAuth Inventory.
+
+Same authentication flow as MS Graph Scan.
+
+---
+
+**Run Endpoint Inventory Scan** *(device-code flow)*
+
+Enumerates Azure AD registered devices and Intune-managed endpoints. Checks device compliance policy assignment, encryption status, and OS version currency. Requires Intune (Microsoft 365 Business Premium or Intune standalone) for full results.
+
+Same authentication flow as MS Graph Scan.
+
+---
+
+**Run Network Scan** *(no authentication required)*
+
+Port scan and TLS inspection against a target host or IP. Enter the target hostname or IP address and click **Run Network Scan**. No client credentials needed — run this pre-meeting.
+
+Checks: open ports, TLS version and certificate validity, weak cipher suites.
+
+---
+
+**Run DNS & Email Security Scan** *(no authentication required)*
+
+Checks DMARC, SPF, DKIM, MX records, and DNSSEC for the client domain. Enter the client domain (e.g. `contoso.com`) and click **Run DNS & Email Security Scan**. No client credentials needed — run this pre-meeting.
+
+---
+
+**Run Web Security Headers Scan** *(no authentication required)*
+
+Fetches the client's public web presence and checks for HSTS, Content-Security-Policy, X-Frame-Options, and Referrer-Policy headers. Enter the client URL and click **Run Web Security Headers Scan**. No client credentials needed — run this pre-meeting.
+
+---
 
 **Import Scan Result** — Paste a previously-exported scan result JSON to register it manually. Use this to import scans run from the CLI or from another system.
 
-Below both panels: a list of registered scans showing source type, object count, evidence hash, and collection date.
+---
+
+Below all panels: a list of registered scans showing source type, object count, evidence hash, and collection date.
 
 ---
 
