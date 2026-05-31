@@ -180,6 +180,21 @@ class HealthChecker:
                 message=f"Redis connection failed: {type(e).__name__}",
             )
 
+    def check_anthropic_api_key(self) -> DependencyCheck:
+        """Check that the Anthropic API key is configured."""
+        key = os.getenv("FG_ANTHROPIC_API_KEY", "").strip()
+        if not key:
+            return DependencyCheck(
+                name="anthropic_api_key",
+                status=HealthStatus.DEGRADED,
+                message="FG_ANTHROPIC_API_KEY not set — AI executive summary will use deterministic fallback",
+            )
+        return DependencyCheck(
+            name="anthropic_api_key",
+            status=HealthStatus.HEALTHY,
+            message="API key configured",
+        )
+
     def check_disk_space(self) -> DependencyCheck:
         """Check available disk space."""
         try:
@@ -249,6 +264,11 @@ class HealthChecker:
         redis_check = self.check_redis()
         if redis_check:
             checks.append(redis_check)
+
+        # Check Anthropic API key if detailed
+        if include_details:
+            anthropic_check = self.check_anthropic_api_key()
+            checks.append(anthropic_check)
 
         # Check disk space if detailed
         if include_details:

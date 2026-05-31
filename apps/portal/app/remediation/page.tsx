@@ -585,9 +585,11 @@ function RemediationPageInner() {
       )}
 
       {!loading && !error && roadmap && roadmap.total_open_findings === 0 && (
-        <div className="rounded border border-green-500/30 bg-green-500/5 p-6 text-center space-y-1">
-          <p className="text-sm font-semibold text-green-300">No open findings</p>
-          <p className="text-xs text-muted">All findings have been resolved or accepted. Run a new scan to check for regressions.</p>
+        <div className="rounded border border-border bg-surface-2 p-6 text-center space-y-1">
+          <p className="text-sm font-semibold text-foreground">No open findings</p>
+          <p className="text-xs text-muted">
+            No findings are currently open. This could mean all findings have been resolved, or that assessment scans have not been run yet. Contact your operator if you expected findings to appear here.
+          </p>
         </div>
       )}
 

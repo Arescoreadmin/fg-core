@@ -52,18 +52,19 @@ function FindingCard({
   const [expanded, setExpanded] = useState(false);
   const [explanation, setExplanation] = useState<FindingExplanation | null>(null);
   const [explainLoading, setExplainLoading] = useState(false);
+  const [explainFailed, setExplainFailed] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
 
   async function handleExpand() {
     const next = !expanded;
     setExpanded(next);
-    if (next && !explanation && !explainLoading) {
+    if (next && !explanation && !explainLoading && !explainFailed) {
       setExplainLoading(true);
       try {
         const result = await portalApi.explainFinding(engagementId, finding.finding_id);
         setExplanation(result);
       } catch {
-        // Falls back to technical view if explanation unavailable
+        setExplainFailed(true);
       } finally {
         setExplainLoading(false);
       }
@@ -197,6 +198,12 @@ function FindingCard({
                 </div>
               )}
             </div>
+          )}
+
+          {explainFailed && !explainLoading && (
+            <p className="text-[11px] text-muted italic">
+              Plain-language explanation unavailable — technical details shown below.
+            </p>
           )}
 
           {!explanation && !explainLoading && (
@@ -350,7 +357,9 @@ function FindingsPageInner() {
         <div className="flex flex-col items-center justify-center py-16 text-center text-muted">
           <p className="text-sm font-medium">No findings</p>
           <p className="text-xs mt-1">
-            {severityFilter ? 'No findings match the selected severity filter.' : 'No findings have been recorded for this engagement.'}
+            {severityFilter
+              ? 'No findings match the selected severity filter.'
+              : 'No findings have been recorded for this engagement. If scans have not been run yet, your operator will add them during or after the assessment session.'}
           </p>
         </div>
       )}
