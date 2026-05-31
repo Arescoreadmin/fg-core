@@ -40,7 +40,7 @@ Check each item when verified or completed. Do not begin the client engagement u
 - [x] **B2** **Basic uptime check** — UptimeRobot monitoring all 3 services (confirmed 2026-05-30)
 - [x] **B3** **Error alerting** — Sentry DSN set in Railway; confirmed capturing events during startup crash cycles (confirmed 2026-05-31)
 - [x] **B4** Anthropic API credit verified — $3.50 balance, ~$0.05–0.25 per engagement (claude-haiku-4-5), sufficient for 35+ engagements (confirmed 2026-05-31)
-- [ ] **B5** Railway logs bookmarked — bookmark `railway.app` dashboard tab before the engagement
+- [x] **B5** Railway logs bookmarked — bookmark `railway.app` dashboard tab before the engagement (done 2026-05-31)
 
 ---
 
