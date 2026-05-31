@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { fieldAssessmentApi, type ReportVersionSummary } from '@/lib/fieldAssessmentApi';
 
@@ -46,14 +47,17 @@ interface Props {
   refreshKey: number;
   selectedVersion: number | null;
   onSelectVersion: (version: number) => void;
+  onQaApproved?: () => void;
 }
 
-export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion, onSelectVersion }: Props) {
+export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion, onSelectVersion, onQaApproved }: Props) {
   const [versions, setVersions] = useState<ReportVersionSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [approveError, setApproveError] = useState<string | null>(null);
 
   const loadVersions = useCallback(async (offset: number) => {
     setLoading(true);
@@ -80,6 +84,20 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
   function handlePage(newPage: number) {
     setPage(newPage);
     loadVersions(newPage * PAGE_SIZE);
+  }
+
+  async function handleQaApprove(e: React.MouseEvent, reportId: string) {
+    e.stopPropagation();
+    setApprovingId(reportId);
+    setApproveError(null);
+    try {
+      await fieldAssessmentApi.qaApproveReport(engagementId, reportId);
+      onQaApproved?.();
+    } catch (err) {
+      setApproveError(err instanceof Error ? err.message : 'QA approval failed');
+    } finally {
+      setApprovingId(null);
+    }
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -134,10 +152,17 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
         </div>
       )}
 
+      {approveError && (
+        <Alert variant="destructive">
+          <AlertDescription className="text-xs">{approveError}</AlertDescription>
+        </Alert>
+      )}
+
       {!loading && versions.length > 0 && (
         <div className="space-y-1.5">
           {versions.map((v) => {
             const isSelected = selectedVersion === v.version;
+            const isApproving = approvingId === v.report_id;
             return (
               <div
                 key={v.report_id}
@@ -163,6 +188,18 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
                 {v.compiled_by && (
                   <div className="mt-1 text-muted">
                     By: <span className="text-foreground">{v.compiled_by}</span>
+                  </div>
+                )}
+                {v.status === 'finalized' && (
+                  <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      type="button"
+                      disabled={isApproving}
+                      onClick={(e) => handleQaApprove(e, v.report_id)}
+                      className="h-6 text-[11px] px-2"
+                    >
+                      {isApproving ? 'Approving…' : 'QA Approve'}
+                    </Button>
                   </div>
                 )}
               </div>

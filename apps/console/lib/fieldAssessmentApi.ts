@@ -886,6 +886,12 @@ export const fieldAssessmentApi = {
     });
   },
 
+  qaApproveReport(engagementId: string, reportId: string): Promise<{ report_id: string; qa_approved_by: string; qa_approved_at: string }> {
+    return request(`/engagements/${engagementId}/reports/${reportId}/qa-approve`, {
+      method: 'POST',
+    });
+  },
+
   getNextActions(engagementId: string): Promise<PlaybookProgress> {
     return request(`/engagements/${engagementId}/next-actions`);
   },

@@ -51,6 +51,7 @@ const TAB_SECTIONS: Record<string, string> = {
   total_observations: 'observations',
   total_evidence_links: 'evidence',
   total_findings: 'findings',
+  report: 'reports',
 };
 
 function formatDate(iso: string) {
@@ -867,6 +868,7 @@ export default function EngagementWorkspacePage() {
                     refreshKey={reportsRefreshKey}
                     selectedVersion={selectedReportVersion}
                     onSelectVersion={setSelectedReportVersion}
+                    onQaApproved={() => { loadSummary(); loadExecutionState(); }}
                   />
 
                   {selectedReportVersion !== null && (

@@ -160,6 +160,17 @@ export function GuidedExecutionPanel({
     };
   }, [fetchProgress]);
 
+  // Re-fetch progress immediately whenever a gate closes (completed_gate_count increases).
+  // This keeps "Next best actions" in sync without waiting for the 30s poll interval.
+  const prevCompletedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (executionState === null) return;
+    if (prevCompletedRef.current !== null && prevCompletedRef.current !== executionState.completed_gate_count) {
+      fetchProgress();
+    }
+    prevCompletedRef.current = executionState.completed_gate_count;
+  }, [executionState?.completed_gate_count, fetchProgress]);
+
   if (loading) {
     return (
       <div className="space-y-3" aria-busy="true">
