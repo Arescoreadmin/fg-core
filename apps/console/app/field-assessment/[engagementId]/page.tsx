@@ -304,6 +304,17 @@ export default function EngagementWorkspacePage() {
           onTransition={handleTransition}
         />
 
+        {/* Client access code banner — shown whenever a code has been issued */}
+        {engagement.client_access_code && (
+          <div className="p-3 rounded border border-success/40 bg-success/5 flex flex-wrap items-center gap-4">
+            <div>
+              <p className="text-xs font-semibold text-success uppercase tracking-wider">Client Access Code</p>
+              <p className="font-mono text-lg font-bold text-foreground tracking-widest">{engagement.client_access_code}</p>
+            </div>
+            <p className="text-xs text-muted">Share this code with the client. It is their access key for the delivered report.</p>
+          </div>
+        )}
+
         {/* Metadata */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-muted">
           <div><span className="font-medium text-foreground block">Engagement ID</span><span className="font-mono">{engagement.id}</span></div>

@@ -4,11 +4,7 @@ import { Badge } from '@fg/ui';
 import type { EngagementStatus } from '@/lib/fieldAssessmentApi';
 
 const STATUS_LABELS: Record<EngagementStatus, string> = {
-  scheduled: 'Scheduled',
-  pre_visit: 'Pre-Visit',
   in_progress: 'In Progress',
-  evidence_collected: 'Evidence Collected',
-  report_generation: 'Report Generation',
   delivered: 'Delivered',
   remediation: 'Remediation',
   monitoring: 'Monitoring',
@@ -17,11 +13,7 @@ const STATUS_LABELS: Record<EngagementStatus, string> = {
 };
 
 const STATUS_VARIANT: Record<EngagementStatus, 'default' | 'outline' | 'secondary'> = {
-  scheduled: 'outline',
-  pre_visit: 'secondary',
   in_progress: 'default',
-  evidence_collected: 'default',
-  report_generation: 'secondary',
   delivered: 'secondary',
   remediation: 'secondary',
   monitoring: 'outline',
@@ -30,11 +22,7 @@ const STATUS_VARIANT: Record<EngagementStatus, 'default' | 'outline' | 'secondar
 };
 
 const STATUS_COLOR: Record<EngagementStatus, string> = {
-  scheduled: 'text-muted border-border',
-  pre_visit: 'text-info border-info/30 bg-info/10',
   in_progress: 'text-primary border-primary/30 bg-primary/10',
-  evidence_collected: 'text-success border-success/30 bg-success/10',
-  report_generation: 'text-warning border-warning/30 bg-warning/10',
   delivered: 'text-success border-success/30 bg-success/10',
   remediation: 'text-warning border-warning/30 bg-warning/10',
   monitoring: 'text-info border-info/30 bg-info/10',

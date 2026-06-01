@@ -77,7 +77,12 @@ PLANE_REGISTRY: list[PlaneDef] = [
         ),
         public_routes=(
             ex("GET", "/health", "public", "Unauthenticated health probe."),
-            ex("HEAD", "/health", "public", "Unauthenticated health probe for uptime monitoring."),
+            ex(
+                "HEAD",
+                "/health",
+                "public",
+                "Unauthenticated health probe for uptime monitoring.",
+            ),
             ex("GET", "/health/live", "public", "Kubernetes liveness probe."),
             ex("GET", "/health/ready", "public", "Kubernetes readiness probe."),
             ex("GET", "/health/detailed", "public", "Detailed health probe endpoint."),

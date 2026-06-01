@@ -47,8 +47,11 @@ class FaEngagement(Base):
     client_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
     assessor_id: Mapped[str] = mapped_column(String(128), nullable=False)
     assessment_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(64), nullable=False, default="scheduled")
+    status: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="in_progress"
+    )
     scheduled_date: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    client_access_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     engagement_metadata: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict
     )

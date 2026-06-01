@@ -43,7 +43,7 @@ _ENGAGEMENT_BODY = {
     "assessment_type": "ai_governance",
 }
 
-_TRANSITION_BODY = {"new_status": "pre_visit", "reason": "kickoff scheduled"}
+_TRANSITION_BODY = {"new_status": "cancelled", "reason": "engagement cancelled"}
 
 _SCAN_RESULT_BODY = {
     "source_type": "microsoft_graph",
@@ -111,9 +111,10 @@ def test_findings_hash_full_length() -> None:
 
 
 def test_valid_engagement_transitions() -> None:
-    assert "pre_visit" in VALID_ENGAGEMENT_TRANSITIONS["scheduled"]
-    assert "cancelled" in VALID_ENGAGEMENT_TRANSITIONS["scheduled"]
-    assert "in_progress" in VALID_ENGAGEMENT_TRANSITIONS["pre_visit"]
+    assert "cancelled" in VALID_ENGAGEMENT_TRANSITIONS["in_progress"]
+    assert "remediation" in VALID_ENGAGEMENT_TRANSITIONS["delivered"]
+    assert "monitoring" in VALID_ENGAGEMENT_TRANSITIONS["delivered"]
+    assert "closed" in VALID_ENGAGEMENT_TRANSITIONS["delivered"]
 
 
 def test_invalid_engagement_transitions_terminal_states() -> None:
@@ -122,7 +123,7 @@ def test_invalid_engagement_transitions_terminal_states() -> None:
 
 
 def test_engagement_status_enum_values() -> None:
-    assert EngagementStatus.SCHEDULED.value == "scheduled"
+    assert EngagementStatus.IN_PROGRESS.value == "in_progress"
     assert EngagementStatus.CLOSED.value == "closed"
 
 
@@ -166,7 +167,7 @@ def test_create_engagement_success(client: TestClient) -> None:
     assert resp.status_code == 201
     data = resp.json()
     assert data["client_name"] == "ACME Corp"
-    assert data["status"] == "scheduled"
+    assert data["status"] == "in_progress"
     assert data["assessment_type"] == "ai_governance"
 
 
@@ -218,14 +219,14 @@ def test_engagement_status_transition_valid(client: TestClient) -> None:
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "pre_visit"
+    assert data["status"] == "cancelled"
 
 
 def test_engagement_status_transition_invalid(client: TestClient) -> None:
     created = _create_engagement(client)
     eng_id = created["id"]
 
-    # scheduled → closed is not a valid transition
+    # in_progress → closed is not a valid direct transition
     resp = client.patch(
         f"/field-assessment/engagements/{eng_id}/status",
         json={"new_status": "closed", "reason": "skipping ahead"},
@@ -473,7 +474,7 @@ def test_engagement_summary(client: TestClient) -> None:
     data = resp.json()
     assert data["engagement_id"] == eng_id
     assert data["client_name"] == "ACME Corp"
-    assert data["status"] == "scheduled"
+    assert data["status"] == "in_progress"
     assert data["total_scan_results"] == 1
     assert data["total_observations"] == 1
     assert "total_findings" in data

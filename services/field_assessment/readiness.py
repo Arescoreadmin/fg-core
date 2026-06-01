@@ -304,9 +304,7 @@ class _ReadinessBuilder:
                     evidence_present=present,
                     missing_items=[] if present else [source],
                     related_entity_ids=present,
-                    blocks_status_transition=["evidence_collected"]
-                    if not present
-                    else [],
+                    blocks_status_transition=["delivered"] if not present else [],
                     recommended_action_id=None
                     if present
                     else f"action.import_scan.{source}",
@@ -430,9 +428,7 @@ class _ReadinessBuilder:
                     evidence_present=doc_ids,
                     missing_items=[] if doc_ids else [doc_class],
                     related_entity_ids=doc_ids,
-                    blocks_status_transition=["evidence_collected"]
-                    if not doc_ids
-                    else [],
+                    blocks_status_transition=["delivered"] if not doc_ids else [],
                     recommended_action_id=None
                     if doc_ids
                     else f"action.register_document.{doc_class}",
@@ -616,7 +612,7 @@ class _ReadinessBuilder:
                     evidence_present=present,
                     missing_items=[] if row else [role],
                     related_entity_ids=present,
-                    blocks_status_transition=["evidence_collected"] if not row else [],
+                    blocks_status_transition=["delivered"] if not row else [],
                     recommended_action_id=None
                     if row
                     else f"action.capture_interview.{role}",
@@ -784,7 +780,7 @@ class _ReadinessBuilder:
                 evidence_present=[],
                 missing_items=["evidence_link"],
                 related_entity_ids=[],
-                blocks_status_transition=["report_generation", "delivered"],
+                blocks_status_transition=["delivered"],
                 recommended_action_id="action.create_evidence_link",
                 confidence_impact=ConfidenceImpact(
                     reason="no_evidence_links",
@@ -921,9 +917,7 @@ class _ReadinessBuilder:
                 evidence_present=[item for item in finding_ids if item not in unlinked],
                 missing_items=unlinked,
                 related_entity_ids=finding_ids,
-                blocks_status_transition=["report_generation", "delivered"]
-                if blocked
-                else [],
+                blocks_status_transition=["delivered"] if blocked else [],
                 recommended_action_id="action.link_finding_evidence"
                 if blocked
                 else None,
@@ -982,9 +976,7 @@ class _ReadinessBuilder:
                 evidence_present=[item for item in finding_ids if item not in missing],
                 missing_items=missing,
                 related_entity_ids=finding_ids,
-                blocks_status_transition=["report_generation", "delivered"]
-                if blocked
-                else [],
+                blocks_status_transition=["delivered"] if blocked else [],
                 recommended_action_id="action.add_finding_remediation"
                 if blocked
                 else None,

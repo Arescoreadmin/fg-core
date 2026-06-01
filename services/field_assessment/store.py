@@ -82,7 +82,7 @@ def create_engagement(
         client_domain=client_domain,
         assessor_id=assessor_id,
         assessment_type=assessment_type,
-        status="scheduled",
+        status="in_progress",
         scheduled_date=scheduled_date,
         engagement_metadata=engagement_metadata,
         schema_version="1.0",

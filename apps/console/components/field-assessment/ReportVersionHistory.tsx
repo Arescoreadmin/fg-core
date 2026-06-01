@@ -58,6 +58,7 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
   const [error, setError] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
+  const [clientAccessCode, setClientAccessCode] = useState<string | null>(null);
 
   const loadVersions = useCallback(async (offset: number) => {
     setLoading(true);
@@ -90,8 +91,12 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
     e.stopPropagation();
     setApprovingId(reportId);
     setApproveError(null);
+    setClientAccessCode(null);
     try {
-      await fieldAssessmentApi.qaApproveReport(engagementId, reportId);
+      const result = await fieldAssessmentApi.qaApproveReport(engagementId, reportId);
+      if (result.client_access_code) {
+        setClientAccessCode(result.client_access_code);
+      }
       onQaApproved?.();
     } catch (err) {
       setApproveError(err instanceof Error ? err.message : 'QA approval failed');
@@ -156,6 +161,14 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
         <Alert variant="destructive">
           <AlertDescription className="text-xs">{approveError}</AlertDescription>
         </Alert>
+      )}
+
+      {clientAccessCode && (
+        <div className="p-3 rounded border border-success/40 bg-success/5 space-y-1">
+          <p className="text-xs font-semibold text-success uppercase tracking-wider">Report Delivered — Client Access Code</p>
+          <p className="font-mono text-lg font-bold text-foreground tracking-widest">{clientAccessCode}</p>
+          <p className="text-xs text-muted">Give this code to the client. It is their access key for the delivered report.</p>
+        </div>
       )}
 
       {!loading && versions.length > 0 && (

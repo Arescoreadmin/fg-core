@@ -192,7 +192,7 @@ export default function FieldAssessmentListPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">All</SelectItem>
-              {(['scheduled','pre_visit','in_progress','evidence_collected','report_generation','delivered','remediation','monitoring','closed','cancelled'] as const).map((s) => (
+              {(['in_progress','delivered','remediation','monitoring','closed','cancelled'] as const).map((s) => (
                 <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, ' ')}</SelectItem>
               ))}
             </SelectContent>

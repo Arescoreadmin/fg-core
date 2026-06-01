@@ -7,11 +7,7 @@ from enum import Enum
 
 
 class EngagementStatus(str, Enum):
-    SCHEDULED = "scheduled"
-    PRE_VISIT = "pre_visit"
     IN_PROGRESS = "in_progress"
-    EVIDENCE_COLLECTED = "evidence_collected"
-    REPORT_GENERATION = "report_generation"
     DELIVERED = "delivered"
     REMEDIATION = "remediation"
     MONITORING = "monitoring"
@@ -116,11 +112,7 @@ class FrameworkId(str, Enum):
 
 # Valid engagement state transitions
 VALID_ENGAGEMENT_TRANSITIONS: dict[str, set[str]] = {
-    "scheduled": {"pre_visit", "cancelled"},
-    "pre_visit": {"in_progress", "cancelled"},
-    "in_progress": {"evidence_collected", "cancelled"},
-    "evidence_collected": {"report_generation", "cancelled"},
-    "report_generation": {"delivered", "cancelled"},
+    "in_progress": {"cancelled"},
     "delivered": {"remediation", "monitoring", "closed"},
     "remediation": {"monitoring", "closed"},
     "monitoring": {"remediation", "closed"},

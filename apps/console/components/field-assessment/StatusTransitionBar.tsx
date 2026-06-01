@@ -7,11 +7,7 @@ import { VALID_TRANSITIONS, type EngagementStatus } from '@/lib/fieldAssessmentA
 import { StatusBadge } from './StatusBadge';
 
 const STATUS_LABELS: Record<EngagementStatus, string> = {
-  scheduled: 'Scheduled',
-  pre_visit: 'Pre-Visit',
   in_progress: 'In Progress',
-  evidence_collected: 'Evidence Collected',
-  report_generation: 'Report Generation',
   delivered: 'Delivered',
   remediation: 'Remediation',
   monitoring: 'Monitoring',

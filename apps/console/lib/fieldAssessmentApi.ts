@@ -18,11 +18,7 @@ const BASE = '/api/core/field-assessment';
 // ---------------------------------------------------------------------------
 
 export type EngagementStatus =
-  | 'scheduled'
-  | 'pre_visit'
   | 'in_progress'
-  | 'evidence_collected'
-  | 'report_generation'
   | 'delivered'
   | 'remediation'
   | 'monitoring'
@@ -79,11 +75,7 @@ export type EvidenceEntityType = 'scan_result' | 'document_analysis' | 'field_ob
 
 // Allowed transitions — mirrors backend VALID_ENGAGEMENT_TRANSITIONS
 export const VALID_TRANSITIONS: Record<EngagementStatus, EngagementStatus[]> = {
-  scheduled: ['pre_visit', 'cancelled'],
-  pre_visit: ['in_progress', 'cancelled'],
-  in_progress: ['evidence_collected', 'cancelled'],
-  evidence_collected: ['report_generation', 'cancelled'],
-  report_generation: ['delivered', 'cancelled'],
+  in_progress: ['cancelled'],
   delivered: ['remediation', 'monitoring', 'closed'],
   remediation: ['monitoring', 'closed'],
   monitoring: ['remediation', 'closed'],
@@ -103,6 +95,7 @@ export interface Engagement {
   assessment_type: AssessmentType;
   status: EngagementStatus;
   scheduled_date: string | null;
+  client_access_code: string | null;
   engagement_metadata: Record<string, unknown>;
   schema_version: string;
   created_at: string;
@@ -886,7 +879,7 @@ export const fieldAssessmentApi = {
     });
   },
 
-  qaApproveReport(engagementId: string, reportId: string): Promise<{ report_id: string; qa_approved_by: string; qa_approved_at: string }> {
+  qaApproveReport(engagementId: string, reportId: string): Promise<{ report_id: string; qa_approved_by: string; qa_approved_at: string; engagement_status: string; client_access_code: string | null }> {
     return request(`/engagements/${engagementId}/reports/${reportId}/qa-approve`, {
       method: 'POST',
     });

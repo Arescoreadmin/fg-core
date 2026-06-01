@@ -128,6 +128,7 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | 36 | Guided panel live refresh | ✅ done 2026-06-01 — `GuidedExecutionPanel` re-fetches next actions immediately when `completed_gate_count` changes; interviews and remediation gates clear without page reload |
 | 37 | Tab navigation from sidebar | ✅ done 2026-06-01 — `TAB_SECTIONS` map fixed (`report → reports`); sidebar "Fix this →" now scrolls main tabs into view and highlights the target tab trigger |
 | 38 | Report signing key | ✅ done 2026-06-01 — `FG_REPORT_SIGNING_KEY` (Ed25519 seed) documented and set in Railway; report generation no longer throws `ReportSigningKeyError` |
+| 39 | Engagement status simplification + auto-advance + client access code | ✅ done 2026-05-31 — Reduced engagement statuses from 10 → 6 (`in_progress`, `delivered`, `remediation`, `monitoring`, `closed`, `cancelled`); removed mechanical intermediates (`scheduled`, `pre_visit`, `evidence_collected`, `report_generation`); new engagements start as `in_progress`; QA approve auto-advances `in_progress` → `delivered` and generates an 8-char memorable client access code; code stored on engagement record and displayed prominently in console after delivery; legacy status values normalized on read; Postgres migration `0073` + SQLite auto-migration |
 
 ---
 
@@ -140,4 +141,4 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-06-01 (H1–H18 dry run complete — first full engagement delivered; 6 platform gaps fixed: rate limiter fail-open, finding remediation UI, QA approve UI, guided panel live refresh, tab navigation, report signing key)*
+*Last updated: 2026-05-31 (status simplification: 10→6 statuses; auto-advance in_progress→delivered on QA approve; client access code generated and displayed in console)*

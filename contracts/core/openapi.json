@@ -6190,6 +6190,17 @@
             "title": "Assessor Id",
             "type": "string"
           },
+          "client_access_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Access Code"
+          },
           "client_domain": {
             "anyOf": [
               {
@@ -7762,6 +7773,22 @@
           "total_count"
         ],
         "title": "FindingListResponse",
+        "type": "object"
+      },
+      "FindingRemediationPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "remediation_hint": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Remediation Hint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "remediation_hint"
+        ],
+        "title": "FindingRemediationPatchRequest",
         "type": "object"
       },
       "FindingResponse": {
@@ -13508,6 +13535,21 @@
       },
       "ReportQaApproveResponse": {
         "properties": {
+          "client_access_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Access Code"
+          },
+          "engagement_status": {
+            "title": "Engagement Status",
+            "type": "string"
+          },
           "qa_approved_at": {
             "title": "Qa Approved At",
             "type": "string"
@@ -13524,7 +13566,8 @@
         "required": [
           "report_id",
           "qa_approved_by",
-          "qa_approved_at"
+          "qa_approved_at",
+          "engagement_status"
         ],
         "title": "ReportQaApproveResponse",
         "type": "object"
@@ -34755,6 +34798,85 @@
           }
         },
         "summary": "Get Finding Explanation Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/findings/{finding_id}/remediation": {
+      "patch": {
+        "description": "Set remediation_hint on a finding to satisfy the readiness gate.",
+        "operationId": "patch_finding_remediation_route_field_assessment_engagements__engagement_id__findings__finding_id__remediation_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingRemediationPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Patch Finding Remediation Route Field Assessment Engagements  Engagement Id  Findings  Finding Id  Remediation Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Finding Remediation Route",
         "tags": [
           "field-assessment"
         ]

@@ -160,10 +160,9 @@ class TestHipaaEvidenceFreshness:
         assert e is not None
         assert e.freshness_days == 365
 
-    def test_risk_analysis_blocks_report_generation(self) -> None:
+    def test_risk_analysis_blocks_delivered(self) -> None:
         e = self._expectation("document.hipaa_risk_analysis")
         assert e is not None
-        assert "report_generation" in e.blocks_statuses
         assert "delivered" in e.blocks_statuses
 
     def test_access_control_policy_has_freshness_expectation(self) -> None:
@@ -171,35 +170,34 @@ class TestHipaaEvidenceFreshness:
         e = self._expectation("document.hipaa_access_control_policy")
         assert e is not None
         assert e.freshness_days == 365
-        assert "report_generation" in e.blocks_statuses
         assert "delivered" in e.blocks_statuses
 
 
 class TestHipaaStatusTransitions:
-    def test_evidence_collected_requires_privacy_officer(self) -> None:
-        reqs = HIPAA_PLAYBOOK.status_transition_requirements["evidence_collected"]
+    def test_delivered_requires_privacy_officer(self) -> None:
+        reqs = HIPAA_PLAYBOOK.status_transition_requirements["delivered"]
         assert "interview.privacy_officer.required" in reqs
 
-    def test_evidence_collected_requires_security_officer(self) -> None:
-        reqs = HIPAA_PLAYBOOK.status_transition_requirements["evidence_collected"]
+    def test_delivered_requires_security_officer(self) -> None:
+        reqs = HIPAA_PLAYBOOK.status_transition_requirements["delivered"]
         assert "interview.security_officer.required" in reqs
 
-    def test_evidence_collected_requires_baa(self) -> None:
-        reqs = HIPAA_PLAYBOOK.status_transition_requirements["evidence_collected"]
+    def test_delivered_requires_baa(self) -> None:
+        reqs = HIPAA_PLAYBOOK.status_transition_requirements["delivered"]
         assert "document.hipaa_baa.required" in reqs
 
-    def test_evidence_collected_requires_risk_analysis(self) -> None:
-        reqs = HIPAA_PLAYBOOK.status_transition_requirements["evidence_collected"]
+    def test_delivered_requires_risk_analysis(self) -> None:
+        reqs = HIPAA_PLAYBOOK.status_transition_requirements["delivered"]
         assert "document.hipaa_risk_analysis.required" in reqs
 
-    def test_evidence_collected_requires_access_control_policy(self) -> None:
+    def test_delivered_requires_access_control_policy(self) -> None:
         # Regression: absent from transition requirements caused the API to advance
-        # engagements to evidence_collected even when this document was missing.
-        reqs = HIPAA_PLAYBOOK.status_transition_requirements["evidence_collected"]
+        # engagements without this document being present.
+        reqs = HIPAA_PLAYBOOK.status_transition_requirements["delivered"]
         assert "document.hipaa_access_control_policy.required" in reqs
 
-    def test_report_generation_transition(self) -> None:
-        reqs = HIPAA_PLAYBOOK.status_transition_requirements["report_generation"]
+    def test_delivered_requires_evidence_link(self) -> None:
+        reqs = HIPAA_PLAYBOOK.status_transition_requirements["delivered"]
         assert "evidence.link.required" in reqs
         assert "finding.evidence.required" in reqs
 
@@ -349,23 +347,23 @@ class TestSoc2EvidenceFreshness:
         assert e is not None
         assert e.freshness_days == 365
 
-    def test_security_policy_blocks_report_generation(self) -> None:
+    def test_security_policy_blocks_delivered(self) -> None:
         e = self._expectation("document.security_policy")
         assert e is not None
-        assert "report_generation" in e.blocks_statuses
+        assert "delivered" in e.blocks_statuses
 
 
 class TestSoc2StatusTransitions:
-    def test_evidence_collected_requires_executive_sponsor(self) -> None:
-        reqs = SOC2_PLAYBOOK.status_transition_requirements["evidence_collected"]
+    def test_delivered_requires_executive_sponsor(self) -> None:
+        reqs = SOC2_PLAYBOOK.status_transition_requirements["delivered"]
         assert "interview.executive_sponsor.required" in reqs
 
-    def test_evidence_collected_requires_security_policy(self) -> None:
-        reqs = SOC2_PLAYBOOK.status_transition_requirements["evidence_collected"]
+    def test_delivered_requires_security_policy(self) -> None:
+        reqs = SOC2_PLAYBOOK.status_transition_requirements["delivered"]
         assert "document.security_policy.required" in reqs
 
-    def test_evidence_collected_requires_risk_assessment(self) -> None:
-        reqs = SOC2_PLAYBOOK.status_transition_requirements["evidence_collected"]
+    def test_delivered_requires_risk_assessment(self) -> None:
+        reqs = SOC2_PLAYBOOK.status_transition_requirements["delivered"]
         assert "document.risk_assessment.required" in reqs
 
     def test_delivered_requires_qa_approval(self) -> None:

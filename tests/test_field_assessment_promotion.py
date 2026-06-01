@@ -49,7 +49,6 @@ from services.field_assessment.promotion_store import (
 from services.field_assessment.store import (
     create_engagement,
     create_scan_result,
-    transition_engagement,
 )
 from services.field_assessment.normalizer import normalize_scan_findings
 
@@ -94,20 +93,11 @@ def _make_delivered_engagement(db: Session, suffix: str = "a") -> Any:
         engagement_metadata={},
         actor="test",
     )
-    for status in (
-        "pre_visit",
-        "in_progress",
-        "evidence_collected",
-        "report_generation",
-        "delivered",
-    ):
-        transition_engagement(
-            db,
-            engagement_id=eng.id,
-            tenant_id=_TENANT,
-            new_status=status,
-            actor="test",
-        )
+    # Force status to delivered directly — in the simplified status model
+    # in_progress → delivered is auto-advance only (via qa-approve), not a
+    # manual transition.
+    eng.status = "delivered"
+    db.flush()
     return eng
 
 

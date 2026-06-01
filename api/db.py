@@ -1295,6 +1295,12 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             "ON evaluation_query_items (tenant_id, item_ref)"
         )
 
+        # PR 104 — status simplification + client access code
+        if "fa_engagements" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "fa_engagements", "client_access_code", "TEXT"
+            )
+
 
 # ---------------------------------------------------------------------
 # Public API

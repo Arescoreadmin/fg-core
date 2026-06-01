@@ -250,7 +250,7 @@ def test_unlinked_high_risk_finding_blocks_report_and_escalates() -> None:
     engagement = SimpleNamespace(
         id="eng-2",
         assessment_type="ai_governance",
-        status="evidence_collected",
+        status="in_progress",
     )
     finding = SimpleNamespace(
         id="finding-high",
@@ -275,7 +275,7 @@ def test_unlinked_high_risk_finding_blocks_report_and_escalates() -> None:
     assert _get_gate(state, "finding.remediation.required")["status"] == "blocked"
     assert any(item["must_block_progression"] for item in state["escalation_items"])
     assert any(
-        blocker["target_status"] == "report_generation"
+        blocker["target_status"] == "delivered"
         for blocker in state["transition_blockers"]
     )
 

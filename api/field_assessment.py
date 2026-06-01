@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import threading
 import uuid as _uuid_module
 from typing import Any, Literal
@@ -165,10 +166,7 @@ _MSGRAPH_RUNS: dict[str, dict[str, Any]] = {}
 _MSGRAPH_RUNS_LOCK = threading.Lock()
 
 # Statuses whose transition requires all blocking readiness gates to be satisfied.
-# Ungated transitions (e.g. scheduled→pre_visit) skip the expensive gate evaluation.
-_GATED_STATUSES: frozenset[str] = frozenset(
-    {"evidence_collected", "report_generation", "delivered"}
-)
+_GATED_STATUSES: frozenset[str] = frozenset({"delivered"})
 
 router = APIRouter(
     prefix="/field-assessment",
@@ -321,6 +319,7 @@ class EngagementResponse(BaseModel):
     assessment_type: str
     status: str
     scheduled_date: str | None
+    client_access_code: str | None = None
     engagement_metadata: dict[str, Any]
     schema_version: str
     created_at: str
@@ -699,6 +698,15 @@ class ConnectorImportResponse(BaseModel):
 
 
 def _engagement_to_response(eng: FaEngagement) -> EngagementResponse:
+    # Normalize legacy status values from before the 6-status simplification.
+    raw_status = eng.status
+    _LEGACY_STATUS_MAP = {
+        "scheduled": "in_progress",
+        "pre_visit": "in_progress",
+        "evidence_collected": "in_progress",
+        "report_generation": "in_progress",
+    }
+    status = _LEGACY_STATUS_MAP.get(raw_status, raw_status)
     return EngagementResponse(
         id=eng.id,
         tenant_id=eng.tenant_id,
@@ -706,8 +714,9 @@ def _engagement_to_response(eng: FaEngagement) -> EngagementResponse:
         client_domain=eng.client_domain,
         assessor_id=eng.assessor_id,
         assessment_type=eng.assessment_type,
-        status=eng.status,
+        status=status,
         scheduled_date=eng.scheduled_date,
+        client_access_code=eng.client_access_code,
         engagement_metadata=eng.engagement_metadata or {},
         schema_version=eng.schema_version,
         created_at=eng.created_at,
@@ -4314,6 +4323,8 @@ class ReportQaApproveResponse(BaseModel):
     report_id: str
     qa_approved_by: str
     qa_approved_at: str
+    engagement_status: str
+    client_access_code: str | None = None
 
 
 @router.post(
@@ -4385,12 +4396,43 @@ def qa_approve_report_route(
             "qa_approved_at": now,
         },
     )
+
+    # Auto-advance in_progress → delivered and issue client access code.
+    eng = db.execute(
+        select(FaEngagement).where(
+            FaEngagement.id == engagement_id,
+            FaEngagement.tenant_id == tenant_id,
+        )
+    ).scalar_one()
+    client_access_code: str | None = None
+    if eng.status == "in_progress":
+        eng.status = "delivered"
+        eng.updated_at = now
+        # Generate a memorable 8-char alphanumeric code (no ambiguous chars).
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        client_access_code = "".join(secrets.choice(alphabet) for _ in range(8))
+        eng.client_access_code = client_access_code
+        db.flush()
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="engagement.status_transitioned",
+            actor=actor,
+            reason_code="AUTO_ADVANCE_QA_APPROVED",
+            payload={"new_status": "delivered", "triggered_by": "report.qa_approved"},
+        )
+    else:
+        client_access_code = eng.client_access_code
+
     db.commit()
 
     return ReportQaApproveResponse(
         report_id=report_id,
         qa_approved_by=actor,
         qa_approved_at=now,
+        engagement_status=eng.status,
+        client_access_code=client_access_code,
     )
 
 

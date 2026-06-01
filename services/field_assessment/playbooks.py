@@ -88,19 +88,19 @@ AI_GOVERNANCE_PLAYBOOK = FieldAssessmentPlaybook(
             source_entity_type="finding",
             evidence_entity_type="scan_result",
             minimum_count=1,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceLinkRequirement(
             source_entity_type="finding",
             evidence_entity_type="document_analysis",
             minimum_count=1,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceLinkRequirement(
             source_entity_type="finding",
             evidence_entity_type="field_observation",
             minimum_count=1,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
     ),
     required_asset_candidate_sources=("microsoft_graph", "oauth_inventory"),
@@ -122,24 +122,24 @@ AI_GOVERNANCE_PLAYBOOK = FieldAssessmentPlaybook(
             evidence_type="document.ai_policy",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.data_governance",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.vendor_risk",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
     ),
     status_transition_requirements=MappingProxyType(
         {
-            "evidence_collected": (
+            "delivered": (
                 "scan.microsoft_graph.required",
                 "scan.oauth_inventory.required",
                 "document.ai_policy.required",
@@ -148,13 +148,6 @@ AI_GOVERNANCE_PLAYBOOK = FieldAssessmentPlaybook(
                 "interview.ai_system_owner.required",
                 "interview.security_owner.required",
                 "interview.legal_or_compliance.required",
-            ),
-            "report_generation": (
-                "evidence.link.required",
-                "finding.evidence.required",
-                "finding.remediation.required",
-            ),
-            "delivered": (
                 "evidence.link.required",
                 "finding.evidence.required",
                 "finding.remediation.required",
@@ -243,25 +236,25 @@ COMPREHENSIVE_PLAYBOOK = FieldAssessmentPlaybook(
             evidence_type="document.incident_response",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.access_control",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.training_records",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
     ),
     status_transition_requirements=MappingProxyType(
         {
-            "evidence_collected": AI_GOVERNANCE_PLAYBOOK.status_transition_requirements[
-                "evidence_collected"
+            "delivered": AI_GOVERNANCE_PLAYBOOK.status_transition_requirements[
+                "delivered"
             ]
             + (
                 "scan.endpoint_inventory.required",
@@ -270,12 +263,6 @@ COMPREHENSIVE_PLAYBOOK = FieldAssessmentPlaybook(
                 "document.access_control.required",
                 "document.training_records.required",
             ),
-            "report_generation": AI_GOVERNANCE_PLAYBOOK.status_transition_requirements[
-                "report_generation"
-            ],
-            "delivered": AI_GOVERNANCE_PLAYBOOK.status_transition_requirements[
-                "delivered"
-            ],
         }
     ),
 )
@@ -352,48 +339,48 @@ HIPAA_PLAYBOOK = FieldAssessmentPlaybook(
             evidence_type="document.hipaa_risk_analysis",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.hipaa_phi_inventory",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.hipaa_baa",
             minimum_count=1,
             freshness_days=None,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.hipaa_sanction_policy",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.hipaa_access_control_policy",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.incident_response",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.training_records",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
     ),
     status_transition_requirements=MappingProxyType(
         {
-            "evidence_collected": (
+            "delivered": (
                 "scan.microsoft_graph.required",
                 "scan.oauth_inventory.required",
                 "document.hipaa_baa.required",
@@ -406,13 +393,6 @@ HIPAA_PLAYBOOK = FieldAssessmentPlaybook(
                 "interview.privacy_officer.required",
                 "interview.security_officer.required",
                 "interview.compliance_owner.required",
-            ),
-            "report_generation": (
-                "evidence.link.required",
-                "finding.evidence.required",
-                "finding.remediation.required",
-            ),
-            "delivered": (
                 "evidence.link.required",
                 "finding.evidence.required",
                 "finding.remediation.required",
@@ -500,42 +480,42 @@ SOC2_PLAYBOOK = FieldAssessmentPlaybook(
             evidence_type="document.security_policy",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.risk_assessment",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.incident_response",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.vendor_risk",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.change_management",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
         EvidenceExpectation(
             evidence_type="document.business_continuity",
             minimum_count=1,
             freshness_days=365,
-            blocks_statuses=("report_generation", "delivered"),
+            blocks_statuses=("delivered",),
         ),
     ),
     status_transition_requirements=MappingProxyType(
         {
-            "evidence_collected": (
+            "delivered": (
                 "scan.microsoft_graph.required",
                 "scan.oauth_inventory.required",
                 "document.security_policy.required",
@@ -547,13 +527,6 @@ SOC2_PLAYBOOK = FieldAssessmentPlaybook(
                 "interview.executive_sponsor.required",
                 "interview.security_owner.required",
                 "interview.compliance_owner.required",
-            ),
-            "report_generation": (
-                "evidence.link.required",
-                "finding.evidence.required",
-                "finding.remediation.required",
-            ),
-            "delivered": (
                 "evidence.link.required",
                 "finding.evidence.required",
                 "finding.remediation.required",
