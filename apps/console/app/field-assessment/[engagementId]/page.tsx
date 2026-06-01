@@ -417,6 +417,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
@@ -435,6 +436,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
@@ -453,6 +455,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
@@ -471,6 +474,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
@@ -489,6 +493,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
@@ -507,6 +512,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
@@ -525,6 +531,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
@@ -543,6 +550,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
@@ -561,6 +569,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
@@ -579,6 +588,7 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       onSuccess={(scan) => {
                         setScans((prev) => [scan, ...prev]);
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
                         loadSummary();
                         loadExecutionState();
                       }}
