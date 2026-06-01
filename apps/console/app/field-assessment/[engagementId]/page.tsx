@@ -88,6 +88,7 @@ export default function EngagementWorkspacePage() {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedObsId, setExpandedObsId] = useState<string | null>(null);
+  const mainTabsRef = useRef<HTMLElement>(null);
 
   const [reportsRefreshKey, setReportsRefreshKey] = useState(0);
   const [selectedReportVersion, setSelectedReportVersion] = useState<number | null>(null);
@@ -213,6 +214,11 @@ export default function EngagementWorkspacePage() {
   useEffect(() => {
     if (activeTab === 'findings') loadFindings();
     if (activeTab === 'history') loadAuditEvents();
+    // Scroll the active tab trigger into view when switching tabs programmatically
+    // (the tab bar is overflow-x-auto so the active trigger may be off-screen).
+    mainTabsRef.current
+      ?.querySelector('[role="tab"][data-state="active"]')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }, [activeTab, loadFindings, loadAuditEvents]);
 
   useEffect(() => {
@@ -230,7 +236,10 @@ export default function EngagementWorkspacePage() {
 
   function handleSectionClick(key: string) {
     const tab = TAB_SECTIONS[key] ?? key;
-    if (tab) setActiveTab(tab);
+    if (tab) {
+      setActiveTab(tab);
+      mainTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   if (engLoading) {
@@ -340,7 +349,7 @@ export default function EngagementWorkspacePage() {
           </aside>
 
           {/* Main tabs */}
-          <main className="lg:col-span-3">
+          <main ref={mainTabsRef} className="lg:col-span-3">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="overflow-x-auto">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
