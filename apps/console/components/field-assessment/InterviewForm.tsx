@@ -15,6 +15,7 @@ import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger,
 import { Textarea } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { fieldAssessmentApi, type ObservationDomain, type ObservationSeverity, type Observation } from '@/lib/fieldAssessmentApi';
+import { getInterviewGuide, type InterviewGuide, type InterviewQuestion } from '@/lib/interviewGuides';
 
 const DOMAINS: { value: ObservationDomain; label: string }[] = [
   { value: 'ai_governance', label: 'AI Governance' },
@@ -33,241 +34,6 @@ const CONFIDENCE_OPTIONS = [
   { value: 'low', label: 'Low — anecdotal, unverified, or contradicted' },
 ];
 
-interface InterviewQuestion {
-  text: string;
-  nist: string[]; // NIST AI RMF 1.0 subcategory references
-}
-
-interface InterviewGuide {
-  roleLabel: string;
-  domain: ObservationDomain;
-  suggestedTitle: string;
-  topics: string[];
-  questions: InterviewQuestion[];
-}
-
-const INTERVIEW_GUIDES: Record<string, InterviewGuide> = {
-  // ── Playbook-required roles ────────────────────────────────────────────────
-  executive_sponsor: {
-    roleLabel: 'Executive Sponsor',
-    domain: 'ai_governance',
-    suggestedTitle: 'Executive Sponsor — AI governance awareness interview',
-    topics: ['AI strategy and board-level oversight', 'Risk appetite and tolerance', 'Policy awareness and approval', 'AI investment and roadmap', 'Incident escalation path'],
-    questions: [
-      { text: 'What AI tools or systems does your organisation currently use or plan to adopt?', nist: ['GOVERN 1.1', 'MAP 1.1'] },
-      { text: 'Who owns AI risk in your organisation — is there a named role, committee, or policy owner?', nist: ['GOVERN 1.2', 'GOVERN 5.1'] },
-      { text: 'Are you aware of the current AI usage policy? Have you reviewed or formally approved it?', nist: ['GOVERN 1.1', 'GOVERN 1.3'] },
-      { text: 'How do you receive updates on AI-related risks, incidents, or compliance obligations?', nist: ['GOVERN 1.6', 'GOVERN 6.1'] },
-      { text: 'What level of AI risk is acceptable to the business, and how was that threshold set?', nist: ['GOVERN 2.1', 'GOVERN 2.2'] },
-      { text: 'Is AI adoption factored into your strategic roadmap or board / leadership reporting?', nist: ['GOVERN 1.5', 'MAP 1.5'] },
-      { text: 'Have there been any AI-related incidents or near-misses in the last 12 months?', nist: ['MANAGE 2.4', 'MAP 3.5'] },
-      { text: 'What approval or oversight process exists before a new AI tool is deployed?', nist: ['GOVERN 1.1', 'GOVERN 4.1'] },
-    ],
-  },
-  ai_system_owner: {
-    roleLabel: 'AI System Owner',
-    domain: 'ai_governance',
-    suggestedTitle: 'AI System Owner — system scope, data use, and monitoring interview',
-    topics: ['System purpose and intended use', 'Training and inference data', 'Known failure modes and limitations', 'Production monitoring', 'Change and incident management'],
-    questions: [
-      { text: 'What AI systems are you responsible for — what is their intended purpose and scope of use?', nist: ['MAP 1.1', 'GOVERN 1.2'] },
-      { text: 'What data does the system use as input, and where does that data come from?', nist: ['MAP 1.5', 'MEASURE 2.5'] },
-      { text: 'What are the known failure modes, edge cases, or limitations of the system?', nist: ['MAP 5.1', 'MEASURE 2.7'] },
-      { text: 'How is the system monitored in production — are there performance or quality thresholds?', nist: ['MANAGE 2.2', 'MEASURE 4.1'] },
-      { text: 'How are changes to the model or system tested and approved before deployment?', nist: ['MANAGE 1.1', 'GOVERN 1.7'] },
-      { text: 'What training or guidance do end users receive about appropriate use of the system?', nist: ['GOVERN 1.6', 'MAP 1.6'] },
-      { text: 'If the system produced a harmful or incorrect output, what is the escalation path?', nist: ['MANAGE 2.4', 'GOVERN 1.2'] },
-    ],
-  },
-  security_owner: {
-    roleLabel: 'Security Owner',
-    domain: 'ai_governance',
-    suggestedTitle: 'Security Owner — AI security controls and risk posture interview',
-    topics: ['AI risk register and classification', 'Technical security controls', 'Logging and audit trail', 'Vendor and third-party risk', 'Incident response'],
-    questions: [
-      { text: 'Are AI systems formally listed in the risk register? At what severity are they classified?', nist: ['GOVERN 1.1', 'MAP 5.1'] },
-      { text: 'What technical controls restrict what data AI systems can access or process?', nist: ['MANAGE 1.1', 'MEASURE 2.7'] },
-      { text: 'Is access to AI tools and their outputs logged, reviewed, and retained?', nist: ['MEASURE 4.1', 'MANAGE 2.2'] },
-      { text: 'How are third-party AI vendors assessed for security risk before and after onboarding?', nist: ['GOVERN 4.1', 'MANAGE 3.1'] },
-      { text: 'Has penetration testing or red-teaming been conducted specifically for AI systems?', nist: ['MEASURE 2.7', 'MANAGE 1.3'] },
-      { text: 'What is the incident response process if an AI system is compromised or produces harmful output?', nist: ['MANAGE 2.4', 'GOVERN 6.2'] },
-      { text: 'How do you detect and respond to unsanctioned or shadow AI tool usage?', nist: ['MAP 3.5', 'GOVERN 4.2'] },
-    ],
-  },
-  legal_or_compliance: {
-    roleLabel: 'Legal / Compliance',
-    domain: 'compliance',
-    suggestedTitle: 'Legal & Compliance — regulatory obligations and legal exposure interview',
-    topics: ['Applicable AI regulations and frameworks', 'Legal review of AI deployments', 'Contractual AI obligations', 'Regulatory incident reporting', 'Intellectual property and liability'],
-    questions: [
-      { text: 'Which regulations or frameworks apply to your AI use (EU AI Act, NIST AI RMF, ISO 42001, sector-specific)?', nist: ['GOVERN 1.1', 'MAP 5.2'] },
-      { text: 'Is legal review required before deploying a new AI system — what does that process look like?', nist: ['GOVERN 1.1', 'GOVERN 4.1'] },
-      { text: 'Do vendor contracts include AI-specific clauses covering data use, training, and auditability?', nist: ['GOVERN 4.1', 'MANAGE 3.1'] },
-      { text: 'What is the legal obligation to report an AI-related incident to a regulator or affected party?', nist: ['MANAGE 2.4', 'GOVERN 6.1'] },
-      { text: 'How is personal data handled when used in AI systems — is there a legal basis for each use?', nist: ['MEASURE 2.5', 'GOVERN 1.1'] },
-      { text: 'Has legal reviewed IP ownership, liability, and indemnity exposure for AI-generated outputs?', nist: ['MAP 5.1', 'GOVERN 1.1'] },
-      { text: 'How do you track regulatory changes (EU AI Act phases, sector guidance) and translate them into policy updates?', nist: ['GOVERN 1.7', 'MAP 5.2'] },
-    ],
-  },
-  compliance_owner: {
-    roleLabel: 'Compliance Owner',
-    domain: 'compliance',
-    suggestedTitle: 'Compliance Owner — AI compliance programme and audit readiness interview',
-    topics: ['Compliance register for AI systems', 'Policy review cycle and ownership', 'Training and certification obligations', 'Audit readiness', 'Control testing and evidence'],
-    questions: [
-      { text: 'Is there a compliance register that maps AI systems to applicable regulations and controls?', nist: ['GOVERN 1.1', 'MAP 5.2'] },
-      { text: 'How often are AI-related policies reviewed, who owns them, and what triggers an out-of-cycle review?', nist: ['GOVERN 1.1', 'GOVERN 1.3'] },
-      { text: 'Are there mandatory training or certification requirements for staff who deploy or operate AI systems?', nist: ['GOVERN 1.6', 'MAP 5.2'] },
-      { text: 'How would you demonstrate AI compliance readiness to an external auditor today?', nist: ['GOVERN 5.1', 'MEASURE 4.1'] },
-      { text: 'How are AI-specific controls tested, and how frequently?', nist: ['MEASURE 2.7', 'MANAGE 1.3'] },
-      { text: 'How do you track regulatory changes and translate them into updated controls or policies?', nist: ['GOVERN 1.7', 'MAP 5.2'] },
-    ],
-  },
-  system_owner: {
-    roleLabel: 'System Owner',
-    domain: 'operational_security',
-    suggestedTitle: 'System Owner — system configuration, access, and continuity interview',
-    topics: ['System purpose and data dependencies', 'User access and role management', 'Change and release management', 'Performance and quality monitoring', 'Business continuity'],
-    questions: [
-      { text: 'What is the primary purpose of the system and what business process does it support?', nist: ['MAP 1.1', 'GOVERN 1.2'] },
-      { text: 'What data does the system depend on, and how is sensitive data protected within it?', nist: ['MAP 1.5', 'MEASURE 2.5'] },
-      { text: 'How is user access to the system granted, reviewed, and revoked?', nist: ['GOVERN 4.1', 'MANAGE 2.2'] },
-      { text: 'What is the change management process — how are releases tested and approved?', nist: ['GOVERN 1.7', 'MANAGE 1.1'] },
-      { text: 'How is system performance monitored — are there SLAs or quality thresholds in place?', nist: ['MEASURE 4.1', 'MANAGE 2.2'] },
-      { text: 'What is the business continuity and disaster recovery plan for this system?', nist: ['MANAGE 2.4', 'GOVERN 6.2'] },
-      { text: 'Are there third-party integrations — how are those dependencies and risks managed?', nist: ['GOVERN 4.1', 'MANAGE 3.1'] },
-    ],
-  },
-  privacy_officer: {
-    roleLabel: 'Privacy Officer',
-    domain: 'data_security',
-    suggestedTitle: 'Privacy Officer — AI data use, consent, and data subject rights interview',
-    topics: ['Personal data in AI systems', 'Legal basis and consent', 'Data subject rights', 'Data minimisation and retention', 'DPIA and bias assessment'],
-    questions: [
-      { text: 'Which AI systems process personal data, and what categories of data are involved?', nist: ['MEASURE 2.5', 'GOVERN 1.1'] },
-      { text: 'What is the legal basis for using personal data in each AI system?', nist: ['MEASURE 2.5', 'MAP 1.5'] },
-      { text: 'How are data subject rights (access, erasure, portability) handled for data used in AI?', nist: ['MEASURE 2.5', 'GOVERN 1.7'] },
-      { text: 'How is data minimisation applied — is only the minimum necessary data used by AI systems?', nist: ['MEASURE 2.5', 'MAP 1.5'] },
-      { text: 'Are there cross-border data transfers involved in AI processing, and how are they governed?', nist: ['GOVERN 4.1', 'MEASURE 2.5'] },
-      { text: 'Has a DPIA (Data Protection Impact Assessment) been completed for high-risk AI systems?', nist: ['MAP 5.1', 'MEASURE 2.5'] },
-      { text: 'Has the system been assessed for bias or discriminatory outputs affecting protected characteristics?', nist: ['MAP 5.1', 'MEASURE 2.7'] },
-    ],
-  },
-
-  // ── Additional roles for broader playbook coverage ─────────────────────────
-  ciso: {
-    roleLabel: 'CISO',
-    domain: 'ai_governance',
-    suggestedTitle: 'CISO — AI security posture and governance interview',
-    topics: ['AI security controls and risk framework', 'Data classification for AI inputs/outputs', 'Vendor and third-party AI risk', 'Incident response for AI events', 'Monitoring and detection capability'],
-    questions: [
-      { text: 'Which AI tools or platforms are in scope for your security programme?', nist: ['GOVERN 1.1', 'MAP 1.1'] },
-      { text: "How are AI vendors assessed before onboarding — what's the security review process?", nist: ['GOVERN 4.1', 'MANAGE 3.1'] },
-      { text: 'How is sensitive data classified and protected when used as AI input?', nist: ['MEASURE 2.5', 'MAP 1.5'] },
-      { text: 'Is there a defined incident response playbook for AI-specific events (model poisoning, data exfiltration via AI)?', nist: ['MANAGE 2.4', 'GOVERN 6.2'] },
-      { text: 'What monitoring or alerting is in place for anomalous AI usage or outputs?', nist: ['MEASURE 4.1', 'MANAGE 2.2'] },
-      { text: 'Have any AI tools been shadow-deployed without security review?', nist: ['MAP 3.5', 'GOVERN 4.2'] },
-      { text: 'How does your team keep pace with the emerging AI threat landscape and regulatory changes?', nist: ['GOVERN 1.7', 'MAP 5.2'] },
-    ],
-  },
-  security_officer: {
-    roleLabel: 'Security Officer',
-    domain: 'ai_governance',
-    suggestedTitle: 'Security Officer — AI risk and control interview',
-    topics: ['Control implementation', 'Risk register entries for AI', 'Monitoring and detection', 'Policy enforcement'],
-    questions: [
-      { text: 'Are AI systems listed in the risk register? At what severity?', nist: ['GOVERN 1.1', 'MAP 5.1'] },
-      { text: 'What technical controls limit what data AI tools can access?', nist: ['MANAGE 1.1', 'MEASURE 2.7'] },
-      { text: 'Is access to AI tools logged and reviewed?', nist: ['MEASURE 4.1', 'MANAGE 2.2'] },
-      { text: 'How are policy violations around AI use identified and handled?', nist: ['MAP 3.5', 'GOVERN 1.1'] },
-      { text: 'Are AI-specific risks included in periodic security reviews?', nist: ['MEASURE 2.7', 'MANAGE 1.3'] },
-    ],
-  },
-  data_steward: {
-    roleLabel: 'Data Steward',
-    domain: 'data_security',
-    suggestedTitle: 'Data Steward — data governance and AI data use interview',
-    topics: ['Data classification and lineage', 'AI training and inference data', 'Consent and data subject rights', 'Retention and deletion', 'Cross-border data flows'],
-    questions: [
-      { text: 'Which data sets are used as input to AI models or third-party AI services?', nist: ['MAP 1.5', 'GOVERN 1.1'] },
-      { text: 'How is personal or sensitive data identified before it reaches an AI system?', nist: ['MEASURE 2.5', 'MAP 1.5'] },
-      { text: "Is there a process to ensure AI outputs don't expose regulated data (PII, health, financial)?", nist: ['MEASURE 2.5', 'MANAGE 2.2'] },
-      { text: 'How are data subject rights (access, erasure) handled for data used in AI training?', nist: ['MEASURE 2.5', 'GOVERN 1.7'] },
-      { text: 'Are there retention policies specific to AI-generated outputs or logs?', nist: ['GOVERN 1.7', 'MAP 1.5'] },
-      { text: 'Do any AI vendors process data outside the primary jurisdiction? Is this documented?', nist: ['GOVERN 4.1', 'MEASURE 2.5'] },
-    ],
-  },
-  it_admin: {
-    roleLabel: 'IT Administrator',
-    domain: 'access_management',
-    suggestedTitle: 'IT Admin — access control and AI tool provisioning interview',
-    topics: ['AI tool provisioning and deprovisioning', 'Access control and least privilege', 'Shadow IT / unsanctioned AI', 'Endpoint controls', 'Patch and update management'],
-    questions: [
-      { text: 'What is the process for provisioning a user with access to an approved AI tool?', nist: ['GOVERN 4.1', 'MANAGE 2.2'] },
-      { text: 'Are AI service accounts or API keys managed in a secrets manager or inventory?', nist: ['MANAGE 2.2', 'MEASURE 4.1'] },
-      { text: 'How do you identify and block unsanctioned AI tool usage on corporate devices?', nist: ['MAP 3.5', 'GOVERN 4.2'] },
-      { text: 'Is MFA enforced for access to AI platforms?', nist: ['MANAGE 1.1', 'GOVERN 4.1'] },
-      { text: 'How are AI tool updates or patches applied — is there a tested rollout process?', nist: ['MANAGE 1.1', 'GOVERN 1.7'] },
-      { text: 'When an employee leaves, how quickly is their AI tool access revoked?', nist: ['GOVERN 4.1', 'MANAGE 2.2'] },
-    ],
-  },
-  compliance_officer: {
-    roleLabel: 'Compliance Officer',
-    domain: 'compliance',
-    suggestedTitle: 'Compliance Officer — regulatory obligations and AI compliance interview',
-    topics: ['Applicable AI regulations and frameworks', 'Audit readiness', 'Policy review cycle', 'Training and awareness obligations', 'Incident reporting requirements'],
-    questions: [
-      { text: 'Which regulations or frameworks govern AI use in your organisation (EU AI Act, NIST AI RMF, ISO 42001, sector-specific)?', nist: ['GOVERN 1.1', 'MAP 5.2'] },
-      { text: 'Has a formal AI risk classification been completed against applicable regulation?', nist: ['MAP 5.1', 'MEASURE 2.7'] },
-      { text: 'How often are AI-related policies reviewed, and who signs off?', nist: ['GOVERN 1.1', 'GOVERN 1.3'] },
-      { text: 'Are there mandatory training or certification requirements for staff deploying or using AI?', nist: ['GOVERN 1.6', 'MAP 5.2'] },
-      { text: 'What is the reporting obligation if an AI system causes a material incident or harm?', nist: ['MANAGE 2.4', 'GOVERN 6.1'] },
-      { text: 'Is there a register of AI systems mapped to their regulatory risk category?', nist: ['GOVERN 1.1', 'MAP 5.2'] },
-    ],
-  },
-  department_head: {
-    roleLabel: 'Department Head',
-    domain: 'ai_governance',
-    suggestedTitle: 'Department Head — operational AI use and awareness interview',
-    topics: ['Day-to-day AI tool usage', 'Policy awareness within the team', 'Data handling practices', 'Risk awareness', 'Informal / shadow AI adoption'],
-    questions: [
-      { text: 'Which AI tools does your team use on a regular basis — sanctioned or otherwise?', nist: ['MAP 3.5', 'GOVERN 1.1'] },
-      { text: 'Are your team members aware of the AI usage policy and any restrictions?', nist: ['GOVERN 1.6', 'GOVERN 1.1'] },
-      { text: 'Has your team used AI to process or summarise sensitive business or customer data?', nist: ['MEASURE 2.5', 'MAP 1.5'] },
-      { text: 'Have you seen team members use personal AI accounts (e.g. free ChatGPT) for work tasks?', nist: ['MAP 3.5', 'GOVERN 4.2'] },
-      { text: 'How do team members raise concerns if they think an AI output is wrong or harmful?', nist: ['MANAGE 2.4', 'GOVERN 6.1'] },
-      { text: 'Has AI changed how work gets done in your team — are those changes documented?', nist: ['MAP 1.6', 'GOVERN 1.1'] },
-    ],
-  },
-  vendor_manager: {
-    roleLabel: 'Vendor / Procurement Manager',
-    domain: 'vendor_management',
-    suggestedTitle: 'Vendor Manager — third-party AI risk and procurement interview',
-    topics: ['Vendor AI due diligence', 'Contractual AI obligations', 'Sub-processor visibility', 'Ongoing vendor monitoring', 'Exit and contingency planning'],
-    questions: [
-      { text: 'What due diligence is performed on vendors that use or offer AI capabilities?', nist: ['GOVERN 4.1', 'MANAGE 3.1'] },
-      { text: 'Are AI-specific clauses included in vendor contracts (data use, model training, auditability)?', nist: ['GOVERN 4.1', 'MANAGE 3.1'] },
-      { text: 'Do vendor agreements require disclosure if an AI tool changes significantly or a new AI capability is added?', nist: ['GOVERN 4.2', 'MANAGE 3.1'] },
-      { text: 'How are vendor sub-processors assessed — especially for AI data handling?', nist: ['GOVERN 4.1', 'MEASURE 2.5'] },
-      { text: 'Is there a periodic review of active AI vendor relationships and their risk posture?', nist: ['MANAGE 3.1', 'GOVERN 4.2'] },
-      { text: 'What is the exit strategy if a key AI vendor becomes non-compliant or ceases operation?', nist: ['GOVERN 6.2', 'MANAGE 3.1'] },
-    ],
-  },
-  incident_response_lead: {
-    roleLabel: 'Incident Response Lead',
-    domain: 'incident_response',
-    suggestedTitle: 'Incident Response Lead — AI incident preparedness interview',
-    topics: ['AI incident definition and classification', 'Detection and triage', 'Playbook coverage', 'Post-incident review', 'Lessons learned and policy update'],
-    questions: [
-      { text: 'How does your organisation define an AI-related incident — what triggers a response?', nist: ['MANAGE 2.4', 'GOVERN 1.1'] },
-      { text: 'Is there a dedicated playbook or runbook for AI incidents, separate from general IR?', nist: ['MANAGE 2.4', 'GOVERN 6.2'] },
-      { text: 'How would an AI data exfiltration or model manipulation event be detected?', nist: ['MEASURE 4.1', 'MANAGE 2.4'] },
-      { text: 'Who is the escalation path for an AI incident — is the CISO or legal involved at what threshold?', nist: ['GOVERN 1.2', 'MANAGE 2.4'] },
-      { text: 'Have any AI incidents or near-misses occurred? Were they formally reviewed?', nist: ['MAP 3.5', 'MANAGE 2.4'] },
-      { text: 'After an AI incident, how are lessons learned fed back into policy or controls?', nist: ['GOVERN 1.7', 'MANAGE 1.3'] },
-    ],
-  },
-};
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -591,10 +357,11 @@ interface InterviewPrefill {
 interface Props {
   engagementId: string;
   prefill?: InterviewPrefill | null;
+  assessmentType?: string;
   onSuccess: (obs: Observation) => void;
 }
 
-export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
+export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess }: Props) {
   const [interviewRole, setInterviewRole] = useState('');
   const [businessFunction, setBusinessFunction] = useState('');
   const [domain, setDomain] = useState<ObservationDomain | ''>('');
@@ -610,7 +377,7 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
   const [guideOpen, setGuideOpen] = useState(true);
   const [audioArtifact, setAudioArtifact] = useState<{ hash: string; sizeKb: number; durationSec: number } | null>(null);
 
-  const guide = prefill?.role ? INTERVIEW_GUIDES[prefill.role] ?? null : null;
+  const guide = getInterviewGuide(prefill?.role, assessmentType);
 
   // Unique NIST AI RMF refs across all questions in the guide, sorted.
   const nistRefs = guide
@@ -645,8 +412,11 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
     const audioLine = audioArtifact?.hash
       ? `\n\n[Audio artifact: ${audioArtifact.durationSec}s, ${audioArtifact.sizeKb} KB, SHA-256: ${audioArtifact.hash}]`
       : '';
+    const regsRefs = guide
+      ? Array.from(new Set(guide.questions.flatMap((q) => q.regs ?? []))).sort()
+      : [];
     const nistLine = nistRefs.length > 0
-      ? `\n\n[NIST AI RMF: ${nistRefs.join(', ')}]`
+      ? `\n\n[NIST AI RMF: ${nistRefs.join(', ')}${regsRefs.length > 0 ? ` | Regs: ${regsRefs.join(', ')}` : ''}]`
       : '';
 
     const description = [
@@ -736,6 +506,11 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
                             {q.nist.map((ref) => (
                               <span key={ref} className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-mono border border-primary/20 bg-primary/10 text-primary">
                                 {ref}
+                              </span>
+                            ))}
+                            {q.regs && q.regs.length > 0 && q.regs.map((reg) => (
+                              <span key={reg} className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-mono border border-amber-500/30 bg-amber-500/10 text-amber-400">
+                                {reg}
                               </span>
                             ))}
                           </div>

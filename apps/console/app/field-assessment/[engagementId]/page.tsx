@@ -760,6 +760,7 @@ export default function EngagementWorkspacePage() {
                     <InterviewForm
                       engagementId={engagementId}
                       prefill={interviewPrefill}
+                      assessmentType={engagement?.assessment_type ?? undefined}
                       onSuccess={(obs) => {
                         setObservations((prev) => [obs, ...prev]);
                         setInterviewPrefill(null);

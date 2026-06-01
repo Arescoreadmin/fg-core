@@ -551,6 +551,10 @@ _FALLBACK_PLAYBOOK_BY_ASSESSMENT_TYPE: MappingProxyType[str, str] = MappingProxy
     {
         "cmmc": "comprehensive",
         "iso27001": "comprehensive",
+        "pci_dss": "comprehensive",
+        "dora": "comprehensive",
+        "fedramp": "comprehensive",
+        "nist_800_171": "comprehensive",
     }
 )
 
