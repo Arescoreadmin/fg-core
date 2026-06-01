@@ -54,8 +54,14 @@ const TAB_SECTIONS: Record<string, string> = {
   total_evidence_links: 'evidence',
   total_findings: 'findings',
   report: 'reports',
-  // interview role keys that guided execution may emit
+  // interview role keys that guided execution may emit (all playbook roles)
   executive_sponsor: 'interviews',
+  ai_system_owner: 'interviews',
+  security_owner: 'interviews',
+  legal_or_compliance: 'interviews',
+  compliance_owner: 'interviews',
+  system_owner: 'interviews',
+  privacy_officer: 'interviews',
   ciso: 'interviews',
   data_steward: 'interviews',
   it_admin: 'interviews',
