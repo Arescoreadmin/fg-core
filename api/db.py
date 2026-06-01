@@ -1330,9 +1330,10 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
             logger.exception("sqlite auto-migration failed (best effort)")
 
     elif engine.dialect.name == "postgresql":
-        if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
-            from api.db_migrations import assert_migrations_applied  # noqa
+        from api.db_migrations import apply_migrations, assert_migrations_applied  # noqa
 
+        apply_migrations(engine)
+        if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
             assert_migrations_applied(engine)
         # Create ORM-managed tables not covered by numbered SQL migrations (e.g. FA
         # substrate tables). checkfirst=True skips tables that already exist, so
