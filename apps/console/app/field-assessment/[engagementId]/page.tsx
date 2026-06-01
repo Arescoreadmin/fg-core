@@ -756,13 +756,13 @@ export default function EngagementWorkspacePage() {
                 </Card>
               </TabsContent>
 
-              {/* Findings (read-only) */}
+              {/* Findings */}
               <TabsContent value="findings">
                 <Card className="border-border">
                   <CardHeader className="pb-2 pt-4 px-4">
                     <CardTitle className="text-sm">Normalized Findings</CardTitle>
                     <p className="text-xs text-muted mt-0.5">
-                      Findings are normalized by the governance substrate — not created in this UI
+                      Click any finding to expand it and set remediation guidance
                     </p>
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
