@@ -10,7 +10,7 @@
  * technical observations. See docs/ai/PR_FIX_LOG.md PR 2 entry.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@fg/ui';
 import { Textarea } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
@@ -33,12 +33,158 @@ const CONFIDENCE_OPTIONS = [
   { value: 'low', label: 'Low — anecdotal, unverified, or contradicted' },
 ];
 
+interface InterviewGuide {
+  roleLabel: string;
+  domain: ObservationDomain;
+  suggestedTitle: string;
+  topics: string[];
+  questions: string[];
+}
+
+const INTERVIEW_GUIDES: Record<string, InterviewGuide> = {
+  executive_sponsor: {
+    roleLabel: 'Executive Sponsor',
+    domain: 'ai_governance',
+    suggestedTitle: 'Executive Sponsor — AI governance awareness interview',
+    topics: ['AI strategy and board-level oversight', 'Risk appetite and tolerance', 'Policy awareness and approval', 'AI investment and roadmap', 'Incident escalation path'],
+    questions: [
+      'What AI tools or systems does your organisation currently use or plan to adopt?',
+      'Who owns AI risk in your organisation — is there a named role, committee, or policy owner?',
+      'Are you aware of the current AI usage policy? Have you reviewed or formally approved it?',
+      'How do you receive updates on AI-related risks, incidents, or compliance obligations?',
+      'What level of AI risk is acceptable to the business, and how was that threshold set?',
+      'Is AI adoption factored into your strategic roadmap or board / leadership reporting?',
+      'Have there been any AI-related incidents or near-misses in the last 12 months?',
+      'What approval or oversight process exists before a new AI tool is deployed?',
+    ],
+  },
+  ciso: {
+    roleLabel: 'CISO',
+    domain: 'ai_governance',
+    suggestedTitle: 'CISO — AI security posture and governance interview',
+    topics: ['AI security controls and risk framework', 'Data classification for AI inputs/outputs', 'Vendor and third-party AI risk', 'Incident response for AI events', 'Monitoring and detection capability'],
+    questions: [
+      'Which AI tools or platforms are in scope for your security programme?',
+      'How are AI vendors assessed before onboarding — what's the security review process?',
+      'How is sensitive data classified and protected when used as AI input?',
+      'Is there a defined incident response playbook for AI-specific events (model poisoning, data exfiltration via AI)?',
+      'What monitoring or alerting is in place for anomalous AI usage or outputs?',
+      'Have any AI tools been shadow-deployed without security review?',
+      'How does your team keep pace with emerging AI threat landscape and regulatory changes?',
+    ],
+  },
+  security_officer: {
+    roleLabel: 'Security Officer',
+    domain: 'ai_governance',
+    suggestedTitle: 'Security Officer — AI risk and control interview',
+    topics: ['Control implementation', 'Risk register entries for AI', 'Monitoring and detection', 'Policy enforcement'],
+    questions: [
+      'Are AI systems listed in the risk register? At what severity?',
+      'What technical controls limit what data AI tools can access?',
+      'Is access to AI tools logged and reviewed?',
+      'How are policy violations around AI use identified and handled?',
+      'Are AI-specific risks included in periodic security reviews?',
+    ],
+  },
+  data_steward: {
+    roleLabel: 'Data Steward',
+    domain: 'data_security',
+    suggestedTitle: 'Data Steward — data governance and AI data use interview',
+    topics: ['Data classification and lineage', 'AI training and inference data', 'Consent and data subject rights', 'Retention and deletion', 'Cross-border data flows'],
+    questions: [
+      'Which data sets are used as input to AI models or third-party AI services?',
+      'How is personal or sensitive data identified before it reaches an AI system?',
+      'Is there a process to ensure AI outputs don't expose regulated data (PII, health, financial)?',
+      'How are data subject rights (access, erasure) handled for data used in AI training?',
+      'Are there retention policies specific to AI-generated outputs or logs?',
+      'Do any AI vendors process data outside the primary jurisdiction? Is this documented?',
+    ],
+  },
+  it_admin: {
+    roleLabel: 'IT Administrator',
+    domain: 'access_management',
+    suggestedTitle: 'IT Admin — access control and AI tool provisioning interview',
+    topics: ['AI tool provisioning and deprovisioning', 'Access control and least privilege', 'Shadow IT / unsanctioned AI', 'Endpoint controls', 'Patch and update management'],
+    questions: [
+      'What is the process for provisioning a user with access to an approved AI tool?',
+      'Are AI service accounts or API keys managed in a secrets manager or inventory?',
+      'How do you identify and block unsanctioned AI tool usage on corporate devices?',
+      'Is MFA enforced for access to AI platforms?',
+      'How are AI tool updates or patches applied — is there a tested rollout process?',
+      'When an employee leaves, how quickly is their AI tool access revoked?',
+    ],
+  },
+  compliance_officer: {
+    roleLabel: 'Compliance Officer',
+    domain: 'compliance',
+    suggestedTitle: 'Compliance Officer — regulatory obligations and AI compliance interview',
+    topics: ['Applicable AI regulations and frameworks', 'Audit readiness', 'Policy review cycle', 'Training and awareness obligations', 'Incident reporting requirements'],
+    questions: [
+      'Which regulations or frameworks govern AI use in your organisation (EU AI Act, NIST AI RMF, ISO 42001, sector-specific)?',
+      'Has a formal AI risk classification been completed against applicable regulation?',
+      'How often are AI-related policies reviewed, and who signs off?',
+      'Are there mandatory training or certification requirements for staff deploying or using AI?',
+      'What is the reporting obligation if an AI system causes a material incident or harm?',
+      'Is there a register of AI systems mapped to their regulatory risk category?',
+    ],
+  },
+  department_head: {
+    roleLabel: 'Department Head',
+    domain: 'ai_governance',
+    suggestedTitle: 'Department Head — operational AI use and awareness interview',
+    topics: ['Day-to-day AI tool usage', 'Policy awareness within the team', 'Data handling practices', 'Risk awareness', 'Informal / shadow AI adoption'],
+    questions: [
+      'Which AI tools does your team use on a regular basis — sanctioned or otherwise?',
+      'Are your team members aware of the AI usage policy and any restrictions?',
+      'Has your team used AI to process or summarise sensitive business or customer data?',
+      'Have you seen team members use personal AI accounts (e.g. free ChatGPT) for work tasks?',
+      'How do team members raise concerns if they think an AI output is wrong or harmful?',
+      'Has AI changed how work gets done in your team — are those changes documented?',
+    ],
+  },
+  vendor_manager: {
+    roleLabel: 'Vendor / Procurement Manager',
+    domain: 'vendor_management',
+    suggestedTitle: 'Vendor Manager — third-party AI risk and procurement interview',
+    topics: ['Vendor AI due diligence', 'Contractual AI obligations', 'Sub-processor visibility', 'Ongoing vendor monitoring', 'Exit and contingency planning'],
+    questions: [
+      'What due diligence is performed on vendors that use or offer AI capabilities?',
+      'Are AI-specific clauses included in vendor contracts (data use, model training, auditability)?',
+      'Do vendor agreements require disclosure if an AI tool changes significantly or a new AI capability is added?',
+      'How are vendor sub-processors assessed — especially for AI data handling?',
+      'Is there a periodic review of active AI vendor relationships and their risk posture?',
+      'What is the exit strategy if a key AI vendor becomes non-compliant or ceases operation?',
+    ],
+  },
+  incident_response_lead: {
+    roleLabel: 'Incident Response Lead',
+    domain: 'incident_response',
+    suggestedTitle: 'Incident Response Lead — AI incident preparedness interview',
+    topics: ['AI incident definition and classification', 'Detection and triage', 'Playbook coverage', 'Post-incident review', 'Lessons learned and policy update'],
+    questions: [
+      'How does your organisation define an AI-related incident — what triggers a response?',
+      'Is there a dedicated playbook or runbook for AI incidents, separate from general IR?',
+      'How would an AI data exfiltration or model manipulation event be detected?',
+      'Who is the escalation path for an AI incident — is the CISO or legal involved at what threshold?',
+      'Have any AI incidents or near-misses occurred? Were they formally reviewed?',
+      'After an AI incident, how are lessons learned fed back into policy or controls?',
+    ],
+  },
+};
+
+interface InterviewPrefill {
+  role?: string;
+  title?: string;
+  instruction?: string;
+}
+
 interface Props {
   engagementId: string;
+  prefill?: InterviewPrefill | null;
   onSuccess: (obs: Observation) => void;
 }
 
-export function InterviewForm({ engagementId, onSuccess }: Props) {
+export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
   const [interviewRole, setInterviewRole] = useState('');
   const [businessFunction, setBusinessFunction] = useState('');
   const [domain, setDomain] = useState<ObservationDomain | ''>('');
@@ -51,6 +197,22 @@ export function InterviewForm({ engagementId, onSuccess }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastObs, setLastObs] = useState<Observation | null>(null);
+  const [guideOpen, setGuideOpen] = useState(true);
+
+  const guide = prefill?.role ? INTERVIEW_GUIDES[prefill.role] ?? null : null;
+
+  useEffect(() => {
+    if (!prefill) return;
+    if (guide) {
+      setInterviewRole(guide.roleLabel);
+      setDomain(guide.domain);
+      setTitle(guide.suggestedTitle);
+    } else if (prefill.role) {
+      // Unknown role — use the key itself formatted as a label
+      setInterviewRole(prefill.role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()));
+    }
+    setGuideOpen(true);
+  }, [prefill]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canSubmit =
     interviewRole.trim() !== '' &&
@@ -104,6 +266,56 @@ export function InterviewForm({ engagementId, onSuccess }: Props) {
 
   return (
     <div className="space-y-4" aria-label="interview-form">
+      {/* Interview guide — shown when a prefill is active */}
+      {prefill && (
+        <div className="rounded border border-primary/30 bg-primary/5">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between px-3 py-2 text-left focus:outline-none"
+            onClick={() => setGuideOpen((v) => !v)}
+            aria-expanded={guideOpen}
+          >
+            <div>
+              <p className="text-xs font-semibold text-foreground">
+                Interview guide — {guide?.roleLabel ?? prefill.role?.replace(/_/g, ' ')}
+              </p>
+              {prefill.instruction && (
+                <p className="text-[11px] text-muted mt-0.5">{prefill.instruction}</p>
+              )}
+            </div>
+            <span className="text-xs text-muted shrink-0 ml-2">{guideOpen ? '▲ collapse' : '▼ expand'}</span>
+          </button>
+
+          {guideOpen && guide && (
+            <div className="border-t border-primary/20 px-3 pb-3 pt-2 space-y-3">
+              <div>
+                <p className="text-[11px] font-medium text-muted uppercase tracking-wide mb-1">Key topics to cover</p>
+                <ul className="space-y-0.5">
+                  {guide.topics.map((topic) => (
+                    <li key={topic} className="flex items-start gap-1.5 text-xs text-foreground">
+                      <span className="mt-0.5 shrink-0 text-primary">•</span>
+                      {topic}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-medium text-muted uppercase tracking-wide mb-1">Suggested questions</p>
+                <ol className="space-y-1.5 list-none">
+                  {guide.questions.map((q, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs text-foreground">
+                      <span className="shrink-0 text-[10px] text-muted font-mono mt-0.5 w-4 text-right">{i + 1}.</span>
+                      <span>{q}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="rounded border border-info/20 bg-info/5 px-3 py-2 text-xs text-info">
         Interview records are stored as structured field observations (type: interview) anchored to this engagement.
         Capture role — not personal name. Avoid PII beyond what governance evidence requires.

@@ -54,6 +54,16 @@ const TAB_SECTIONS: Record<string, string> = {
   total_evidence_links: 'evidence',
   total_findings: 'findings',
   report: 'reports',
+  // interview role keys that guided execution may emit
+  executive_sponsor: 'interviews',
+  ciso: 'interviews',
+  data_steward: 'interviews',
+  it_admin: 'interviews',
+  compliance_officer: 'interviews',
+  department_head: 'interviews',
+  vendor_manager: 'interviews',
+  incident_response_lead: 'interviews',
+  security_officer: 'interviews',
 };
 
 function formatDate(iso: string) {
@@ -93,6 +103,7 @@ export default function EngagementWorkspacePage() {
   const mainTabsRef = useRef<HTMLElement>(null);
 
   const [docPrefill, setDocPrefill] = useState<{ classification?: DocumentClassification } | null>(null);
+  const [interviewPrefill, setInterviewPrefill] = useState<{ role?: string; title?: string; instruction?: string } | null>(null);
   const [reportsRefreshKey, setReportsRefreshKey] = useState(0);
   const [selectedReportVersion, setSelectedReportVersion] = useState<number | null>(null);
   const [reportDoc, setReportDoc] = useState<ReportDocument | null>(null);
@@ -246,6 +257,13 @@ export default function EngagementWorkspacePage() {
     if (tab === 'documents' && action?.expected_evidence?.length) {
       const classification = action.expected_evidence[0] as DocumentClassification;
       setDocPrefill({ classification });
+    }
+    if (tab === 'interviews' && action) {
+      setInterviewPrefill({
+        role: action.expected_evidence?.[0],
+        title: action.title,
+        instruction: action.instruction,
+      });
     }
   }
 
@@ -735,8 +753,10 @@ export default function EngagementWorkspacePage() {
                   <CardContent className="px-4 pb-4">
                     <InterviewForm
                       engagementId={engagementId}
+                      prefill={interviewPrefill}
                       onSuccess={(obs) => {
                         setObservations((prev) => [obs, ...prev]);
+                        setInterviewPrefill(null);
                         loadSummary();
                         loadExecutionState();
                       }}
