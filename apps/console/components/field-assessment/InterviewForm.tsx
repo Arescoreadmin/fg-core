@@ -10,7 +10,7 @@
  * technical observations. See docs/ai/PR_FIX_LOG.md PR 2 entry.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@fg/ui';
 import { Textarea } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
@@ -172,6 +172,239 @@ const INTERVIEW_GUIDES: Record<string, InterviewGuide> = {
   },
 };
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+async function hashBlob(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped';
+
+function RecordingWidget({
+  onAudioReady,
+}: {
+  onAudioReady: (info: { hash: string; sizeKb: number; durationSec: number; blobUrl: string; blob: Blob }) => void;
+}) {
+  const [recState, setRecState] = useState<RecordingState>('idle');
+  const [displayTime, setDisplayTime] = useState(0);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [audioInfo, setAudioInfo] = useState<{ hash: string; sizeKb: number; durationSec: number } | null>(null);
+  const [recError, setRecError] = useState<string | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef = useRef(0);     // total elapsed seconds at last pause
+  const startedAtRef = useRef(0);   // Date.now() when last resumed
+
+  function tick() {
+    const total = elapsedRef.current + Math.floor((Date.now() - startedAtRef.current) / 1000);
+    setDisplayTime(total);
+  }
+
+  function startTimer() {
+    startedAtRef.current = Date.now();
+    timerRef.current = setInterval(tick, 1000);
+  }
+
+  function stopTimer() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    elapsedRef.current += Math.floor((Date.now() - startedAtRef.current) / 1000);
+  }
+
+  async function start() {
+    setRecError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunksRef.current = [];
+      elapsedRef.current = 0;
+      setDisplayTime(0);
+
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        const hash = await hashBlob(blob);
+        const info = {
+          hash,
+          sizeKb: Math.round(blob.size / 1024),
+          durationSec: elapsedRef.current,
+          blobUrl: url,
+          blob,
+        };
+        setBlobUrl(url);
+        setAudioInfo({ hash, sizeKb: info.sizeKb, durationSec: info.durationSec });
+        onAudioReady(info);
+        setRecState('stopped');
+      };
+
+      recorder.start(500);
+      mediaRecorderRef.current = recorder;
+      setRecState('recording');
+      startTimer();
+    } catch {
+      setRecError('Microphone access denied — check browser permissions.');
+    }
+  }
+
+  function pause() {
+    mediaRecorderRef.current?.pause();
+    stopTimer();
+    setRecState('paused');
+  }
+
+  function resume() {
+    mediaRecorderRef.current?.resume();
+    startTimer();
+    setRecState('recording');
+  }
+
+  function stop() {
+    stopTimer();
+    mediaRecorderRef.current?.stop();
+    // onstop handler fires async and sets state to 'stopped'
+  }
+
+  function discard() {
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+    setBlobUrl(null);
+    setAudioInfo(null);
+    setDisplayTime(0);
+    elapsedRef.current = 0;
+    setRecState('idle');
+    onAudioReady({ hash: '', sizeKb: 0, durationSec: 0, blobUrl: '', blob: new Blob() });
+  }
+
+  function download() {
+    if (!blobUrl) return;
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `interview-recording-${Date.now()}.webm`;
+    a.click();
+  }
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [blobUrl]);
+
+  return (
+    <div className="rounded border border-border bg-surface-2 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-foreground">Audio recording</p>
+        <div className="flex items-center gap-2">
+          {recState === 'recording' && (
+            <span className="flex items-center gap-1 text-[11px] text-red-300">
+              <span className="inline-block h-2 w-2 rounded-full bg-red-400 animate-pulse" />
+              REC
+            </span>
+          )}
+          {recState === 'paused' && (
+            <span className="text-[11px] text-amber-300">PAUSED</span>
+          )}
+          <span className="font-mono text-xs text-foreground tabular-nums">
+            {formatDuration(displayTime)}
+          </span>
+        </div>
+      </div>
+
+      {recState === 'idle' && (
+        <button
+          type="button"
+          onClick={start}
+          className="flex items-center gap-2 rounded border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 transition hover:bg-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-red-400" />
+          Start recording
+        </button>
+      )}
+
+      {(recState === 'recording' || recState === 'paused') && (
+        <div className="flex items-center gap-2">
+          {recState === 'recording' ? (
+            <button
+              type="button"
+              onClick={pause}
+              className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200 transition hover:bg-amber-500/20 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+            >
+              ⏸ Pause
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={resume}
+              className="flex items-center gap-2 rounded border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 transition hover:bg-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+            >
+              <span className="inline-block h-2 w-2 rounded-full bg-red-400" />
+              Resume
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={stop}
+            className="rounded border border-border bg-surface-1 px-3 py-1.5 text-xs font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            ⏹ Stop
+          </button>
+        </div>
+      )}
+
+      {recState === 'stopped' && blobUrl && audioInfo && (
+        <div className="space-y-2">
+          <audio controls src={blobUrl} className="w-full h-8" />
+          <div className="flex items-center justify-between text-[11px] text-muted">
+            <span>{formatDuration(audioInfo.durationSec)} · {audioInfo.sizeKb} KB</span>
+            <span className="font-mono truncate max-w-[160px]" title={audioInfo.hash}>
+              SHA-256: {audioInfo.hash.slice(0, 12)}…
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={download}
+              className="rounded border border-border bg-surface-1 px-2 py-1 text-[11px] text-foreground transition hover:border-primary/50 focus:outline-none"
+            >
+              Download
+            </button>
+            <button
+              type="button"
+              onClick={discard}
+              className="rounded border border-border px-2 py-1 text-[11px] text-muted transition hover:text-foreground focus:outline-none"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {recError && (
+        <p className="text-[11px] text-red-300">{recError}</p>
+      )}
+      <p className="text-[11px] text-muted">
+        Recording stays in your browser — download to keep a local copy. The SHA-256 hash is attached to the observation as a tamper-evident artifact reference.
+      </p>
+    </div>
+  );
+}
+
 interface InterviewPrefill {
   role?: string;
   title?: string;
@@ -198,6 +431,7 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [lastObs, setLastObs] = useState<Observation | null>(null);
   const [guideOpen, setGuideOpen] = useState(true);
+  const [audioArtifact, setAudioArtifact] = useState<{ hash: string; sizeKb: number; durationSec: number } | null>(null);
 
   const guide = prefill?.role ? INTERVIEW_GUIDES[prefill.role] ?? null : null;
 
@@ -208,7 +442,6 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
       setDomain(guide.domain);
       setTitle(guide.suggestedTitle);
     } else if (prefill.role) {
-      // Unknown role — use the key itself formatted as a label
       setInterviewRole(prefill.role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()));
     }
     setGuideOpen(true);
@@ -227,6 +460,10 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
     setSubmitting(true);
     setError(null);
 
+    const audioLine = audioArtifact?.hash
+      ? `\n\n[Audio artifact: ${audioArtifact.durationSec}s, ${audioArtifact.sizeKb} KB, SHA-256: ${audioArtifact.hash}]`
+      : '';
+
     const description = [
       businessFunction.trim() && `Business function: ${businessFunction.trim()}`,
       aiUsageAsserted.trim() && `AI usage asserted: ${aiUsageAsserted.trim()}`,
@@ -235,7 +472,7 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
       structuredNotes.trim(),
     ]
       .filter(Boolean)
-      .join('\n\n');
+      .join('\n\n') + audioLine;
 
     try {
       const obs = await fieldAssessmentApi.captureObservation(engagementId, {
@@ -256,6 +493,7 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
       setPolicyAwareness('');
       setStructuredNotes('');
       setConfidence('');
+      setAudioArtifact(null);
       onSuccess(obs);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Capture failed');
@@ -315,6 +553,17 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
           )}
         </div>
       )}
+
+      {/* Recording widget */}
+      <RecordingWidget
+        onAudioReady={(info) => {
+          if (info.hash) {
+            setAudioArtifact({ hash: info.hash, sizeKb: info.sizeKb, durationSec: info.durationSec });
+          } else {
+            setAudioArtifact(null);
+          }
+        }}
+      />
 
       <div className="rounded border border-info/20 bg-info/5 px-3 py-2 text-xs text-info">
         Interview records are stored as structured field observations (type: interview) anchored to this engagement.
@@ -430,6 +679,12 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
           </SelectContent>
         </Select>
       </div>
+
+      {audioArtifact && (
+        <div className="rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100">
+          Audio artifact will be attached — {formatDuration(audioArtifact.durationSec)}, {audioArtifact.sizeKb} KB, hash {audioArtifact.hash.slice(0, 12)}…
+        </div>
+      )}
 
       {lastObs && (
         <Alert variant="success">
