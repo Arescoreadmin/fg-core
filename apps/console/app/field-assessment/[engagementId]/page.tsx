@@ -792,7 +792,11 @@ export default function EngagementWorkspacePage() {
                       engagementId={engagementId}
                       loading={findingsLoading}
                       error={findingsError}
-                      onRemediationSaved={() => fieldAssessmentApi.listFindings(engagementId).then(r => setFindings(r.items)).catch(() => {})}
+                      onRemediationSaved={() => {
+                        fieldAssessmentApi.listFindings(engagementId).then(r => setFindings(r.items)).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
                     />
                   </CardContent>
                 </Card>
