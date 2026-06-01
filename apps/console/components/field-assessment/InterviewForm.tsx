@@ -190,14 +190,20 @@ type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped';
 
 function RecordingWidget({
   onAudioReady,
+  onUseTranscript,
 }: {
   onAudioReady: (info: { hash: string; sizeKb: number; durationSec: number; blobUrl: string; blob: Blob }) => void;
+  onUseTranscript: (text: string) => void;
 }) {
   const [recState, setRecState] = useState<RecordingState>('idle');
   const [displayTime, setDisplayTime] = useState(0);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [audioInfo, setAudioInfo] = useState<{ hash: string; sizeKb: number; durationSec: number } | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const blobRef = useRef<Blob | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -247,7 +253,10 @@ function RecordingWidget({
           blobUrl: url,
           blob,
         };
+        blobRef.current = blob;
         setBlobUrl(url);
+        setTranscript(null);
+        setTranscriptError(null);
         setAudioInfo({ hash, sizeKb: info.sizeKb, durationSec: info.durationSec });
         onAudioReady(info);
         setRecState('stopped');
@@ -280,11 +289,33 @@ function RecordingWidget({
     // onstop handler fires async and sets state to 'stopped'
   }
 
+  async function transcribe() {
+    if (!blobRef.current) return;
+    setTranscribing(true);
+    setTranscriptError(null);
+    setTranscript(null);
+    try {
+      const form = new FormData();
+      form.append('audio', blobRef.current, 'interview.webm');
+      const res = await fetch('/api/field-assessment/transcribe', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Transcription failed');
+      setTranscript(data.text as string);
+    } catch (e) {
+      setTranscriptError(e instanceof Error ? e.message : 'Transcription failed');
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
   function discard() {
     if (blobUrl) URL.revokeObjectURL(blobUrl);
+    blobRef.current = null;
     setBlobUrl(null);
     setAudioInfo(null);
     setDisplayTime(0);
+    setTranscript(null);
+    setTranscriptError(null);
     elapsedRef.current = 0;
     setRecState('idle');
     onAudioReady({ hash: '', sizeKb: 0, durationSec: 0, blobUrl: '', blob: new Blob() });
@@ -392,6 +423,55 @@ function RecordingWidget({
               Discard
             </button>
           </div>
+
+          {/* Transcription panel */}
+          {!transcript && !transcribing && (
+            <button
+              type="button"
+              onClick={transcribe}
+              className="w-full rounded border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition hover:bg-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              Transcribe with Whisper (~$0.006 / min)
+            </button>
+          )}
+
+          {transcribing && (
+            <div className="flex items-center gap-2 rounded border border-border bg-surface-1 px-3 py-2">
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <span className="text-xs text-muted">Transcribing — this may take a moment…</span>
+            </div>
+          )}
+
+          {transcript && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-medium text-muted uppercase tracking-wide">Transcript</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onUseTranscript(transcript)}
+                    className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200 transition hover:bg-emerald-500/20 focus:outline-none"
+                  >
+                    Use as notes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={transcribe}
+                    className="rounded border border-border px-2 py-0.5 text-[11px] text-muted transition hover:text-foreground focus:outline-none"
+                  >
+                    Re-transcribe
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded border border-border bg-surface-1 p-2 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+                {transcript}
+              </div>
+            </div>
+          )}
+
+          {transcriptError && (
+            <p className="text-[11px] text-red-300">{transcriptError}</p>
+          )}
         </div>
       )}
 
@@ -563,6 +643,9 @@ export function InterviewForm({ engagementId, prefill, onSuccess }: Props) {
             setAudioArtifact(null);
           }
         }}
+        onUseTranscript={(text) =>
+          setStructuredNotes((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text))
+        }
       />
 
       <div className="rounded border border-info/20 bg-info/5 px-3 py-2 text-xs text-info">
