@@ -37,12 +37,14 @@ import {
   type EngagementSummary,
   type ScanResultSummary,
   type DocumentAnalysis,
+  type DocumentClassification,
   type Observation,
   type Finding,
   type EvidenceLink,
   type AuditEvent,
   type ExecutionState,
   type ReportDocument,
+  type PlaybookNextAction,
 } from '@/lib/fieldAssessmentApi';
 
 const TAB_SECTIONS: Record<string, string> = {
@@ -90,6 +92,7 @@ export default function EngagementWorkspacePage() {
   const [expandedObsId, setExpandedObsId] = useState<string | null>(null);
   const mainTabsRef = useRef<HTMLElement>(null);
 
+  const [docPrefill, setDocPrefill] = useState<{ classification?: DocumentClassification } | null>(null);
   const [reportsRefreshKey, setReportsRefreshKey] = useState(0);
   const [selectedReportVersion, setSelectedReportVersion] = useState<number | null>(null);
   const [reportDoc, setReportDoc] = useState<ReportDocument | null>(null);
@@ -234,11 +237,15 @@ export default function EngagementWorkspacePage() {
     loadExecutionState();
   }
 
-  function handleSectionClick(key: string) {
+  function handleSectionClick(key: string, action?: PlaybookNextAction) {
     const tab = TAB_SECTIONS[key] ?? key;
     if (tab) {
       setActiveTab(tab);
       mainTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    if (tab === 'documents' && action?.expected_evidence?.length) {
+      const classification = action.expected_evidence[0] as DocumentClassification;
+      setDocPrefill({ classification });
     }
   }
 
@@ -338,7 +345,7 @@ export default function EngagementWorkspacePage() {
                   executionState={executionState}
                   loading={executionLoading}
                   error={executionError}
-                  onSectionClick={handleSectionClick}
+                  onSectionClick={(section, action) => handleSectionClick(section, action)}
                 />
               </CardContent>
             </Card>
@@ -619,7 +626,9 @@ export default function EngagementWorkspacePage() {
                   <CardContent className="px-4 pb-4">
                     <DocumentRegistrationPanel
                       engagementId={engagementId}
+                      prefill={docPrefill}
                       onSuccess={(doc) => {
+                        setDocPrefill(null);
                         setDocuments((prev) => [doc, ...prev]);
                         loadSummary();
                         loadExecutionState();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { fieldAssessmentApi, type DocumentClassification, type DocumentAnalysis } from '@/lib/fieldAssessmentApi';
@@ -16,6 +16,16 @@ const CLASSIFICATIONS: { value: DocumentClassification; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+const CLASSIFICATION_LABELS: Partial<Record<DocumentClassification, string>> = {
+  ai_policy: 'AI Policy',
+  data_governance: 'Data Governance',
+  incident_response: 'Incident Response',
+  vendor_risk: 'Vendor Risk',
+  access_control: 'Access Control',
+  training_records: 'Training Records',
+  audit_reports: 'Audit Reports',
+};
+
 async function hashFile(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
   const digest = await crypto.subtle.digest('SHA-256', buf);
@@ -26,10 +36,11 @@ async function hashFile(file: File): Promise<string> {
 
 interface Props {
   engagementId: string;
+  prefill?: { classification?: DocumentClassification } | null;
   onSuccess: (doc: DocumentAnalysis) => void;
 }
 
-export function DocumentRegistrationPanel({ engagementId, onSuccess }: Props) {
+export function DocumentRegistrationPanel({ engagementId, prefill, onSuccess }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [documentName, setDocumentName] = useState('');
   const [classification, setClassification] = useState<DocumentClassification | ''>('');
@@ -41,9 +52,33 @@ export function DocumentRegistrationPanel({ engagementId, onSuccess }: Props) {
   const [fileSize, setFileSize] = useState<number | null>(null);
   const [hashing, setHashing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [noPolicyMode, setNoPolicyMode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastDoc, setLastDoc] = useState<DocumentAnalysis | null>(null);
+
+  // Apply prefill when guided execution sends a classification hint.
+  useEffect(() => {
+    if (!prefill) return;
+    if (prefill.classification) setClassification(prefill.classification);
+  }, [prefill]);
+
+  // When no-policy mode is toggled on, build a sensible document name.
+  useEffect(() => {
+    if (noPolicyMode) {
+      const classLabel = classification
+        ? (CLASSIFICATION_LABELS[classification as DocumentClassification] ?? classification)
+        : 'Policy';
+      setDocumentName(`No ${classLabel} currently in place — Gap Acknowledged`);
+      setApprovedBy('Assessor attestation');
+      setVersionLabel('GAP');
+      clearFile();
+    } else {
+      setDocumentName('');
+      setApprovedBy('');
+      setVersionLabel('');
+    }
+  }, [noPolicyMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canSubmit = documentName.trim() !== '' && classification !== '' && !submitting && !hashing;
 
@@ -102,6 +137,7 @@ export function DocumentRegistrationPanel({ engagementId, onSuccess }: Props) {
       setVersionLabel('');
       setApprovedBy('');
       setFreshnessDate('');
+      setNoPolicyMode(false);
       clearFile();
       onSuccess(doc);
     } catch (e) {
@@ -113,60 +149,92 @@ export function DocumentRegistrationPanel({ engagementId, onSuccess }: Props) {
 
   return (
     <div className="space-y-4" aria-label="document-registration-panel">
-      {/* File drop zone */}
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label="Upload policy file"
-        className={`relative flex flex-col items-center justify-center gap-2 rounded border-2 border-dashed p-6 text-center transition-colors cursor-pointer
-          ${dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-surface-2'}`}
-        onClick={() => fileInputRef.current?.click()}
-        onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="sr-only"
-          accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.pptx,.ppt,.png,.jpg,.jpeg"
-          onChange={handleFileChange}
-          aria-label="Select policy file"
-        />
-        {hashing ? (
-          <p className="text-sm text-muted animate-pulse">Computing integrity hash…</p>
-        ) : fileName ? (
-          <div className="space-y-1 w-full">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium text-foreground truncate">{fileName}</span>
-              <button
-                type="button"
-                className="text-xs text-muted hover:text-foreground shrink-0"
-                onClick={(e) => { e.stopPropagation(); clearFile(); }}
-                aria-label="Remove file"
-              >
-                ✕ Remove
-              </button>
-            </div>
-            {fileSize !== null && (
-              <p className="text-xs text-muted">{(fileSize / 1024).toFixed(1)} KB</p>
-            )}
-            {fileHash && (
-              <p className="text-xs text-muted font-mono truncate" title={fileHash}>
-                SHA-256: {fileHash.slice(0, 16)}…
-              </p>
-            )}
-          </div>
-        ) : (
-          <>
-            <p className="text-sm text-muted">
-              <span className="font-medium text-foreground">Click to upload</span> or drag and drop
-            </p>
-            <p className="text-xs text-muted">PDF, Word, Excel, PowerPoint, images — max 50 MB</p>
-          </>
-        )}
+      {/* No-policy toggle */}
+      <div className="flex items-center justify-between rounded border border-border bg-surface-2 px-3 py-2">
+        <div>
+          <p className="text-xs font-medium text-foreground">No policy currently exists</p>
+          <p className="text-[11px] text-muted">Document the gap — records that no policy is in place at time of assessment</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={noPolicyMode}
+          onClick={() => setNoPolicyMode((v) => !v)}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+            noPolicyMode ? 'bg-primary' : 'bg-surface-3'
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              noPolicyMode ? 'translate-x-4' : 'translate-x-0'
+            }`}
+          />
+        </button>
       </div>
+
+      {/* File drop zone — hidden in no-policy mode */}
+      {!noPolicyMode && (
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="Upload policy file"
+          className={`relative flex flex-col items-center justify-center gap-2 rounded border-2 border-dashed p-6 text-center transition-colors cursor-pointer
+            ${dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-surface-2'}`}
+          onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="sr-only"
+            accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.pptx,.ppt,.png,.jpg,.jpeg"
+            onChange={handleFileChange}
+            aria-label="Select policy file"
+          />
+          {hashing ? (
+            <p className="text-sm text-muted animate-pulse">Computing integrity hash…</p>
+          ) : fileName ? (
+            <div className="space-y-1 w-full">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-foreground truncate">{fileName}</span>
+                <button
+                  type="button"
+                  className="text-xs text-muted hover:text-foreground shrink-0"
+                  onClick={(e) => { e.stopPropagation(); clearFile(); }}
+                  aria-label="Remove file"
+                >
+                  ✕ Remove
+                </button>
+              </div>
+              {fileSize !== null && (
+                <p className="text-xs text-muted">{(fileSize / 1024).toFixed(1)} KB</p>
+              )}
+              {fileHash && (
+                <p className="text-xs text-muted font-mono truncate" title={fileHash}>
+                  SHA-256: {fileHash.slice(0, 16)}…
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted">
+                <span className="font-medium text-foreground">Click to upload</span> or drag and drop
+              </p>
+              <p className="text-xs text-muted">PDF, Word, Excel, PowerPoint, images — max 50 MB</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Gap acknowledgement notice */}
+      {noPolicyMode && (
+        <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+          This will register a gap acknowledgement — no file required. The assessor attestation confirms no policy existed at time of assessment.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1 sm:col-span-2">
@@ -243,7 +311,7 @@ export function DocumentRegistrationPanel({ engagementId, onSuccess }: Props) {
       )}
 
       <Button onClick={handleSubmit} disabled={!canSubmit} aria-label="Register document">
-        {submitting ? 'Registering…' : 'Register Document'}
+        {submitting ? 'Registering…' : noPolicyMode ? 'Record Gap' : 'Register Document'}
       </Button>
     </div>
   );

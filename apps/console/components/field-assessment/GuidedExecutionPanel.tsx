@@ -16,7 +16,7 @@ interface GuidedExecutionPanelProps {
   executionState: ExecutionState | null;
   loading?: boolean;
   error?: string | null;
-  onSectionClick?: (section: string) => void;
+  onSectionClick?: (section: string, action?: PlaybookNextAction) => void;
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -76,13 +76,13 @@ function ActionButton({
   onSectionClick,
 }: {
   action: PlaybookNextAction;
-  onSectionClick?: (section: string) => void;
+  onSectionClick?: (section: string, action?: PlaybookNextAction) => void;
 }) {
   const router = useRouter();
 
   function handleClick() {
     if (onSectionClick) {
-      onSectionClick(action.target_ui_section);
+      onSectionClick(action.target_ui_section, action);
     } else if (action.deep_link) {
       router.push(action.deep_link);
     }
