@@ -21,6 +21,7 @@ import { OauthRiskScanPanel } from '@/components/field-assessment/OauthRiskScanP
 import { DocumentRegistrationPanel } from '@/components/field-assessment/DocumentRegistrationPanel';
 import { ObservationForm } from '@/components/field-assessment/ObservationForm';
 import { InterviewForm } from '@/components/field-assessment/InterviewForm';
+import { type ObservationPrefill } from '@/components/field-assessment/ObservationForm';
 import { EvidenceLinkPanel } from '@/components/field-assessment/EvidenceLinkPanel';
 import { FindingPreviewPanel } from '@/components/field-assessment/FindingPreviewPanel';
 import { EngagementSummaryPanel } from '@/components/field-assessment/EngagementSummaryPanel';
@@ -39,6 +40,7 @@ import {
   type DocumentAnalysis,
   type DocumentClassification,
   type Observation,
+  type ObservationDomain,
   type Finding,
   type EvidenceLink,
   type AuditEvent,
@@ -110,6 +112,7 @@ export default function EngagementWorkspacePage() {
 
   const [docPrefill, setDocPrefill] = useState<{ classification?: DocumentClassification } | null>(null);
   const [interviewPrefill, setInterviewPrefill] = useState<{ role?: string; title?: string; instruction?: string } | null>(null);
+  const [obsPrefill, setObsPrefill] = useState<ObservationPrefill | null>(null);
   const [reportsRefreshKey, setReportsRefreshKey] = useState(0);
   const [selectedReportVersion, setSelectedReportVersion] = useState<number | null>(null);
   const [reportDoc, setReportDoc] = useState<ReportDocument | null>(null);
@@ -268,6 +271,13 @@ export default function EngagementWorkspacePage() {
       setInterviewPrefill({
         role: action.expected_evidence?.[0],
         title: action.title,
+        instruction: action.instruction,
+      });
+    }
+    if (tab === 'observations' && action) {
+      setObsPrefill({
+        domain: action.expected_evidence?.[0] as ObservationDomain | undefined,
+        obsType: 'gap',
         instruction: action.instruction,
       });
     }
@@ -684,8 +694,10 @@ export default function EngagementWorkspacePage() {
                   <CardContent className="px-4 pb-4">
                     <ObservationForm
                       engagementId={engagementId}
+                      prefill={obsPrefill}
                       onSuccess={(obs) => {
                         setObservations((prev) => [obs, ...prev]);
+                        setObsPrefill(null);
                         loadSummary();
                         loadExecutionState();
                       }}
