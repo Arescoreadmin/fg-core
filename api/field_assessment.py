@@ -832,6 +832,63 @@ def _finding_to_response(f: FaNormalizedFinding) -> FindingResponse:
     )
 
 
+_SCAN_SOURCE_LABELS: dict[str, str] = {
+    "microsoft_graph": "MS Graph Core Scan",
+    "oauth_inventory": "OAuth Inventory Scan",
+    "oauth_risk": "OAuth Risk Scan",
+    "entra_governance": "Entra Governance Scan",
+    "endpoint_inventory": "Endpoint Inventory Scan",
+    "sharepoint_onedrive": "SharePoint & OneDrive Scan",
+    "dns_email": "DNS & Email Security Scan",
+    "network_scan": "Network Scan",
+    "web_headers": "Web Security Headers Scan",
+    "google_workspace": "Google Workspace Scan",
+    "aws": "AWS Scan",
+    "azure": "Azure Scan",
+    "gcp": "GCP Scan",
+}
+
+
+def _auto_link_scan_evidence(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    scan_result_id: str,
+    source_type: str,
+) -> None:
+    """Create an engagement-level evidence link for a scan result if one doesn't already exist.
+
+    Uses SELECT-first to avoid rolling back the parent transaction on duplicate.
+    """
+    existing = db.execute(
+        select(FaEvidenceLink).where(
+            FaEvidenceLink.tenant_id == tenant_id,
+            FaEvidenceLink.engagement_id == engagement_id,
+            FaEvidenceLink.evidence_entity_id == scan_result_id,
+            FaEvidenceLink.source_entity_type == "engagement",
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return
+    label = _SCAN_SOURCE_LABELS.get(
+        source_type, source_type.replace("_", " ").title() + " Scan"
+    )
+    try:
+        create_evidence_link(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            source_entity_type="engagement",
+            source_entity_id=engagement_id,
+            evidence_entity_type=EvidenceLinkType.SCAN_RESULT.value,
+            evidence_entity_id=scan_result_id,
+            link_metadata={"label": label, "source_type": source_type, "auto_linked": True},
+        )
+    except EvidenceLinkDuplicate:
+        pass
+
+
 def _evidence_link_to_response(lnk: FaEvidenceLink) -> EvidenceLinkResponse:
     return EvidenceLinkResponse(
         id=lnk.id,
@@ -1240,6 +1297,13 @@ def ingest_scan_result_route(
         occurred_at=result.created_at,
         payload=scan_audit_payload,
         replay_eligible=True,
+    )
+    _auto_link_scan_evidence(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scan_result_id=result.id,
+        source_type=body.source_type.value,
     )
     db.commit()
     db.refresh(result)
@@ -2320,6 +2384,13 @@ def _msgraph_scan_background(
                 envelope=envelope,
                 actor=actor,
             )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=import_result.scan_result_id,
+                source_type="microsoft_graph",
+            )
             db.commit()
             _set(status="complete", scan_result_id=import_result.scan_result_id)
         except Exception as exc:
@@ -2475,6 +2546,13 @@ def _oauth_inventory_scan_background(
                 scan_result=scan_result,
                 actor=actor,
             )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                source_type="oauth_inventory",
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
@@ -2613,6 +2691,13 @@ def _endpoint_inventory_scan_background(
                 engagement_id=engagement_id,
                 scan_result=scan_result,
                 actor=actor,
+            )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                source_type="endpoint_inventory",
             )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
@@ -2756,6 +2841,13 @@ def _network_scan_background(
                 scan_result=scan_result,
                 actor=actor,
             )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                source_type="network_scan",
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
@@ -2868,6 +2960,13 @@ def _dns_email_scan_background(
                 scan_result=scan_result,
                 actor=actor,
             )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                source_type="dns_email",
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
@@ -2978,6 +3077,13 @@ def _web_headers_scan_background(
                 engagement_id=engagement_id,
                 scan_result=scan_result,
                 actor=actor,
+            )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                source_type="web_headers",
             )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
@@ -3098,6 +3204,13 @@ def _entra_governance_scan_background(
                 engagement_id=engagement_id,
                 scan_result=scan_result,
                 actor=actor,
+            )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                source_type="entra_governance",
             )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
@@ -3244,6 +3357,13 @@ def _sharepoint_scan_background(
                 scan_result=scan_result,
                 actor=actor,
             )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                source_type="sharepoint_onedrive",
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
@@ -3388,6 +3508,13 @@ def _oauth_risk_scan_background(
                 engagement_id=engagement_id,
                 scan_result=scan_result,
                 actor=actor,
+            )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                source_type="oauth_risk",
             )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
