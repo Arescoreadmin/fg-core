@@ -121,6 +121,13 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 | 29 | Console user guide — all 9 scan panels | ✅ done 2026-05-31 — `docs/operators/console_user_guide.md`: all 9 scan panels documented (DNS/Email, Web Headers, Network, MS Graph Core, OAuth Inventory, OAuth Risk, Endpoint Inventory, Entra Governance, SharePoint + OneDrive); auth flow, pre-meeting vs in-meeting split, P1/P2 license caveats |
 | 30 | Data Processing Agreement template | ✅ done 2026-05-31 — `contracts/dpa_template.md`: sub-processors table (Railway/Vercel/Anthropic/Auth0 with SOC 2 certs), 90-day retention, 72-hour breach notification, audit rights, dual signature blocks; F6 in CLIENT_READINESS |
 | 31 | Secure credential delivery plan | ✅ done 2026-05-31 — `docs/operators/credential_delivery.md`: three delivery options (1Password Share, Bitwarden Send, verbal); reset instructions; split-channel rule; E11 in CLIENT_READINESS |
+| 32 | H1–H18 dry run — end-to-end delivered | ✅ done 2026-06-01 — First full engagement dry run completed: engagement created → 7 scans → 7 docs → 7 evidence links → 4 interviews → 4 findings remediated → report generated + signed → QA approved → status `delivered`; 6 platform gaps found and fixed (see below) |
+| 33 | BFF rate limiter fail-open | ✅ done 2026-06-01 — Rate limiter now skips (warns + passes) when Redis unavailable instead of returning 503 on every request; `BFF_REDIS_URL` + Upstash provisioned for production rate limiting |
+| 34 | Finding remediation UI | ✅ done 2026-06-01 — `PATCH /engagements/{id}/findings/{id}/remediation` endpoint; `RemediationForm` in expanded finding cards; clears `remediation_hint` readiness gate without page reload |
+| 35 | QA approve UI | ✅ done 2026-06-01 — `POST .../reports/{id}/qa-approve` wired to frontend; "QA Approve" button on finalized report rows in `ReportVersionHistory`; clears `qa_approved_report` gate |
+| 36 | Guided panel live refresh | ✅ done 2026-06-01 — `GuidedExecutionPanel` re-fetches next actions immediately when `completed_gate_count` changes; interviews and remediation gates clear without page reload |
+| 37 | Tab navigation from sidebar | ✅ done 2026-06-01 — `TAB_SECTIONS` map fixed (`report → reports`); sidebar "Fix this →" now scrolls main tabs into view and highlights the target tab trigger |
+| 38 | Report signing key | ✅ done 2026-06-01 — `FG_REPORT_SIGNING_KEY` (Ed25519 seed) documented and set in Railway; report generation no longer throws `ReportSigningKeyError` |
 
 ---
 
@@ -133,4 +140,4 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-05-31 (prod mode fully live on Railway; health HEAD fix; Stripe webhook; Azure AD app; console guide 9 panels; DPA template; credential delivery plan; portal Redis rate limiter)*
+*Last updated: 2026-06-01 (H1–H18 dry run complete — first full engagement delivered; 6 platform gaps fixed: rate limiter fail-open, finding remediation UI, QA approve UI, guided panel live refresh, tab navigation, report signing key)*
