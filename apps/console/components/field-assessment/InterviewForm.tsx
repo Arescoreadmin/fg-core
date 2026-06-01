@@ -65,7 +65,7 @@ const INTERVIEW_GUIDES: Record<string, InterviewGuide> = {
     topics: ['AI security controls and risk framework', 'Data classification for AI inputs/outputs', 'Vendor and third-party AI risk', 'Incident response for AI events', 'Monitoring and detection capability'],
     questions: [
       'Which AI tools or platforms are in scope for your security programme?',
-      'How are AI vendors assessed before onboarding — what's the security review process?',
+      "How are AI vendors assessed before onboarding — what's the security review process?",
       'How is sensitive data classified and protected when used as AI input?',
       'Is there a defined incident response playbook for AI-specific events (model poisoning, data exfiltration via AI)?',
       'What monitoring or alerting is in place for anomalous AI usage or outputs?',
@@ -94,7 +94,7 @@ const INTERVIEW_GUIDES: Record<string, InterviewGuide> = {
     questions: [
       'Which data sets are used as input to AI models or third-party AI services?',
       'How is personal or sensitive data identified before it reaches an AI system?',
-      'Is there a process to ensure AI outputs don't expose regulated data (PII, health, financial)?',
+      "Is there a process to ensure AI outputs don't expose regulated data (PII, health, financial)?",
       'How are data subject rights (access, erasure) handled for data used in AI training?',
       'Are there retention policies specific to AI-generated outputs or logs?',
       'Do any AI vendors process data outside the primary jurisdiction? Is this documented?',
