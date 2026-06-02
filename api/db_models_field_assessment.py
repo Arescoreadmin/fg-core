@@ -150,6 +150,8 @@ class FaFieldObservation(Base):
         String(16), nullable=False, default="1.0"
     )
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    deleted_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         Index("ix_fa_field_obs_engagement_tenant", "engagement_id", "tenant_id"),

@@ -69,6 +69,7 @@ function RecordingWidget({
   const [transcribing, setTranscribing] = useState(false);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
   const [blobWarning, setBlobWarning] = useState<string | null>(null);
+  const [entities, setEntities] = useState<{ vendors: string[]; systems: string[]; risks: string[]; suggested_domains: string[] } | null>(null);
   const blobRef = useRef<Blob | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -172,6 +173,7 @@ function RecordingWidget({
       const audioUrl = (data.audio_url as string | null) ?? null;
       setTranscript(data.text as string);
       setBlobWarning((data.blob_warning as string | null) ?? null);
+      setEntities((data.entities as typeof entities) ?? null);
       // Propagate the persistent URL back to the parent form
       onAudioReady({ ...audioInfo, blobUrl: blobUrl ?? '', blob: blobRef.current, audioUrl });
     } catch (e) {
@@ -340,6 +342,40 @@ function RecordingWidget({
               <div className="max-h-48 overflow-y-auto rounded border border-border bg-surface-1 p-2 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
                 {transcript}
               </div>
+              {entities && (entities.risks.length > 0 || entities.vendors.length > 0 || entities.systems.length > 0) && (
+                <div className="rounded border border-primary/20 bg-primary/5 p-2 space-y-1.5">
+                  <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">AI-extracted signals</p>
+                  {entities.risks.length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-muted font-medium mb-0.5">Risk signals</p>
+                      <ul className="space-y-0.5">
+                        {entities.risks.map((r, i) => (
+                          <li key={i} className="flex items-start gap-1 text-[11px] text-foreground">
+                            <span className="text-red-400 shrink-0 mt-0.5">⚠</span>
+                            <span>{r}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {(entities.vendors.length > 0 || entities.systems.length > 0) && (
+                    <div className="flex flex-wrap gap-1">
+                      {entities.vendors.map((v) => (
+                        <span key={v} className="inline-flex items-center rounded px-1 py-0.5 text-[10px] border border-amber-500/30 bg-amber-500/10 text-amber-300">vendor: {v}</span>
+                      ))}
+                      {entities.systems.map((s) => (
+                        <span key={s} className="inline-flex items-center rounded px-1 py-0.5 text-[10px] border border-blue-500/30 bg-blue-500/10 text-blue-300">sys: {s}</span>
+                      ))}
+                    </div>
+                  )}
+                  {entities.suggested_domains.length > 0 && (
+                    <p className="text-[10px] text-muted">
+                      Suggested domains:{' '}
+                      <span className="font-mono text-foreground">{entities.suggested_domains.join(', ')}</span>
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -392,6 +428,9 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
   const [lastObs, setLastObs] = useState<Observation | null>(null);
   const [guideOpen, setGuideOpen] = useState(true);
   const [audioArtifact, setAudioArtifact] = useState<{ hash: string; sizeKb: number; durationSec: number; audioUrl: string | null } | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [templates, setTemplates] = useState<Observation[] | null>(null);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
 
   const guide = getInterviewGuide(prefill?.role, assessmentType);
 
@@ -546,15 +585,15 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
                       <span className="shrink-0 text-[10px] text-muted font-mono mt-0.5 w-4 text-right">{i + 1}.</span>
                       <div className="space-y-0.5">
                         <span>{q.text}</span>
-                        {q.nist.length > 0 && (
+                        {(q.nist.length > 0 || (q.regs && q.regs.length > 0)) && (
                           <div className="flex flex-wrap gap-1">
                             {q.nist.map((ref) => (
                               <span key={ref} className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-mono border border-primary/20 bg-primary/10 text-primary">
                                 {ref}
                               </span>
                             ))}
-                            {q.regs && q.regs.length > 0 && q.regs.map((reg) => (
-                              <span key={reg} className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-mono border border-amber-500/30 bg-amber-500/10 text-amber-400">
+                            {q.regs && q.regs.map((reg) => (
+                              <span key={reg} title={`Regulatory clause: ${reg}`} className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-mono border border-amber-500/40 bg-amber-500/10 text-amber-300 font-semibold">
                                 {reg}
                               </span>
                             ))}
@@ -675,7 +714,62 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="int-notes">Structured Notes *</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="int-notes">Structured Notes *</Label>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!templateOpen) {
+                setTemplateOpen(true);
+                if (templates === null) {
+                  setTemplatesLoading(true);
+                  try {
+                    const role = prefill?.role || interviewRole.toLowerCase().replace(/\s+/g, '_');
+                    const rows = await fieldAssessmentApi.listInterviewTemplates({
+                      interview_role: role || undefined,
+                      assessment_type: assessmentType || undefined,
+                    });
+                    setTemplates(rows);
+                  } catch {
+                    setTemplates([]);
+                  } finally {
+                    setTemplatesLoading(false);
+                  }
+                }
+              } else {
+                setTemplateOpen(false);
+              }
+            }}
+            className="text-[11px] text-primary hover:underline focus:outline-none"
+          >
+            {templateOpen ? 'Hide' : 'Load from prior interviews'}
+          </button>
+        </div>
+        {templateOpen && (
+          <div className="rounded border border-border bg-surface-1 p-2 space-y-1.5 max-h-48 overflow-y-auto">
+            {templatesLoading ? (
+              <p className="text-xs text-muted">Loading…</p>
+            ) : !templates || templates.length === 0 ? (
+              <p className="text-xs text-muted">No prior interview notes found for this role/type.</p>
+            ) : (
+              templates.map((t) => (
+                <div key={t.id} className="rounded border border-border bg-surface-2 p-2 space-y-0.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-foreground truncate">{t.title}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setStructuredNotes(t.description); setTemplateOpen(false); }}
+                      className="text-[11px] text-primary hover:underline focus:outline-none shrink-0"
+                    >
+                      Use
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted line-clamp-2">{t.description}</p>
+                </div>
+              ))
+            )}
+          </div>
+        )}
         <Textarea
           id="int-notes"
           aria-required="true"

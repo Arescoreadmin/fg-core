@@ -154,6 +154,8 @@ export interface Observation {
   assessor_id: string;
   schema_version: string;
   created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
 }
 
 export interface Finding {
@@ -725,6 +727,27 @@ export const fieldAssessmentApi = {
     return request(`/engagements/${engagementId}/observations`, {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+
+  listInterviewTemplates(params?: { interview_role?: string; assessment_type?: string }): Promise<Observation[]> {
+    const q = new URLSearchParams();
+    if (params?.interview_role) q.set('interview_role', params.interview_role);
+    if (params?.assessment_type) q.set('assessment_type', params.assessment_type);
+    const qs = q.toString() ? `?${q}` : '';
+    return request(`/interview-templates${qs}`);
+  },
+
+  updateObservation(engagementId: string, observationId: string, payload: Partial<Pick<CaptureObservationPayload, 'title' | 'description' | 'severity' | 'structured_evidence' | 'linked_finding_ids'>>): Promise<Observation> {
+    return request(`/engagements/${engagementId}/observations/${observationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteObservation(engagementId: string, observationId: string): Promise<void> {
+    return request(`/engagements/${engagementId}/observations/${observationId}`, {
+      method: 'DELETE',
     });
   },
 

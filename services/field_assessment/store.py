@@ -398,6 +398,7 @@ def list_observations(
         .where(
             FaFieldObservation.engagement_id == engagement_id,
             FaFieldObservation.tenant_id == tenant_id,
+            FaFieldObservation.deleted_at.is_(None),
         )
         .order_by(FaFieldObservation.created_at.desc())
         .limit(limit)

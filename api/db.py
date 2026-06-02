@@ -1301,6 +1301,15 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 conn, "fa_engagements", "client_access_code", "TEXT"
             )
 
+        # Sprint 3 — soft-delete + edit history for field observations
+        if "fa_field_observations" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "fa_field_observations", "updated_at", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "fa_field_observations", "deleted_at", "TEXT"
+            )
+
 
 # ---------------------------------------------------------------------
 # Public API

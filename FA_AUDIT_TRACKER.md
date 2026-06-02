@@ -37,11 +37,11 @@ Status: `open` | `in_progress` | `done` | `deferred`
 
 | # | ID | Title | Priority | Est | Status | PR |
 |---|----|-------|----------|-----|--------|----|
-| 15 | 2.1 | No observation editing after capture — immutable once submitted | P2 | 8h | open | — |
-| 16 | 2.4 | No soft-delete for observations — bad captures stick forever | P2 | 6h | open | — |
-| 17 | 6.2 | No cascade-delete evidence links when observation is deleted | P2 | 3h | open | — |
-| 18 | 8.2 | No observation change history — audit trail shows capture only | P2 | 5h | open | — |
-| 19 | 8.4 | No interview reuse/templating from prior engagements | P2 | 6h | open | — |
+| 15 | 2.1 | No observation editing after capture — immutable once submitted | P2 | 8h | done | — |
+| 16 | 2.4 | No soft-delete for observations — bad captures stick forever | P2 | 6h | done | — |
+| 17 | 6.2 | No cascade-delete evidence links when observation is deleted | P2 | 3h | done | — |
+| 18 | 8.2 | No observation change history — audit trail shows capture only | P2 | 5h | done | — |
+| 19 | 8.4 | No interview reuse/templating from prior engagements | P2 | 6h | done | — |
 
 ---
 
@@ -49,9 +49,9 @@ Status: `open` | `in_progress` | `done` | `deferred`
 
 | # | ID | Title | Est | Status |
 |---|----|-------|-----|--------|
-| A | DIFF-1 | Show exact regulation clause (HIPAA §164.308) per interview question — not just NIST | 4h | open |
-| B | DIFF-2 | Post-transcription Claude pass: extract entities → auto-link to findings | 8h | open |
-| C | DIFF-3 | Clickable control gap matrix — click a control → see observations + evidence inline | 6h | open |
+| A | DIFF-1 | Show exact regulation clause (HIPAA §164.308) per interview question — not just NIST | 4h | done |
+| B | DIFF-2 | Post-transcription Claude pass: extract entities → auto-link to findings | 8h | done |
+| C | DIFF-3 | Clickable control gap matrix — click a control → see observations + evidence inline | 6h | done |
 
 ---
 

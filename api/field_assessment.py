@@ -31,7 +31,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
@@ -412,6 +412,8 @@ class ObservationResponse(BaseModel):
     assessor_id: str
     schema_version: str
     created_at: str
+    updated_at: str | None = None
+    deleted_at: str | None = None
 
 
 class FindingResponse(BaseModel):
@@ -807,6 +809,8 @@ def _observation_to_response(o: FaFieldObservation) -> ObservationResponse:
         assessor_id=o.assessor_id,
         schema_version=o.schema_version,
         created_at=o.created_at,
+        updated_at=getattr(o, "updated_at", None),
+        deleted_at=getattr(o, "deleted_at", None),
     )
 
 
@@ -1646,6 +1650,149 @@ def list_observations_route(
         observation_type=observation_type,
     )
     return [_observation_to_response(r) for r in rows]
+
+
+@router.get(
+    "/interview-templates",
+    response_model=list[ObservationResponse],
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_interview_templates_route(
+    request: Request,
+    interview_role: str | None = Query(None),
+    assessment_type: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[ObservationResponse]:
+    """Return recent interview observations across the tenant's engagements.
+    Useful for seeding new interviews from prior assessment notes."""
+    tenant_id = _resolve_caller_tenant(request)
+    stmt = (
+        select(FaFieldObservation)
+        .where(
+            FaFieldObservation.tenant_id == tenant_id,
+            FaFieldObservation.observation_type == "interview",
+            FaFieldObservation.deleted_at.is_(None),
+        )
+        .order_by(FaFieldObservation.created_at.desc())
+        .limit(limit)
+    )
+    if interview_role:
+        stmt = stmt.where(FaFieldObservation.interview_role == interview_role)
+    if assessment_type:
+        # Join via engagement to filter by assessment_type
+        stmt = stmt.join(
+            FaEngagement,
+            (FaEngagement.id == FaFieldObservation.engagement_id)
+            & (FaEngagement.tenant_id == FaFieldObservation.tenant_id),
+        ).where(FaEngagement.assessment_type == assessment_type)
+    rows = list(db.execute(stmt).scalars().all())
+    return [_observation_to_response(r) for r in rows]
+
+
+class UpdateObservationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+    description: str | None = None
+    severity: ObservationSeverity | None = None
+    structured_evidence: dict[str, Any] | None = None
+    linked_finding_ids: list[Any] | None = None
+
+
+@router.patch(
+    "/engagements/{engagement_id}/observations/{observation_id}",
+    response_model=ObservationResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def update_observation_route(
+    engagement_id: str,
+    observation_id: str,
+    request: Request,
+    body: UpdateObservationRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ObservationResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    obs = db.execute(
+        select(FaFieldObservation).where(
+            FaFieldObservation.id == observation_id,
+            FaFieldObservation.engagement_id == engagement_id,
+            FaFieldObservation.tenant_id == tenant_id,
+            FaFieldObservation.deleted_at.is_(None),
+        )
+    ).scalar_one_or_none()
+    if obs is None:
+        raise HTTPException(status_code=404, detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"))
+    now = utc_iso8601_z_now()
+    if body.title is not None:
+        obs.title = body.title
+    if body.description is not None:
+        obs.description = body.description
+    if body.severity is not None:
+        obs.severity = body.severity.value
+    if body.structured_evidence is not None:
+        obs.structured_evidence = body.structured_evidence
+    if body.linked_finding_ids is not None:
+        obs.linked_finding_ids = body.linked_finding_ids
+    obs.updated_at = now
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="observation.updated",
+        actor=actor,
+        reason_code="OBSERVATION_UPDATED",
+        payload={"observation_id": observation_id},
+    )
+    db.commit()
+    db.refresh(obs)
+    return _observation_to_response(obs)
+
+
+@router.delete(
+    "/engagements/{engagement_id}/observations/{observation_id}",
+    status_code=204,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def delete_observation_route(
+    engagement_id: str,
+    observation_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> None:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    obs = db.execute(
+        select(FaFieldObservation).where(
+            FaFieldObservation.id == observation_id,
+            FaFieldObservation.engagement_id == engagement_id,
+            FaFieldObservation.tenant_id == tenant_id,
+            FaFieldObservation.deleted_at.is_(None),
+        )
+    ).scalar_one_or_none()
+    if obs is None:
+        raise HTTPException(status_code=404, detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"))
+    now = utc_iso8601_z_now()
+    obs.deleted_at = now
+    # Cascade-remove evidence links that source this observation (#17)
+    db.execute(
+        delete(FaEvidenceLink).where(
+            FaEvidenceLink.tenant_id == tenant_id,
+            FaEvidenceLink.source_entity_type == "field_observation",
+            FaEvidenceLink.source_entity_id == observation_id,
+        )
+    )
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="observation.deleted",
+        actor=actor,
+        reason_code="OBSERVATION_SOFT_DELETED",
+        payload={"observation_id": observation_id},
+    )
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -5082,6 +5229,7 @@ def _build_engagement_report_json(
                 FaFieldObservation.engagement_id == engagement_id,
                 FaFieldObservation.tenant_id == tenant_id,
                 FaFieldObservation.observation_type.in_(["finding", "gap", "concern"]),
+                FaFieldObservation.deleted_at.is_(None),
             )
         ).scalars().all()
         for obs in obs_rows:

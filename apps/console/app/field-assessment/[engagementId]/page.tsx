@@ -109,6 +109,11 @@ export default function EngagementWorkspacePage() {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedObsId, setExpandedObsId] = useState<string | null>(null);
+  const [editingObsId, setEditingObsId] = useState<string | null>(null);
+  const [editObsTitle, setEditObsTitle] = useState('');
+  const [editObsDesc, setEditObsDesc] = useState('');
+  const [editObsError, setEditObsError] = useState<string | null>(null);
+  const [editObsSaving, setEditObsSaving] = useState(false);
   const mainTabsRef = useRef<HTMLElement>(null);
 
   const [docPrefill, setDocPrefill] = useState<{ classification?: DocumentClassification } | null>(null);
@@ -736,10 +741,11 @@ export default function EngagementWorkspacePage() {
                             </div>
                             <p className={`text-muted ${isExpanded ? '' : 'line-clamp-2'}`}>{o.description}</p>
                             {isExpanded && (
-                              <div className="border-t border-border pt-2 mt-2 space-y-1">
+                              <div className="border-t border-border pt-2 mt-2 space-y-1" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex flex-wrap gap-3">
                                   <span className="text-muted">Domain: <span className="text-foreground capitalize">{o.domain.replace(/_/g, ' ')}</span></span>
                                   <span className="text-muted">Assessor: <span className="text-foreground">{o.assessor_id}</span></span>
+                                  {o.updated_at && <span className="text-muted">Edited: <span className="text-foreground">{formatDate(o.updated_at)}</span></span>}
                                 </div>
                                 {o.linked_finding_ids.length > 0 && (
                                   <div>
@@ -756,6 +762,79 @@ export default function EngagementWorkspacePage() {
                                         <span className="text-foreground">{String(v)}</span>
                                       </div>
                                     ))}
+                                  </div>
+                                )}
+                                {/* Inline edit form */}
+                                {editingObsId === o.id ? (
+                                  <div className="mt-2 space-y-2 rounded border border-primary/30 bg-primary/5 p-2">
+                                    <input
+                                      className="w-full rounded border border-border bg-surface-1 px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                      value={editObsTitle}
+                                      onChange={(e) => setEditObsTitle(e.target.value)}
+                                      placeholder="Title"
+                                    />
+                                    <textarea
+                                      className="w-full rounded border border-border bg-surface-1 px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
+                                      rows={3}
+                                      value={editObsDesc}
+                                      onChange={(e) => setEditObsDesc(e.target.value)}
+                                      placeholder="Description"
+                                    />
+                                    {editObsError && <p className="text-xs text-red-300">{editObsError}</p>}
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        disabled={editObsSaving}
+                                        onClick={async () => {
+                                          setEditObsSaving(true);
+                                          setEditObsError(null);
+                                          try {
+                                            const updated = await fieldAssessmentApi.updateObservation(engagementId, o.id, {
+                                              title: editObsTitle.trim() || undefined,
+                                              description: editObsDesc.trim() || undefined,
+                                            });
+                                            setObservations((prev) => prev.map((x) => x.id === o.id ? updated : x));
+                                            setEditingObsId(null);
+                                          } catch (err) {
+                                            setEditObsError(err instanceof Error ? err.message : 'Save failed');
+                                          } finally {
+                                            setEditObsSaving(false);
+                                          }
+                                        }}
+                                        className="rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                      >
+                                        {editObsSaving ? 'Saving…' : 'Save'}
+                                      </button>
+                                      <button type="button" onClick={() => setEditingObsId(null)} className="text-[11px] text-muted hover:text-foreground">Cancel</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 flex gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => { setEditingObsId(o.id); setEditObsTitle(o.title); setEditObsDesc(o.description); setEditObsError(null); }}
+                                      className="text-[11px] text-primary hover:underline focus:outline-none"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (!window.confirm('Delete this observation? This cannot be undone.')) return;
+                                        try {
+                                          await fieldAssessmentApi.deleteObservation(engagementId, o.id);
+                                          setObservations((prev) => prev.filter((x) => x.id !== o.id));
+                                          setExpandedObsId(null);
+                                          loadSummary();
+                                          loadExecutionState();
+                                        } catch (err) {
+                                          alert(err instanceof Error ? err.message : 'Delete failed');
+                                        }
+                                      }}
+                                      className="text-[11px] text-red-400 hover:underline focus:outline-none"
+                                    >
+                                      Delete
+                                    </button>
                                   </div>
                                 )}
                               </div>
@@ -1022,6 +1101,7 @@ export default function EngagementWorkspacePage() {
                             ? (reportDoc.report?.framework_summary as Record<string, string[]> | null)
                             : null
                         }
+                        observations={observations.filter((o) => !o.deleted_at)}
                       />
                     </>
                   )}
