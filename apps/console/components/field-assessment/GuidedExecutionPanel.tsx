@@ -317,7 +317,7 @@ export function GuidedExecutionPanel({
               <p className="mt-1 text-[11px] opacity-90">{gate.why_it_matters}</p>
               {gate.missing_items.length > 0 && (
                 <p className="mt-1 text-[11px] opacity-90">
-                  Missing: {gate.missing_items.map((id) => id.slice(0, 8)).join(', ')}
+                  Missing: <span className="font-mono">{gate.missing_items.join(', ')}</span>
                 </p>
               )}
               {gate.gate_type === 'finding_remediation' && gate.status === 'blocked' && (

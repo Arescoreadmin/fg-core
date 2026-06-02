@@ -15,7 +15,7 @@ import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger,
 import { Textarea } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { fieldAssessmentApi, type ObservationDomain, type ObservationSeverity, type Observation } from '@/lib/fieldAssessmentApi';
-import { getInterviewGuide, type InterviewGuide, type InterviewQuestion } from '@/lib/interviewGuides';
+import { getInterviewGuide, ASSESSMENT_TYPE_TO_SECTOR, type InterviewGuide, type InterviewQuestion, type SectorKey } from '@/lib/interviewGuides';
 
 const DOMAINS: { value: ObservationDomain; label: string }[] = [
   { value: 'ai_governance', label: 'AI Governance' },
@@ -68,6 +68,7 @@ function RecordingWidget({
   const [transcript, setTranscript] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const [blobWarning, setBlobWarning] = useState<string | null>(null);
   const blobRef = useRef<Blob | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -170,6 +171,7 @@ function RecordingWidget({
       if (!res.ok) throw new Error(data.error ?? 'Transcription failed');
       const audioUrl = (data.audio_url as string | null) ?? null;
       setTranscript(data.text as string);
+      setBlobWarning((data.blob_warning as string | null) ?? null);
       // Propagate the persistent URL back to the parent form
       onAudioReady({ ...audioInfo, blobUrl: blobUrl ?? '', blob: blobRef.current, audioUrl });
     } catch (e) {
@@ -289,7 +291,8 @@ function RecordingWidget({
             <button
               type="button"
               onClick={discard}
-              className="rounded border border-border px-2 py-1 text-[11px] text-muted transition hover:text-foreground focus:outline-none"
+              disabled={transcribing}
+              className="rounded border border-border px-2 py-1 text-[11px] text-muted transition hover:text-foreground focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Discard
             </button>
@@ -342,6 +345,11 @@ function RecordingWidget({
 
           {transcriptError && (
             <p className="text-[11px] text-red-300">{transcriptError}</p>
+          )}
+          {blobWarning && (
+            <p className="text-[11px] text-amber-300">
+              Transcript saved, but audio could not be stored: {blobWarning}. Download the recording locally to keep a copy.
+            </p>
           )}
         </div>
       )}
@@ -487,10 +495,28 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
             onClick={() => setGuideOpen((v) => !v)}
             aria-expanded={guideOpen}
           >
-            <div>
-              <p className="text-xs font-semibold text-foreground">
-                Interview guide — {guide?.roleLabel ?? prefill.role?.replace(/_/g, ' ')}
-              </p>
+            <div className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-semibold text-foreground">
+                  Interview guide — {guide?.roleLabel ?? prefill.role?.replace(/_/g, ' ')}
+                </p>
+                {(() => {
+                  const sector: SectorKey = (assessmentType ? ASSESSMENT_TYPE_TO_SECTOR[assessmentType] : undefined) ?? 'default';
+                  const SECTOR_LABEL: Record<SectorKey, string> = {
+                    default: 'General AI',
+                    healthcare: 'Healthcare / HIPAA',
+                    pci_dss: 'PCI DSS',
+                    dora: 'DORA',
+                    government: 'Gov / CMMC',
+                  };
+                  const isNonDefault = sector !== 'default';
+                  return (
+                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] border font-medium ${isNonDefault ? 'border-amber-500/30 bg-amber-500/5 text-amber-300' : 'border-info/20 bg-info/5 text-info'}`}>
+                      {SECTOR_LABEL[sector]}
+                    </span>
+                  );
+                })()}
+              </div>
               {prefill.instruction && (
                 <p className="text-[11px] text-muted mt-0.5">{prefill.instruction}</p>
               )}

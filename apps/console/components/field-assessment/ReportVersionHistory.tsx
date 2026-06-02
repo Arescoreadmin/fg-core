@@ -115,6 +115,7 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
         setClientAccessCode(result.client_access_code);
       }
       setConfirmingId(null);
+      loadVersions(page * PAGE_SIZE);
       onQaApproved?.();
     } catch (err) {
       setApproveError(err instanceof Error ? err.message : 'QA approval failed');

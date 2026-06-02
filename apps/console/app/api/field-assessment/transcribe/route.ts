@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { put } from '@vercel/blob';
+import { auth } from '@/auth';
 
 // Whisper on long recordings can take 10-20 s; default is 10 s on Vercel Hobby.
 export const maxDuration = 60;
 
 const MAX_BYTES = 25 * 1024 * 1024; // Whisper hard limit is 25 MB
 
+// Opaque 12-char hex derived from a string — used to namespace blob paths
+// without exposing raw user identifiers.
+async function opaqueHash(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
+}
+
 export async function POST(req: NextRequest) {
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json({ error: 'OPENAI_API_KEY is not configured' }, { status: 503 });
+  }
+
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   let form: FormData;
@@ -36,19 +49,21 @@ export async function POST(req: NextRequest) {
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  // Run transcription and blob upload concurrently — blob upload doesn't
-  // depend on the transcript so there's no reason to wait for it first.
+  // Opaque namespace: hash of user identity so paths are non-guessable
+  // and scoped to the authenticated user, even without a DB tenant_id lookup.
+  const userIdentity = session.user.email ?? session.user.name ?? 'unknown';
+  const tenantNs = await opaqueHash(userIdentity);
   const hashSuffix = typeof audioHash === 'string' ? audioHash.slice(0, 12) : Date.now().toString(36);
   const engSuffix = typeof engagementId === 'string' ? engagementId.slice(0, 12) : 'unknown';
-  const blobPath = `field-assessment/interviews/${engSuffix}/${hashSuffix}.webm`;
+  const blobPath = `field-assessment/${tenantNs}/${engSuffix}/${hashSuffix}.webm`;
 
+  // Transcribe and upload concurrently — transcript doesn't depend on blob URL.
   const [transcription, blobResult] = await Promise.allSettled([
     openai.audio.transcriptions.create({
       file: audioFile,
       model: 'whisper-1',
       response_format: 'verbose_json',
     }),
-    // Only attempt blob upload when token is configured; degrade gracefully otherwise.
     process.env.BLOB_READ_WRITE_TOKEN
       ? put(blobPath, audioFile, { access: 'public', contentType: audioFile.type || 'audio/webm' })
       : Promise.reject(new Error('BLOB_READ_WRITE_TOKEN not configured')),
@@ -59,12 +74,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
-  const audio_url =
-    blobResult.status === 'fulfilled' ? blobResult.value.url : null;
+  const audio_url = blobResult.status === 'fulfilled' ? blobResult.value.url : null;
+  const blob_error = blobResult.status === 'rejected'
+    ? (blobResult.reason instanceof Error ? blobResult.reason.message : 'Upload failed')
+    : null;
 
   return NextResponse.json({
     text: transcription.value.text,
     duration: (transcription.value as { duration?: number }).duration ?? null,
     audio_url,
+    // Surfaced so the client can warn the user if blob storage isn't configured
+    blob_warning: blob_error && process.env.BLOB_READ_WRITE_TOKEN ? blob_error : null,
   });
 }

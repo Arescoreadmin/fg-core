@@ -4466,7 +4466,7 @@ class ReportQaApproveBody(BaseModel):
     "/engagements/{engagement_id}/reports/{report_id}/qa-approve",
     response_model=ReportQaApproveResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(require_scopes("governance:qa_approve"))],
 )
 def qa_approve_report_route(
     engagement_id: str,
