@@ -1,4 +1,4 @@
-"""tests/test_db_init_ordering.py — C2 regression guard.
+"""tests/test_db_init_ordering.py — C2 + C3 regression guards.
 
 Verifies that:
   1. init_db() on Postgres calls create_all() BEFORE apply_migrations() so that
@@ -6,6 +6,8 @@ Verifies that:
   2. FA-targeting ALTER TABLE migrations (0073, 0074) use IF NOT EXISTS, making
      them safe to run after create_all() has already materialised the columns.
   3. No other migration ADD COLUMNs without IF NOT EXISTS target FA tables.
+  4. Migration 0075 enables RLS + FORCE on all FA and governance tables (C3).
+  5. assert_tenant_rls() expected_tables covers all FA and governance tables (C3).
 """
 from __future__ import annotations
 
@@ -72,6 +74,64 @@ class TestFaMigrationSafety:
                         if add_pattern:
                             unsafe.append(f"{path.name}: ADD COLUMN missing IF NOT EXISTS")
         assert not unsafe, "\n".join(unsafe)
+
+
+_FA_RLS_TABLES = {
+    "fa_engagements",
+    "fa_scan_results",
+    "fa_document_analyses",
+    "fa_field_observations",
+    "fa_normalized_findings",
+    "fa_evidence_links",
+    "fa_engagement_audit_events",
+    "fa_quarantined_scans",
+    "fa_questionnaires",
+    "fa_questionnaire_responses",
+    "governance_promotions",
+}
+
+
+class TestFaRls:
+    """C3 structural guards — FA tenant RLS coverage."""
+
+    def test_0075_enables_rls_on_all_fa_tables(self) -> None:
+        """Migration 0075 must ENABLE ROW LEVEL SECURITY on every FA table."""
+        sql = _migration_sql("0075_fa_rls.sql").upper()
+        assert "ENABLE ROW LEVEL SECURITY" in sql, (
+            "0075 must enable RLS"
+        )
+        for table in _FA_RLS_TABLES:
+            assert table.upper() in sql, (
+                f"0075 missing RLS coverage for {table}"
+            )
+
+    def test_0075_forces_rls_on_all_fa_tables(self) -> None:
+        """Migration 0075 must FORCE ROW LEVEL SECURITY so table owners are also constrained."""
+        sql = _migration_sql("0075_fa_rls.sql").upper()
+        assert "FORCE ROW LEVEL SECURITY" in sql, (
+            "0075 must use FORCE ROW LEVEL SECURITY"
+        )
+
+    def test_0075_creates_tenant_isolation_policies(self) -> None:
+        """Migration 0075 must create {table}_tenant_isolation policies for each FA table."""
+        sql = _migration_sql("0075_fa_rls.sql")
+        assert "tenant_isolation" in sql, (
+            "0075 must create tenant_isolation policies"
+        )
+        assert "app.tenant_id" in sql, (
+            "0075 policies must reference app.tenant_id session variable"
+        )
+
+    def test_assert_tenant_rls_covers_all_fa_tables(self) -> None:
+        """assert_tenant_rls() expected_tables must include every FA and governance table."""
+        from api.db_migrations import assert_tenant_rls
+        import inspect
+
+        source = inspect.getsource(assert_tenant_rls)
+        missing = [t for t in _FA_RLS_TABLES if t not in source]
+        assert not missing, (
+            f"assert_tenant_rls() is missing FA tables: {missing}"
+        )
 
 
 class TestInitDbOrdering:
