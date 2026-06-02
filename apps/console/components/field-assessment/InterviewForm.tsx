@@ -57,7 +57,7 @@ function RecordingWidget({
   onUseTranscript,
 }: {
   engagementId: string;
-  onAudioReady: (info: { hash: string; sizeKb: number; durationSec: number; blobUrl: string; blob: Blob; audioUrl: string | null }) => void;
+  onAudioReady: (info: { hash: string; sizeKb: number; durationSec: number; blobUrl: string; blob: Blob; artifactId: string | null }) => void;
   onUseTranscript: (text: string) => void;
 }) {
   const [recState, setRecState] = useState<RecordingState>('idle');
@@ -119,7 +119,7 @@ function RecordingWidget({
           durationSec: elapsedRef.current,
           blobUrl: url,
           blob,
-          audioUrl: null as string | null,
+          artifactId: null as string | null,
         };
         blobRef.current = blob;
         setBlobUrl(url);
@@ -170,12 +170,13 @@ function RecordingWidget({
       const res = await fetch('/api/field-assessment/transcribe', { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Transcription failed');
-      const audioUrl = (data.audio_url as string | null) ?? null;
+      const artifactId = (data.artifact_id as string | null) ?? null;
       setTranscript(data.text as string);
       setBlobWarning((data.blob_warning as string | null) ?? null);
       setEntities((data.entities as typeof entities) ?? null);
-      // Propagate the persistent URL back to the parent form
-      onAudioReady({ ...audioInfo, blobUrl: blobUrl ?? '', blob: blobRef.current, audioUrl });
+      // Propagate the opaque artifact_id back to the parent form.
+      // The storage URL is never returned to the client — the proxy resolves it.
+      onAudioReady({ ...audioInfo, blobUrl: blobUrl ?? '', blob: blobRef.current, artifactId });
     } catch (e) {
       setTranscriptError(e instanceof Error ? e.message : 'Transcription failed');
     } finally {
@@ -193,7 +194,7 @@ function RecordingWidget({
     setTranscriptError(null);
     elapsedRef.current = 0;
     setRecState('idle');
-    onAudioReady({ hash: '', sizeKb: 0, durationSec: 0, blobUrl: '', blob: new Blob(), audioUrl: null });
+    onAudioReady({ hash: '', sizeKb: 0, durationSec: 0, blobUrl: '', blob: new Blob(), artifactId: null });
   }
 
   function download() {
@@ -427,7 +428,7 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
   const [error, setError] = useState<string | null>(null);
   const [lastObs, setLastObs] = useState<Observation | null>(null);
   const [guideOpen, setGuideOpen] = useState(true);
-  const [audioArtifact, setAudioArtifact] = useState<{ hash: string; sizeKb: number; durationSec: number; audioUrl: string | null } | null>(null);
+  const [audioArtifact, setAudioArtifact] = useState<{ hash: string; sizeKb: number; durationSec: number; artifactId: string | null } | null>(null);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState<Observation[] | null>(null);
   const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -491,8 +492,8 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
         structured_evidence['_audio_duration_sec'] = String(audioArtifact.durationSec);
         structured_evidence['_audio_size_kb'] = String(audioArtifact.sizeKb);
       }
-      if (audioArtifact?.audioUrl) {
-        structured_evidence['_audio_url'] = audioArtifact.audioUrl;
+      if (audioArtifact?.artifactId) {
+        structured_evidence['_audio_artifact_id'] = audioArtifact.artifactId;
       }
 
       const obs = await fieldAssessmentApi.captureObservation(engagementId, {
@@ -614,7 +615,7 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
         engagementId={engagementId}
         onAudioReady={(info) => {
           if (info.hash) {
-            setAudioArtifact({ hash: info.hash, sizeKb: info.sizeKb, durationSec: info.durationSec, audioUrl: info.audioUrl });
+            setAudioArtifact({ hash: info.hash, sizeKb: info.sizeKb, durationSec: info.durationSec, artifactId: info.artifactId });
           } else {
             setAudioArtifact(null);
           }

@@ -21,11 +21,12 @@ Tables:
   fa_evidence_links           — evidence relationship graph
   fa_engagement_audit_events  — append-only audit trail
   fa_quarantined_scans        — rejected scan ingest attempts (audit trail)
+  fa_artifacts                — artifact registry (audio, documents); storage keys never client-visible
 """
 
 from __future__ import annotations
 
-from sqlalchemy import Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -289,4 +290,40 @@ class FaQuarantinedScan(Base):
     __table_args__ = (
         Index("ix_fa_quarantined_engagement_tenant", "engagement_id", "tenant_id"),
         Index("ix_fa_quarantined_tenant_reason", "tenant_id", "quarantine_reason"),
+    )
+
+
+class FaArtifact(Base):
+    """Artifact registry — opaque handle for evidence objects stored in blob storage.
+
+    The storage_key (blob URL) is never returned to client browsers. The proxy
+    route resolves artifact_id → storage_key server-side, issues a short-lived
+    signed download URL, and streams the content without exposing the key.
+
+    Retention columns mirror the Evidence Provenance Ledger spec from ENTERPRISE_PLAN.md.
+    """
+
+    __tablename__ = "fa_artifacts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    deleted_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    retention_class: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="standard_3y"
+    )
+    legal_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    scheduled_purge_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    purge_completed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (
+        Index("ix_fa_artifacts_tenant_engagement", "tenant_id", "engagement_id"),
+        Index("ix_fa_artifacts_tenant_type", "tenant_id", "artifact_type"),
     )

@@ -125,6 +125,7 @@ from services.field_assessment.store import (
 )
 from services.field_assessment.timeline import emit_fa_timeline_event
 from api.db_models_field_assessment import (
+    FaArtifact,
     FaDocumentAnalysis,
     FaEngagement,
     FaEvidenceLink,
@@ -6914,4 +6915,216 @@ def get_remediation_roadmap(
         phases=phases,
         total_open_findings=len(active),
         is_truncated=_truncated,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Artifact registry — register and retrieve evidence artifacts (audio, docs)
+# storage_key is never returned to client; proxy resolves artifact_id server-side
+# ---------------------------------------------------------------------------
+
+
+class RegisterArtifactRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_type: Literal["audio", "document", "export"]
+    storage_key: str = Field(..., min_length=1, max_length=4096)
+    sha256: str | None = Field(default=None, max_length=64)
+    size_bytes: int | None = Field(default=None, ge=0)
+    content_type: str | None = Field(default=None, max_length=128)
+    retention_class: str = Field(default="standard_3y", max_length=64)
+
+
+class ArtifactResponse(BaseModel):
+    id: str
+    engagement_id: str
+    artifact_type: str
+    sha256: str | None
+    size_bytes: int | None
+    content_type: str | None
+    created_by: str
+    created_at: str
+    retention_class: str
+
+
+class ArtifactInternalResponse(ArtifactResponse):
+    """Extended response used by the BFF proxy — includes storage_key.
+
+    This response shape must only be returned to authenticated server-side
+    callers (BFF proxy). The storage_key must never be forwarded to browsers.
+    """
+
+    storage_key: str
+
+
+@router.post(
+    "/engagements/{engagement_id}/artifacts",
+    response_model=ArtifactResponse,
+    status_code=201,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def register_artifact_route(
+    engagement_id: str,
+    body: RegisterArtifactRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ArtifactResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    eng = db.execute(
+        select(FaEngagement).where(
+            FaEngagement.id == engagement_id,
+            FaEngagement.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if eng is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("ENGAGEMENT_NOT_FOUND", "Engagement not found"),
+        )
+
+    _assert_engagement_accepts_evidence(eng)
+
+    artifact_id = str(_uuid_module.uuid4())
+    now = utc_iso8601_z_now()
+    artifact = FaArtifact(
+        id=artifact_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        artifact_type=body.artifact_type,
+        storage_key=body.storage_key,
+        sha256=body.sha256,
+        size_bytes=body.size_bytes,
+        content_type=body.content_type,
+        created_by=actor,
+        created_at=now,
+        retention_class=body.retention_class,
+    )
+    db.add(artifact)
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="artifact.registered",
+        actor=actor,
+        reason_code="ARTIFACT_REGISTERED",
+        payload={
+            "artifact_id": artifact_id,
+            "artifact_type": body.artifact_type,
+            "sha256": body.sha256,
+            "size_bytes": body.size_bytes,
+            "content_type": body.content_type,
+            "retention_class": body.retention_class,
+        },
+    )
+    db.commit()
+    db.refresh(artifact)
+    return ArtifactResponse(
+        id=artifact.id,
+        engagement_id=artifact.engagement_id,
+        artifact_type=artifact.artifact_type,
+        sha256=artifact.sha256,
+        size_bytes=artifact.size_bytes,
+        content_type=artifact.content_type,
+        created_by=artifact.created_by,
+        created_at=artifact.created_at,
+        retention_class=artifact.retention_class,
+    )
+
+
+@router.get(
+    "/engagements/{engagement_id}/artifacts/{artifact_id}",
+    response_model=ArtifactInternalResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_artifact_route(
+    engagement_id: str,
+    artifact_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ArtifactInternalResponse:
+    """Retrieve artifact metadata including storage_key for the BFF proxy.
+
+    This endpoint is called server-side by the console audio proxy. The
+    storage_key is used to generate a short-lived signed download URL and
+    must never be forwarded to the browser. The caller is responsible for
+    keeping storage_key confidential.
+
+    Emits an audit event on every access (success and denial) so that the
+    immutable audit trail records who retrieved each artifact and when.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    artifact = db.execute(
+        select(FaArtifact).where(
+            FaArtifact.id == artifact_id,
+            FaArtifact.engagement_id == engagement_id,
+            FaArtifact.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+
+    if artifact is None:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="artifact.access_denied",
+            actor=actor,
+            reason_code="ARTIFACT_NOT_FOUND",
+            payload={"artifact_id": artifact_id, "reason": "not_found"},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("ARTIFACT_NOT_FOUND", "Artifact not found"),
+        )
+
+    if artifact.deleted_at is not None:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="artifact.access_denied",
+            actor=actor,
+            reason_code="ARTIFACT_DELETED",
+            payload={
+                "artifact_id": artifact_id,
+                "reason": "deleted",
+                "deleted_at": artifact.deleted_at,
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("ARTIFACT_DELETED", "Artifact has been deleted"),
+        )
+
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="artifact.accessed",
+        actor=actor,
+        reason_code="ARTIFACT_ACCESSED",
+        payload={
+            "artifact_id": artifact_id,
+            "artifact_type": artifact.artifact_type,
+            "size_bytes": artifact.size_bytes,
+        },
+    )
+    db.commit()
+
+    return ArtifactInternalResponse(
+        id=artifact.id,
+        engagement_id=artifact.engagement_id,
+        artifact_type=artifact.artifact_type,
+        sha256=artifact.sha256,
+        size_bytes=artifact.size_bytes,
+        content_type=artifact.content_type,
+        created_by=artifact.created_by,
+        created_at=artifact.created_at,
+        retention_class=artifact.retention_class,
+        storage_key=artifact.storage_key,
     )

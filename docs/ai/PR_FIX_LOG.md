@@ -13023,3 +13023,79 @@ guard, header isolation, cache-control private, caller routing.
 ## Validation
 `make console-test` passes: 1033 pass / 3 pre-existing failures (unrelated) / 0 new failures.
 All 17 audio proxy security tests green.
+
+## PR 43 — feat(security): C5 — artifact-registry audio proxy refactor
+
+**Date:** 2026-06-02
+**Files changed:** 9 (api/db_models_field_assessment.py, migrations/postgres/0078_fa_artifacts.sql, api/field_assessment.py, apps/console/app/api/field-assessment/transcribe/route.ts, apps/console/app/api/field-assessment/audio-url/route.ts, apps/console/components/field-assessment/InterviewForm.tsx, apps/console/app/field-assessment/[engagementId]/page.tsx, apps/console/tests/audio-proxy-security.test.js, AUDIT_TRACKER.md)
+**Tests:** 1038 pass / 3 pre-existing failures / 0 new failures. All 22 audio proxy security tests green.
+
+### Problem
+The PR 42 hostname-suffix fix (C5) still accepted a client-supplied raw blob URL via `?url=`.
+An attacker in control of a Vercel Blob subdomain could submit a crafted URL and cause the
+proxy to fetch and forward arbitrary blob content. The `?url=` attack surface needed to be
+eliminated entirely, not hardened.
+
+### Solution: artifact-registry pattern
+Clients no longer submit blob URLs. Instead:
+1. **Transcribe route** uploads audio to Vercel Blob, registers it with the FA backend
+   (`POST /field-assessment/engagements/{id}/artifacts`), and returns an opaque `artifact_id`.
+   The blob URL (`storage_key`) is never sent to the browser.
+2. **Audio proxy** accepts only `artifact_id` + `engagement_id`. The `storage_key` is
+   resolved server-side from the trusted FA backend DB (which enforces tenant/engagement
+   ownership, `deleted_at` guard, and emits an immutable audit event on every access).
+3. **SSRF is structurally impossible** — there is no code path that constructs a fetch URL
+   from client input. `new URL()` is only called on the DB-sourced `storage_key`.
+
+### Schema (called out — schema change)
+`migrations/postgres/0078_fa_artifacts.sql`: new `fa_artifacts` table with RLS policy
+enforcing `tenant_id = current_setting('app.tenant_id', TRUE)`. Includes retention class,
+legal hold, and purge timestamp columns for Phase 1 Evidence Provenance Ledger.
+
+### Backend endpoints (new)
+- `POST /field-assessment/engagements/{id}/artifacts` — registers artifact, emits
+  `artifact.registered` audit event, returns `ArtifactResponse` (no storage_key).
+- `GET /field-assessment/engagements/{id}/artifacts/{artifact_id}` — resolves artifact
+  for trusted server-to-server calls, emits `artifact.accessed` or `artifact.access_denied`
+  on every call, returns `ArtifactInternalResponse` (includes storage_key for proxy).
+
+### Signed URL (no read/write token in proxy)
+The proxy calls `issueSignedToken` + `presignUrl` from `@vercel/blob`:
+- `BLOB_DELEGATION_TOKEN` is consumed server-side only to issue a 60-second, path-scoped,
+  get-only signed URL. It is never forwarded to the client or used in any fetch Authorization header.
+- `presignedDownloadUrl` is fetched with no Authorization header — the signature is embedded in the URL.
+- `redirect: 'error'` rejects any storage redirect without following it.
+
+### Client changes
+- `InterviewForm.tsx`: stores `_audio_artifact_id` (not `_audio_url`) in `structured_evidence`.
+  `onAudioReady` callback carries `artifactId: string | null` (not `audioUrl`).
+- `page.tsx`: `extractProxyAudioUrl()` builds `/api/field-assessment/audio-url?artifact_id=X&engagement_id=Y`
+  from `_audio_artifact_id`. Functions `toBlobAudioUrl()` and `extractAudioUrl()` removed entirely.
+  Legacy observations with only `_audio_url` return null (audio absent until re-recorded).
+
+### Security controls in proxy
+1. Auth gate (401 on no session)
+2. `ARTIFACT_ID_RE` validation — opaque hex ID, no URL parsing of client input
+3. `ENGAGEMENT_ID_RE` validation — safe identifier characters only
+4. Backend resolves artifact with tenant/engagement enforcement + audit event
+5. `artifact_type === 'audio'` type guard
+6. `size_bytes > MAX_AUDIO_BYTES` early guard from DB metadata
+7. `issueSignedToken` scoped to exact pathname + `get` only + 60 s expiry
+8. `presignUrl` generates self-authenticated URL — no bearer token in fetch
+9. `redirect: 'error'` — storage redirects rejected
+10. Content-Type validated against audio-only `ALLOWED_CONTENT_TYPES` before streaming
+11. Content-Length validated against `MAX_AUDIO_BYTES` from upstream headers
+12. Minimal, explicit response headers — upstream headers never forwarded
+13. `metric()` events on every outcome path (allowed, denied.*, upstream_failed, redirect_blocked)
+
+### Tests (22 static-analysis security tests)
+Prove structural impossibility of attacks — no live network or auth required:
+- `proxy_accepts_artifact_id_not_raw_url` / `proxy_has_no_url_param_handler` / `proxy_performs_no_url_parsing_of_client_input`
+- `proxy_no_ssrf_hostname_checks` / `proxy_resolves_storage_key_from_backend_not_request`
+- `proxy_uses_issue_signed_token` / `proxy_uses_presign_url`
+- `proxy_delegation_token_not_forwarded_in_fetch` / `proxy_fetch_has_no_authorization_header`
+- `proxy_disables_redirect_following` / `proxy_validates_content_type_before_streaming`
+- `proxy_guards_content_length` / `proxy_does_not_forward_upstream_headers` / `proxy_sends_cache_control_private`
+- `proxy_emits_metric_events` / `proxy_rejects_wrong_artifact_type` / `proxy_validates_artifact_id_format`
+- `transcribe_registers_artifact_not_audio_url` / `transcribe_returns_artifact_id_not_audio_url`
+- `form_stores_audio_artifact_id_not_audio_url` / `page_builds_proxy_url_with_artifact_id` / `page_has_no_raw_blob_url_routing`

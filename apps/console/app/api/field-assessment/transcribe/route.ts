@@ -8,6 +8,10 @@ export const maxDuration = 60;
 
 const MAX_BYTES = 25 * 1024 * 1024; // Whisper hard limit is 25 MB
 
+const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
+const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
+
 // Opaque 12-char hex derived from a string — used to namespace blob paths
 // without exposing raw user identifiers.
 async function opaqueHash(s: string): Promise<string> {
@@ -58,6 +62,47 @@ ${transcript.slice(0, 3000)}
       risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 5) : [],
       suggested_domains: Array.isArray(parsed.suggested_domains) ? parsed.suggested_domains.slice(0, 4) : [],
     };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Register the uploaded blob as an artifact in the FA backend. Returns the
+ * opaque artifact_id that clients use to request the audio through the proxy.
+ * The storage_key (blob URL) stays server-side and is never given to the browser.
+ */
+async function registerArtifact(opts: {
+  engagementId: string;
+  storageKey: string;
+  sha256: string | null;
+  sizeBytes: number;
+  contentType: string;
+}): Promise<string | null> {
+  if (!CORE_API_KEY || !CORE_TENANT_ID) return null;
+
+  try {
+    const res = await fetch(
+      `${CORE_API_URL}/field-assessment/engagements/${encodeURIComponent(opts.engagementId)}/artifacts?tenant_id=${encodeURIComponent(CORE_TENANT_ID)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': CORE_API_KEY,
+        },
+        body: JSON.stringify({
+          artifact_type: 'audio',
+          storage_key: opts.storageKey,
+          sha256: opts.sha256,
+          size_bytes: opts.sizeBytes,
+          content_type: opts.contentType,
+          retention_class: 'standard_3y',
+        }),
+      },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { id?: string };
+    return data.id ?? null;
   } catch {
     return null;
   }
@@ -130,17 +175,30 @@ export async function POST(req: NextRequest) {
     extractEntities(openai, transcriptText),
   ]);
 
-  const audio_url = blobResult.status === 'fulfilled' ? blobResult.value.url : null;
+  const blobUrl = blobResult.status === 'fulfilled' ? blobResult.value.url : null;
   const blob_error = blobResult.status === 'rejected'
     ? (blobResult.reason instanceof Error ? blobResult.reason.message : 'Upload failed')
     : null;
 
   const entities = entitiesResult.status === 'fulfilled' ? entitiesResult.value : null;
 
+  // Register the artifact so the audio proxy can resolve it by opaque ID.
+  // artifact_id replaces audio_url — the storage_key never reaches the browser.
+  let artifact_id: string | null = null;
+  if (blobUrl && typeof engagementId === 'string' && engagementId !== 'unknown') {
+    artifact_id = await registerArtifact({
+      engagementId,
+      storageKey: blobUrl,
+      sha256: typeof audioHash === 'string' ? audioHash : null,
+      sizeBytes: audioFile.size,
+      contentType: audioFile.type || 'audio/webm',
+    });
+  }
+
   return NextResponse.json({
     text: transcriptText,
     duration: (transcriptionResult.value as { duration?: number }).duration ?? null,
-    audio_url,
+    artifact_id,
     // Surfaced so the client can warn the user if blob storage isn't configured
     blob_warning: blob_error && process.env.BLOB_READ_WRITE_TOKEN ? blob_error : null,
     // DIFF-2: extracted entities for auto-linking suggestions

@@ -145,7 +145,7 @@ Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
 
 | Gate | Key work | Estimate |
 |------|----------|----------|
-| **Phase 0 — Containment** | C5 audio proxy SSRF fix, C6 scanner private-range blocking, C7 portal grant model, H13 audit atomicity, H15 evidence lifecycle locks | Weeks 1–2 |
+| **Phase 0A — Revenue-Safe** | ✅ C5 audio proxy SSRF — artifact-registry refactor (PR fix 43): client submits artifact_id only, storage_key server-side from DB, issueSignedToken+presignUrl, 22 security tests; C6 scanner private-range blocking, C7 portal grant model, H13 audit atomicity, H15 evidence lifecycle locks | Weeks 1–2 |
 | **Phase 1 — Trusted Pilot** | H11 drift RLS, H12 durable job store, H14 console RBAC + actor attribution, PI20 FA/Gov outbox boundary, DB hardening, portal session identity | Weeks 3–6 |
 | **Phase 2 — Enterprise Production** | Governed document pipeline, retention + legal hold, scheduler execution, observability dashboards, assessor assignment workflows, client account identity, OpenAPI → TypeScript codegen | Weeks 7–14 |
 | **Phase 3 — Moat Layer** | Longitudinal evidence graph (across reassessments), regulator-ready verification bundles (signed, replayable), reassessment intelligence (drift, regression, remediation velocity), consent-based sector benchmarks | Months 3–6 |
@@ -162,4 +162,4 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-06-02 (Phase 3 Enterprise plan added — see ENTERPRISE_PLAN.md; Codex forensic audit complete: 15 new test modules, gate fixes, connector contracts; AUDIT_TRACKER updated with C5/C6/C7/H11–H15/PI17–PI20)*
+*Last updated: 2026-06-02 (C5 fixed — artifact-registry audio proxy refactor: fa_artifacts table + RLS, artifact_id-only proxy, issueSignedToken+presignUrl, 22 static-analysis security tests, SSRF structurally impossible. Previously: Phase 3 Enterprise plan added — see ENTERPRISE_PLAN.md; Codex forensic audit complete: 15 new test modules, gate fixes, connector contracts; AUDIT_TRACKER updated with C5/C6/C7/H11–H15/PI17–PI20)*

@@ -82,30 +82,29 @@ function formatDate(iso: string) {
   });
 }
 
-const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|m4a|webm|aac|flac)(\?.*)?$/i;
-
-function extractAudioUrl(payload: Record<string, unknown>): string | null {
-  for (const key of ['audio_url', 'recording_url', 'audio_file_url']) {
-    const val = payload[key];
-    if (typeof val === 'string' && val.startsWith('http')) return val;
+/**
+ * Extract an audio proxy URL from observation or audit-event structured_evidence.
+ *
+ * New recordings carry _audio_artifact_id — route through the artifact-registry
+ * proxy which resolves the storage_key server-side. Raw blob URLs are never
+ * accepted by the proxy; legacy observations without an artifact_id will not
+ * have audio playback until re-recorded.
+ */
+function extractProxyAudioUrl(
+  payload: Record<string, unknown>,
+  engagementId: string,
+): string | null {
+  const artifactId = payload['_audio_artifact_id'];
+  if (typeof artifactId === 'string' && artifactId.length > 0) {
+    return `/api/field-assessment/audio-url?artifact_id=${encodeURIComponent(artifactId)}&engagement_id=${encodeURIComponent(engagementId)}`;
   }
-  // Fallback: any string value that looks like an audio file URL.
-  for (const val of Object.values(payload)) {
-    if (typeof val === 'string' && AUDIO_EXTENSIONS.test(val)) return val;
-  }
+  // Legacy observations stored _audio_url directly. The proxy no longer accepts
+  // raw blob URLs — audio will be absent for these records until re-recorded.
   return null;
 }
 
-// Route blob audio through the auth-gated proxy so private blobs are accessible.
-function toBlobAudioUrl(url: string): string {
-  if (url.includes('.blob.vercel-storage.com')) {
-    return `/api/field-assessment/audio-url?url=${encodeURIComponent(url)}`;
-  }
-  return url;
-}
-
-function AuditEventModal({ event, onClose }: { event: AuditEvent; onClose: () => void }) {
-  const audioUrl = extractAudioUrl(event.payload);
+function AuditEventModal({ event, engagementId, onClose }: { event: AuditEvent; engagementId: string; onClose: () => void }) {
+  const audioUrl = extractProxyAudioUrl(event.payload, engagementId);
   const jsonText = JSON.stringify(event.payload, null, 2);
 
   useEffect(() => {
@@ -169,9 +168,9 @@ function AuditEventModal({ event, onClose }: { event: AuditEvent; onClose: () =>
         {audioUrl && (
           <div className="px-4 py-3 border-b border-border bg-surface-2 shrink-0 space-y-2">
             <p className="text-xs text-muted font-medium">Recording</p>
-            <audio controls src={toBlobAudioUrl(audioUrl)} className="w-full" />
+            <audio controls src={audioUrl} className="w-full" />
             <a
-              href={toBlobAudioUrl(audioUrl)}
+              href={audioUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-primary hover:underline"
@@ -1023,9 +1022,10 @@ export default function EngagementWorkspacePage() {
                     {observations
                       .filter((o) => o.observation_type === 'interview')
                       .map((o) => {
-                        const audioUrl = typeof o.structured_evidence?.['_audio_url'] === 'string'
-                          ? (o.structured_evidence['_audio_url'] as string)
-                          : null;
+                        const audioUrl = extractProxyAudioUrl(
+                          (o.structured_evidence ?? {}) as Record<string, unknown>,
+                          engagementId,
+                        );
                         const audioDuration = typeof o.structured_evidence?.['_audio_duration_sec'] === 'string' || typeof o.structured_evidence?.['_audio_duration_sec'] === 'number'
                           ? String(o.structured_evidence['_audio_duration_sec'])
                           : null;
@@ -1069,7 +1069,7 @@ export default function EngagementWorkspacePage() {
                                 </p>
                                 <audio
                                   controls
-                                  src={toBlobAudioUrl(audioUrl)}
+                                  src={audioUrl}
                                   className="w-full h-8"
                                   aria-label="Interview recording playback"
                                 />
@@ -1179,7 +1179,7 @@ export default function EngagementWorkspacePage() {
                     {!auditLoading && auditEvents.length > 0 && (
                       <div className="space-y-2" aria-label="audit-event-list">
                         {auditEvents.map((ev) => {
-                          const audioUrl = extractAudioUrl(ev.payload);
+                          const audioUrl = extractProxyAudioUrl(ev.payload, engagementId);
                           return (
                             <div
                               key={ev.id}
@@ -1202,7 +1202,7 @@ export default function EngagementWorkspacePage() {
                               )}
                               {audioUrl && (
                                 <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-                                  <audio controls src={toBlobAudioUrl(audioUrl)} className="w-full h-8" />
+                                  <audio controls src={audioUrl} className="w-full h-8" />
                                 </div>
                               )}
                             </div>
@@ -1217,6 +1217,7 @@ export default function EngagementWorkspacePage() {
                 {selectedAuditEvent && (
                   <AuditEventModal
                     event={selectedAuditEvent}
+                    engagementId={engagementId}
                     onClose={() => setSelectedAuditEvent(null)}
                   />
                 )}
