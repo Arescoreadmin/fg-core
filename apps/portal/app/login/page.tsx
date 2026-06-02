@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { setStoredEngagementId } from '@/lib/engagementStore';
 
 function LoginForm() {
   const router = useRouter();
@@ -25,6 +26,7 @@ function LoginForm() {
         body: JSON.stringify({ password }),
       });
       if (res.ok) {
+        setStoredEngagementId(''); // clear stale engagement from previous session
         router.push(next);
         router.refresh();
       } else {
