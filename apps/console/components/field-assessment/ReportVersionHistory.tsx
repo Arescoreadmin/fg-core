@@ -56,6 +56,9 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [reviewerName, setReviewerName] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [clientAccessCode, setClientAccessCode] = useState<string | null>(null);
@@ -87,16 +90,31 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
     loadVersions(newPage * PAGE_SIZE);
   }
 
-  async function handleQaApprove(e: React.MouseEvent, reportId: string) {
+  function openConfirm(e: React.MouseEvent, reportId: string) {
     e.stopPropagation();
-    setApprovingId(reportId);
+    setConfirmingId(reportId);
+    setReviewerName('');
+    setConfirmed(false);
+    setApproveError(null);
+  }
+
+  function cancelConfirm(e: React.MouseEvent) {
+    e.stopPropagation();
+    setConfirmingId(null);
+  }
+
+  async function handleQaApprove(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirmingId || !confirmed) return;
+    setApprovingId(confirmingId);
     setApproveError(null);
     setClientAccessCode(null);
     try {
-      const result = await fieldAssessmentApi.qaApproveReport(engagementId, reportId);
+      const result = await fieldAssessmentApi.qaApproveReport(engagementId, confirmingId, reviewerName.trim() || undefined);
       if (result.client_access_code) {
         setClientAccessCode(result.client_access_code);
       }
+      setConfirmingId(null);
       onQaApproved?.();
     } catch (err) {
       setApproveError(err instanceof Error ? err.message : 'QA approval failed');
@@ -200,19 +218,77 @@ export function ReportVersionHistory({ engagementId, refreshKey, selectedVersion
                 </div>
                 {v.compiled_by && (
                   <div className="mt-1 text-muted">
-                    By: <span className="text-foreground">{v.compiled_by}</span>
+                    Compiled by: <span className="text-foreground">{v.compiled_by}</span>
                   </div>
                 )}
-                {v.status === 'finalized' && (
+                {v.qa_approved_by && v.qa_approved_at && (
+                  <div className="mt-1 text-emerald-300 text-[11px]">
+                    QA approved by <span className="font-medium">{v.qa_approved_by}</span>
+                    {' · '}{formatDate(v.qa_approved_at)}
+                  </div>
+                )}
+
+                {/* QA Approve — inline confirmation step */}
+                {v.status === 'finalized' && !v.qa_approved_by && (
                   <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      type="button"
-                      disabled={isApproving}
-                      onClick={(e) => handleQaApprove(e, v.report_id)}
-                      className="h-6 text-[11px] px-2"
-                    >
-                      {isApproving ? 'Approving…' : 'QA Approve'}
-                    </Button>
+                    {confirmingId !== v.report_id ? (
+                      <Button
+                        type="button"
+                        disabled={isApproving}
+                        onClick={(e) => openConfirm(e, v.report_id)}
+                        className="h-6 text-[11px] px-2"
+                      >
+                        QA Approve
+                      </Button>
+                    ) : (
+                      <div className="mt-1 space-y-2 rounded border border-primary/30 bg-primary/5 p-2">
+                        <p className="text-[11px] font-medium text-foreground">Confirm QA approval</p>
+                        <p className="text-[11px] text-muted">
+                          This marks the report as reviewed and ready for client delivery. The approval is recorded in the audit log and cannot be undone.
+                        </p>
+                        <div className="space-y-1">
+                          <label className="text-[11px] text-muted" htmlFor={`reviewer-${v.report_id}`}>
+                            Reviewer name <span className="text-foreground">(who is approving this?)</span>
+                          </label>
+                          <input
+                            id={`reviewer-${v.report_id}`}
+                            type="text"
+                            placeholder="e.g. Jane Smith, Senior Assessor"
+                            value={reviewerName}
+                            onChange={(e) => setReviewerName(e.target.value)}
+                            className="w-full rounded border border-border bg-surface-1 px-2 py-1 text-xs text-foreground placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary/40"
+                          />
+                        </div>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={confirmed}
+                            onChange={(e) => setConfirmed(e.target.checked)}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <span className="text-[11px] text-foreground">
+                            I confirm I have reviewed this report and it is accurate and ready for client delivery.
+                          </span>
+                        </label>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            disabled={!confirmed || isApproving || !reviewerName.trim()}
+                            onClick={handleQaApprove}
+                            className="h-6 text-[11px] px-2"
+                          >
+                            {isApproving ? 'Approving…' : 'Confirm Approval'}
+                          </Button>
+                          <button
+                            type="button"
+                            onClick={cancelConfirm}
+                            className="text-[11px] text-muted hover:text-foreground"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

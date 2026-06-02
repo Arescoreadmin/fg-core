@@ -385,6 +385,8 @@ export interface ReportVersionSummary {
   compiled_at: string;
   compiled_by: string | null;
   report_type: string | null;
+  qa_approved_by: string | null;
+  qa_approved_at: string | null;
 }
 
 export interface ReportVersionList {
@@ -879,9 +881,10 @@ export const fieldAssessmentApi = {
     });
   },
 
-  qaApproveReport(engagementId: string, reportId: string): Promise<{ report_id: string; qa_approved_by: string; qa_approved_at: string; engagement_status: string; client_access_code: string | null }> {
+  qaApproveReport(engagementId: string, reportId: string, reviewerName?: string): Promise<{ report_id: string; qa_approved_by: string; qa_approved_at: string; engagement_status: string; client_access_code: string | null }> {
     return request(`/engagements/${engagementId}/reports/${reportId}/qa-approve`, {
       method: 'POST',
+      body: JSON.stringify({ reviewer_name: reviewerName ?? null }),
     });
   },
 

@@ -883,7 +883,11 @@ def _auto_link_scan_evidence(
             source_entity_id=engagement_id,
             evidence_entity_type=EvidenceLinkType.SCAN_RESULT.value,
             evidence_entity_id=scan_result_id,
-            link_metadata={"label": label, "source_type": source_type, "auto_linked": True},
+            link_metadata={
+                "label": label,
+                "source_type": source_type,
+                "auto_linked": True,
+            },
         )
     except EvidenceLinkDuplicate:
         pass
@@ -4454,6 +4458,10 @@ class ReportQaApproveResponse(BaseModel):
     client_access_code: str | None = None
 
 
+class ReportQaApproveBody(BaseModel):
+    reviewer_name: str | None = None  # Human-readable name; falls back to JWT actor if omitted
+
+
 @router.post(
     "/engagements/{engagement_id}/reports/{report_id}/qa-approve",
     response_model=ReportQaApproveResponse,
@@ -4464,6 +4472,7 @@ def qa_approve_report_route(
     engagement_id: str,
     report_id: str,
     request: Request,
+    body: ReportQaApproveBody = ReportQaApproveBody(),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ReportQaApproveResponse:
     """Mark a finalized report as QA-approved for client delivery.
@@ -4506,7 +4515,10 @@ def qa_approve_report_route(
         )
 
     now = utc_iso8601_z_now()
-    report.qa_approved_by = actor
+    # reviewer_name is the human-readable display name (e.g. "Jane Smith, Senior Assessor").
+    # The JWT actor is always recorded in the audit event for non-repudiation.
+    display_name = (body.reviewer_name.strip() if body.reviewer_name and body.reviewer_name.strip() else None) or actor
+    report.qa_approved_by = display_name
     report.qa_approved_at = now
     db.flush()
 
@@ -4519,8 +4531,9 @@ def qa_approve_report_route(
         reason_code="REPORT_QA_APPROVED",
         payload={
             "report_id": report_id,
-            "qa_approved_by": actor,
+            "qa_approved_by": display_name,
             "qa_approved_at": now,
+            "jwt_actor": actor,
         },
     )
 
@@ -4760,6 +4773,8 @@ class EngagementReportSummary(BaseModel):
     compiled_at: str
     compiled_by: str | None
     report_type: str | None
+    qa_approved_by: str | None = None
+    qa_approved_at: str | None = None
 
 
 class EngagementReportListResponse(BaseModel):
@@ -5152,6 +5167,8 @@ def list_engagement_reports_route(
             compiled_at=r.generated_at,
             compiled_by=r.compiled_by,
             report_type=r.report_type,
+            qa_approved_by=r.qa_approved_by,
+            qa_approved_at=r.qa_approved_at,
         )
         for r in page
     ]
