@@ -114,6 +114,7 @@ export default function EngagementWorkspacePage() {
   const [editObsDesc, setEditObsDesc] = useState('');
   const [editObsError, setEditObsError] = useState<string | null>(null);
   const [editObsSaving, setEditObsSaving] = useState(false);
+  const [aiToggleSaving, setAiToggleSaving] = useState(false);
   const mainTabsRef = useRef<HTMLElement>(null);
 
   const [docPrefill, setDocPrefill] = useState<{ classification?: DocumentClassification } | null>(null);
@@ -263,6 +264,17 @@ export default function EngagementWorkspacePage() {
     loadExecutionState();
   }
 
+  async function handleAiToggle(enabled: boolean) {
+    if (!engagement || aiToggleSaving) return;
+    setAiToggleSaving(true);
+    try {
+      const updated = await fieldAssessmentApi.patchEngagementMetadata(engagementId, { portal_ai_enabled: enabled });
+      setEngagement(updated);
+    } finally {
+      setAiToggleSaving(false);
+    }
+  }
+
   function handleSectionClick(key: string, action?: PlaybookNextAction) {
     const tab = TAB_SECTIONS[key] ?? key;
     if (tab) {
@@ -361,6 +373,33 @@ export default function EngagementWorkspacePage() {
             <p className="text-xs text-muted">Share this code with the client. It is their access key for the delivered report.</p>
           </div>
         )}
+
+        {/* Portal AI assistant toggle */}
+        <div className="p-3 rounded border border-border bg-surface flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold text-foreground">AI Remediation Assistant</p>
+            <p className="text-xs text-muted mt-0.5">
+              When enabled, the client can use the AI assistant in the portal to ask questions about their findings and remediation steps.
+              {!engagement.client_access_code && ' Requires a client access code (issued on QA approval).'}
+            </p>
+          </div>
+          <button
+            onClick={() => handleAiToggle(!engagement.engagement_metadata?.portal_ai_enabled)}
+            disabled={aiToggleSaving || !engagement.client_access_code}
+            className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed ${
+              engagement.engagement_metadata?.portal_ai_enabled
+                ? 'bg-primary'
+                : 'bg-surface-3 border border-border'
+            }`}
+            title={!engagement.client_access_code ? 'Issue client access code first (QA approve the report)' : undefined}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                engagement.engagement_metadata?.portal_ai_enabled ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
 
         {/* Metadata */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-muted">

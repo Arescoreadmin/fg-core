@@ -1038,6 +1038,37 @@ def get_engagement_route(
     return _engagement_to_response(eng)
 
 
+class PatchEngagementRequest(BaseModel):
+    engagement_metadata: dict[str, Any] | None = None
+
+
+@router.patch(
+    "/engagements/{engagement_id}",
+    response_model=EngagementResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def patch_engagement_route(
+    engagement_id: str,
+    request: Request,
+    body: PatchEngagementRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> EngagementResponse:
+    """Shallow-merge engagement_metadata fields. Other top-level fields are immutable here."""
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    if body.engagement_metadata is not None:
+        eng.engagement_metadata = {**(eng.engagement_metadata or {}), **body.engagement_metadata}
+        eng.updated_at = utc_iso8601_z_now()
+    db.commit()
+    db.refresh(eng)
+    return _engagement_to_response(eng)
+
+
 @router.patch(
     "/engagements/{engagement_id}/status",
     response_model=EngagementResponse,

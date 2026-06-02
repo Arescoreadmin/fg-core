@@ -698,6 +698,13 @@ export const fieldAssessmentApi = {
     });
   },
 
+  patchEngagementMetadata(engagementId: string, metadata: Record<string, unknown>): Promise<Engagement> {
+    return request(`/engagements/${engagementId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ engagement_metadata: metadata }),
+    });
+  },
+
   // Scan results
   ingestScan(engagementId: string, payload: IngestScanPayload): Promise<ScanResultSummary> {
     return request(`/engagements/${engagementId}/scan-results`, {
