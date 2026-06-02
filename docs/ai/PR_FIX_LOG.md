@@ -12988,3 +12988,38 @@ Added M0 Autonomous Trust Fabric (Evidence Confidence Engine: Evidence → Contr
 
 ## Validation
 No source code changed — docs only. `bash codex_gates.sh` (strict) passes unchanged.
+
+---
+
+## PR 42 — fix(security): C5 — audio proxy SSRF / bearer token exfiltration
+
+### apps/console/app/api/field-assessment/audio-url/route.ts
+Replaced substring URL check (`url.includes('.blob.vercel-storage.com')`) with a
+multi-layer validation chain enforcing enterprise security requirements:
+
+1. `new URL()` parse — rejects malformed inputs before any string operations.
+2. `parsed.protocol === 'https:'` — HTTP blocked.
+3. `parsed.hostname.endsWith(BLOB_HOST_SUFFIX)` — suffix check, not substring.
+   Blocks `https://attacker.com?x=.blob.vercel-storage.com` (hostname is `attacker.com`,
+   does not end with suffix → rejected).
+4. `parsed.pathname.startsWith('/field-assessment/')` — only blobs written by the
+   transcribe route are reachable; all other paths on the storage host are blocked.
+5. `process.env.BLOB_READ_WRITE_TOKEN` read after all URL checks — token is never
+   resolved before the URL is validated.
+6. `redirect: 'error'` on fetch — storage redirects are rejected rather than followed
+   to an unvalidated host that would receive the Authorization header.
+7. Upstream Content-Type validated against `ALLOWED_CONTENT_TYPES` (audio/* only)
+   before streaming — non-audio blobs rejected with 502.
+8. Upstream Content-Length checked against `MAX_AUDIO_BYTES` (25 MB) — 413 on oversize.
+9. Response headers built explicitly — upstream headers are not forwarded; only
+   `Content-Type`, `Cache-Control: private`, and `Content-Disposition: inline` are set.
+
+### apps/console/tests/audio-proxy-security.test.js (new)
+17 static-analysis security tests covering: auth gate, URL parse requirement, protocol
+enforcement, hostname endsWith vs includes, hostname confusion attack, path prefix, token
+ordering (token read after checks), redirect disable, content-type allowlist, content-length
+guard, header isolation, cache-control private, caller routing.
+
+## Validation
+`make console-test` passes: 1033 pass / 3 pre-existing failures (unrelated) / 0 new failures.
+All 17 audio proxy security tests green.
