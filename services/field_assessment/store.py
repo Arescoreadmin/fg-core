@@ -117,11 +117,14 @@ def list_engagements(
     status_filter: str | None,
     limit: int,
     cursor: str | None,
+    access_code_filter: str | None = None,
 ) -> list[FaEngagement]:
     limit = min(limit, MAX_PAGE_SIZE)
     stmt = select(FaEngagement).where(FaEngagement.tenant_id == tenant_id)
     if status_filter:
         stmt = stmt.where(FaEngagement.status == status_filter)
+    if access_code_filter:
+        stmt = stmt.where(FaEngagement.client_access_code == access_code_filter)
     if cursor:
         stmt = stmt.where(FaEngagement.created_at < cursor)
     stmt = stmt.order_by(FaEngagement.created_at.desc()).limit(limit)

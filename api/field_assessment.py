@@ -943,6 +943,7 @@ def list_engagements_route(
     status_filter: str | None = Query(None, alias="status"),
     limit: int = Query(50, ge=1, le=100),
     cursor: str | None = Query(None),
+    client_access_code: str | None = Query(None),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementListResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -952,11 +953,13 @@ def list_engagements_route(
         status_filter=status_filter,
         limit=limit,
         cursor=cursor,
+        access_code_filter=client_access_code,
     )
     next_cursor = rows[-1].created_at if len(rows) == limit else None
-    total = db.execute(
-        select(func.count(FaEngagement.id)).where(FaEngagement.tenant_id == tenant_id)
-    ).scalar_one()
+    count_stmt = select(func.count(FaEngagement.id)).where(FaEngagement.tenant_id == tenant_id)
+    if client_access_code:
+        count_stmt = count_stmt.where(FaEngagement.client_access_code == client_access_code)
+    total = db.execute(count_stmt).scalar_one()
     return EngagementListResponse(
         items=[_engagement_to_response(r) for r in rows],
         cursor=next_cursor,
@@ -4806,9 +4809,23 @@ def qa_approve_report_route(
     if eng.status == "in_progress":
         eng.status = "delivered"
         eng.updated_at = now
-        # Generate a memorable 8-char alphanumeric code (no ambiguous chars).
-        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        client_access_code = "".join(secrets.choice(alphabet) for _ in range(8))
+        # Reuse any existing code already issued for this client so they can
+        # log in with one password and see all their engagements over time.
+        existing_code = db.execute(
+            select(FaEngagement.client_access_code)
+            .where(
+                FaEngagement.tenant_id == tenant_id,
+                FaEngagement.client_name == eng.client_name,
+                FaEngagement.client_access_code.isnot(None),
+                FaEngagement.id != engagement_id,
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if existing_code:
+            client_access_code = existing_code
+        else:
+            alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+            client_access_code = "".join(secrets.choice(alphabet) for _ in range(8))
         eng.client_access_code = client_access_code
         db.flush()
         emit_engagement_audit_event(

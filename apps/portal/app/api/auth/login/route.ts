@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSessionToken, COOKIE_NAME } from '@/lib/session';
+import { createAccessCodeSession, COOKIE_NAME } from '@/lib/session';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-// 5 failed attempts per IP within 15 minutes triggers a lockout.
 const _loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const LOGIN_RL_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_RL_MAX = 5;
@@ -23,22 +22,15 @@ function clearLoginAttempts(ip: string) {
   _loginAttempts.delete(ip);
 }
 
-function timingSafeEqual(a: string, b: string): boolean {
-  const ea = new TextEncoder().encode(a);
-  const eb = new TextEncoder().encode(b);
-  if (ea.length !== eb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i];
-  return diff === 0;
-}
-
 export async function POST(req: NextRequest) {
-  const password = process.env.PORTAL_PASSWORD;
   const secret = process.env.PORTAL_SESSION_SECRET;
+  const coreApiUrl = (process.env.CORE_API_URL || '').replace(/\/$/, '');
+  const coreApiKey = process.env.CORE_API_KEY;
+  const coreTenantId = process.env.CORE_TENANT_ID;
 
-  if (!password || !secret) {
+  if (!secret || !coreApiUrl || !coreApiKey || !coreTenantId) {
     return NextResponse.json(
-      { error: 'Portal authentication is not configured. Set PORTAL_PASSWORD and PORTAL_SESSION_SECRET.' },
+      { error: 'Portal authentication is not configured.' },
       { status: 503 },
     );
   }
@@ -62,12 +54,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
   }
 
-  if (!timingSafeEqual(body.password ?? '', password)) {
-    return NextResponse.json({ error: 'Invalid password.' }, { status: 401 });
+  const accessCode = (body.password ?? '').trim().toUpperCase();
+  if (!accessCode) {
+    return NextResponse.json({ error: 'Access code is required.' }, { status: 401 });
+  }
+
+  // Validate: check that at least one engagement exists for this access code.
+  try {
+    const resp = await fetch(
+      `${coreApiUrl}/field-assessment/engagements?client_access_code=${encodeURIComponent(accessCode)}&limit=1`,
+      {
+        headers: {
+          'X-API-Key': coreApiKey,
+          'X-Tenant-ID': coreTenantId,
+          'X-Portal-Source': 'client-portal-auth',
+        },
+        cache: 'no-store',
+      },
+    );
+    if (!resp.ok) throw new Error(`backend ${resp.status}`);
+    const data = await resp.json();
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      return NextResponse.json({ error: 'Invalid access code.' }, { status: 401 });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('401') || msg.includes('Invalid')) {
+      return NextResponse.json({ error: 'Invalid access code.' }, { status: 401 });
+    }
+    return NextResponse.json({ error: 'Authentication service unavailable.' }, { status: 503 });
   }
 
   clearLoginAttempts(clientIp);
-  const token = await createSessionToken();
+  const token = await createAccessCodeSession(accessCode);
   const res = NextResponse.json({ ok: true });
   res.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,
