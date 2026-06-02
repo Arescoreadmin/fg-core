@@ -272,6 +272,25 @@ class RegisterDocumentAnalysisRequest(BaseModel):
     gaps_identified: list[Any] = Field(default_factory=list)
 
 
+def _check_structured_evidence(ev: dict[str, Any]) -> None:
+    """Validate audio-evidence fields within a structured_evidence dict.
+
+    Shared by CaptureObservationRequest and UpdateObservationRequest so the
+    same constraints apply on both create and edit paths.
+    """
+    url = ev.get("_audio_url")
+    if url is not None:
+        if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+            raise ValueError("_audio_url must be an http(s) URL string")
+    for key in ("_audio_duration_sec", "_audio_size_kb"):
+        val = ev.get(key)
+        if val is not None and not isinstance(val, (int, float)):
+            raise ValueError(f"{key} must be a number")
+    audio_hash = ev.get("_audio_hash")
+    if audio_hash is not None and not isinstance(audio_hash, str):
+        raise ValueError("_audio_hash must be a string")
+
+
 class CaptureObservationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -286,18 +305,7 @@ class CaptureObservationRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_audio_evidence(self) -> "CaptureObservationRequest":
-        ev = self.structured_evidence
-        url = ev.get("_audio_url")
-        if url is not None:
-            if not isinstance(url, str) or not url.startswith(("https://", "http://")):
-                raise ValueError("_audio_url must be an http(s) URL string")
-        for key in ("_audio_duration_sec", "_audio_size_kb"):
-            val = ev.get(key)
-            if val is not None and not isinstance(val, (int, float)):
-                raise ValueError(f"{key} must be a number")
-        audio_hash = ev.get("_audio_hash")
-        if audio_hash is not None and not isinstance(audio_hash, str):
-            raise ValueError("_audio_hash must be a string")
+        _check_structured_evidence(self.structured_evidence)
         return self
 
 
@@ -1735,6 +1743,12 @@ class UpdateObservationRequest(BaseModel):
     structured_evidence: dict[str, Any] | None = None
     linked_finding_ids: list[Any] | None = None
 
+    @model_validator(mode="after")
+    def _validate_audio_evidence(self) -> "UpdateObservationRequest":
+        if self.structured_evidence is not None:
+            _check_structured_evidence(self.structured_evidence)
+        return self
+
 
 @router.patch(
     "/engagements/{engagement_id}/observations/{observation_id}",
@@ -1760,10 +1774,32 @@ def update_observation_route(
     ).scalar_one_or_none()
     if obs is None:
         raise HTTPException(status_code=404, detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"))
+    if body.linked_finding_ids is not None and body.linked_finding_ids:
+        candidate_ids = [str(fid) for fid in body.linked_finding_ids]
+        found_ids = set(
+            db.execute(
+                select(FaNormalizedFinding.id).where(
+                    FaNormalizedFinding.id.in_(candidate_ids),
+                    FaNormalizedFinding.engagement_id == engagement_id,
+                    FaNormalizedFinding.tenant_id == tenant_id,
+                )
+            ).scalars().all()
+        )
+        invalid = [fid for fid in candidate_ids if fid not in found_ids]
+        if invalid:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error(
+                    "INVALID_FINDING_IDS",
+                    f"Finding IDs not found in this engagement: {invalid}",
+                ),
+            )
     before = {
         "title": obs.title,
         "description": obs.description,
         "severity": obs.severity,
+        "structured_evidence": obs.structured_evidence,
+        "linked_finding_ids": obs.linked_finding_ids,
     }
     now = utc_iso8601_z_now()
     if body.title is not None:
@@ -1791,6 +1827,8 @@ def update_observation_route(
                 "title": obs.title,
                 "description": obs.description,
                 "severity": obs.severity,
+                "structured_evidence": obs.structured_evidence,
+                "linked_finding_ids": obs.linked_finding_ids,
             },
         },
     )

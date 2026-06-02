@@ -981,3 +981,116 @@ def test_qa_approve_engagement_status_unchanged_when_blocked(qa_client: TestClie
     detail = qa_client.get(f"/field-assessment/engagements/{eng_id}")
     assert detail.status_code == 200
     assert detail.json()["status"] == "in_progress"
+
+
+# ---------------------------------------------------------------------------
+# H9 — observation edit validation
+# ---------------------------------------------------------------------------
+
+
+def _create_observation(client: TestClient, eng_id: str, body: dict | None = None) -> dict:
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/observations",
+        json=body or _OBSERVATION_BODY,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_update_observation_rejects_invalid_audio_url(client: TestClient) -> None:
+    """PATCH must reject structured_evidence with a non-http _audio_url."""
+    eng_id = _create_engagement(client)["id"]
+    obs_id = _create_observation(client, eng_id)["id"]
+
+    resp = client.patch(
+        f"/field-assessment/engagements/{eng_id}/observations/{obs_id}",
+        json={"structured_evidence": {"_audio_url": "ftp://bad-scheme.example.com/file.mp3"}},
+    )
+    assert resp.status_code == 422
+
+
+def test_update_observation_rejects_non_numeric_audio_duration(client: TestClient) -> None:
+    """PATCH must reject _audio_duration_sec that is not a number."""
+    eng_id = _create_engagement(client)["id"]
+    obs_id = _create_observation(client, eng_id)["id"]
+
+    resp = client.patch(
+        f"/field-assessment/engagements/{eng_id}/observations/{obs_id}",
+        json={"structured_evidence": {"_audio_duration_sec": "not-a-number"}},
+    )
+    assert resp.status_code == 422
+
+
+def test_update_observation_rejects_foreign_finding_ids(client: TestClient) -> None:
+    """PATCH must reject linked_finding_ids that don't exist in this engagement."""
+    eng_id = _create_engagement(client)["id"]
+    obs_id = _create_observation(client, eng_id)["id"]
+
+    resp = client.patch(
+        f"/field-assessment/engagements/{eng_id}/observations/{obs_id}",
+        json={"linked_finding_ids": ["nonexistent-finding-id-abc123"]},
+    )
+    assert resp.status_code == 422
+    assert "INVALID_FINDING_IDS" in resp.text
+
+
+def test_update_observation_audit_diff_includes_structured_evidence(client: TestClient) -> None:
+    """Audit event after PATCH must include structured_evidence in before/after."""
+    eng_id = _create_engagement(client)["id"]
+    obs_id = _create_observation(client, eng_id)["id"]
+
+    resp = client.patch(
+        f"/field-assessment/engagements/{eng_id}/observations/{obs_id}",
+        json={"structured_evidence": {"notes": "updated note"}},
+    )
+    assert resp.status_code == 200
+
+    audit_resp = client.get(f"/field-assessment/engagements/{eng_id}/audit-events")
+    assert audit_resp.status_code == 200
+    events = audit_resp.json()
+    update_events = [e for e in events if e.get("event_type") == "observation.updated"]
+    assert update_events, "No observation.updated audit event found"
+    payload = update_events[-1]["payload"]
+    assert "structured_evidence" in payload["before"]
+    assert "structured_evidence" in payload["after"]
+    assert payload["after"]["structured_evidence"] == {"notes": "updated note"}
+
+
+def test_update_observation_audit_diff_includes_linked_finding_ids(client: TestClient) -> None:
+    """Audit event after PATCH must include linked_finding_ids in before/after."""
+    eng_id = _create_engagement(client)["id"]
+    obs_id = _create_observation(client, eng_id)["id"]
+
+    resp = client.patch(
+        f"/field-assessment/engagements/{eng_id}/observations/{obs_id}",
+        json={"title": "Updated title"},
+    )
+    assert resp.status_code == 200
+
+    audit_resp = client.get(f"/field-assessment/engagements/{eng_id}/audit-events")
+    assert audit_resp.status_code == 200
+    events = audit_resp.json()
+    update_events = [e for e in events if e.get("event_type") == "observation.updated"]
+    assert update_events, "No observation.updated audit event found"
+    payload = update_events[-1]["payload"]
+    assert "linked_finding_ids" in payload["before"]
+    assert "linked_finding_ids" in payload["after"]
+
+
+def test_update_observation_valid_audio_evidence_accepted(client: TestClient) -> None:
+    """PATCH with valid audio evidence metadata must succeed."""
+    eng_id = _create_engagement(client)["id"]
+    obs_id = _create_observation(client, eng_id)["id"]
+
+    resp = client.patch(
+        f"/field-assessment/engagements/{eng_id}/observations/{obs_id}",
+        json={
+            "structured_evidence": {
+                "_audio_url": "https://storage.example.com/rec.mp3",
+                "_audio_duration_sec": 120.5,
+                "_audio_size_kb": 2048,
+                "_audio_hash": "abc123",
+            }
+        },
+    )
+    assert resp.status_code == 200

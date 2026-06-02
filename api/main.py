@@ -398,7 +398,12 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                         },
                     },
                 )
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+        errs = [dict(e) for e in exc.errors()]
+        for e in errs:
+            ctx = e.get("ctx")
+            if isinstance(ctx, dict) and isinstance(ctx.get("error"), Exception):
+                e["ctx"] = dict(ctx, error=str(ctx["error"]))
+        return JSONResponse(status_code=422, content={"detail": errs})
 
     if not hasattr(app.state, "_ui_single_use_used"):
         app.state._ui_single_use_used = set()
