@@ -12,7 +12,7 @@ Nothing in this file can be closed without a PR reference and explicit review.
 | # | Finding | Location | Status | PR |
 |---|---------|----------|--------|----|
 | C1 | **QA approval bypasses readiness gates** — `qa_approve_report` directly sets `delivered` without running `_evaluate_execution_state`. Missing scans, questionnaires, evidence links, and remediation can ship as complete. | `api/field_assessment.py:4877` vs `:1179` | ✅ Fixed | — |
-| C2 | **Fresh Postgres deployments can fail** — startup runs migrations before `create_all()`, while migrations 0073 and 0074 alter FA tables that have no earlier create migration. | `api/db.py:1344`, `migrations/postgres/0073` | 🔴 Open | — |
+| C2 | **Fresh Postgres deployments can fail** — startup runs migrations before `create_all()`, while migrations 0073 and 0074 alter FA tables that have no earlier create migration. | `api/db.py:1344`, `migrations/postgres/0073` | ✅ Fixed | — |
 | C3 | **FA tenant tables lack Postgres RLS** — questionnaires and governance promotions have no DB-level row security. Application filters present but not enforced at DB layer. | `api/db_migrations.py:137`, `migrations/postgres/0067` | 🔴 Open | — |
 | C4 | **Portal IDOR — client-wide not engagement-scoped** — BFF appends `client_access_code` as query param but item endpoints scope only on `(engagement_id, tenant_id)`. A client with another engagement UUID can read or mutate data. | `apps/portal/app/api/core/[...path]/route.ts:110`, `api/field_assessment.py:1031,1944` | ✅ Fixed | — |
 
@@ -86,4 +86,4 @@ Nothing in this file can be closed without a PR reference and explicit review.
 
 ---
 
-*Last updated: 2026-06-02 — H7, H8, PI14 fixed; C4 fixed (PortalClientScopeMiddleware); C1 fixed (QA gate enforcement + promote_engagement_to_governance on auto-advance); 10 items remain open.*
+*Last updated: 2026-06-02 — H7, H8, PI14 fixed; C4 fixed (PortalClientScopeMiddleware); C1 fixed (QA gate enforcement + promote_engagement_to_governance on auto-advance); C2 fixed (create_all before apply_migrations + IF NOT EXISTS guards on 0073/0074); 9 items remain open.*

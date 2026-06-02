@@ -1341,13 +1341,16 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
     elif engine.dialect.name == "postgresql":
         from api.db_migrations import apply_migrations, assert_migrations_applied  # noqa
 
+        # Create ORM-managed tables BEFORE running numbered migrations.
+        # Migrations 0073+ use ALTER TABLE on FA substrate tables that have no
+        # earlier CREATE TABLE migration — they rely on ORM create_all() to
+        # materialise the table first.  checkfirst=True makes this idempotent
+        # on existing databases where the tables are already present.
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+
         apply_migrations(engine)
         if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
             assert_migrations_applied(engine)
-        # Create ORM-managed tables not covered by numbered SQL migrations (e.g. FA
-        # substrate tables). checkfirst=True skips tables that already exist, so
-        # this is safe to call on any Postgres database at any time.
-        Base.metadata.create_all(bind=engine, checkfirst=True)
 
     # Optional sanity check
     try:
