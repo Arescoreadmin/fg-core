@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { getStoredEngagementId } from '@/lib/engagementStore';
+import { portalApi } from '@/lib/portalApi';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -55,11 +56,23 @@ export default function AssistantPage() {
   const [loading, setLoading] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
   const [engagementId, setEngagementId] = useState<string>('');
+  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null); // null = still loading
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const eid = getStoredEngagementId();
-    if (eid) setEngagementId(eid);
+    if (!eid) {
+      setAiEnabled(false);
+      return;
+    }
+    setEngagementId(eid);
+    portalApi
+      .getEngagement(eid)
+      .then((eng) => {
+        const enabled = !!(eng.engagement_metadata as Record<string, unknown> | null)?.portal_ai_enabled;
+        setAiEnabled(enabled);
+      })
+      .catch(() => setAiEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -83,6 +96,7 @@ export default function AssistantPage() {
           session_id: sessionId,
           device_id: getDeviceId(),
           persona: 'default',
+          engagement_id: engagementId || undefined,
         }),
       });
 
@@ -128,9 +142,38 @@ export default function AssistantPage() {
     }
   }
 
+  // Loading state
+  if (aiEnabled === null) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-sm text-muted">Loading…</p>
+      </div>
+    );
+  }
+
+  // Not enabled for this engagement
+  if (!aiEnabled) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">AI Assistant</h1>
+          <p className="text-xs text-muted mt-0.5">Remediation guidance · assessment-aware</p>
+        </div>
+        <div className="rounded border border-border bg-surface p-8 text-center space-y-3">
+          <p className="text-sm font-medium text-foreground">
+            AI Assistant is not enabled for this engagement
+          </p>
+          <p className="text-xs text-muted max-w-sm mx-auto">
+            The remediation AI assistant is available as part of the monthly tracking plan.
+            Contact your FrostGate assessor to enable it for your account.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
-      {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">AI Assistant</h1>
@@ -140,25 +183,25 @@ export default function AssistantPage() {
         </div>
         {engagementId && (
           <span className="text-xs text-muted border border-border rounded px-2 py-1">
-            Engagement context active
+            Assessment context active
           </span>
         )}
       </div>
 
-      {/* Message thread */}
       <div className="flex-1 overflow-y-auto space-y-3 rounded border border-border bg-surface p-4">
         {messages.length === 0 && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-2">
               <p className="text-sm font-medium text-foreground">How can I help?</p>
               <p className="text-xs text-muted max-w-xs">
-                Ask about your assessment findings, compliance requirements, or remediation steps.
+                Ask about your findings, compliance gaps, or what to fix first.
               </p>
               <div className="flex flex-wrap justify-center gap-2 mt-3">
                 {[
                   'Summarize my critical findings',
-                  'What NIST controls am I missing?',
                   'What should I fix first?',
+                  'Explain my compliance gaps',
+                  'What documents am I missing?',
                 ].map((prompt) => (
                   <button
                     key={prompt}
@@ -185,7 +228,6 @@ export default function AssistantPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <div className="mt-3 flex gap-2">
         <textarea
           value={input}

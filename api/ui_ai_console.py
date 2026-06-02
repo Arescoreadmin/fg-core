@@ -13,8 +13,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+
+from api.db_models_field_assessment import FaEngagement, FaNormalizedFinding
+from services.field_assessment.playbooks import get_playbook
 
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
 from api.config.env import is_production_env
@@ -344,6 +347,7 @@ class AIChatRequest(BaseModel):
     device_id: str | None = None
     provider: str | None = None
     model: str | None = None
+    engagement_id: str | None = None
 
 
 class DeviceStateRequest(BaseModel):
@@ -574,6 +578,97 @@ def _contracts_bundle() -> dict[str, list[dict[str, Any]]]:
                 experience_id=exp["id"],
             )
     return {"experiences": experiences, "policies": policies, "themes": themes}
+
+
+def _build_engagement_system_prompt(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+) -> str | None:
+    """Build a grounded system prompt from the engagement's live assessment data.
+
+    Returns None if the engagement doesn't exist, doesn't belong to this tenant,
+    or doesn't have portal_ai_enabled set in its metadata (premium gate).
+    """
+    eng = db.execute(
+        select(FaEngagement).where(
+            FaEngagement.id == engagement_id,
+            FaEngagement.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if eng is None:
+        return None
+
+    # Premium gate: only engagements explicitly enabled get the AI assistant.
+    metadata = eng.engagement_metadata or {}
+    if not metadata.get("portal_ai_enabled"):
+        return None
+
+    assessment_type = eng.assessment_type or "comprehensive"
+    playbook = get_playbook(assessment_type)
+    framework_label = assessment_type.upper().replace("_", " ")
+
+    # Load findings — cap at 25 to stay within token budget.
+    SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+    findings = list(
+        db.execute(
+            select(FaNormalizedFinding)
+            .where(
+                FaNormalizedFinding.engagement_id == engagement_id,
+                FaNormalizedFinding.tenant_id == tenant_id,
+            )
+            .order_by(FaNormalizedFinding.created_at.desc())
+            .limit(60)
+        ).scalars()
+    )
+    findings.sort(key=lambda f: (SEVERITY_ORDER.get(f.severity.lower(), 5), f.status != "open"))
+    findings = findings[:25]
+
+    open_counts: dict[str, int] = {}
+    for f in findings:
+        if f.status == "open":
+            open_counts[f.severity.lower()] = open_counts.get(f.severity.lower(), 0) + 1
+
+    def _finding_line(f: FaNormalizedFinding) -> str:
+        hint = f" → {f.remediation_hint[:120]}" if f.remediation_hint else ""
+        mappings = ", ".join(str(m) for m in (f.framework_mappings or [])[:3])
+        fw_tag = f" [{mappings}]" if mappings else ""
+        return f"  • [{f.severity.upper()}] {f.title} ({f.status}){fw_tag}{hint}"
+
+    findings_block = "\n".join(_finding_line(f) for f in findings) or "  No findings recorded yet."
+
+    summary_parts = [f"{v} {k}" for k, v in open_counts.items() if v]
+    open_summary = ", ".join(summary_parts) if summary_parts else "none open"
+
+    domains = ", ".join(playbook.required_observation_domains) if playbook.required_observation_domains else "general"
+    doc_classes = ", ".join(playbook.required_document_classes) if playbook.required_document_classes else "standard"
+
+    return f"""You are a compliance and security assessment assistant for {eng.client_name}.
+
+This is a {framework_label} assessment (status: {eng.status}).
+
+Your role:
+- Help the client understand their findings, compliance gaps, and remediation priorities
+- Explain what specific findings mean in plain language and how to fix them
+- Answer questions about the data shown below — do not speculate beyond it
+- Do not discuss topics unrelated to this assessment or general security/compliance
+- If asked something outside the assessment data, say so clearly
+
+## Assessment Summary
+Client: {eng.client_name}
+Framework: {framework_label}
+Status: {eng.status}
+Open findings: {open_summary}
+
+## Findings (by priority)
+{findings_block}
+
+## Framework Requirements
+Required domains: {domains}
+Required document classes: {doc_classes}
+
+Answer concisely. Prioritize actionable guidance. Use plain language — the client is not necessarily a security expert."""
 
 
 def _resolve_experience(
@@ -1057,6 +1152,16 @@ def ai_chat(
 
     persona = _extract_persona(request, payload.persona)
     experience, policy, _theme = _resolve_experience(tenant_id)
+
+    # Build grounded system prompt if caller provided an engagement_id and the
+    # engagement has portal_ai_enabled set (premium gate).
+    engagement_system_prompt: str | None = None
+    if payload.engagement_id:
+        engagement_system_prompt = _build_engagement_system_prompt(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=payload.engagement_id,
+        )
     try:
         ai_policy = resolve_ai_policy_for_tenant(
             tenant_id=tenant_id,
@@ -1292,6 +1397,7 @@ def ai_chat(
                 max_tokens=_max_tokens_per_request(policy, provider),
                 request_id=event_id,
                 tenant_id=tenant_id,
+                system_prompt=engagement_system_prompt,
             )
         except _ProviderCallError as exc:
             blocked_error = _error(503, exc.error_code, "provider call failed")
