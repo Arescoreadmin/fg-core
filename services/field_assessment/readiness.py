@@ -137,6 +137,7 @@ def build_execution_state(
     evidence_links: Iterable[Any],
     generated_at: str,
     reports: Iterable[Any] = (),
+    questionnaire_responses: Iterable[Any] = (),
 ) -> ExecutionState:
     scans = sorted(
         scan_results, key=lambda row: (_str(row, "source_type"), _str(row, "id"))
@@ -171,6 +172,7 @@ def build_execution_state(
         evidence_links=links,
         generated_at=generated_at,
         reports=report_list if report_list else None,
+        questionnaire_responses=list(questionnaire_responses),
     )
     return gate_builder.build()
 
@@ -188,6 +190,7 @@ class _ReadinessBuilder:
         evidence_links: list[Any],
         generated_at: str,
         reports: list[Any] | None = None,
+        questionnaire_responses: list[Any] | None = None,
     ) -> None:
         self.engagement = engagement
         self.playbook = playbook
@@ -198,6 +201,7 @@ class _ReadinessBuilder:
         self.evidence_links = evidence_links
         self.generated_at = generated_at
         self.reports: list[Any] = reports if reports is not None else []
+        self.questionnaire_responses: list[Any] = questionnaire_responses if questionnaire_responses is not None else []
         self.gates: list[ReadinessGate] = []
         self.actions: list[NextAction] = []
         self.escalations: list[EscalationItem] = []
@@ -211,6 +215,7 @@ class _ReadinessBuilder:
         self._observation_gates()
         self._evidence_link_gates()
         self._finding_gates()
+        self._questionnaire_gate()
         self._report_qa_gate()
         self._asset_candidate_actions()
         self._continuity_opportunities()
@@ -999,6 +1004,76 @@ class _ReadinessBuilder:
                     related_entities=missing,
                     recommended_reviewer_role="governance_lead",
                     must_block_progression=True,
+                )
+            )
+
+    def _questionnaire_gate(self) -> None:
+        total = len(self.questionnaire_responses)
+        answered = sum(
+            1 for r in self.questionnaire_responses
+            if _str(r, "response_status") not in ("not_assessed", "")
+        )
+        gate_id = "questionnaire.responses.required"
+        if total == 0 or answered == 0:
+            status = "blocked"
+        elif answered < max(1, total // 5):
+            status = "warning"
+        else:
+            status = "passed"
+        self.gates.append(
+            ReadinessGate(
+                gate_id=gate_id,
+                gate_type="questionnaire_completion",
+                readiness_category="evidence",
+                severity="high",
+                priority=5,
+                status=status,
+                title="NIST AI RMF questionnaire completed",
+                explanation=(
+                    f"{answered} of {total} controls assessed."
+                    if total > 0
+                    else "Questionnaire has not been started."
+                ),
+                why_it_matters=(
+                    "The questionnaire captures governance and process controls that "
+                    "automated scans cannot detect. Without it, the coverage score "
+                    "and remediation roadmap are incomplete."
+                ),
+                evidence_required=["questionnaire_response"],
+                evidence_present=[str(answered)] if answered > 0 else [],
+                missing_items=[] if status == "passed" else ["questionnaire_responses"],
+                related_entity_ids=[],
+                blocks_status_transition=["delivered"] if status == "blocked" else [],
+                recommended_action_id=None if status == "passed" else "action.complete_questionnaire",
+                confidence_impact=None if status == "passed" else ConfidenceImpact(
+                    reason="questionnaire_incomplete",
+                    delta=-15,
+                    affected_scope="governance_coverage",
+                ),
+            )
+        )
+        if status != "passed":
+            self.actions.append(
+                NextAction(
+                    action_id="action.complete_questionnaire",
+                    priority=5,
+                    severity="high",
+                    title="Complete the NIST AI RMF questionnaire",
+                    instruction=(
+                        "Open the Questionnaire tab and record the client's control "
+                        "status for each of the 69 NIST AI RMF subcategories. "
+                        "Use interview responses to inform each answer."
+                    ),
+                    why_it_matters=(
+                        "The questionnaire is the primary source of governance coverage "
+                        "data. Skipping it produces a score based on scans alone, which "
+                        "systematically undercounts implemented controls."
+                    ),
+                    closes_gate_ids=[gate_id],
+                    required_input_type="questionnaire_response",
+                    target_ui_section="questionnaire",
+                    expected_evidence=["questionnaire_responses"],
+                    safe_for_junior_assessor=True,
                 )
             )
 

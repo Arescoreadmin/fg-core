@@ -2384,6 +2384,18 @@ def _evaluate_execution_state(db: Session, *, eng: Any, tenant_id: str) -> Any:
         .scalars()
         .all()
     )
+    from api.db_models_questionnaire import FaQuestionnaireResponse  # noqa: F811
+
+    questionnaire_responses = list(
+        db.execute(
+            select(FaQuestionnaireResponse).where(
+                FaQuestionnaireResponse.engagement_id == engagement_id,
+                FaQuestionnaireResponse.tenant_id == tenant_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
     playbook = get_playbook(eng.assessment_type)
     return build_execution_state(
         engagement=eng,
@@ -2395,6 +2407,7 @@ def _evaluate_execution_state(db: Session, *, eng: Any, tenant_id: str) -> Any:
         evidence_links=evidence_links,
         generated_at=utc_iso8601_z_now(),
         reports=reports,
+        questionnaire_responses=questionnaire_responses,
     )
 
 

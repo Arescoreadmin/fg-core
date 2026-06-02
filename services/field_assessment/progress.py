@@ -41,6 +41,7 @@ _TAB_MAP: dict[str, str] = {
     "documents": "documents",
     "observations": "observations",
     "interviews": "interviews",
+    "questionnaire": "questionnaire",
     "report": "reports",
 }
 
