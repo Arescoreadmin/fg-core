@@ -4796,6 +4796,8 @@ class ReportQaApproveResponse(BaseModel):
     qa_approved_at: str
     engagement_status: str
     client_access_code: str | None = None
+    delivery_blocked: bool = False
+    delivery_blockers: list[dict[str, Any]] = []
 
 
 class ReportQaApproveBody(BaseModel):
@@ -4877,7 +4879,9 @@ def qa_approve_report_route(
         },
     )
 
-    # Auto-advance in_progress → delivered and issue client access code.
+    # Attempt auto-advance in_progress → delivered.
+    # Gate evaluation runs *after* the db.flush() above so the qa-approval is
+    # already visible to the readiness engine. Only advance when all gates pass.
     eng = db.execute(
         select(FaEngagement).where(
             FaEngagement.id == engagement_id,
@@ -4885,37 +4889,77 @@ def qa_approve_report_route(
         )
     ).scalar_one()
     client_access_code: str | None = None
+    delivery_blocked: bool = False
+    delivery_blockers: list[dict[str, Any]] = []
+
     if eng.status == "in_progress":
-        eng.status = "delivered"
-        eng.updated_at = now
-        # Reuse any existing code already issued for this client so they can
-        # log in with one password and see all their engagements over time.
-        existing_code = db.execute(
-            select(FaEngagement.client_access_code)
-            .where(
-                FaEngagement.tenant_id == tenant_id,
-                FaEngagement.client_name == eng.client_name,
-                FaEngagement.client_access_code.isnot(None),
-                FaEngagement.id != engagement_id,
-            )
-            .limit(1)
-        ).scalar_one_or_none()
-        if existing_code:
-            client_access_code = existing_code
+        execution_state = _evaluate_execution_state(db, eng=eng, tenant_id=tenant_id)
+        blockers = [
+            b for b in execution_state.transition_blockers if b.target_status == "delivered"
+        ]
+        if blockers:
+            # QA approval recorded; delivery blocked by remaining gates.
+            delivery_blocked = True
+            blocked_gate_ids = blockers[0].blocked_by_gate_ids
+            delivery_blockers = [
+                {
+                    "gate_id": g.gate_id,
+                    "title": g.title,
+                    "missing_items": g.missing_items,
+                }
+                for g in execution_state.gates
+                if g.gate_id in blocked_gate_ids and g.status == "blocked"
+            ]
         else:
-            alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-            client_access_code = "".join(secrets.choice(alphabet) for _ in range(8))
-        eng.client_access_code = client_access_code
-        db.flush()
-        emit_engagement_audit_event(
-            db,
-            tenant_id=tenant_id,
-            engagement_id=engagement_id,
-            event_type="engagement.status_transitioned",
-            actor=actor,
-            reason_code="AUTO_ADVANCE_QA_APPROVED",
-            payload={"new_status": "delivered", "triggered_by": "report.qa_approved"},
-        )
+            # All gates pass — advance to delivered.
+            gate_snapshot: dict[str, Any] = {
+                "gates_evaluated": [g.gate_id for g in execution_state.gates],
+                "gates_passed": [
+                    g.gate_id for g in execution_state.gates if g.status == "passed"
+                ],
+                "readiness_score": execution_state.readiness_score,
+            }
+            eng.status = "delivered"
+            eng.updated_at = now
+            # Reuse any existing code already issued for this client so they can
+            # log in with one password and see all their engagements over time.
+            existing_code = db.execute(
+                select(FaEngagement.client_access_code)
+                .where(
+                    FaEngagement.tenant_id == tenant_id,
+                    FaEngagement.client_name == eng.client_name,
+                    FaEngagement.client_access_code.isnot(None),
+                    FaEngagement.id != engagement_id,
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if existing_code:
+                client_access_code = existing_code
+            else:
+                alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+                client_access_code = "".join(secrets.choice(alphabet) for _ in range(8))
+            eng.client_access_code = client_access_code
+            db.flush()
+            emit_engagement_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="engagement.status_transitioned",
+                actor=actor,
+                reason_code="AUTO_ADVANCE_QA_APPROVED",
+                payload={
+                    "new_status": "delivered",
+                    "triggered_by": "report.qa_approved",
+                    **gate_snapshot,
+                },
+            )
+            promote_engagement_to_governance(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                gate_snapshot=gate_snapshot,
+                baseline_readiness_score=gate_snapshot.get("readiness_score", 0),
+            )
     else:
         client_access_code = eng.client_access_code
 
@@ -4927,6 +4971,8 @@ def qa_approve_report_route(
         qa_approved_at=now,
         engagement_status=eng.status,
         client_access_code=client_access_code,
+        delivery_blocked=delivery_blocked,
+        delivery_blockers=delivery_blockers,
     )
 
 
@@ -5183,6 +5229,7 @@ def _build_engagement_report_json(
     tenant_id: str,
     report_type: str,
     include_sections: list[str] | None,
+    assessment_type: str,
     db: Session,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     from services.governance.report import (
@@ -5309,7 +5356,7 @@ def _build_engagement_report_json(
             "nist_800_171": {"NIST-AI-RMF", "CMMC"},
             "comprehensive": None,
         }
-        _allowed_fws: set[str] | None = _ASSESSMENT_FRAMEWORK_ALLOW.get(eng.assessment_type)
+        _allowed_fws: set[str] | None = _ASSESSMENT_FRAMEWORK_ALLOW.get(assessment_type)
 
         fw_summary: dict[str, set[str]] = {}
 
@@ -5446,7 +5493,7 @@ def create_engagement_report_route(
     actor = _actor_from_request(request)
 
     try:
-        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
@@ -5457,6 +5504,7 @@ def create_engagement_report_route(
         tenant_id=tenant_id,
         report_type=body.report_type,
         include_sections=body.include_sections,
+        assessment_type=eng.assessment_type,
         db=db,
     )
 

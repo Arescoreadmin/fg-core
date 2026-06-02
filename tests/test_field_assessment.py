@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("FG_ENV", "test")
+os.environ.setdefault("FG_REPORT_SIGNING_KEY", "aa" * 32)  # 64-char hex test seed
 
 import pytest
 from fastapi.testclient import TestClient
@@ -893,3 +894,90 @@ def test_operator_request_bypasses_portal_guard(client: TestClient) -> None:
     # No X-Portal-Source header → middleware is a no-op → normal 200
     resp = client.get(f"/field-assessment/engagements/{eng_id}")
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# QA delivery gate tests (C1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def qa_client(build_app: object) -> TestClient:
+    """Client with governance:read + governance:write + governance:qa_approve scopes."""
+    from api.auth_scopes import mint_key
+
+    app = build_app(auth_enabled=True)  # type: ignore[operator]
+    key = mint_key(
+        "governance:read",
+        "governance:write",
+        "governance:qa_approve",
+        tenant_id=_TENANT_ID,
+    )
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+def _create_finalized_report(qa_client: TestClient, eng_id: str) -> str:
+    """Create and finalize a report; return the report_id."""
+    resp = qa_client.post(
+        f"/field-assessment/engagements/{eng_id}/reports",
+        json={"report_type": "full_assessment"},
+    )
+    assert resp.status_code in (200, 201), resp.text
+    data = resp.json()
+    # The route returns the report id directly or inside a list; normalise both shapes.
+    return data.get("id") or data.get("report_id") or data["items"][0]["report_id"]
+
+
+def test_qa_approve_blocks_delivery_when_gates_incomplete(qa_client: TestClient) -> None:
+    """QA approval records successfully but delivery is blocked when other gates are not met."""
+    eng = _create_engagement(qa_client)
+    eng_id = eng["id"]
+    report_id = _create_finalized_report(qa_client, eng_id)
+
+    resp = qa_client.post(
+        f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
+        json={},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # QA approval was recorded
+    assert data["qa_approved_by"] != ""
+    assert data["qa_approved_at"] != ""
+    # Delivery is blocked because other gates (scans, questionnaire, etc.) are unmet
+    assert data["delivery_blocked"] is True
+    assert len(data["delivery_blockers"]) > 0
+    assert data["engagement_status"] == "in_progress"
+    assert data["client_access_code"] is None
+
+
+def test_qa_approve_blockers_include_gate_id_and_title(qa_client: TestClient) -> None:
+    """delivery_blockers items contain gate_id, title, and missing_items."""
+    eng = _create_engagement(qa_client)
+    eng_id = eng["id"]
+    report_id = _create_finalized_report(qa_client, eng_id)
+
+    data = qa_client.post(
+        f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
+        json={},
+    ).json()
+
+    for blocker in data["delivery_blockers"]:
+        assert "gate_id" in blocker
+        assert "title" in blocker
+        assert "missing_items" in blocker
+
+
+def test_qa_approve_engagement_status_unchanged_when_blocked(qa_client: TestClient) -> None:
+    """Engagement remains in_progress when QA approve cannot auto-advance."""
+    eng = _create_engagement(qa_client)
+    eng_id = eng["id"]
+    report_id = _create_finalized_report(qa_client, eng_id)
+
+    qa_client.post(
+        f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
+        json={},
+    )
+
+    detail = qa_client.get(f"/field-assessment/engagements/{eng_id}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "in_progress"
