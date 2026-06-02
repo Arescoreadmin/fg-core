@@ -17,6 +17,7 @@ import pytest
 
 from services.field_assessment.playbooks import (
     AI_GOVERNANCE_PLAYBOOK,
+    CMMC_PLAYBOOK,
     COMPREHENSIVE_PLAYBOOK,
     HIPAA_PLAYBOOK,
     SOC2_PLAYBOOK,
@@ -214,8 +215,8 @@ class TestExistingPlaybooksUnaffected:
     def test_comprehensive_unchanged(self) -> None:
         assert get_playbook("comprehensive") is COMPREHENSIVE_PLAYBOOK
 
-    def test_cmmc_still_falls_back_to_comprehensive(self) -> None:
-        assert get_playbook("cmmc") is COMPREHENSIVE_PLAYBOOK
+    def test_cmmc_returns_cmmc_playbook(self) -> None:
+        assert get_playbook("cmmc") is CMMC_PLAYBOOK
 
     def test_unknown_type_falls_back_to_comprehensive(self) -> None:
         assert get_playbook("unknown_type") is COMPREHENSIVE_PLAYBOOK

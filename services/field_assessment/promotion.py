@@ -343,7 +343,7 @@ def _feed_engagement_to_corpus(
         # --- Findings ---
         offset = 0
         while True:
-            page = list_findings(
+            finding_page = list_findings(
                 db,
                 engagement_id=engagement_id,
                 tenant_id=tenant_id,
@@ -352,7 +352,7 @@ def _feed_engagement_to_corpus(
                 limit=_MAX_FINDINGS,
                 offset=offset,
             )
-            for f in page:
+            for f in finding_page:
                 docs.append(
                     CorpusDocument(
                         source_id=f"fa:{engagement_id}:finding:{f.id}",
@@ -366,21 +366,21 @@ def _feed_engagement_to_corpus(
                         },
                     )
                 )
-            if len(page) < _MAX_FINDINGS:
+            if len(finding_page) < _MAX_FINDINGS:
                 break
-            offset += len(page)
+            offset += len(finding_page)
 
         # --- Document analyses ---
         offset = 0
         while True:
-            page = list_document_analyses(
+            document_page = list_document_analyses(
                 db,
                 engagement_id=engagement_id,
                 tenant_id=tenant_id,
                 limit=_MAX_FINDINGS,
                 offset=offset,
             )
-            for d in page:
+            for d in document_page:
                 content = f"{d.document_name}\n\n{d.document_classification}".strip()
                 if not content:
                     continue
@@ -396,21 +396,21 @@ def _feed_engagement_to_corpus(
                         },
                     )
                 )
-            if len(page) < _MAX_FINDINGS:
+            if len(document_page) < _MAX_FINDINGS:
                 break
-            offset += len(page)
+            offset += len(document_page)
 
         # --- Field observations (excludes soft-deleted) ---
         offset = 0
         while True:
-            page = list_observations(
+            observation_page = list_observations(
                 db,
                 engagement_id=engagement_id,
                 tenant_id=tenant_id,
                 limit=_MAX_FINDINGS,
                 offset=offset,
             )
-            for o in page:
+            for o in observation_page:
                 content = f"{o.title}\n\n{o.description}".strip()
                 if not content:
                     continue
@@ -428,9 +428,9 @@ def _feed_engagement_to_corpus(
                         },
                     )
                 )
-            if len(page) < _MAX_FINDINGS:
+            if len(observation_page) < _MAX_FINDINGS:
                 break
-            offset += len(page)
+            offset += len(observation_page)
 
         if not docs:
             return

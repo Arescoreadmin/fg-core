@@ -152,6 +152,7 @@ def test_action_type_is_semantic() -> None:
                 "document_analysis",
                 "field_observation",
                 "report_qa_approval",
+                "questionnaire_response",
             )
         )
 

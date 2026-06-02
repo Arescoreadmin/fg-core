@@ -30,7 +30,14 @@ from fastapi import (
     Response,
     status,
 )
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -196,6 +203,18 @@ def _actor_from_request(request: Request) -> str:
     auth = getattr(getattr(request, "state", None), "auth", None)
     prefix = getattr(auth, "key_prefix", None)
     return str(prefix) if prefix else "unknown"
+
+
+def _assert_engagement_accepts_evidence(eng: FaEngagement) -> None:
+    """Reject evidence mutations once an engagement reaches a terminal state."""
+    if eng.status in {"delivered", "cancelled", "closed"}:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "ENGAGEMENT_LOCKED",
+                f"Engagement in status '{eng.status}' no longer accepts evidence mutations.",
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -964,9 +983,13 @@ def list_engagements_route(
         access_code_filter=client_access_code,
     )
     next_cursor = rows[-1].created_at if len(rows) == limit else None
-    count_stmt = select(func.count(FaEngagement.id)).where(FaEngagement.tenant_id == tenant_id)
+    count_stmt = select(func.count(FaEngagement.id)).where(
+        FaEngagement.tenant_id == tenant_id
+    )
     if client_access_code:
-        count_stmt = count_stmt.where(FaEngagement.client_access_code == client_access_code)
+        count_stmt = count_stmt.where(
+            FaEngagement.client_access_code == client_access_code
+        )
     total = db.execute(count_stmt).scalar_one()
     return EngagementListResponse(
         items=[_engagement_to_response(r) for r in rows],
@@ -1070,7 +1093,10 @@ def patch_engagement_route(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
     if body.engagement_metadata is not None:
-        eng.engagement_metadata = {**(eng.engagement_metadata or {}), **body.engagement_metadata}
+        eng.engagement_metadata = {
+            **(eng.engagement_metadata or {}),
+            **body.engagement_metadata,
+        }
         eng.updated_at = utc_iso8601_z_now()
     db.commit()
     db.refresh(eng)
@@ -1219,11 +1245,12 @@ def ingest_scan_result_route(
 
     # Verify engagement belongs to tenant
     try:
-        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+    _assert_engagement_accepts_evidence(eng)
 
     # Compute evidence hash over the original payload first so we can record it
     # in the quarantine store even if validation fails.
@@ -1387,6 +1414,7 @@ def list_scan_results_route(
     engagement_id: str,
     request: Request,
     limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ScanResultSummaryResponse]:
     tenant_id = _resolve_caller_tenant(request)
@@ -1397,7 +1425,7 @@ def list_scan_results_route(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
     rows = list_scan_results(
-        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=limit
+        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=limit, offset=offset
     )
     return [_scan_result_to_summary(r) for r in rows]
 
@@ -1454,11 +1482,12 @@ def register_document_analysis_route(
     tenant_id = _resolve_caller_tenant(request)
     actor = _actor_from_request(request)
     try:
-        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+    _assert_engagement_accepts_evidence(eng)
     analysis = create_document_analysis(
         db,
         tenant_id=tenant_id,
@@ -1540,17 +1569,7 @@ def capture_observation_route(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
-    if body.interview_role:
-        _playbook = get_playbook(eng.assessment_type)
-        if body.interview_role not in _playbook.required_interview_roles:
-            raise HTTPException(
-                status_code=422,
-                detail=api_error(
-                    "INVALID_INTERVIEW_ROLE",
-                    f"'{body.interview_role}' is not a valid role for this playbook. "
-                    f"Valid roles: {list(_playbook.required_interview_roles)}",
-                ),
-            )
+    _assert_engagement_accepts_evidence(eng)
     observation = create_observation(
         db,
         tenant_id=tenant_id,
@@ -1612,10 +1631,17 @@ def bulk_import_observations_route(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+    _assert_engagement_accepts_evidence(eng)
     if not body:
-        raise HTTPException(status_code=400, detail=api_error("EMPTY_IMPORT", "No observations provided"))
+        raise HTTPException(
+            status_code=400,
+            detail=api_error("EMPTY_IMPORT", "No observations provided"),
+        )
     if len(body) > 200:
-        raise HTTPException(status_code=400, detail=api_error("IMPORT_TOO_LARGE", "Maximum 200 observations per import"))
+        raise HTTPException(
+            status_code=400,
+            detail=api_error("IMPORT_TOO_LARGE", "Maximum 200 observations per import"),
+        )
 
     _playbook = get_playbook(eng.assessment_type)
     created_ids: list[str] = []
@@ -1624,8 +1650,13 @@ def bulk_import_observations_route(
 
     for idx, row in enumerate(body):
         try:
-            if row.interview_role and row.interview_role not in _playbook.required_interview_roles:
-                errors.append(f"Row {idx}: invalid interview_role '{row.interview_role}'")
+            if (
+                row.interview_role
+                and row.interview_role not in _playbook.required_interview_roles
+            ):
+                errors.append(
+                    f"Row {idx}: invalid interview_role '{row.interview_role}'"
+                )
                 skipped += 1
                 continue
             obs = create_observation(
@@ -1677,6 +1708,7 @@ def list_observations_route(
     request: Request,
     observation_type: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ObservationResponse]:
     tenant_id = _resolve_caller_tenant(request)
@@ -1691,6 +1723,7 @@ def list_observations_route(
         engagement_id=engagement_id,
         tenant_id=tenant_id,
         limit=limit,
+        offset=offset,
         observation_type=observation_type,
     )
     return [_observation_to_response(r) for r in rows]
@@ -1773,7 +1806,10 @@ def update_observation_route(
         )
     ).scalar_one_or_none()
     if obs is None:
-        raise HTTPException(status_code=404, detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"))
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"),
+        )
     if body.linked_finding_ids is not None and body.linked_finding_ids:
         candidate_ids = [str(fid) for fid in body.linked_finding_ids]
         found_ids = set(
@@ -1783,7 +1819,9 @@ def update_observation_route(
                     FaNormalizedFinding.engagement_id == engagement_id,
                     FaNormalizedFinding.tenant_id == tenant_id,
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         invalid = [fid for fid in candidate_ids if fid not in found_ids]
         if invalid:
@@ -1859,7 +1897,10 @@ def delete_observation_route(
         )
     ).scalar_one_or_none()
     if obs is None:
-        raise HTTPException(status_code=404, detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"))
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"),
+        )
     now = utc_iso8601_z_now()
     obs.deleted_at = now
     # Cascade-remove evidence links that source this observation
@@ -1916,6 +1957,7 @@ def list_findings_route(
     severity: str | None = Query(None),
     finding_status: str | None = Query(None, alias="status"),
     limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
 ) -> FindingListResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -1932,6 +1974,7 @@ def list_findings_route(
         severity_filter=severity,
         status_filter=finding_status,
         limit=limit,
+        offset=offset,
     )
     count_stmt = select(func.count(FaNormalizedFinding.id)).where(
         FaNormalizedFinding.engagement_id == engagement_id,
@@ -2213,18 +2256,37 @@ def create_evidence_link_route(
     tenant_id = _resolve_caller_tenant(request)
     actor = _actor_from_request(request)
     try:
-        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
-    # Orphan prevention: verify evidence entity exists in this engagement
-    _EVIDENCE_ENTITY_TABLES: dict[str, type] = {
+    _assert_engagement_accepts_evidence(eng)
+    # Orphan prevention: verify both link endpoints exist in this engagement.
+    _ENTITY_TABLES: dict[str, type] = {
+        "finding": FaNormalizedFinding,
         "scan_result": FaScanResult,
         "document_analysis": FaDocumentAnalysis,
         "field_observation": FaFieldObservation,
     }
-    evidence_model = _EVIDENCE_ENTITY_TABLES.get(body.evidence_entity_type.value)
+    source_model = _ENTITY_TABLES.get(body.source_entity_type)
+    if source_model is not None:
+        exists = db.execute(
+            select(source_model.id).where(  # type: ignore[attr-defined]
+                source_model.id == body.source_entity_id,  # type: ignore[attr-defined]
+                source_model.engagement_id == engagement_id,  # type: ignore[attr-defined]
+                source_model.tenant_id == tenant_id,  # type: ignore[attr-defined]
+            )
+        ).scalar_one_or_none()
+        if exists is None:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error(
+                    "SOURCE_ENTITY_NOT_FOUND",
+                    f"source entity {body.source_entity_id!r} not found in engagement",
+                ),
+            )
+    evidence_model = _ENTITY_TABLES.get(body.evidence_entity_type.value)
     if evidence_model is not None:
         exists = db.execute(
             select(evidence_model.id).where(  # type: ignore[attr-defined]
@@ -2445,9 +2507,7 @@ def _evaluate_execution_state(db: Session, *, eng: Any, tenant_id: str) -> Any:
     findings = _fetch_all_pages(
         list_findings, severity_filter=None, status_filter=None, **_kw
     )
-    evidence_links = _fetch_all_pages(
-        list_evidence_links, source_entity_id=None, **_kw
-    )
+    evidence_links = _fetch_all_pages(list_evidence_links, source_entity_id=None, **_kw)
     reports = list(
         db.execute(
             select(GovernanceReportRecord).where(
@@ -4175,6 +4235,7 @@ def list_audit_events_route(
     engagement_id: str,
     request: Request,
     limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[AuditEventResponse]:
     tenant_id = _resolve_caller_tenant(request)
@@ -4185,7 +4246,7 @@ def list_audit_events_route(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
     rows = list_audit_events(
-        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=limit
+        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=limit, offset=offset
     )
     return [
         AuditEventResponse(
@@ -4840,7 +4901,9 @@ class ReportQaApproveResponse(BaseModel):
 
 
 class ReportQaApproveBody(BaseModel):
-    reviewer_name: str | None = None  # Human-readable name; falls back to JWT actor if omitted
+    reviewer_name: str | None = (
+        None  # Human-readable name; falls back to JWT actor if omitted
+    )
 
 
 @router.post(
@@ -4908,7 +4971,11 @@ def qa_approve_report_route(
     now = utc_iso8601_z_now()
     # reviewer_name is the human-readable display name (e.g. "Jane Smith, Senior Assessor").
     # The JWT actor is always recorded in the audit event for non-repudiation.
-    display_name = (body.reviewer_name.strip() if body.reviewer_name and body.reviewer_name.strip() else None) or actor
+    display_name = (
+        body.reviewer_name.strip()
+        if body.reviewer_name and body.reviewer_name.strip()
+        else None
+    ) or actor
     report.qa_approved_by = display_name
     report.qa_approved_at = now
     db.flush()
@@ -4944,7 +5011,9 @@ def qa_approve_report_route(
     if eng.status == "in_progress":
         execution_state = _evaluate_execution_state(db, eng=eng, tenant_id=tenant_id)
         blockers = [
-            b for b in execution_state.transition_blockers if b.target_status == "delivered"
+            b
+            for b in execution_state.transition_blockers
+            if b.target_status == "delivered"
         ]
         if blockers:
             # QA approval recorded; delivery blocked by remaining gates.
@@ -5292,7 +5361,9 @@ def _build_engagement_report_json(
         _serialize_evidence_ref,
         _serialize_confidence,
     )
-    from services.governance.report.framework_mappings import get_framework_mappings as _get_fw_maps
+    from services.governance.report.framework_mappings import (
+        get_framework_mappings as _get_fw_maps,
+    )
 
     active_sections = set(include_sections) if include_sections else set(_ALL_SECTIONS)
 
@@ -5416,25 +5487,34 @@ def _build_engagement_report_json(
             fw_summary.setdefault(fw_key, set()).add(ctrl)
 
         # 1. Derive from field observations (manual assessment) — gap/finding types
-        obs_rows = db.execute(
-            select(FaFieldObservation).where(
-                FaFieldObservation.engagement_id == engagement_id,
-                FaFieldObservation.tenant_id == tenant_id,
-                FaFieldObservation.observation_type.in_(["finding", "gap", "concern"]),
-                FaFieldObservation.deleted_at.is_(None),
+        obs_rows = (
+            db.execute(
+                select(FaFieldObservation).where(
+                    FaFieldObservation.engagement_id == engagement_id,
+                    FaFieldObservation.tenant_id == tenant_id,
+                    FaFieldObservation.observation_type.in_(
+                        ["finding", "gap", "concern"]
+                    ),
+                    FaFieldObservation.deleted_at.is_(None),
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for obs in obs_rows:
             fw_domain = _OBS_DOMAIN_MAP.get(obs.domain)
             if fw_domain is None:
-                log.warning("Observation domain '%s' has no framework mapping — skipping", obs.domain)
+                log.warning(
+                    "Observation domain '%s' has no framework mapping — skipping",
+                    obs.domain,
+                )
                 continue
             for fm in _get_fw_maps(control_id=fw_domain, domain=fw_domain):
                 _add_fw_refs(fm.framework, fm.control_ref)
 
         # 2. Derive from connector-driven normalized findings (framework_mappings field)
         for f in all_findings:
-            for fm in (f.framework_mappings or []):
+            for fm in f.framework_mappings or []:
                 if isinstance(fm, dict):
                     fw = fm.get("framework", "")
                     ctrl = fm.get("control_id") or fm.get("control_ref") or ""
@@ -5594,7 +5674,12 @@ def create_engagement_report_route(
             version=version,
             schema_version="1.0",
             report_type=body.report_type,
-            compiled_by=(body.compiled_by.strip() if body.compiled_by and body.compiled_by.strip() else None) or actor,
+            compiled_by=(
+                body.compiled_by.strip()
+                if body.compiled_by and body.compiled_by.strip()
+                else None
+            )
+            or actor,
             manifest_hash=manifest_hash,
             report_json=report_json,
             section_hashes=section_hashes,
@@ -6221,7 +6306,9 @@ def _questionnaire_to_response(
         created_at=q.created_at,
         updated_at=q.updated_at,
         responses=[
-            _fuse_response_item(r, sc.get(r.control_id, 0), evidence_doc_id=em.get(r.id))
+            _fuse_response_item(
+                r, sc.get(r.control_id, 0), evidence_doc_id=em.get(r.id)
+            )
             for r in responses
         ],
         already_existed=already_existed,
@@ -6278,7 +6365,9 @@ def create_or_get_questionnaire(
         tenant_id=tenant_id,
         response_ids=[r.id for r in responses],
     )
-    return _questionnaire_to_response(q, responses, already_existed=not created, evidence_map=evidence_map)
+    return _questionnaire_to_response(
+        q, responses, already_existed=not created, evidence_map=evidence_map
+    )
 
 
 @router.get(
@@ -6391,7 +6480,10 @@ def patch_questionnaire_response(
         if not doc_exists:
             raise HTTPException(
                 status_code=422,
-                detail=api_error("INVALID_EVIDENCE_DOC", "Document does not belong to this engagement"),
+                detail=api_error(
+                    "INVALID_EVIDENCE_DOC",
+                    "Document does not belong to this engagement",
+                ),
             )
         # Delete any existing doc link for this response (upsert semantics).
         db.execute(
@@ -6458,7 +6550,10 @@ def patch_questionnaire_response(
                         source_entity_id=finding.id,
                         evidence_entity_type="document_analysis",
                         evidence_entity_id=body.evidence_doc_id,
-                        link_metadata={"control_id": r.control_id, "via": "questionnaire"},
+                        link_metadata={
+                            "control_id": r.control_id,
+                            "via": "questionnaire",
+                        },
                         created_at=utc_iso8601_z_now(),
                         schema_version="1.0",
                     )
@@ -6487,22 +6582,28 @@ def patch_questionnaire_response(
         if old_link:
             # Remove stale finding → document_analysis links that were auto-created
             # via this questionnaire response (identified by control_id + via marker).
-            stale = list(db.scalars(
-                select(FaEvidenceLink).where(
-                    FaEvidenceLink.tenant_id == tenant_id,
-                    FaEvidenceLink.engagement_id == engagement_id,
-                    FaEvidenceLink.source_entity_type == "finding",
-                    FaEvidenceLink.evidence_entity_type == "document_analysis",
-                    FaEvidenceLink.evidence_entity_id == old_link.evidence_entity_id,
+            stale = list(
+                db.scalars(
+                    select(FaEvidenceLink).where(
+                        FaEvidenceLink.tenant_id == tenant_id,
+                        FaEvidenceLink.engagement_id == engagement_id,
+                        FaEvidenceLink.source_entity_type == "finding",
+                        FaEvidenceLink.evidence_entity_type == "document_analysis",
+                        FaEvidenceLink.evidence_entity_id
+                        == old_link.evidence_entity_id,
+                    )
                 )
-            ))
+            )
             auto_link_ids = [
-                lk.id for lk in stale
+                lk.id
+                for lk in stale
                 if lk.link_metadata.get("control_id") == r.control_id
                 and lk.link_metadata.get("via") == "questionnaire"
             ]
             if auto_link_ids:
-                db.execute(delete(FaEvidenceLink).where(FaEvidenceLink.id.in_(auto_link_ids)))
+                db.execute(
+                    delete(FaEvidenceLink).where(FaEvidenceLink.id.in_(auto_link_ids))
+                )
 
     db.commit()
     return UpdateResponseResponse(
@@ -6658,7 +6759,11 @@ def list_questionnaires_route(
             tenant_id=tenant_id,
             response_ids=[r.id for r in responses],
         )
-        result.append(_questionnaire_to_response(q, responses, scan_counts=scan_counts, evidence_map=evidence_map))
+        result.append(
+            _questionnaire_to_response(
+                q, responses, scan_counts=scan_counts, evidence_map=evidence_map
+            )
+        )
     return result
 
 
@@ -6752,6 +6857,8 @@ def get_remediation_roadmap(
             key=lambda f: compute_priority_score(f),
             reverse=True,
         )
+        if not findings:
+            continue
         # Unique NIST controls addressed by this phase that are not yet implemented.
         phase_new_controls: set[str] = set()
         for f in findings:

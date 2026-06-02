@@ -351,16 +351,16 @@ def test_fetch_all_pages_collects_beyond_page_size() -> None:
 
     calls: list[tuple[int, int]] = []
 
-    def fake_fn(*, db: None, engagement_id: str, tenant_id: str, limit: int, offset: int) -> list[int]:
+    def fake_fn(
+        *, db: None, engagement_id: str, tenant_id: str, limit: int, offset: int
+    ) -> list[int]:
         calls.append((limit, offset))
         # Simulate 250 total items: pages of 100, 100, 50
         start = offset
         end = min(offset + limit, 250)
         return list(range(start, end))
 
-    result = _fetch_all_pages(
-        fake_fn, db=None, engagement_id="eng-1", tenant_id="t-1"
-    )
+    result = _fetch_all_pages(fake_fn, db=None, engagement_id="eng-1", tenant_id="t-1")
 
     assert len(result) == 250, f"expected 250 items, got {len(result)}"
     assert len(calls) == 3, f"expected 3 page fetches, got {len(calls)}"

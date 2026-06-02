@@ -13,6 +13,7 @@ Verifies that:
   8. Migration 0077 backfills fa_scan_results.finding_count and
      fa_normalized_findings.asset_id with IF NOT EXISTS guards (PI15).
 """
+
 from __future__ import annotations
 
 import inspect
@@ -76,7 +77,9 @@ class TestFaMigrationSafety:
                             r"ADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS)", sql, re.IGNORECASE
                         )
                         if add_pattern:
-                            unsafe.append(f"{path.name}: ADD COLUMN missing IF NOT EXISTS")
+                            unsafe.append(
+                                f"{path.name}: ADD COLUMN missing IF NOT EXISTS"
+                            )
         assert not unsafe, "\n".join(unsafe)
 
 
@@ -101,13 +104,9 @@ class TestFaRls:
     def test_0075_enables_rls_on_all_fa_tables(self) -> None:
         """Migration 0075 must ENABLE ROW LEVEL SECURITY on every FA table."""
         sql = _migration_sql("0075_fa_rls.sql").upper()
-        assert "ENABLE ROW LEVEL SECURITY" in sql, (
-            "0075 must enable RLS"
-        )
+        assert "ENABLE ROW LEVEL SECURITY" in sql, "0075 must enable RLS"
         for table in _FA_RLS_TABLES:
-            assert table.upper() in sql, (
-                f"0075 missing RLS coverage for {table}"
-            )
+            assert table.upper() in sql, f"0075 missing RLS coverage for {table}"
 
     def test_0075_forces_rls_on_all_fa_tables(self) -> None:
         """Migration 0075 must FORCE ROW LEVEL SECURITY so table owners are also constrained."""
@@ -119,9 +118,7 @@ class TestFaRls:
     def test_0075_creates_tenant_isolation_policies(self) -> None:
         """Migration 0075 must create {table}_tenant_isolation policies for each FA table."""
         sql = _migration_sql("0075_fa_rls.sql")
-        assert "tenant_isolation" in sql, (
-            "0075 must create tenant_isolation policies"
-        )
+        assert "tenant_isolation" in sql, "0075 must create tenant_isolation policies"
         assert "app.tenant_id" in sql, (
             "0075 policies must reference app.tenant_id session variable"
         )
@@ -133,9 +130,7 @@ class TestFaRls:
 
         source = inspect.getsource(assert_tenant_rls)
         missing = [t for t in _FA_RLS_TABLES if t not in source]
-        assert not missing, (
-            f"assert_tenant_rls() is missing FA tables: {missing}"
-        )
+        assert not missing, f"assert_tenant_rls() is missing FA tables: {missing}"
 
 
 class TestFaAuditEventsAppendOnly:
@@ -164,9 +159,7 @@ class TestFaAuditEventsAppendOnly:
     def test_0076_uses_append_only_guard(self) -> None:
         """Migration 0076 must wire triggers to the shared append_only_guard() function."""
         sql = _migration_sql("0076_fa_audit_events_append_only.sql")
-        assert "append_only_guard" in sql, (
-            "0076 triggers must use append_only_guard()"
-        )
+        assert "append_only_guard" in sql, "0076 triggers must use append_only_guard()"
 
     def test_assert_append_only_triggers_covers_fa_audit_events(self) -> None:
         """assert_append_only_triggers() must include fa_engagement_audit_events."""
@@ -190,13 +183,17 @@ class TestFaSchemaGaps:
     def test_0077_adds_asset_id(self) -> None:
         """Migration 0077 must add asset_id to fa_normalized_findings."""
         sql = _migration_sql("0077_fa_schema_gaps.sql").upper()
-        assert "FA_NORMALIZED_FINDINGS" in sql, "0077 must target fa_normalized_findings"
+        assert "FA_NORMALIZED_FINDINGS" in sql, (
+            "0077 must target fa_normalized_findings"
+        )
         assert "ASSET_ID" in sql, "0077 must add asset_id column"
 
     def test_0077_creates_asset_id_index(self) -> None:
         """Migration 0077 must create ix_fa_findings_asset index."""
         sql = _migration_sql("0077_fa_schema_gaps.sql")
-        assert "ix_fa_findings_asset" in sql, "0077 must create ix_fa_findings_asset index"
+        assert "ix_fa_findings_asset" in sql, (
+            "0077 must create ix_fa_findings_asset index"
+        )
 
     def test_0077_uses_if_not_exists_on_all_statements(self) -> None:
         """All ADD COLUMN and CREATE INDEX statements in 0077 must use IF NOT EXISTS."""

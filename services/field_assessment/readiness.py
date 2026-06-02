@@ -201,7 +201,9 @@ class _ReadinessBuilder:
         self.evidence_links = evidence_links
         self.generated_at = generated_at
         self.reports: list[Any] = reports if reports is not None else []
-        self.questionnaire_responses: list[Any] = questionnaire_responses if questionnaire_responses is not None else []
+        self.questionnaire_responses: list[Any] = (
+            questionnaire_responses if questionnaire_responses is not None else []
+        )
         self.gates: list[ReadinessGate] = []
         self.actions: list[NextAction] = []
         self.escalations: list[EscalationItem] = []
@@ -1010,7 +1012,8 @@ class _ReadinessBuilder:
     def _questionnaire_gate(self) -> None:
         total = len(self.questionnaire_responses)
         answered = sum(
-            1 for r in self.questionnaire_responses
+            1
+            for r in self.questionnaire_responses
             if _str(r, "response_status") not in ("not_assessed", "")
         )
         gate_id = "questionnaire.responses.required"
@@ -1044,8 +1047,12 @@ class _ReadinessBuilder:
                 missing_items=[] if status == "passed" else ["questionnaire_responses"],
                 related_entity_ids=[],
                 blocks_status_transition=["delivered"] if status == "blocked" else [],
-                recommended_action_id=None if status == "passed" else "action.complete_questionnaire",
-                confidence_impact=None if status == "passed" else ConfidenceImpact(
+                recommended_action_id=None
+                if status == "passed"
+                else "action.complete_questionnaire",
+                confidence_impact=None
+                if status == "passed"
+                else ConfidenceImpact(
                     reason="questionnaire_incomplete",
                     delta=-15,
                     affected_scope="governance_coverage",

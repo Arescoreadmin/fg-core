@@ -13684,6 +13684,19 @@
             ],
             "title": "Client Access Code"
           },
+          "delivery_blocked": {
+            "default": false,
+            "title": "Delivery Blocked",
+            "type": "boolean"
+          },
+          "delivery_blockers": {
+            "default": [],
+            "items": {
+              "type": "object"
+            },
+            "title": "Delivery Blockers",
+            "type": "array"
+          },
           "engagement_status": {
             "title": "Engagement Status",
             "type": "string"
@@ -33053,6 +33066,17 @@
             }
           },
           {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -34853,6 +34877,17 @@
             }
           },
           {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -35283,6 +35318,17 @@
               "maximum": 100,
               "minimum": 1,
               "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
               "type": "integer"
             }
           },
@@ -36670,6 +36716,17 @@
               "maximum": 100,
               "minimum": 1,
               "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
               "type": "integer"
             }
           },

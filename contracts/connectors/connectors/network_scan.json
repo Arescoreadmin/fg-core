@@ -1,0 +1,10 @@
+{
+  "id": "network_scan",
+  "display_name": "Network Exposure Scanner",
+  "provider": "passive",
+  "capabilities": ["read", "ingest"],
+  "required_scopes": [],
+  "allowed_auth_modes": [],
+  "webhook_support": false,
+  "version": "1.0.0"
+}

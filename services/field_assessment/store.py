@@ -242,7 +242,7 @@ def list_scan_results(
             FaScanResult.engagement_id == engagement_id,
             FaScanResult.tenant_id == tenant_id,
         )
-        .order_by(FaScanResult.created_at.desc())
+        .order_by(FaScanResult.created_at.desc(), FaScanResult.id.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -342,7 +342,7 @@ def list_document_analyses(
             FaDocumentAnalysis.engagement_id == engagement_id,
             FaDocumentAnalysis.tenant_id == tenant_id,
         )
-        .order_by(FaDocumentAnalysis.created_at.desc())
+        .order_by(FaDocumentAnalysis.created_at.desc(), FaDocumentAnalysis.id.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -408,7 +408,7 @@ def list_observations(
             FaFieldObservation.tenant_id == tenant_id,
             FaFieldObservation.deleted_at.is_(None),
         )
-        .order_by(FaFieldObservation.created_at.desc())
+        .order_by(FaFieldObservation.created_at.desc(), FaFieldObservation.id.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -423,6 +423,7 @@ def list_audit_events(
     engagement_id: str,
     tenant_id: str,
     limit: int = 100,
+    offset: int = 0,
 ) -> list[FaEngagementAuditEvent]:
     limit = min(limit, MAX_PAGE_SIZE)
     stmt = (
@@ -431,8 +432,11 @@ def list_audit_events(
             FaEngagementAuditEvent.engagement_id == engagement_id,
             FaEngagementAuditEvent.tenant_id == tenant_id,
         )
-        .order_by(FaEngagementAuditEvent.created_at.desc())
+        .order_by(
+            FaEngagementAuditEvent.created_at.desc(), FaEngagementAuditEvent.id.desc()
+        )
         .limit(limit)
+        .offset(offset)
     )
     return list(db.execute(stmt).scalars().all())
 

@@ -26,7 +26,12 @@ def client(build_app):
     from api.auth_scopes import mint_key
 
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT)
+    key = mint_key(
+        "governance:read",
+        "governance:write",
+        "governance:qa_approve",
+        tenant_id=_TENANT,
+    )
     return TestClient(app, headers={"X-API-Key": key})
 
 

@@ -841,13 +841,17 @@ def _create_delivered_engagement(client: TestClient) -> dict:
     )
     if report_resp.status_code == 201:
         version = report_resp.json()["version"]
-        client.post(f"/field-assessment/engagements/{eng_id}/reports/{version}/qa-approve")
+        client.post(
+            f"/field-assessment/engagements/{eng_id}/reports/{version}/qa-approve"
+        )
     # Re-fetch to get current state including client_access_code
     detail = client.get(f"/field-assessment/engagements/{eng_id}")
     return detail.json()
 
 
-def test_portal_engagement_access_requires_code(portal_client: TestClient, client: TestClient) -> None:
+def test_portal_engagement_access_requires_code(
+    portal_client: TestClient, client: TestClient
+) -> None:
     """Portal request without client_access_code is blocked with 403."""
     eng = _create_engagement(client)
     eng_id = eng["id"]
@@ -856,7 +860,9 @@ def test_portal_engagement_access_requires_code(portal_client: TestClient, clien
     assert resp.json()["code"] == "PORTAL_ACCESS_CODE_REQUIRED"
 
 
-def test_portal_engagement_wrong_code_denied(portal_client: TestClient, client: TestClient) -> None:
+def test_portal_engagement_wrong_code_denied(
+    portal_client: TestClient, client: TestClient
+) -> None:
     """Portal request with wrong access code is denied."""
     eng = _create_engagement(client)
     eng_id = eng["id"]
@@ -868,7 +874,9 @@ def test_portal_engagement_wrong_code_denied(portal_client: TestClient, client: 
     assert resp.json()["code"] == "PORTAL_ACCESS_DENIED"
 
 
-def test_portal_engagement_wrong_code_denied_on_subresource(portal_client: TestClient, client: TestClient) -> None:
+def test_portal_engagement_wrong_code_denied_on_subresource(
+    portal_client: TestClient, client: TestClient
+) -> None:
     """IDOR guard also protects sub-resources like /findings."""
     eng = _create_engagement(client)
     eng_id = eng["id"]
@@ -928,7 +936,9 @@ def _create_finalized_report(qa_client: TestClient, eng_id: str) -> str:
     return data.get("id") or data.get("report_id") or data["items"][0]["report_id"]
 
 
-def test_qa_approve_blocks_delivery_when_gates_incomplete(qa_client: TestClient) -> None:
+def test_qa_approve_blocks_delivery_when_gates_incomplete(
+    qa_client: TestClient,
+) -> None:
     """QA approval records successfully but delivery is blocked when other gates are not met."""
     eng = _create_engagement(qa_client)
     eng_id = eng["id"]
@@ -967,7 +977,9 @@ def test_qa_approve_blockers_include_gate_id_and_title(qa_client: TestClient) ->
         assert "missing_items" in blocker
 
 
-def test_qa_approve_engagement_status_unchanged_when_blocked(qa_client: TestClient) -> None:
+def test_qa_approve_engagement_status_unchanged_when_blocked(
+    qa_client: TestClient,
+) -> None:
     """Engagement remains in_progress when QA approve cannot auto-advance."""
     eng = _create_engagement(qa_client)
     eng_id = eng["id"]
@@ -988,7 +1000,9 @@ def test_qa_approve_engagement_status_unchanged_when_blocked(qa_client: TestClie
 # ---------------------------------------------------------------------------
 
 
-def _create_observation(client: TestClient, eng_id: str, body: dict | None = None) -> dict:
+def _create_observation(
+    client: TestClient, eng_id: str, body: dict | None = None
+) -> dict:
     resp = client.post(
         f"/field-assessment/engagements/{eng_id}/observations",
         json=body or _OBSERVATION_BODY,
@@ -1004,12 +1018,18 @@ def test_update_observation_rejects_invalid_audio_url(client: TestClient) -> Non
 
     resp = client.patch(
         f"/field-assessment/engagements/{eng_id}/observations/{obs_id}",
-        json={"structured_evidence": {"_audio_url": "ftp://bad-scheme.example.com/file.mp3"}},
+        json={
+            "structured_evidence": {
+                "_audio_url": "ftp://bad-scheme.example.com/file.mp3"
+            }
+        },
     )
     assert resp.status_code == 422
 
 
-def test_update_observation_rejects_non_numeric_audio_duration(client: TestClient) -> None:
+def test_update_observation_rejects_non_numeric_audio_duration(
+    client: TestClient,
+) -> None:
     """PATCH must reject _audio_duration_sec that is not a number."""
     eng_id = _create_engagement(client)["id"]
     obs_id = _create_observation(client, eng_id)["id"]
@@ -1034,7 +1054,9 @@ def test_update_observation_rejects_foreign_finding_ids(client: TestClient) -> N
     assert "INVALID_FINDING_IDS" in resp.text
 
 
-def test_update_observation_audit_diff_includes_structured_evidence(client: TestClient) -> None:
+def test_update_observation_audit_diff_includes_structured_evidence(
+    client: TestClient,
+) -> None:
     """Audit event after PATCH must include structured_evidence in before/after."""
     eng_id = _create_engagement(client)["id"]
     obs_id = _create_observation(client, eng_id)["id"]
@@ -1056,7 +1078,9 @@ def test_update_observation_audit_diff_includes_structured_evidence(client: Test
     assert payload["after"]["structured_evidence"] == {"notes": "updated note"}
 
 
-def test_update_observation_audit_diff_includes_linked_finding_ids(client: TestClient) -> None:
+def test_update_observation_audit_diff_includes_linked_finding_ids(
+    client: TestClient,
+) -> None:
     """Audit event after PATCH must include linked_finding_ids in before/after."""
     eng_id = _create_engagement(client)["id"]
     obs_id = _create_observation(client, eng_id)["id"]
@@ -1133,7 +1157,9 @@ def test_qa_approve_response_uses_reviewer_name(qa_client: TestClient) -> None:
     assert resp.json()["qa_approved_by"] == "Jane Smith, Senior Assessor"
 
 
-def test_qa_approve_response_falls_back_to_actor_when_no_name(qa_client: TestClient) -> None:
+def test_qa_approve_response_falls_back_to_actor_when_no_name(
+    qa_client: TestClient,
+) -> None:
     """When reviewer_name is omitted, qa_approved_by must be non-empty (JWT actor fallback)."""
     eng_id = _create_engagement(qa_client)["id"]
     report_id = _create_finalized_report(qa_client, eng_id)

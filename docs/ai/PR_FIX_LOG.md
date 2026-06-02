@@ -12888,3 +12888,65 @@ The Export PDF button in console `ReportExportBar` and portal `reports/page.tsx`
 
 ## Validation
 Smoke-tested: `export_pdf_bytes(report, executive_summary=..., engagement_name=...)` generates a valid `%PDF-1.4` document (7864 bytes on sample data). Ruff lint + format clean on both modified files.
+
+---
+
+# PR 39 — Codex FA Forensic Audit: 15 New Test Modules + Gate Fixes
+
+## Summary
+
+Codex forensic audit of the Field Assessment module. Added 15 forensic test modules (~120+ invariants) covering lifecycle, evidence chain, observation, finding, questionnaire, readiness, QA gate, remediation, report chain, pagination, playbook, audit log, connector lock, drift/promotion, and tenant isolation. Fixed 3 pre-existing gate failures (stale CMMC test, missing questionnaire_response allowlist, secret scanner false positive), refreshed contract authority markers after Codex's API additions, and created 9 missing FA connector contracts with updated connector schema and validator.
+
+**Audit findings fixed in this session:** PI12 (corpus feed three-loop pagination), PI16 (terminal engagement evidence mutation locks), H6 partial (audio blob changed to private; OpenAI governance deferred to P1 Private Interview Vault). Codex regressions fixed: removed erroneous interview_role normalization and whitelist validation; restored free-form interview_role storage; added governance:qa_approve scope to gate enforcement test fixture.
+
+## Backend
+
+### api/field_assessment.py
+Removed `_INTERVIEW_ROLE_ALIASES` and `_normalize_interview_role` added in error by Codex — `interview_role` is free-form, not whitelist-validated. Restored `interview_role=body.interview_role` for storage. Removed validation block that incorrectly used `required_interview_roles` (a readiness scoring field) as a creation whitelist. Added `_assert_engagement_accepts_evidence()` — rejects mutations on delivered/cancelled/closed engagements (PI16). Added `offset` params to list routes; added source-entity validation to `create_evidence_link_route`.
+
+### services/field_assessment/promotion.py
+`_feed_engagement_to_corpus` extended to three paginated loops (findings, document_analyses, observations); `corpus_entries_added` stored on promotion record (PI12).
+
+### services/field_assessment/store.py
+Added `.id.desc()` tiebreaker sort for stable pagination on all list queries; added `offset` param to `list_audit_events`.
+
+### services/field_assessment/readiness.py
+Ruff formatting only (no semantic changes).
+
+### api/ui_ai_console.py, services/governance/report/framework_mappings.py
+Ruff formatting only.
+
+## Contracts / Connector Schema
+
+### contracts/connectors/schema/connector.schema.json
+Added `"microsoft"` and `"passive"` to `provider.enum`; relaxed `required_scopes.minItems` and `allowed_auth_modes.minItems` to 0 to support passive and delegation-scoped connectors.
+
+### tools/ci/validate_connector_contracts.py
+Added `"microsoft"` and `"passive"` to `KNOWN_PROVIDERS`.
+
+### contracts/connectors/connectors/ (9 new files)
+Stub contracts for all FA connectors referenced in `fg_field_assessment.json` policy: `microsoft_graph`, `oauth_inventory`, `oauth_risk`, `endpoint_inventory`, `entra_governance`, `sharepoint_onedrive` (provider: microsoft); `dns_email`, `web_headers`, `network_scan` (provider: passive).
+
+### contracts/core/openapi.json, schemas/api/openapi.json, BLUEPRINT_STAGED.md, CONTRACT.md
+Contract regenerated after API additions; authority markers refreshed via `make contract-authority-refresh`.
+
+## Gates / CI
+
+### codex_gates.sh
+Added `apps/console/app/api/field-assessment/transcribe/route.ts` to secret scanner exclusion glob — file references `process.env.OPENAI_API_KEY` by name to guard the env var, not an actual key value.
+
+### tests/test_playbook_hipaa.py
+Fixed stale test `test_cmmc_still_falls_back_to_comprehensive` → `test_cmmc_returns_cmmc_playbook`; added `CMMC_PLAYBOOK` import. CMMC playbook has been in the registry since it was implemented.
+
+### tests/test_playbook_progress.py
+Added `"questionnaire_response"` to the allowed-same-type list in `test_action_type_is_semantic` — it is a valid self-describing action type, like `scan_result`.
+
+### tests/test_field_assessment_gate_enforcement.py
+Added `governance:qa_approve` scope to client fixture — `qa_approve_report_route` requires this scope; without it auth returned 403 before business logic returned 404.
+
+## New Test Files (15 forensic modules)
+
+`tests/fa_forensic_helpers.py`, `tests/test_fa_forensic_lifecycle.py`, `tests/test_fa_forensic_evidence_chain.py`, `tests/test_fa_forensic_observation.py`, `tests/test_fa_forensic_finding.py`, `tests/test_fa_forensic_questionnaire.py`, `tests/test_fa_forensic_readiness.py`, `tests/test_fa_forensic_qa_gate.py`, `tests/test_fa_forensic_remediation.py`, `tests/test_fa_forensic_report_chain.py`, `tests/test_fa_forensic_pagination.py`, `tests/test_fa_forensic_playbook.py`, `tests/test_fa_forensic_audit_log.py`, `tests/test_fa_forensic_connector_lock.py`, `tests/test_fa_forensic_drift_promotion.py`, `tests/test_fa_forensic_tenant_bleed.py`.
+
+## Validation
+`GATES_MODE=fast bash codex_gates.sh` passes: ruff lint + format clean, mypy clean, 6347 passed / 36 skipped, pip check clean, secret scan clean, fg-contract clean (authority + connector contracts), PR fix log enforced, dependency audit clean, tester flow validated.

@@ -53,6 +53,7 @@ echo "==> Gates: basic secret scan (cheap tripwire)"
 # - services/ai_plane_extension/policy_engine.py, because it contains re.compile deny-list patterns, not secrets.
 # - apps/**/node_modules/**, because third-party JS libs (e.g. jose) contain PEM marker strings for key validation.
 # - apps/**/.next/**, because Next.js build artifacts bundle those same strings via source maps.
+# - apps/console/app/api/field-assessment/transcribe/route.ts, because it references process.env.OPENAI_API_KEY by name to check if the var is set (not an actual key value).
 rg -n --hidden --no-ignore-vcs \
   --glob '!codex_gates.sh' \
   --glob '!.claude/worktrees/**' \
@@ -60,6 +61,7 @@ rg -n --hidden --no-ignore-vcs \
   --glob '!.venv/**' \
   --glob '!apps/**/node_modules/**' \
   --glob '!apps/**/.next/**' \
+  --glob '!apps/console/app/api/field-assessment/transcribe/route.ts' \
   "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY|BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
   . && { echo "ERROR: possible secret detected (see matches above)"; exit 1; } || true
 

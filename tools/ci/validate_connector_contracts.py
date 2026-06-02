@@ -23,7 +23,7 @@ FORBIDDEN_FIELDS = {
 SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
-KNOWN_PROVIDERS = {"slack", "google"}
+KNOWN_PROVIDERS = {"slack", "google", "microsoft", "passive"}
 SCOPE_ALLOWLIST = {
     "slack": {"channels:history", "users:read"},
     "google": {"https://www.googleapis.com/auth/drive.readonly"},

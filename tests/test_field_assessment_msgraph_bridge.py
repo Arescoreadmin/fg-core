@@ -461,12 +461,15 @@ def test_persist_candidates_skips_auto_promote_when_delivered() -> None:
     candidate = MagicMock()
     candidate.status = "detected"
 
-    with patch(
-        "services.field_assessment.connectors.msgraph_bridge.upsert_candidate",
-        return_value=(candidate, False),
-    ) as mock_upsert, patch(
-        "services.field_assessment.connectors.msgraph_bridge.auto_promote_if_eligible"
-    ) as mock_promote:
+    with (
+        patch(
+            "services.field_assessment.connectors.msgraph_bridge.upsert_candidate",
+            return_value=(candidate, False),
+        ) as mock_upsert,
+        patch(
+            "services.field_assessment.connectors.msgraph_bridge.auto_promote_if_eligible"
+        ) as mock_promote,
+    ):
         _persist_candidates(
             db=db,
             tenant_id="tenant-test",
@@ -499,12 +502,15 @@ def test_persist_candidates_auto_promotes_when_not_delivered() -> None:
     candidate = MagicMock()
     candidate.status = "detected"
 
-    with patch(
-        "services.field_assessment.connectors.msgraph_bridge.upsert_candidate",
-        return_value=(candidate, False),
-    ) as mock_upsert, patch(
-        "services.field_assessment.connectors.msgraph_bridge.auto_promote_if_eligible"
-    ) as mock_promote:
+    with (
+        patch(
+            "services.field_assessment.connectors.msgraph_bridge.upsert_candidate",
+            return_value=(candidate, False),
+        ) as mock_upsert,
+        patch(
+            "services.field_assessment.connectors.msgraph_bridge.auto_promote_if_eligible"
+        ) as mock_promote,
+    ):
         _persist_candidates(
             db=db,
             tenant_id="tenant-test",

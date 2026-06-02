@@ -622,7 +622,9 @@ def _build_engagement_system_prompt(
             .limit(60)
         ).scalars()
     )
-    findings.sort(key=lambda f: (SEVERITY_ORDER.get(f.severity.lower(), 5), f.status != "open"))
+    findings.sort(
+        key=lambda f: (SEVERITY_ORDER.get(f.severity.lower(), 5), f.status != "open")
+    )
     findings = findings[:25]
 
     open_counts: dict[str, int] = {}
@@ -636,13 +638,23 @@ def _build_engagement_system_prompt(
         fw_tag = f" [{mappings}]" if mappings else ""
         return f"  • [{f.severity.upper()}] {f.title} ({f.status}){fw_tag}{hint}"
 
-    findings_block = "\n".join(_finding_line(f) for f in findings) or "  No findings recorded yet."
+    findings_block = (
+        "\n".join(_finding_line(f) for f in findings) or "  No findings recorded yet."
+    )
 
     summary_parts = [f"{v} {k}" for k, v in open_counts.items() if v]
     open_summary = ", ".join(summary_parts) if summary_parts else "none open"
 
-    domains = ", ".join(playbook.required_observation_domains) if playbook.required_observation_domains else "general"
-    doc_classes = ", ".join(playbook.required_document_classes) if playbook.required_document_classes else "standard"
+    domains = (
+        ", ".join(playbook.required_observation_domains)
+        if playbook.required_observation_domains
+        else "general"
+    )
+    doc_classes = (
+        ", ".join(playbook.required_document_classes)
+        if playbook.required_document_classes
+        else "standard"
+    )
 
     return f"""You are a compliance and security assessment assistant for {eng.client_name}.
 

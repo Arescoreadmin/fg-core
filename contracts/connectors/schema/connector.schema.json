@@ -15,7 +15,7 @@
   "properties": {
     "id": {"type": "string", "pattern": "^[a-z0-9_\\-]+$"},
     "display_name": {"type": "string", "minLength": 1, "maxLength": 120},
-    "provider": {"type": "string", "enum": ["slack", "google"]},
+    "provider": {"type": "string", "enum": ["slack", "google", "microsoft", "passive"]},
     "capabilities": {
       "type": "array",
       "items": {"type": "string", "enum": ["read", "ingest", "write"]},
@@ -25,13 +25,13 @@
     "required_scopes": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
-      "minItems": 1,
+      "minItems": 0,
       "uniqueItems": true
     },
     "allowed_auth_modes": {
       "type": "array",
       "items": {"type": "string", "enum": ["oauth2", "service_account"]},
-      "minItems": 1,
+      "minItems": 0,
       "uniqueItems": true
     },
     "webhook_support": {"type": "boolean"},

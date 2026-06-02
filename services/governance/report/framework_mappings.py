@@ -448,7 +448,14 @@ _FRAMEWORK_CONTROL_MAP_RAW: dict[str, dict[str, list[str]]] = {
     },
     "CMMC": {
         "data_governance": ["AC.1.001", "AC.1.002", "AU.2.041", "AU.2.042", "CM.2.061"],
-        "security_posture": ["AC.1.001", "IA.1.076", "IA.1.077", "SC.1.175", "SC.1.176", "SI.1.210"],
+        "security_posture": [
+            "AC.1.001",
+            "IA.1.076",
+            "IA.1.077",
+            "SC.1.175",
+            "SC.1.176",
+            "SI.1.210",
+        ],
         "ai_maturity": ["CM.2.061", "CM.2.062", "RM.2.141", "RM.2.142"],
         "ai_trustworthiness": ["RM.2.141", "RM.2.142", "CA.2.157", "CA.2.158"],
         "infra_readiness": ["CM.2.061", "SC.1.175", "SC.1.176", "SC.3.177", "SC.3.187"],
