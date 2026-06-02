@@ -1,4 +1,4 @@
-"""tests/test_db_init_ordering.py — C2 + C3 + H5 regression guards.
+"""tests/test_db_init_ordering.py — C2 + C3 + H5 + PI15 regression guards.
 
 Verifies that:
   1. init_db() on Postgres calls create_all() BEFORE apply_migrations() so that
@@ -10,6 +10,8 @@ Verifies that:
   5. assert_tenant_rls() expected_tables covers all FA and governance tables (C3).
   6. Migration 0076 adds append-only triggers on fa_engagement_audit_events (H5).
   7. assert_append_only_triggers() expected_tables includes fa_engagement_audit_events (H5).
+  8. Migration 0077 backfills fa_scan_results.finding_count and
+     fa_normalized_findings.asset_id with IF NOT EXISTS guards (PI15).
 """
 from __future__ import annotations
 
@@ -174,6 +176,39 @@ class TestFaAuditEventsAppendOnly:
         assert "fa_engagement_audit_events" in source, (
             "assert_append_only_triggers() must include fa_engagement_audit_events"
         )
+
+
+class TestFaSchemaGaps:
+    """PI15 structural guards — ORM column backfill via migration 0077."""
+
+    def test_0077_adds_finding_count(self) -> None:
+        """Migration 0077 must add finding_count to fa_scan_results."""
+        sql = _migration_sql("0077_fa_schema_gaps.sql").upper()
+        assert "FA_SCAN_RESULTS" in sql, "0077 must target fa_scan_results"
+        assert "FINDING_COUNT" in sql, "0077 must add finding_count column"
+
+    def test_0077_adds_asset_id(self) -> None:
+        """Migration 0077 must add asset_id to fa_normalized_findings."""
+        sql = _migration_sql("0077_fa_schema_gaps.sql").upper()
+        assert "FA_NORMALIZED_FINDINGS" in sql, "0077 must target fa_normalized_findings"
+        assert "ASSET_ID" in sql, "0077 must add asset_id column"
+
+    def test_0077_creates_asset_id_index(self) -> None:
+        """Migration 0077 must create ix_fa_findings_asset index."""
+        sql = _migration_sql("0077_fa_schema_gaps.sql")
+        assert "ix_fa_findings_asset" in sql, "0077 must create ix_fa_findings_asset index"
+
+    def test_0077_uses_if_not_exists_on_all_statements(self) -> None:
+        """All ADD COLUMN and CREATE INDEX statements in 0077 must use IF NOT EXISTS."""
+        sql = _migration_sql("0077_fa_schema_gaps.sql").upper()
+        for stmt_type in ("ADD COLUMN", "CREATE INDEX"):
+            # Every occurrence of ADD COLUMN / CREATE INDEX must be followed by IF NOT EXISTS
+            pattern = re.compile(
+                rf"{re.escape(stmt_type)}\s+(?!IF\s+NOT\s+EXISTS)", re.IGNORECASE
+            )
+            assert not pattern.search(sql), (
+                f"0077: {stmt_type} missing IF NOT EXISTS — unsafe on fresh databases"
+            )
 
 
 class TestInitDbOrdering:
