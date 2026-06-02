@@ -81,6 +81,112 @@ function formatDate(iso: string) {
   });
 }
 
+const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|m4a|webm|aac|flac)(\?.*)?$/i;
+
+function extractAudioUrl(payload: Record<string, unknown>): string | null {
+  for (const key of ['audio_url', 'recording_url', 'audio_file_url']) {
+    const val = payload[key];
+    if (typeof val === 'string' && val.startsWith('http')) return val;
+  }
+  // Fallback: any string value that looks like an audio file URL.
+  for (const val of Object.values(payload)) {
+    if (typeof val === 'string' && AUDIO_EXTENSIONS.test(val)) return val;
+  }
+  return null;
+}
+
+function AuditEventModal({ event, onClose }: { event: AuditEvent; onClose: () => void }) {
+  const audioUrl = extractAudioUrl(event.payload);
+  const jsonText = JSON.stringify(event.payload, null, 2);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function popOutJson() {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(
+      `<html><head><title>${event.event_type}</title><style>` +
+      `body{margin:0;background:#0f1117;color:#c9d1d9;font:13px/1.6 monospace;padding:20px}` +
+      `pre{white-space:pre-wrap;word-break:break-word}</style></head>` +
+      `<body><pre>${jsonText.replace(/</g, '&lt;')}</pre></body></html>`,
+    );
+    w.document.close();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-lg border border-border bg-surface shadow-xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-border shrink-0">
+          <div className="space-y-0.5 min-w-0">
+            <p className="text-sm font-mono font-semibold text-foreground truncate">{event.event_type}</p>
+            <p className="text-xs text-muted">
+              {event.actor} · {formatDate(event.created_at)} · <span className="font-mono">{event.reason_code}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={popOutJson}
+              className="text-xs text-muted hover:text-foreground border border-border rounded px-2 py-1 transition-colors"
+              title="Open in new window"
+            >
+              ↗ Pop out
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-muted hover:text-foreground text-lg leading-none"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Audio player */}
+        {audioUrl && (
+          <div className="px-4 py-3 border-b border-border bg-surface-2 shrink-0 space-y-2">
+            <p className="text-xs text-muted font-medium">Recording</p>
+            <audio controls src={audioUrl} className="w-full" />
+            <a
+              href={audioUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline"
+            >
+              ↗ Open audio in new tab
+            </a>
+          </div>
+        )}
+
+        {/* Payload */}
+        <div className="flex-1 overflow-auto px-4 py-3">
+          {Object.keys(event.payload).length > 0 ? (
+            <pre className="text-xs font-mono text-muted whitespace-pre-wrap break-words">
+              {jsonText}
+            </pre>
+          ) : (
+            <p className="text-xs text-muted">No payload data</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EngagementWorkspacePage() {
   const params = useParams();
   const router = useRouter();
@@ -115,6 +221,7 @@ export default function EngagementWorkspacePage() {
   const [editObsError, setEditObsError] = useState<string | null>(null);
   const [editObsSaving, setEditObsSaving] = useState(false);
   const [aiToggleSaving, setAiToggleSaving] = useState(false);
+  const [selectedAuditEvent, setSelectedAuditEvent] = useState<AuditEvent | null>(null);
   const mainTabsRef = useRef<HTMLElement>(null);
 
   const [docPrefill, setDocPrefill] = useState<{ classification?: DocumentClassification } | null>(null);
@@ -1044,7 +1151,7 @@ export default function EngagementWorkspacePage() {
                   <CardHeader className="pb-2 pt-4 px-4">
                     <CardTitle className="text-sm">Audit History</CardTitle>
                     <p className="text-xs text-muted mt-0.5">
-                      Append-only event log — all mutations recorded by the governance substrate
+                      Append-only event log — double-click any entry to expand
                     </p>
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
@@ -1068,27 +1175,48 @@ export default function EngagementWorkspacePage() {
                     )}
                     {!auditLoading && auditEvents.length > 0 && (
                       <div className="space-y-2" aria-label="audit-event-list">
-                        {auditEvents.map((ev) => (
-                          <div key={ev.id} className="p-3 rounded border border-border bg-surface-2 text-xs space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono font-medium text-foreground">{ev.event_type}</span>
-                              <span className="text-muted">{ev.actor}</span>
-                              <span className="ml-auto text-muted font-mono">{formatDate(ev.created_at)}</span>
+                        {auditEvents.map((ev) => {
+                          const audioUrl = extractAudioUrl(ev.payload);
+                          return (
+                            <div
+                              key={ev.id}
+                              className="p-3 rounded border border-border bg-surface-2 text-xs space-y-1 cursor-pointer hover:border-primary/40 transition-colors select-none"
+                              onDoubleClick={() => setSelectedAuditEvent(ev)}
+                              title="Double-click to expand"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono font-medium text-foreground">{ev.event_type}</span>
+                                <span className="text-muted">{ev.actor}</span>
+                                <span className="ml-auto text-muted font-mono">{formatDate(ev.created_at)}</span>
+                              </div>
+                              <div className="text-muted">
+                                Code: <span className="font-mono text-foreground">{ev.reason_code}</span>
+                              </div>
+                              {Object.keys(ev.payload).length > 0 && (
+                                <pre className="text-xs font-mono bg-background rounded p-2 overflow-auto max-h-24 text-muted pointer-events-none">
+                                  {JSON.stringify(ev.payload, null, 2)}
+                                </pre>
+                              )}
+                              {audioUrl && (
+                                <div className="pt-1" onClick={(e) => e.stopPropagation()}>
+                                  <audio controls src={audioUrl} className="w-full h-8" />
+                                </div>
+                              )}
                             </div>
-                            <div className="text-muted">
-                              Code: <span className="font-mono text-foreground">{ev.reason_code}</span>
-                            </div>
-                            {Object.keys(ev.payload).length > 0 && (
-                              <pre className="text-xs font-mono bg-background rounded p-2 overflow-auto max-h-24 text-muted">
-                                {JSON.stringify(ev.payload, null, 2)}
-                              </pre>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Audit event detail modal */}
+                {selectedAuditEvent && (
+                  <AuditEventModal
+                    event={selectedAuditEvent}
+                    onClose={() => setSelectedAuditEvent(null)}
+                  />
+                )}
               </TabsContent>
               {/* Reports */}
               <TabsContent value="reports">
