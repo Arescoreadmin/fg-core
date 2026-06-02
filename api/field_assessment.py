@@ -1824,12 +1824,22 @@ def delete_observation_route(
         raise HTTPException(status_code=404, detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"))
     now = utc_iso8601_z_now()
     obs.deleted_at = now
-    # Cascade-remove evidence links that source this observation (#17)
+    # Cascade-remove evidence links that source this observation
     db.execute(
         delete(FaEvidenceLink).where(
             FaEvidenceLink.tenant_id == tenant_id,
+            FaEvidenceLink.engagement_id == engagement_id,
             FaEvidenceLink.source_entity_type == "field_observation",
             FaEvidenceLink.source_entity_id == observation_id,
+        )
+    )
+    # Cascade-remove evidence links that target this observation (common remediation path)
+    db.execute(
+        delete(FaEvidenceLink).where(
+            FaEvidenceLink.tenant_id == tenant_id,
+            FaEvidenceLink.engagement_id == engagement_id,
+            FaEvidenceLink.evidence_entity_type == "field_observation",
+            FaEvidenceLink.evidence_entity_id == observation_id,
         )
     )
     emit_engagement_audit_event(
@@ -2309,6 +2319,7 @@ def get_engagement_summary_route(
         select(func.count(FaFieldObservation.id)).where(
             FaFieldObservation.engagement_id == engagement_id,
             FaFieldObservation.tenant_id == tenant_id,
+            FaFieldObservation.deleted_at.is_(None),
         )
     ).scalar_one()
 
@@ -6272,6 +6283,19 @@ def patch_questionnaire_response(
     # Manage questionnaire_response → document_analysis evidence link.
     resolved_doc_id: str | None = None
     if body.evidence_doc_id and body.response_status in ("implemented", "partial"):
+        # Validate the document belongs to this engagement and tenant.
+        doc_exists = db.scalar(
+            select(func.count(FaDocumentAnalysis.id)).where(
+                FaDocumentAnalysis.id == body.evidence_doc_id,
+                FaDocumentAnalysis.engagement_id == engagement_id,
+                FaDocumentAnalysis.tenant_id == tenant_id,
+            )
+        )
+        if not doc_exists:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error("INVALID_EVIDENCE_DOC", "Document does not belong to this engagement"),
+            )
         # Delete any existing doc link for this response (upsert semantics).
         db.execute(
             delete(FaEvidenceLink).where(
@@ -6343,7 +6367,17 @@ def patch_questionnaire_response(
                     )
                 )
     elif body.response_status not in ("implemented", "partial"):
-        # Status no longer warrants a doc link — remove it if present.
+        # Status no longer warrants a doc link — capture old link before removal
+        # so we can also clean up auto-created finding → document_analysis links.
+        old_link = db.scalar(
+            select(FaEvidenceLink).where(
+                FaEvidenceLink.tenant_id == tenant_id,
+                FaEvidenceLink.engagement_id == engagement_id,
+                FaEvidenceLink.source_entity_type == "questionnaire_response",
+                FaEvidenceLink.source_entity_id == r.id,
+                FaEvidenceLink.evidence_entity_type == "document_analysis",
+            )
+        )
         db.execute(
             delete(FaEvidenceLink).where(
                 FaEvidenceLink.tenant_id == tenant_id,
@@ -6353,6 +6387,25 @@ def patch_questionnaire_response(
                 FaEvidenceLink.evidence_entity_type == "document_analysis",
             )
         )
+        if old_link:
+            # Remove stale finding → document_analysis links that were auto-created
+            # via this questionnaire response (identified by control_id + via marker).
+            stale = list(db.scalars(
+                select(FaEvidenceLink).where(
+                    FaEvidenceLink.tenant_id == tenant_id,
+                    FaEvidenceLink.engagement_id == engagement_id,
+                    FaEvidenceLink.source_entity_type == "finding",
+                    FaEvidenceLink.evidence_entity_type == "document_analysis",
+                    FaEvidenceLink.evidence_entity_id == old_link.evidence_entity_id,
+                )
+            ))
+            auto_link_ids = [
+                lk.id for lk in stale
+                if lk.link_metadata.get("control_id") == r.control_id
+                and lk.link_metadata.get("via") == "questionnaire"
+            ]
+            if auto_link_ids:
+                db.execute(delete(FaEvidenceLink).where(FaEvidenceLink.id.in_(auto_link_ids)))
 
     db.commit()
     return UpdateResponseResponse(

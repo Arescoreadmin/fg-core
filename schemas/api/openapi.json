@@ -1342,6 +1342,10 @@
           "hipaa",
           "soc2",
           "iso27001",
+          "pci_dss",
+          "dora",
+          "fedramp",
+          "nist_800_171",
           "comprehensive"
         ],
         "title": "AssessmentType",
@@ -2112,6 +2116,40 @@
           "expires_at_utc"
         ],
         "title": "BreakglassSessionCreate",
+        "type": "object"
+      },
+      "BulkObservationImportResult": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "observation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Observation Ids",
+            "type": "array"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "created",
+          "skipped",
+          "errors",
+          "observation_ids"
+        ],
+        "title": "BulkObservationImportResult",
         "type": "object"
       },
       "CancelCommandRequest": {
@@ -3699,6 +3737,17 @@
       "CreateEngagementReportRequest": {
         "additionalProperties": false,
         "properties": {
+          "compiled_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compiled By"
+          },
           "include_sections": {
             "anyOf": [
               {
@@ -6109,6 +6158,28 @@
               }
             ],
             "title": "Compiled By"
+          },
+          "qa_approved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qa Approved At"
+          },
+          "qa_approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qa Approved By"
           },
           "report_id": {
             "title": "Report Id",
@@ -10811,6 +10882,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -10866,6 +10948,17 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           }
         },
         "required": [
@@ -11073,6 +11166,23 @@
           "assigned_by_email"
         ],
         "title": "OwnerResponse",
+        "type": "object"
+      },
+      "PatchEngagementRequest": {
+        "properties": {
+          "engagement_metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Metadata"
+          }
+        },
+        "title": "PatchEngagementRequest",
         "type": "object"
       },
       "PinBaselineBody": {
@@ -12097,6 +12207,17 @@
           "control_name": {
             "title": "Control Name",
             "type": "string"
+          },
+          "evidence_doc_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Doc Id"
           },
           "evidence_sources": {
             "default": [],
@@ -13531,6 +13652,23 @@
           "replay_contract"
         ],
         "title": "ReplayResponse",
+        "type": "object"
+      },
+      "ReportQaApproveBody": {
+        "properties": {
+          "reviewer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Name"
+          }
+        },
+        "title": "ReportQaApproveBody",
         "type": "object"
       },
       "ReportQaApproveResponse": {
@@ -16262,6 +16400,68 @@
         "title": "UpdateAssetRequest",
         "type": "object"
       },
+      "UpdateObservationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "linked_finding_ids": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Finding Ids"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservationSeverity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "structured_evidence": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured Evidence"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdateObservationRequest",
+        "type": "object"
+      },
       "UpdateReportRequest": {
         "additionalProperties": false,
         "properties": {
@@ -16306,6 +16506,17 @@
             ],
             "title": "Confidence Score"
           },
+          "evidence_doc_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Doc Id"
+          },
           "evidence_text": {
             "anyOf": [
               {
@@ -16344,6 +16555,17 @@
           "control_id": {
             "title": "Control Id",
             "type": "string"
+          },
+          "evidence_doc_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Doc Id"
           },
           "evidence_text": {
             "anyOf": [
@@ -32563,6 +32785,22 @@
             }
           },
           {
+            "in": "query",
+            "name": "client_access_code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Client Access Code"
+            }
+          },
+          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -32717,6 +32955,73 @@
           }
         },
         "summary": "Get Engagement Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "patch": {
+        "description": "Shallow-merge engagement_metadata fields. Other top-level fields are immutable here.",
+        "operationId": "patch_engagement_route_field_assessment_engagements__engagement_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchEngagementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Engagement Route",
         "tags": [
           "field-assessment"
         ]
@@ -35096,6 +35401,214 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/observations/bulk": {
+      "post": {
+        "description": "Import multiple observations in a single call. Processes each row independently \u2014\ninvalid rows are collected in errors and skipped; valid rows are committed atomically.",
+        "operationId": "bulk_import_observations_route_field_assessment_engagements__engagement_id__observations_bulk_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/CaptureObservationRequest"
+                },
+                "title": "Body",
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkObservationImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Import Observations Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/observations/{observation_id}": {
+      "delete": {
+        "operationId": "delete_observation_route_field_assessment_engagements__engagement_id__observations__observation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "observation_id",
+            "required": true,
+            "schema": {
+              "title": "Observation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Observation Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "patch": {
+        "operationId": "update_observation_route_field_assessment_engagements__engagement_id__observations__observation_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "observation_id",
+            "required": true,
+            "schema": {
+              "title": "Observation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateObservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Observation Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/promote": {
       "post": {
         "description": "Admin retry / status route for governance promotion.\n\nIdempotent: returns the existing completed promotion without re-running.\nRetry: re-runs promotion steps if the previous attempt failed.\nPrimary trigger is automatic on 'delivered' transition \u2014 this route is\nfor operator retries and promotion status inspection.",
@@ -35881,6 +36394,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportQaApproveBody",
+                "default": {}
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -36453,6 +36976,104 @@
           }
         },
         "summary": "Get Engagement Summary Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/interview-templates": {
+      "get": {
+        "description": "Return recent interview observations across the tenant's engagements.\nUseful for seeding new interviews from prior assessment notes.",
+        "operationId": "list_interview_templates_route_field_assessment_interview_templates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "interview_role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Interview Role"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assessment_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assessment Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ObservationResponse"
+                  },
+                  "title": "Response List Interview Templates Route Field Assessment Interview Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Interview Templates Route",
         "tags": [
           "field-assessment"
         ]
