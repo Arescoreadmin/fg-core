@@ -23,13 +23,13 @@ Status: `open` | `in_progress` | `done` | `deferred`
 
 | # | ID | Title | Priority | Est | Status | PR |
 |---|----|-------|----------|-----|--------|----|
-| 8 | 1.2 | Backend doesn't validate interview role belongs to engagement's playbook | P1 | 2h | done | — |
-| 9 | 5.3 | Observation domain mapping silently drops controls if domain key is unknown | P1 | 2h | done | — |
-| 10 | 6.1 | `_audio_*` structured_evidence keys not validated on backend | P1 | 3h | done | — |
-| 11 | 4.2 | Client access code lost on page refresh — no way to retrieve it | P2 | 4h | done | — |
-| 12 | 5.2 | CMMC controls appear on non-CMMC engagements — no framework filtering | P2 | 3h | done | — |
-| 13 | 8.3 | No engagement type validation at creation — assessment_type can mismatch playbook | P1 | 3h | done | — |
-| 14 | 8.1 | No bulk observation import — can't migrate from spreadsheets or other tools | P1 | 6h | done | — |
+| 8 | 1.2 | Backend doesn't validate interview role belongs to engagement's playbook | P1 | 2h | done | 4b996e12 |
+| 9 | 5.3 | Observation domain mapping silently drops controls if domain key is unknown | P1 | 2h | done | 4b996e12 |
+| 10 | 6.1 | `_audio_*` structured_evidence keys not validated on backend | P1 | 3h | done | 4b996e12 |
+| 11 | 4.2 | Client access code lost on page refresh — no way to retrieve it | P2 | 4h | done | 4b996e12 |
+| 12 | 5.2 | CMMC controls appear on non-CMMC engagements — no framework filtering | P2 | 3h | done | 4b996e12 |
+| 13 | 8.3 | No engagement type validation at creation — assessment_type can mismatch playbook | P1 | 3h | done | 4b996e12 |
+| 14 | 8.1 | No bulk observation import — can't migrate from spreadsheets or other tools | P1 | 6h | done | 4b996e12 |
 
 ---
 
