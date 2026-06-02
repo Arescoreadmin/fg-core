@@ -5931,6 +5931,7 @@ class QuestionnaireResponseItem(BaseModel):
     evidence_sources: list[str] = []
     scan_finding_count: int = 0
     fused_confidence: float | None = None
+    evidence_doc_id: str | None = None
 
 
 class QuestionnaireResponse(BaseModel):
@@ -5954,6 +5955,7 @@ class UpdateResponseRequest(BaseModel):
     response_status: str
     evidence_text: str | None = None
     confidence_score: float | None = None
+    evidence_doc_id: str | None = None
 
 
 class UpdateResponseResponse(BaseModel):
@@ -5963,6 +5965,7 @@ class UpdateResponseResponse(BaseModel):
     evidence_text: str | None
     confidence_score: float | None
     updated_at: str
+    evidence_doc_id: str | None = None
 
 
 class QuestionnaireCoverageResponse(BaseModel):
@@ -5981,10 +5984,14 @@ class QuestionnaireCoverageResponse(BaseModel):
 def _fuse_response_item(
     r: FaQuestionnaireResponse,
     scan_count: int,
+    *,
+    evidence_doc_id: str | None = None,
 ) -> QuestionnaireResponseItem:
     sources: list[str] = ["questionnaire"]
     if scan_count > 0:
         sources.append("scan")
+    if evidence_doc_id:
+        sources.append("document")
 
     fused: float | None = None
     if r.confidence_score is not None:
@@ -6008,7 +6015,32 @@ def _fuse_response_item(
         evidence_sources=sources,
         scan_finding_count=scan_count,
         fused_confidence=fused,
+        evidence_doc_id=evidence_doc_id,
     )
+
+
+def _build_response_evidence_map(
+    db: Session,
+    *,
+    engagement_id: str,
+    tenant_id: str,
+    response_ids: list[str],
+) -> dict[str, str]:
+    """Return {response_id: doc_id} for questionnaire_response→document_analysis links."""
+    if not response_ids:
+        return {}
+    links = list(
+        db.scalars(
+            select(FaEvidenceLink).where(
+                FaEvidenceLink.tenant_id == tenant_id,
+                FaEvidenceLink.engagement_id == engagement_id,
+                FaEvidenceLink.source_entity_type == "questionnaire_response",
+                FaEvidenceLink.evidence_entity_type == "document_analysis",
+                FaEvidenceLink.source_entity_id.in_(response_ids),
+            )
+        )
+    )
+    return {lnk.source_entity_id: lnk.evidence_entity_id for lnk in links}
 
 
 def _build_scan_counts(
@@ -6041,8 +6073,10 @@ def _questionnaire_to_response(
     *,
     already_existed: bool = False,
     scan_counts: dict[str, int] | None = None,
+    evidence_map: dict[str, str] | None = None,
 ) -> QuestionnaireResponse:
     sc = scan_counts or {}
+    em = evidence_map or {}
     return QuestionnaireResponse(
         id=q.id,
         engagement_id=q.engagement_id,
@@ -6054,7 +6088,10 @@ def _questionnaire_to_response(
         schema_version=q.schema_version,
         created_at=q.created_at,
         updated_at=q.updated_at,
-        responses=[_fuse_response_item(r, sc.get(r.control_id, 0)) for r in responses],
+        responses=[
+            _fuse_response_item(r, sc.get(r.control_id, 0), evidence_doc_id=em.get(r.id))
+            for r in responses
+        ],
         already_existed=already_existed,
     )
 
@@ -6103,7 +6140,13 @@ def create_or_get_questionnaire(
         )
     db.commit()
     responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
-    return _questionnaire_to_response(q, responses, already_existed=not created)
+    evidence_map = _build_response_evidence_map(
+        db,
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+        response_ids=[r.id for r in responses],
+    )
+    return _questionnaire_to_response(q, responses, already_existed=not created, evidence_map=evidence_map)
 
 
 @router.get(
@@ -6137,7 +6180,13 @@ def get_questionnaire_route(
             detail=api_error("QUESTIONNAIRE_NOT_FOUND", "Questionnaire not found"),
         )
     responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
-    return _questionnaire_to_response(q, responses)
+    evidence_map = _build_response_evidence_map(
+        db,
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+        response_ids=[r.id for r in responses],
+    )
+    return _questionnaire_to_response(q, responses, evidence_map=evidence_map)
 
 
 @router.patch(
@@ -6195,6 +6244,92 @@ def patch_questionnaire_response(
         raise HTTPException(
             status_code=404, detail=api_error("CONTROL_NOT_FOUND", exc.message)
         )
+
+    # Manage questionnaire_response → document_analysis evidence link.
+    resolved_doc_id: str | None = None
+    if body.evidence_doc_id and body.response_status in ("implemented", "partial"):
+        # Delete any existing doc link for this response (upsert semantics).
+        db.execute(
+            delete(FaEvidenceLink).where(
+                FaEvidenceLink.tenant_id == tenant_id,
+                FaEvidenceLink.engagement_id == engagement_id,
+                FaEvidenceLink.source_entity_type == "questionnaire_response",
+                FaEvidenceLink.source_entity_id == r.id,
+                FaEvidenceLink.evidence_entity_type == "document_analysis",
+            )
+        )
+        db.add(
+            FaEvidenceLink(
+                id=secrets.token_hex(32),
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                source_entity_type="questionnaire_response",
+                source_entity_id=r.id,
+                evidence_entity_type="document_analysis",
+                evidence_entity_id=body.evidence_doc_id,
+                link_metadata={
+                    "control_id": r.control_id,
+                    "response_status": body.response_status,
+                },
+                created_at=utc_iso8601_z_now(),
+                schema_version="1.0",
+            )
+        )
+        resolved_doc_id = body.evidence_doc_id
+
+        # Auto-link matching findings → document_analysis for full traceability.
+        findings = list(
+            db.scalars(
+                select(FaNormalizedFinding).where(
+                    FaNormalizedFinding.engagement_id == engagement_id,
+                    FaNormalizedFinding.tenant_id == tenant_id,
+                )
+            )
+        )
+        for finding in findings:
+            matched = any(
+                normalize_nist_control(raw) == r.control_id
+                for raw in (finding.nist_ai_rmf_mappings or [])
+            )
+            if not matched:
+                continue
+            exists = db.scalar(
+                select(func.count(FaEvidenceLink.id)).where(
+                    FaEvidenceLink.tenant_id == tenant_id,
+                    FaEvidenceLink.engagement_id == engagement_id,
+                    FaEvidenceLink.source_entity_type == "finding",
+                    FaEvidenceLink.source_entity_id == finding.id,
+                    FaEvidenceLink.evidence_entity_type == "document_analysis",
+                    FaEvidenceLink.evidence_entity_id == body.evidence_doc_id,
+                )
+            )
+            if not exists:
+                db.add(
+                    FaEvidenceLink(
+                        id=secrets.token_hex(32),
+                        tenant_id=tenant_id,
+                        engagement_id=engagement_id,
+                        source_entity_type="finding",
+                        source_entity_id=finding.id,
+                        evidence_entity_type="document_analysis",
+                        evidence_entity_id=body.evidence_doc_id,
+                        link_metadata={"control_id": r.control_id, "via": "questionnaire"},
+                        created_at=utc_iso8601_z_now(),
+                        schema_version="1.0",
+                    )
+                )
+    elif body.response_status not in ("implemented", "partial"):
+        # Status no longer warrants a doc link — remove it if present.
+        db.execute(
+            delete(FaEvidenceLink).where(
+                FaEvidenceLink.tenant_id == tenant_id,
+                FaEvidenceLink.engagement_id == engagement_id,
+                FaEvidenceLink.source_entity_type == "questionnaire_response",
+                FaEvidenceLink.source_entity_id == r.id,
+                FaEvidenceLink.evidence_entity_type == "document_analysis",
+            )
+        )
+
     db.commit()
     return UpdateResponseResponse(
         id=r.id,
@@ -6203,6 +6338,7 @@ def patch_questionnaire_response(
         evidence_text=r.evidence_text,
         confidence_score=r.confidence_score,
         updated_at=r.updated_at,
+        evidence_doc_id=resolved_doc_id,
     )
 
 
@@ -6251,7 +6387,13 @@ def submit_questionnaire_route(
     )
     db.commit()
     responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
-    return _questionnaire_to_response(q, responses)
+    evidence_map = _build_response_evidence_map(
+        db,
+        engagement_id=q.engagement_id,
+        tenant_id=tenant_id,
+        response_ids=[r.id for r in responses],
+    )
+    return _questionnaire_to_response(q, responses, evidence_map=evidence_map)
 
 
 @router.get(
@@ -6319,7 +6461,13 @@ def list_questionnaires_route(
     result = []
     for q in qs:
         responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
-        result.append(_questionnaire_to_response(q, responses, scan_counts=scan_counts))
+        evidence_map = _build_response_evidence_map(
+            db,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+            response_ids=[r.id for r in responses],
+        )
+        result.append(_questionnaire_to_response(q, responses, scan_counts=scan_counts, evidence_map=evidence_map))
     return result
 
 

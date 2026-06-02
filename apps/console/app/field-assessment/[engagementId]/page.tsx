@@ -807,13 +807,13 @@ export default function EngagementWorkspacePage() {
                                 {editingObsId === o.id ? (
                                   <div className="mt-2 space-y-2 rounded border border-primary/30 bg-primary/5 p-2">
                                     <input
-                                      className="w-full rounded border border-border bg-surface-1 px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                      className="w-full rounded border border-border bg-surface-2 px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
                                       value={editObsTitle}
                                       onChange={(e) => setEditObsTitle(e.target.value)}
                                       placeholder="Title"
                                     />
                                     <textarea
-                                      className="w-full rounded border border-border bg-surface-1 px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
+                                      className="w-full rounded border border-border bg-surface-2 px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
                                       rows={3}
                                       value={editObsDesc}
                                       onChange={(e) => setEditObsDesc(e.target.value)}

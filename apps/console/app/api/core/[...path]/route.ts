@@ -62,7 +62,7 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   // Field Assessment Engagement Substrate — operator console (PR 2)
   // governance:write required for mutations; governance:read for queries.
   // tenant_id injected server-side from CORE_TENANT_ID — never from request body.
-  { prefix: 'field-assessment/engagements', methods: new Set(['GET', 'POST', 'PATCH', 'HEAD']) },
+  { prefix: 'field-assessment/engagements', methods: new Set(['GET', 'POST', 'PATCH', 'DELETE', 'HEAD']) },
   // Governance topology graph — tenant-scoped, governance:read/write gated (PR 20)
   { prefix: 'governance/graph', methods: new Set(['GET', 'POST', 'HEAD']) },
   // Governance assets — read-only blast-radius surface (PR 20)

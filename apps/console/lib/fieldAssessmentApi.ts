@@ -570,6 +570,7 @@ export interface QuestionnaireResponseItem {
   confidence_score: number | null;
   assessor_id: string | null;
   updated_at: string;
+  evidence_doc_id?: string | null;
 }
 
 export interface Questionnaire {
@@ -591,6 +592,7 @@ export interface PatchResponsePayload {
   response_status: ResponseStatus;
   evidence_text?: string | null;
   confidence_score?: number | null;
+  evidence_doc_id?: string | null;
 }
 
 export interface QuestionnaireResponseUpdate {
@@ -600,6 +602,7 @@ export interface QuestionnaireResponseUpdate {
   evidence_text: string | null;
   confidence_score: number | null;
   updated_at: string;
+  evidence_doc_id?: string | null;
 }
 
 export interface QuestionnaireCoverage {

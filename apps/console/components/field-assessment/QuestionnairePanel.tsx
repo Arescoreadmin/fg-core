@@ -5,6 +5,7 @@ import { Button, Label } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import {
   fieldAssessmentApi,
+  type DocumentAnalysis,
   type Questionnaire,
   type QuestionnaireCategory,
   type QuestionnaireResponseItem,
@@ -67,26 +68,29 @@ function StatusPill({ status }: { status: ResponseStatus }) {
 
 interface ControlRowProps {
   response: QuestionnaireResponseItem;
+  documents: DocumentAnalysis[];
   disabled: boolean;
-  onSave: (controlId: string, status: ResponseStatus, evidence: string) => void;
+  onSave: (controlId: string, status: ResponseStatus, evidence: string, evidenceDocId: string | null) => void;
 }
 
-function ControlRow({ response, disabled, onSave }: ControlRowProps) {
+function ControlRow({ response, documents, disabled, onSave }: ControlRowProps) {
   const [status, setStatus] = useState<ResponseStatus>(response.response_status);
   const [evidence, setEvidence] = useState(response.evidence_text ?? '');
+  const [evidenceDocId, setEvidenceDocId] = useState<string | null>(response.evidence_doc_id ?? null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showEvidence = status !== 'not_assessed' && status !== 'not_applicable';
+  const showDocPicker = status === 'implemented' || status === 'partial';
 
-  function scheduleAutoSave(newStatus: ResponseStatus, newEvidence: string) {
+  function scheduleAutoSave(newStatus: ResponseStatus, newEvidence: string, newDocId: string | null) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSaved(false);
     debounceRef.current = setTimeout(async () => {
       setSaving(true);
       try {
-        await onSave(response.control_id, newStatus, newEvidence);
+        await onSave(response.control_id, newStatus, newEvidence, newDocId);
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       } finally {
@@ -98,14 +102,24 @@ function ControlRow({ response, disabled, onSave }: ControlRowProps) {
   function handleStatusChange(val: ResponseStatus) {
     setStatus(val);
     const ev = (val === 'not_assessed' || val === 'not_applicable') ? '' : evidence;
+    const docId = (val === 'implemented' || val === 'partial') ? evidenceDocId : null;
     setEvidence(ev);
-    scheduleAutoSave(val, ev);
+    if (docId !== evidenceDocId) setEvidenceDocId(docId);
+    scheduleAutoSave(val, ev, docId);
   }
 
   function handleEvidenceChange(val: string) {
     setEvidence(val);
-    scheduleAutoSave(status, val);
+    scheduleAutoSave(status, val, evidenceDocId);
   }
+
+  function handleDocChange(docId: string) {
+    const resolved = docId || null;
+    setEvidenceDocId(resolved);
+    scheduleAutoSave(status, evidence, resolved);
+  }
+
+  const attachedDoc = evidenceDocId ? documents.find((d) => d.id === evidenceDocId) : null;
 
   return (
     <div className="rounded border border-border bg-surface p-3 space-y-2">
@@ -152,6 +166,42 @@ function ControlRow({ response, disabled, onSave }: ControlRowProps) {
           />
         </div>
       )}
+
+      {showDocPicker && (
+        <div className="space-y-1">
+          <Label htmlFor={`doc-${response.control_id}`} className="text-xs text-muted">
+            Supporting document
+          </Label>
+          {disabled ? (
+            attachedDoc ? (
+              <span className="inline-flex items-center gap-1 text-xs text-foreground bg-surface-2 border border-border rounded px-2 py-0.5">
+                <svg className="w-3 h-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {attachedDoc.document_name}
+              </span>
+            ) : (
+              <span className="text-xs text-muted">No document attached</span>
+            )
+          ) : (
+            <select
+              id={`doc-${response.control_id}`}
+              disabled={disabled}
+              value={evidenceDocId ?? ''}
+              onChange={(e) => handleDocChange(e.target.value)}
+              className="w-full rounded border border-border bg-surface-2 px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50"
+            >
+              <option value="">— No document attached —</option>
+              {documents.map((doc) => (
+                <option key={doc.id} value={doc.id}>
+                  {doc.document_name}
+                  {doc.version_label ? ` (${doc.version_label})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -167,6 +217,7 @@ interface Props {
 
 export function QuestionnairePanel({ engagementId, onSubmitted }: Props) {
   const [questionnaire, setQuestionnaire] = useState<Questionnaire | null>(null);
+  const [documents, setDocuments] = useState<DocumentAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -177,8 +228,12 @@ export function QuestionnairePanel({ engagementId, onSubmitted }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const q = await fieldAssessmentApi.initQuestionnaire(engagementId);
+      const [q, docs] = await Promise.all([
+        fieldAssessmentApi.initQuestionnaire(engagementId),
+        fieldAssessmentApi.listDocuments(engagementId),
+      ]);
       setQuestionnaire(q);
+      setDocuments(docs);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load questionnaire');
     } finally {
@@ -190,11 +245,17 @@ export function QuestionnairePanel({ engagementId, onSubmitted }: Props) {
     loadQuestionnaire();
   }, [loadQuestionnaire]);
 
-  async function handleSave(controlId: string, status: ResponseStatus, evidenceText: string) {
+  async function handleSave(
+    controlId: string,
+    status: ResponseStatus,
+    evidenceText: string,
+    evidenceDocId: string | null,
+  ) {
     if (!questionnaire) return;
-    await fieldAssessmentApi.patchResponse(engagementId, questionnaire.id, controlId, {
+    const update = await fieldAssessmentApi.patchResponse(engagementId, questionnaire.id, controlId, {
       response_status: status,
       evidence_text: evidenceText || null,
+      evidence_doc_id: evidenceDocId,
     });
     setQuestionnaire((prev) => {
       if (!prev) return prev;
@@ -202,7 +263,12 @@ export function QuestionnairePanel({ engagementId, onSubmitted }: Props) {
         ...prev,
         responses: prev.responses.map((r) =>
           r.control_id === controlId
-            ? { ...r, response_status: status, evidence_text: evidenceText || null }
+            ? {
+                ...r,
+                response_status: status,
+                evidence_text: evidenceText || null,
+                evidence_doc_id: update.evidence_doc_id ?? null,
+              }
             : r,
         ),
       };
@@ -335,6 +401,7 @@ export function QuestionnairePanel({ engagementId, onSubmitted }: Props) {
           <ControlRow
             key={r.control_id}
             response={r}
+            documents={documents}
             disabled={isReadOnly}
             onSave={handleSave}
           />
