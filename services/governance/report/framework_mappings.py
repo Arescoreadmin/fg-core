@@ -446,6 +446,21 @@ _FRAMEWORK_CONTROL_MAP_RAW: dict[str, dict[str, list[str]]] = {
         ],
         "vendor_management": ["Administrative:Business Associate Contracts"],
     },
+    "CMMC": {
+        "data_governance": ["AC.1.001", "AC.1.002", "AU.2.041", "AU.2.042", "CM.2.061"],
+        "security_posture": ["AC.1.001", "IA.1.076", "IA.1.077", "SC.1.175", "SC.1.176", "SI.1.210"],
+        "ai_maturity": ["CM.2.061", "CM.2.062", "RM.2.141", "RM.2.142"],
+        "ai_trustworthiness": ["RM.2.141", "RM.2.142", "CA.2.157", "CA.2.158"],
+        "infra_readiness": ["CM.2.061", "SC.1.175", "SC.1.176", "SC.3.177", "SC.3.187"],
+        "compliance_awareness": ["CA.2.157", "CA.2.158", "CA.3.161", "RM.2.141"],
+        "automation_potential": ["CM.2.061", "CM.2.062"],
+        "access_control": ["AC.1.001", "AC.1.002", "AC.2.006", "AC.2.007", "IA.1.076"],
+        "audit_logging": ["AU.2.041", "AU.2.042", "AU.2.043", "AU.3.045"],
+        "data_classification": ["MP.1.001", "MP.1.002"],
+        "incident_response": ["IR.2.092", "IR.2.093", "IR.3.098"],
+        "risk_assessment": ["RM.2.141", "RM.2.142", "RM.3.144"],
+        "vendor_management": ["SR.3.169", "SR.3.170", "SR.5.108"],
+    },
 }
 
 FRAMEWORK_CONTROL_MAP: MappingProxyType = MappingProxyType(_FRAMEWORK_CONTROL_MAP_RAW)

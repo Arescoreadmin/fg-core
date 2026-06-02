@@ -4842,6 +4842,7 @@ def _build_engagement_report_json(
         _serialize_evidence_ref,
         _serialize_confidence,
     )
+    from services.governance.report.framework_mappings import get_framework_mappings as _get_fw_maps
 
     active_sections = set(include_sections) if include_sections else set(_ALL_SECTIONS)
 
@@ -4929,8 +4930,55 @@ def _build_engagement_report_json(
             _serialize_evidence_ref(r) for r in report.evidence_appendix
         ]
     if "framework_summary" in active_sections:
+        # Observation domains → framework_mappings lookup keys
+        _OBS_DOMAIN_MAP = {
+            "ai_governance": "ai_maturity",
+            "data_security": "data_governance",
+            "access_management": "access_control",
+            "operational_security": "security_posture",
+            "compliance": "compliance_awareness",
+            "vendor_management": "vendor_management",
+            "incident_response": "incident_response",
+            "training": "ai_maturity",
+        }
+
+        fw_summary: dict[str, set[str]] = {}
+
+        def _add_fw_refs(fw: str, ctrl: str) -> None:
+            # Normalize underscore-keyed framework names to hyphenated form for UI
+            fw_key = fw.replace("_", "-")
+            fw_summary.setdefault(fw_key, set()).add(ctrl)
+
+        # 1. Derive from field observations (manual assessment) — gap/finding types
+        obs_rows = db.execute(
+            select(FaFieldObservation).where(
+                FaFieldObservation.engagement_id == engagement_id,
+                FaFieldObservation.tenant_id == tenant_id,
+                FaFieldObservation.observation_type.in_(["finding", "gap", "concern"]),
+            )
+        ).scalars().all()
+        for obs in obs_rows:
+            fw_domain = _OBS_DOMAIN_MAP.get(obs.domain, obs.domain)
+            for fm in _get_fw_maps(control_id=fw_domain, domain=fw_domain):
+                _add_fw_refs(fm.framework, fm.control_ref)
+
+        # 2. Derive from connector-driven normalized findings (framework_mappings field)
+        for f in all_findings:
+            for fm in (f.framework_mappings or []):
+                if isinstance(fm, dict):
+                    fw = fm.get("framework", "")
+                    ctrl = fm.get("control_id") or fm.get("control_ref") or ""
+                    if fw and ctrl:
+                        _add_fw_refs(fw, ctrl)
+
+        # 3. Fall back to engine-derived summary if both sources are empty
+        if not fw_summary:
+            for fw, refs in report.framework_summary.items():
+                for ctrl in refs:
+                    _add_fw_refs(fw, ctrl)
+
         section_content["framework_summary"] = {
-            k: sorted(v) for k, v in sorted(report.framework_summary.items())
+            k: sorted(v) for k, v in sorted(fw_summary.items())
         }
     if "confidence" in active_sections:
         section_content["confidence"] = _serialize_confidence(report.confidence)

@@ -316,7 +316,18 @@ export function GuidedExecutionPanel({
               </div>
               <p className="mt-1 text-[11px] opacity-90">{gate.why_it_matters}</p>
               {gate.missing_items.length > 0 && (
-                <p className="mt-1 text-[11px] opacity-90">Missing: {gate.missing_items.join(', ')}</p>
+                <p className="mt-1 text-[11px] opacity-90">
+                  Missing: {gate.missing_items.map((id) => id.slice(0, 8)).join(', ')}
+                </p>
+              )}
+              {gate.gate_type === 'finding_remediation' && gate.status === 'blocked' && (
+                <button
+                  type="button"
+                  onClick={() => onSectionClick?.('findings')}
+                  className="mt-1.5 text-[11px] text-primary hover:underline focus:outline-none"
+                >
+                  Go to Findings — add remediation guidance →
+                </button>
               )}
             </div>
           ))}
@@ -331,6 +342,24 @@ export function GuidedExecutionPanel({
               <p className="font-medium text-orange-100">{label(item.ambiguity_type)}</p>
               <p className="mt-1 text-orange-100/90">{item.reason}</p>
               <p className="mt-1 text-[11px] text-muted">Reviewer: {label(item.recommended_reviewer_role)}</p>
+              {item.ambiguity_type === 'missing_remediation' && (
+                <button
+                  type="button"
+                  onClick={() => onSectionClick?.('findings')}
+                  className="mt-1.5 text-[11px] text-primary hover:underline focus:outline-none"
+                >
+                  Go to Findings — add remediation guidance →
+                </button>
+              )}
+              {item.ambiguity_type === 'ambiguous_observation' && (
+                <button
+                  type="button"
+                  onClick={() => onSectionClick?.('observations')}
+                  className="mt-1.5 text-[11px] text-primary hover:underline focus:outline-none"
+                >
+                  Go to Observations — clarify and update →
+                </button>
+              )}
             </div>
           ))}
         </div>
