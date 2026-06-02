@@ -4894,6 +4894,16 @@ def qa_approve_report_route(
             ),
         )
 
+    if report.qa_approved_by is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_ALREADY_APPROVED",
+                "This report has already been QA-approved and cannot be re-approved. "
+                f"Original approval by {report.qa_approved_by!r} at {report.qa_approved_at}.",
+            ),
+        )
+
     now = utc_iso8601_z_now()
     # reviewer_name is the human-readable display name (e.g. "Jane Smith, Senior Assessor").
     # The JWT actor is always recorded in the audit event for non-repudiation.
@@ -5005,7 +5015,7 @@ def qa_approve_report_route(
 
     return ReportQaApproveResponse(
         report_id=report_id,
-        qa_approved_by=actor,
+        qa_approved_by=display_name,
         qa_approved_at=now,
         engagement_status=eng.status,
         client_access_code=client_access_code,

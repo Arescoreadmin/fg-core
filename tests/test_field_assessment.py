@@ -1093,4 +1093,54 @@ def test_update_observation_valid_audio_evidence_accepted(client: TestClient) ->
             }
         },
     )
+    assert resp.status_code == 200  # valid audio evidence accepted
+
+
+# ---------------------------------------------------------------------------
+# H10 — QA approval immutability + display name
+# ---------------------------------------------------------------------------
+
+
+def test_qa_approve_second_call_rejected_with_409(qa_client: TestClient) -> None:
+    """Re-approving an already-approved report must return 409 REPORT_ALREADY_APPROVED."""
+    eng_id = _create_engagement(qa_client)["id"]
+    report_id = _create_finalized_report(qa_client, eng_id)
+
+    first = qa_client.post(
+        f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
+        json={},
+    )
+    assert first.status_code == 200
+
+    second = qa_client.post(
+        f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
+        json={},
+    )
+    assert second.status_code == 409
+    assert "REPORT_ALREADY_APPROVED" in second.text
+
+
+def test_qa_approve_response_uses_reviewer_name(qa_client: TestClient) -> None:
+    """Response qa_approved_by must reflect the supplied reviewer_name, not the JWT actor."""
+    eng_id = _create_engagement(qa_client)["id"]
+    report_id = _create_finalized_report(qa_client, eng_id)
+
+    resp = qa_client.post(
+        f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
+        json={"reviewer_name": "Jane Smith, Senior Assessor"},
+    )
     assert resp.status_code == 200
+    assert resp.json()["qa_approved_by"] == "Jane Smith, Senior Assessor"
+
+
+def test_qa_approve_response_falls_back_to_actor_when_no_name(qa_client: TestClient) -> None:
+    """When reviewer_name is omitted, qa_approved_by must be non-empty (JWT actor fallback)."""
+    eng_id = _create_engagement(qa_client)["id"]
+    report_id = _create_finalized_report(qa_client, eng_id)
+
+    resp = qa_client.post(
+        f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
+        json={},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["qa_approved_by"]  # non-empty fallback
