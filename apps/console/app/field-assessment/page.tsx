@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@fg/ui';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@fg/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@fg/ui';
 import { StatusBadge } from '@/components/field-assessment/StatusBadge';
+import { ConsoleTopNav } from '@/components/ConsoleTopNav';
 import {
   fieldAssessmentApi,
   type Engagement,
@@ -175,6 +176,7 @@ export default function FieldAssessmentListPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <ConsoleTopNav crumbs={[{ label: 'Field Assessments' }]} />
       <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>

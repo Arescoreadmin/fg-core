@@ -32,6 +32,7 @@ import { ReportViewer } from '@/components/field-assessment/ReportViewer';
 import { ReportExportBar } from '@/components/field-assessment/ReportExportBar';
 import { ControlGapMatrix } from '@/components/field-assessment/ControlGapMatrix';
 import { QuestionnairePanel } from '@/components/field-assessment/QuestionnairePanel';
+import { ConsoleTopNav } from '@/components/ConsoleTopNav';
 import {
   fieldAssessmentApi,
   type Engagement,
@@ -411,6 +412,7 @@ export default function EngagementWorkspacePage() {
   if (engLoading) {
     return (
       <div className="min-h-screen bg-background text-foreground">
+        <ConsoleTopNav crumbs={[{ label: 'Field Assessments', href: '/field-assessment' }, { label: '…' }]} />
         <div className="max-w-6xl mx-auto px-4 py-8 space-y-4">
           <div className="h-8 w-48 bg-surface-2 rounded animate-pulse" />
           <div className="h-32 bg-surface-2 rounded animate-pulse" />
@@ -422,16 +424,11 @@ export default function EngagementWorkspacePage() {
   if (engError || !engagement) {
     return (
       <div className="min-h-screen bg-background text-foreground">
+        <ConsoleTopNav crumbs={[{ label: 'Field Assessments', href: '/field-assessment' }, { label: 'Error' }]} />
         <div className="max-w-6xl mx-auto px-4 py-8">
           <Alert variant="destructive">
             <AlertDescription>{engError ?? 'Engagement not found'}</AlertDescription>
           </Alert>
-          <button
-            className="mt-4 text-sm text-muted hover:text-foreground underline"
-            onClick={() => router.push('/field-assessment')}
-          >
-            ← Back to engagements
-          </button>
         </div>
       </div>
     );
@@ -439,29 +436,27 @@ export default function EngagementWorkspacePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <ConsoleTopNav
+        crumbs={[
+          { label: 'Field Assessments', href: '/field-assessment' },
+          { label: engagement.client_name },
+        ]}
+      />
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
 
         {/* Header */}
-        <div className="space-y-1">
-          <button
-            className="text-xs text-muted hover:text-foreground transition-colors"
-            onClick={() => router.push('/field-assessment')}
-          >
-            ← Field Assessments
-          </button>
-          <div className="flex flex-wrap items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-lg font-semibold text-foreground truncate">{engagement.client_name}</h1>
-              <div className="flex flex-wrap items-center gap-2 mt-1">
-                {engagement.client_domain && (
-                  <span className="text-xs text-muted">{engagement.client_domain}</span>
-                )}
-                <span className="text-xs text-muted capitalize">{engagement.assessment_type.replace(/_/g, ' ')}</span>
-                <span className="text-xs text-muted">Assessor: {engagement.assessor_id}</span>
-              </div>
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-semibold text-foreground truncate">{engagement.client_name}</h1>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              {engagement.client_domain && (
+                <span className="text-xs text-muted">{engagement.client_domain}</span>
+              )}
+              <span className="text-xs text-muted capitalize">{engagement.assessment_type.replace(/_/g, ' ')}</span>
+              <span className="text-xs text-muted">Assessor: {engagement.assessor_id}</span>
             </div>
-            <StatusBadge status={engagement.status} />
           </div>
+          <StatusBadge status={engagement.status} />
         </div>
 
         {/* Status transition */}
