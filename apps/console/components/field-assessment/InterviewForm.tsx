@@ -52,10 +52,12 @@ async function hashBlob(blob: Blob): Promise<string> {
 type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped';
 
 function RecordingWidget({
+  engagementId,
   onAudioReady,
   onUseTranscript,
 }: {
-  onAudioReady: (info: { hash: string; sizeKb: number; durationSec: number; blobUrl: string; blob: Blob }) => void;
+  engagementId: string;
+  onAudioReady: (info: { hash: string; sizeKb: number; durationSec: number; blobUrl: string; blob: Blob; audioUrl: string | null }) => void;
   onUseTranscript: (text: string) => void;
 }) {
   const [recState, setRecState] = useState<RecordingState>('idle');
@@ -115,6 +117,7 @@ function RecordingWidget({
           durationSec: elapsedRef.current,
           blobUrl: url,
           blob,
+          audioUrl: null as string | null,
         };
         blobRef.current = blob;
         setBlobUrl(url);
@@ -153,17 +156,22 @@ function RecordingWidget({
   }
 
   async function transcribe() {
-    if (!blobRef.current) return;
+    if (!blobRef.current || !audioInfo) return;
     setTranscribing(true);
     setTranscriptError(null);
     setTranscript(null);
     try {
       const form = new FormData();
       form.append('audio', blobRef.current, 'interview.webm');
+      form.append('engagement_id', engagementId);
+      form.append('audio_hash', audioInfo.hash);
       const res = await fetch('/api/field-assessment/transcribe', { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Transcription failed');
+      const audioUrl = (data.audio_url as string | null) ?? null;
       setTranscript(data.text as string);
+      // Propagate the persistent URL back to the parent form
+      onAudioReady({ ...audioInfo, blobUrl: blobUrl ?? '', blob: blobRef.current, audioUrl });
     } catch (e) {
       setTranscriptError(e instanceof Error ? e.message : 'Transcription failed');
     } finally {
@@ -181,7 +189,7 @@ function RecordingWidget({
     setTranscriptError(null);
     elapsedRef.current = 0;
     setRecState('idle');
-    onAudioReady({ hash: '', sizeKb: 0, durationSec: 0, blobUrl: '', blob: new Blob() });
+    onAudioReady({ hash: '', sizeKb: 0, durationSec: 0, blobUrl: '', blob: new Blob(), audioUrl: null });
   }
 
   function download() {
@@ -375,7 +383,7 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
   const [error, setError] = useState<string | null>(null);
   const [lastObs, setLastObs] = useState<Observation | null>(null);
   const [guideOpen, setGuideOpen] = useState(true);
-  const [audioArtifact, setAudioArtifact] = useState<{ hash: string; sizeKb: number; durationSec: number } | null>(null);
+  const [audioArtifact, setAudioArtifact] = useState<{ hash: string; sizeKb: number; durationSec: number; audioUrl: string | null } | null>(null);
 
   const guide = getInterviewGuide(prefill?.role, assessmentType);
 
@@ -430,6 +438,16 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
       .join('\n\n') + nistLine + audioLine;
 
     try {
+      const structured_evidence: Record<string, string> = {};
+      if (audioArtifact?.hash) {
+        structured_evidence['_audio_hash'] = audioArtifact.hash;
+        structured_evidence['_audio_duration_sec'] = String(audioArtifact.durationSec);
+        structured_evidence['_audio_size_kb'] = String(audioArtifact.sizeKb);
+      }
+      if (audioArtifact?.audioUrl) {
+        structured_evidence['_audio_url'] = audioArtifact.audioUrl;
+      }
+
       const obs = await fieldAssessmentApi.captureObservation(engagementId, {
         domain: domain as ObservationDomain,
         observation_type: 'interview',
@@ -437,6 +455,7 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
         title: title.trim(),
         description,
         interview_role: interviewRole.trim(),
+        structured_evidence,
       });
       setLastObs(obs);
       setInterviewRole('');
@@ -527,9 +546,10 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
 
       {/* Recording widget */}
       <RecordingWidget
+        engagementId={engagementId}
         onAudioReady={(info) => {
           if (info.hash) {
-            setAudioArtifact({ hash: info.hash, sizeKb: info.sizeKb, durationSec: info.durationSec });
+            setAudioArtifact({ hash: info.hash, sizeKb: info.sizeKb, durationSec: info.durationSec, audioUrl: info.audioUrl });
           } else {
             setAudioArtifact(null);
           }

@@ -789,18 +789,62 @@ export default function EngagementWorkspacePage() {
                     </p>
                     {observations
                       .filter((o) => o.observation_type === 'interview')
-                      .map((o) => (
-                        <div key={o.id} className="p-3 rounded border border-border bg-surface-2 space-y-1 text-xs">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium text-foreground">{o.title}</span>
-                            {o.interview_role && (
-                              <span className="text-info">{o.interview_role}</span>
+                      .map((o) => {
+                        const audioUrl = typeof o.structured_evidence?.['_audio_url'] === 'string'
+                          ? (o.structured_evidence['_audio_url'] as string)
+                          : null;
+                        const audioDuration = typeof o.structured_evidence?.['_audio_duration_sec'] === 'string' || typeof o.structured_evidence?.['_audio_duration_sec'] === 'number'
+                          ? String(o.structured_evidence['_audio_duration_sec'])
+                          : null;
+                        const audioSize = typeof o.structured_evidence?.['_audio_size_kb'] === 'string' || typeof o.structured_evidence?.['_audio_size_kb'] === 'number'
+                          ? String(o.structured_evidence['_audio_size_kb'])
+                          : null;
+                        const isExpanded = expandedObsId === o.id;
+                        return (
+                          <div
+                            key={o.id}
+                            className="p-3 rounded border border-border bg-surface-2 space-y-1 text-xs cursor-pointer"
+                            onClick={() => setExpandedObsId(isExpanded ? null : o.id)}
+                            role="button"
+                            aria-expanded={isExpanded}
+                            tabIndex={0}
+                            onKeyDown={(e) => e.key === 'Enter' && setExpandedObsId(isExpanded ? null : o.id)}
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-foreground">{o.title}</span>
+                              {o.interview_role && (
+                                <span className="text-info">{o.interview_role}</span>
+                              )}
+                              <span className="capitalize text-muted">{o.domain.replace(/_/g, ' ')}</span>
+                              {audioUrl && (
+                                <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 border border-success/30 bg-success/5 text-success text-[11px]">
+                                  ● Recording
+                                </span>
+                              )}
+                              <span className="ml-auto text-muted">{isExpanded ? '▲' : '▼'}</span>
+                            </div>
+                            <p className={`text-muted ${isExpanded ? '' : 'line-clamp-2'}`}>{o.description}</p>
+                            {isExpanded && audioUrl && (
+                              <div className="border-t border-border pt-2 mt-1 space-y-1" onClick={(e) => e.stopPropagation()}>
+                                <p className="text-[11px] font-semibold text-muted uppercase tracking-wider">
+                                  Audio Recording
+                                  {audioDuration && audioSize && (
+                                    <span className="ml-2 normal-case font-normal">
+                                      {audioDuration}s · {audioSize} KB
+                                    </span>
+                                  )}
+                                </p>
+                                <audio
+                                  controls
+                                  src={audioUrl}
+                                  className="w-full h-8"
+                                  aria-label="Interview recording playback"
+                                />
+                              </div>
                             )}
-                            <span className="capitalize text-muted">{o.domain.replace(/_/g, ' ')}</span>
                           </div>
-                          <p className="text-muted line-clamp-2">{o.description}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                   </div>
                 )}
               </TabsContent>
