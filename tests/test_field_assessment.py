@@ -806,3 +806,90 @@ def test_audit_events_tenant_scoped(client: TestClient) -> None:
 def test_audit_events_not_found(client: TestClient) -> None:
     resp = client.get("/field-assessment/engagements/nonexistent-id/audit-events")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Portal IDOR guard tests (C4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def portal_client(build_app: object) -> TestClient:
+    """Portal-flavored client: X-Portal-Source header + governance scopes."""
+    from api.auth_scopes import mint_key
+
+    app = build_app(auth_enabled=True)  # type: ignore[operator]
+    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
+    return TestClient(
+        app,
+        headers={
+            "X-API-Key": key,
+            "X-Portal-Source": "client-portal",
+        },
+    )
+
+
+def _create_delivered_engagement(client: TestClient) -> dict:
+    """Create an engagement and QA-approve it to get a client_access_code."""
+    eng = _create_engagement(client)
+    eng_id = eng["id"]
+    # Ingest a scan + findings so a report can be generated
+    report_resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/reports",
+        json={"schema_version": "1.0", "sections": {}, "section_hashes": {}},
+    )
+    if report_resp.status_code == 201:
+        version = report_resp.json()["version"]
+        client.post(f"/field-assessment/engagements/{eng_id}/reports/{version}/qa-approve")
+    # Re-fetch to get current state including client_access_code
+    detail = client.get(f"/field-assessment/engagements/{eng_id}")
+    return detail.json()
+
+
+def test_portal_engagement_access_requires_code(portal_client: TestClient, client: TestClient) -> None:
+    """Portal request without client_access_code is blocked with 403."""
+    eng = _create_engagement(client)
+    eng_id = eng["id"]
+    resp = portal_client.get(f"/field-assessment/engagements/{eng_id}")
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "PORTAL_ACCESS_CODE_REQUIRED"
+
+
+def test_portal_engagement_wrong_code_denied(portal_client: TestClient, client: TestClient) -> None:
+    """Portal request with wrong access code is denied."""
+    eng = _create_engagement(client)
+    eng_id = eng["id"]
+    resp = portal_client.get(
+        f"/field-assessment/engagements/{eng_id}",
+        params={"client_access_code": "wrong-code"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "PORTAL_ACCESS_DENIED"
+
+
+def test_portal_engagement_wrong_code_denied_on_subresource(portal_client: TestClient, client: TestClient) -> None:
+    """IDOR guard also protects sub-resources like /findings."""
+    eng = _create_engagement(client)
+    eng_id = eng["id"]
+    resp = portal_client.get(
+        f"/field-assessment/engagements/{eng_id}/findings",
+        params={"client_access_code": "not-the-real-code"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "PORTAL_ACCESS_DENIED"
+
+
+def test_portal_list_engagements_no_code_required(portal_client: TestClient) -> None:
+    """List route does not require client_access_code from the middleware (already filtered)."""
+    resp = portal_client.get("/field-assessment/engagements")
+    # List route is not gated by the middleware — the middleware only activates for /{id}/* paths
+    assert resp.status_code == 200
+
+
+def test_operator_request_bypasses_portal_guard(client: TestClient) -> None:
+    """Requests without X-Portal-Source header are not gated."""
+    eng = _create_engagement(client)
+    eng_id = eng["id"]
+    # No X-Portal-Source header → middleware is a no-op → normal 200
+    resp = client.get(f"/field-assessment/engagements/{eng_id}")
+    assert resp.status_code == 200

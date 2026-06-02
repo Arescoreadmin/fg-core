@@ -90,6 +90,7 @@ from api.reports_engine import router as reports_engine_router
 from api.stripe_webhooks import router as stripe_webhooks_router
 from api.tenant_rbac_router import router as tenant_rbac_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
+from api.middleware.portal_scope import PortalClientScopeMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.exception_shield import FGExceptionShieldMiddleware
 from api.middleware.logging import RequestLoggingMiddleware
@@ -587,6 +588,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     except Exception:
         pass
 
+    _add_middleware(app, PortalClientScopeMiddleware)
     _add_middleware(
         app,
         AuthGateMiddleware,
