@@ -338,3 +338,75 @@ def test_execution_state_tenant_isolation_returns_404(build_app: object) -> None
     )
 
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PI13 — execution state must not cap evidence at 100 items
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_all_pages_collects_beyond_page_size() -> None:
+    """_fetch_all_pages must paginate until exhausted, not stop at first page."""
+    from api.field_assessment import _fetch_all_pages
+
+    calls: list[tuple[int, int]] = []
+
+    def fake_fn(*, db: None, engagement_id: str, tenant_id: str, limit: int, offset: int) -> list[int]:
+        calls.append((limit, offset))
+        # Simulate 250 total items: pages of 100, 100, 50
+        start = offset
+        end = min(offset + limit, 250)
+        return list(range(start, end))
+
+    result = _fetch_all_pages(
+        fake_fn, db=None, engagement_id="eng-1", tenant_id="t-1"
+    )
+
+    assert len(result) == 250, f"expected 250 items, got {len(result)}"
+    assert len(calls) == 3, f"expected 3 page fetches, got {len(calls)}"
+    assert calls[0] == (100, 0)
+    assert calls[1] == (100, 100)
+    assert calls[2] == (100, 200)
+
+
+def test_execution_state_scan_results_beyond_100(client: TestClient) -> None:
+    """GET /execution-state must reflect all scans when there are more than 100.
+
+    Scans are auto-linked to the engagement on import, so the observable
+    indicator of how many scans the engine saw is the `evidence_present` list
+    on the `scan.microsoft_graph.required` gate — it holds one ID per fetched
+    scan.  With the old hard cap of 100, that list would have at most 100
+    entries; with the pagination fix it must have all 105.
+    """
+    eng = _create_engagement(client)
+    eng_id = eng["id"]
+
+    _SCAN_BODY = {
+        "source_type": "microsoft_graph",
+        "schema_version": "1.0",
+        "collected_at": "2026-05-19T00:00:00Z",
+        "object_count": 0,
+    }
+
+    # Insert 105 scans — all with unique payloads to avoid evidence_hash conflicts.
+    # microsoft_graph requires a "users" key in raw_payload.
+    for i in range(105):
+        body = {**_SCAN_BODY, "raw_payload": {"users": [], "seq": i}}
+        resp = client.post(
+            f"/field-assessment/engagements/{eng_id}/scan-results", json=body
+        )
+        assert resp.status_code == 201, f"scan {i} failed: {resp.text}"
+
+    state = client.get(f"/field-assessment/engagements/{eng_id}/execution-state")
+    assert state.status_code == 200, state.text
+    data = state.json()
+
+    # `evidence_present` on the required-scan gate holds one entry per scan
+    # that the readiness engine actually fetched.  Without the pagination fix,
+    # the engine caps at 100 and this list would contain at most 100 IDs.
+    mg_gate = _get_gate(data, "scan.microsoft_graph.required")
+    assert mg_gate["status"] == "passed"
+    assert len(mg_gate["evidence_present"]) >= 105, (
+        f"execution-state must see all 105 scans; "
+        f"evidence_present has only {len(mg_gate['evidence_present'])} entries"
+    )

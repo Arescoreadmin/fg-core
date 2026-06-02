@@ -42,7 +42,11 @@ from services.field_assessment.promotion_store import (
     reset_promotion_for_retry,
     update_corpus_count,
 )
-from services.field_assessment.store import list_findings
+from services.field_assessment.store import (
+    list_document_analyses,
+    list_findings,
+    list_observations,
+)
 from services.field_assessment.timeline import emit_fa_timeline_event
 from services.governance_workflows.engine import create_workflow
 
@@ -133,7 +137,7 @@ def promote_engagement_to_governance(
         _emit_promotion_timeline(
             db, tenant_id=tenant_id, engagement_id=engagement_id, promotion=promotion
         )
-        _feed_findings_to_corpus(
+        _feed_engagement_to_corpus(
             db, tenant_id=tenant_id, engagement_id=engagement_id, promotion=promotion
         )
         _detect_and_emit_drift(
@@ -149,39 +153,37 @@ def _promote_findings_to_workflows(
     tenant_id: str,
     engagement_id: str,
 ) -> int:
-    findings = list_findings(
-        db,
-        engagement_id=engagement_id,
-        tenant_id=tenant_id,
-        severity_filter=None,
-        status_filter=None,
-        limit=_MAX_FINDINGS,
-    )
-    if len(findings) == _MAX_FINDINGS:
-        log.warning(
-            "Promotion hit _MAX_FINDINGS=%d for engagement %s — some findings "
-            "may not have corresponding workflows.",
-            _MAX_FINDINGS,
-            engagement_id,
-        )
-
     count = 0
-    for finding in findings:
-        wf = create_workflow(
+    offset = 0
+    while True:
+        page = list_findings(
             db,
-            tenant_id=tenant_id,
             engagement_id=engagement_id,
-            template_name="finding_remediation",
-            context_ref_type="finding",
-            context_ref_id=finding.id,
-            created_by="system:promotion",
-            severity=finding.severity,
-            title=finding.title,
+            tenant_id=tenant_id,
+            severity_filter=None,
+            status_filter=None,
+            limit=_MAX_FINDINGS,
+            offset=offset,
         )
-        # finding_id is not a create_workflow parameter — set directly on the record.
-        wf.finding_id = finding.id
-        db.flush()
-        count += 1
+        for finding in page:
+            wf = create_workflow(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                template_name="finding_remediation",
+                context_ref_type="finding",
+                context_ref_id=finding.id,
+                created_by="system:promotion",
+                severity=finding.severity,
+                title=finding.title,
+            )
+            # finding_id is not a create_workflow parameter — set directly on the record.
+            wf.finding_id = finding.id
+            db.flush()
+            count += 1
+        if len(page) < _MAX_FINDINGS:
+            break
+        offset += _MAX_FINDINGS
 
     return count
 
@@ -321,20 +323,24 @@ def _detect_and_emit_drift(
         )
 
 
-def _feed_findings_to_corpus(
+def _feed_engagement_to_corpus(
     db: Session,
     *,
     tenant_id: str,
     engagement_id: str,
     promotion: GovernancePromotion,
 ) -> None:
-    """Feed all engagement findings into the RAG corpus. Failure-safe: never raises.
+    """Feed all engagement evidence into the RAG corpus. Failure-safe: never raises.
 
-    Paginates through findings in stable (created_at ASC, id ASC) order until
-    exhausted, so corpus_entries_added always reflects the true finding count.
+    Indexes findings, document analyses, and field observations so the corpus
+    reflects the complete evidence picture, not only finding summaries.
+    Each entity type is paginated in stable order until exhausted, so
+    corpus_entries_added always reflects the full count across all types.
     """
     try:
         docs: list[CorpusDocument] = []
+
+        # --- Findings ---
         offset = 0
         while True:
             page = list_findings(
@@ -352,10 +358,73 @@ def _feed_findings_to_corpus(
                         source_id=f"fa:{engagement_id}:finding:{f.id}",
                         content=f"{f.title}\n\n{f.description}".strip(),
                         metadata={
+                            "entity_type": "finding",
                             "finding_id": f.id,
                             "engagement_id": engagement_id,
                             "severity": f.severity,
                             "finding_type": f.finding_type,
+                        },
+                    )
+                )
+            if len(page) < _MAX_FINDINGS:
+                break
+            offset += len(page)
+
+        # --- Document analyses ---
+        offset = 0
+        while True:
+            page = list_document_analyses(
+                db,
+                engagement_id=engagement_id,
+                tenant_id=tenant_id,
+                limit=_MAX_FINDINGS,
+                offset=offset,
+            )
+            for d in page:
+                content = f"{d.document_name}\n\n{d.document_classification}".strip()
+                if not content:
+                    continue
+                docs.append(
+                    CorpusDocument(
+                        source_id=f"fa:{engagement_id}:document:{d.id}",
+                        content=content,
+                        metadata={
+                            "entity_type": "document_analysis",
+                            "document_id": d.id,
+                            "engagement_id": engagement_id,
+                            "document_classification": d.document_classification,
+                        },
+                    )
+                )
+            if len(page) < _MAX_FINDINGS:
+                break
+            offset += len(page)
+
+        # --- Field observations (excludes soft-deleted) ---
+        offset = 0
+        while True:
+            page = list_observations(
+                db,
+                engagement_id=engagement_id,
+                tenant_id=tenant_id,
+                limit=_MAX_FINDINGS,
+                offset=offset,
+            )
+            for o in page:
+                content = f"{o.title}\n\n{o.description}".strip()
+                if not content:
+                    continue
+                docs.append(
+                    CorpusDocument(
+                        source_id=f"fa:{engagement_id}:observation:{o.id}",
+                        content=content,
+                        metadata={
+                            "entity_type": "observation",
+                            "observation_id": o.id,
+                            "engagement_id": engagement_id,
+                            "domain": o.domain,
+                            "observation_type": o.observation_type,
+                            "severity": o.severity,
                         },
                     )
                 )
@@ -378,7 +447,8 @@ def _feed_findings_to_corpus(
             corpus_entries_added=count,
         )
         log.info(
-            "Corpus feed completed for engagement %s: %d documents ingested",
+            "Corpus feed completed for engagement %s: %d documents ingested "
+            "(findings + document analyses + observations)",
             engagement_id,
             count,
         )

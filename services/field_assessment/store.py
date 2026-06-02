@@ -233,6 +233,7 @@ def list_scan_results(
     engagement_id: str,
     tenant_id: str,
     limit: int,
+    offset: int = 0,
 ) -> list[FaScanResult]:
     limit = min(limit, MAX_PAGE_SIZE)
     stmt = (
@@ -243,6 +244,7 @@ def list_scan_results(
         )
         .order_by(FaScanResult.created_at.desc())
         .limit(limit)
+        .offset(offset)
     )
     return list(db.execute(stmt).scalars().all())
 
@@ -331,6 +333,7 @@ def list_document_analyses(
     engagement_id: str,
     tenant_id: str,
     limit: int,
+    offset: int = 0,
 ) -> list[FaDocumentAnalysis]:
     limit = min(limit, MAX_PAGE_SIZE)
     stmt = (
@@ -341,6 +344,7 @@ def list_document_analyses(
         )
         .order_by(FaDocumentAnalysis.created_at.desc())
         .limit(limit)
+        .offset(offset)
     )
     return list(db.execute(stmt).scalars().all())
 
@@ -393,6 +397,7 @@ def list_observations(
     engagement_id: str,
     tenant_id: str,
     limit: int,
+    offset: int = 0,
     observation_type: str | None = None,
 ) -> list[FaFieldObservation]:
     limit = min(limit, MAX_PAGE_SIZE)
@@ -405,6 +410,7 @@ def list_observations(
         )
         .order_by(FaFieldObservation.created_at.desc())
         .limit(limit)
+        .offset(offset)
     )
     if observation_type is not None:
         stmt = stmt.where(FaFieldObservation.observation_type == observation_type)
@@ -603,6 +609,7 @@ def list_evidence_links(
     tenant_id: str,
     source_entity_id: str | None,
     limit: int,
+    offset: int = 0,
 ) -> list[FaEvidenceLink]:
     limit = min(limit, MAX_PAGE_SIZE)
     stmt = select(FaEvidenceLink).where(
@@ -611,7 +618,7 @@ def list_evidence_links(
     )
     if source_entity_id:
         stmt = stmt.where(FaEvidenceLink.source_entity_id == source_entity_id)
-    stmt = stmt.order_by(FaEvidenceLink.created_at.desc()).limit(limit)
+    stmt = stmt.order_by(FaEvidenceLink.created_at.desc()).limit(limit).offset(offset)
     return list(db.execute(stmt).scalars().all())
 
 

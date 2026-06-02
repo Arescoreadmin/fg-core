@@ -9,6 +9,7 @@ then converts the scan into Field Assessment primitives.
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
@@ -36,10 +37,18 @@ from services.field_assessment.store import (
     create_evidence_link,
     create_finding,
     create_scan_result,
+    get_engagement,
 )
 
 BRIDGE_VERSION = "field-assessment-msgraph-bridge-v1"
 CONNECTOR_TYPE = "microsoft_graph"
+
+log = logging.getLogger("frostgate.fa.msgraph_bridge")
+
+# Engagement statuses that lock governance promotion and graph mutations.
+# Candidates must not be auto-promoted and the graph must not be rebuilt
+# outside the formal promote_engagement_to_governance() flow once locked.
+_GOVERNANCE_LOCKED_STATUSES: frozenset[str] = frozenset({"delivered"})
 
 
 class ConnectorBridgeError(Exception):
@@ -236,6 +245,10 @@ def import_msgraph_scan_result(
         scan_result_id=scan_record.id,
     )
 
+    engagement_status = get_engagement(
+        db, engagement_id=engagement_id, tenant_id=tenant_id
+    ).status
+
     _persist_candidates(
         db=db,
         tenant_id=tenant_id,
@@ -244,10 +257,14 @@ def import_msgraph_scan_result(
         report_id=report_id,
         candidates_payload=normalized_payload["asset_candidates"],
         manifest_hash=manifest_hash,
+        engagement_status=engagement_status,
     )
 
     _rebuild_graph_for_engagement(
-        db=db, tenant_id=tenant_id, engagement_id=engagement_id
+        db=db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        engagement_status=engagement_status,
     )
 
     _audit(
@@ -289,9 +306,21 @@ def import_msgraph_scan_result(
 
 
 def _rebuild_graph_for_engagement(
-    *, db: Any, tenant_id: str, engagement_id: str
+    *, db: Any, tenant_id: str, engagement_id: str, engagement_status: str
 ) -> None:
-    """Best-effort graph rebuild after msgraph import. Failures are silently swallowed."""
+    """Best-effort graph rebuild after msgraph import.
+
+    Skipped when the engagement is governance-locked (delivered) because
+    the graph must only be mutated through the formal promotion flow once
+    delivery has occurred.  Failures are logged but never re-raised.
+    """
+    if engagement_status in _GOVERNANCE_LOCKED_STATUSES:
+        log.info(
+            "Skipping graph rebuild for locked engagement %s (status=%s)",
+            engagement_id,
+            engagement_status,
+        )
+        return
     try:
         from services.governance_graph.builder import build_graph_for_engagement
 
@@ -301,8 +330,13 @@ def _rebuild_graph_for_engagement(
             engagement_id=engagement_id,
             triggered_by="msgraph_import",
         )
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "Graph rebuild failed for engagement %s (tenant %s): %s",
+            engagement_id,
+            tenant_id,
+            exc,
+        )
 
 
 def _store_report(
@@ -388,11 +422,16 @@ def _persist_candidates(
     report_id: str | None,
     candidates_payload: list[dict[str, Any]],
     manifest_hash: str,
+    engagement_status: str,
 ) -> None:
-    """Upsert detected candidates into ga_asset_candidates and auto-promote if eligible.
+    """Upsert detected candidates into ga_asset_candidates.
 
-    Best-effort: individual failures are swallowed so the import always succeeds.
+    Auto-promotion to governance assets is skipped when the engagement is
+    governance-locked (delivered) — promotion must only happen through the
+    formal promote_engagement_to_governance() flow after QA-approved delivery.
+    Individual failures are logged but never re-raised so the import succeeds.
     """
+    locked = engagement_status in _GOVERNANCE_LOCKED_STATUSES
     for raw in candidates_payload:
         try:
             candidate, _ = upsert_candidate(
@@ -412,9 +451,22 @@ def _persist_candidates(
                 scan_result_id=scan_result_id,
                 report_id=report_id,
             )
-            auto_promote_if_eligible(db, candidate=candidate)
-        except Exception:  # noqa: BLE001
-            pass
+            if locked:
+                log.info(
+                    "Skipping auto-promotion for candidate %s: engagement %s is locked (status=%s)",
+                    getattr(candidate, "candidate_id", "?"),
+                    engagement_id,
+                    engagement_status,
+                )
+            else:
+                auto_promote_if_eligible(db, candidate=candidate)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "Candidate persist failed for engagement %s (tenant %s): %s",
+                engagement_id,
+                tenant_id,
+                exc,
+            )
 
 
 def _normalized_payload(

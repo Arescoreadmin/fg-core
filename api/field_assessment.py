@@ -2412,8 +2412,23 @@ def get_engagement_summary_route(
 
 
 # ---------------------------------------------------------------------------
-# Internal helper — shared execution state evaluation
+# Internal helpers
 # ---------------------------------------------------------------------------
+
+_EVAL_PAGE_SIZE = 100
+
+
+def _fetch_all_pages(fetch_fn: Any, **kwargs: Any) -> list[Any]:
+    """Exhaust a paginated store function that accepts limit + offset kwargs."""
+    results: list[Any] = []
+    offset = 0
+    while True:
+        page = fetch_fn(limit=_EVAL_PAGE_SIZE, offset=offset, **kwargs)
+        results.extend(page)
+        if len(page) < _EVAL_PAGE_SIZE:
+            break
+        offset += _EVAL_PAGE_SIZE
+    return results
 
 
 def _evaluate_execution_state(db: Session, *, eng: Any, tenant_id: str) -> Any:
@@ -2423,29 +2438,15 @@ def _evaluate_execution_state(db: Session, *, eng: Any, tenant_id: str) -> Any:
     PATCH /status. Queries are identical; the only difference is who uses the result.
     """
     engagement_id = eng.id
-    scans = list_scan_results(
-        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
+    _kw = {"db": db, "engagement_id": engagement_id, "tenant_id": tenant_id}
+    scans = _fetch_all_pages(list_scan_results, **_kw)
+    documents = _fetch_all_pages(list_document_analyses, **_kw)
+    observations = _fetch_all_pages(list_observations, **_kw)
+    findings = _fetch_all_pages(
+        list_findings, severity_filter=None, status_filter=None, **_kw
     )
-    documents = list_document_analyses(
-        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
-    )
-    observations = list_observations(
-        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
-    )
-    findings = list_findings(
-        db,
-        engagement_id=engagement_id,
-        tenant_id=tenant_id,
-        severity_filter=None,
-        status_filter=None,
-        limit=100,
-    )
-    evidence_links = list_evidence_links(
-        db,
-        engagement_id=engagement_id,
-        tenant_id=tenant_id,
-        source_entity_id=None,
-        limit=100,
+    evidence_links = _fetch_all_pages(
+        list_evidence_links, source_entity_id=None, **_kw
     )
     reports = list(
         db.execute(

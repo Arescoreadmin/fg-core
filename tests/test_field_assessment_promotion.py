@@ -47,7 +47,9 @@ from services.field_assessment.promotion_store import (
     get_promotion,
 )
 from services.field_assessment.store import (
+    create_document_analysis,
     create_engagement,
+    create_observation,
     create_scan_result,
 )
 from services.field_assessment.normalizer import normalize_scan_findings
@@ -161,6 +163,40 @@ def _add_candidate(
     db.add(c)
     db.flush()
     return c
+
+
+def _add_document(db: Session, eng_id: str, suffix: str = "a") -> Any:
+    return create_document_analysis(
+        db,
+        tenant_id=_TENANT,
+        engagement_id=eng_id,
+        document_name=f"AI Policy {suffix}",
+        document_classification="ai_policy",
+        document_hash=None,
+        version_label=None,
+        approved_by=None,
+        approval_date=None,
+        freshness_date=None,
+        analysis_findings=[],
+        gaps_identified=[],
+    )
+
+
+def _add_observation(db: Session, eng_id: str, suffix: str = "a") -> Any:
+    return create_observation(
+        db,
+        tenant_id=_TENANT,
+        engagement_id=eng_id,
+        domain="ai_governance",
+        observation_type="gap",
+        severity="medium",
+        title=f"AI governance gap {suffix}",
+        description=f"Policy review revealed gap {suffix}.",
+        interview_role=None,
+        structured_evidence={},
+        linked_finding_ids=[],
+        assessor_id="assessor-promo",
+    )
 
 
 class TestPromotionServiceDirect:
@@ -852,3 +888,99 @@ class TestEvidenceContinuity:
 
         assert all(_TENANT_OTHER not in sid for sid in ingested_source_ids)
         assert len(ingested_source_ids) == 1
+
+
+class TestCorpusFeedPI12:
+    """PI12 — corpus feed covers findings, document analyses, and observations."""
+
+    def _promote(self, db: Session, eng_id: str) -> list[str]:
+        ingested: list[str] = []
+        original_ingest = __import__(
+            "api.rag.ingest", fromlist=["ingest_corpus"]
+        ).ingest_corpus
+
+        def _capture(request, *, trusted_tenant_id):
+            ingested.extend(d.source_id for d in request.documents)
+            return original_ingest(request, trusted_tenant_id=trusted_tenant_id)
+
+        with patch(
+            "services.field_assessment.promotion.ingest_corpus", side_effect=_capture
+        ):
+            promote_engagement_to_governance(
+                db,
+                tenant_id=_TENANT,
+                engagement_id=eng_id,
+                gate_snapshot=_GATE_SNAPSHOT,
+                baseline_readiness_score=75,
+            )
+        return ingested
+
+    def test_corpus_includes_findings(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "pi12-f")
+        _add_finding(db, eng.id, "pi12-f1")
+
+        source_ids = self._promote(db, eng.id)
+
+        finding_ids = [s for s in source_ids if ":finding:" in s]
+        assert len(finding_ids) == 1
+        assert finding_ids[0].startswith(f"fa:{eng.id}:finding:")
+
+    def test_corpus_includes_document_analyses(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "pi12-d")
+        doc = _add_document(db, eng.id, "pi12-d1")
+
+        source_ids = self._promote(db, eng.id)
+
+        doc_ids = [s for s in source_ids if ":document:" in s]
+        assert len(doc_ids) == 1
+        assert doc_ids[0] == f"fa:{eng.id}:document:{doc.id}"
+
+    def test_corpus_includes_observations(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "pi12-o")
+        obs = _add_observation(db, eng.id, "pi12-o1")
+
+        source_ids = self._promote(db, eng.id)
+
+        obs_ids = [s for s in source_ids if ":observation:" in s]
+        assert len(obs_ids) == 1
+        assert obs_ids[0] == f"fa:{eng.id}:observation:{obs.id}"
+
+    def test_corpus_count_reflects_all_entity_types(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "pi12-all")
+        _add_finding(db, eng.id, "pi12-all-f")
+        _add_document(db, eng.id, "pi12-all-d")
+        _add_observation(db, eng.id, "pi12-all-o")
+
+        source_ids = self._promote(db, eng.id)
+
+        assert any(":finding:" in s for s in source_ids)
+        assert any(":document:" in s for s in source_ids)
+        assert any(":observation:" in s for s in source_ids)
+        assert len(source_ids) == 3
+
+    def test_corpus_excludes_soft_deleted_observations(self, db: Session) -> None:
+        eng = _make_delivered_engagement(db, "pi12-del")
+        live_obs = _add_observation(db, eng.id, "pi12-del-live")
+        deleted_obs = _add_observation(db, eng.id, "pi12-del-gone")
+        deleted_obs.deleted_at = utc_iso8601_z_now()
+        db.flush()
+
+        source_ids = self._promote(db, eng.id)
+
+        obs_ids = [s for s in source_ids if ":observation:" in s]
+        assert len(obs_ids) == 1
+        assert obs_ids[0] == f"fa:{eng.id}:observation:{live_obs.id}"
+
+    def test_corpus_promoted_count_stored_on_promotion_record(
+        self, db: Session
+    ) -> None:
+        eng = _make_delivered_engagement(db, "pi12-cnt")
+        _add_finding(db, eng.id, "pi12-cnt-f")
+        _add_document(db, eng.id, "pi12-cnt-d")
+        _add_observation(db, eng.id, "pi12-cnt-o")
+
+        self._promote(db, eng.id)
+
+        promo = get_promotion(db, tenant_id=_TENANT, engagement_id=eng.id)
+        assert promo is not None
+        assert promo.corpus_entries_added == 3

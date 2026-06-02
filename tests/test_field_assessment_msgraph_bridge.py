@@ -445,3 +445,126 @@ def test_import_succeeds_when_ui_run_id_differs_from_scan_id(
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["verification_status"] == "verified"
+
+
+# ---------------------------------------------------------------------------
+# PI11 — governance promotion lock
+# ---------------------------------------------------------------------------
+
+
+def test_persist_candidates_skips_auto_promote_when_delivered() -> None:
+    """_persist_candidates must not call auto_promote_if_eligible when engagement is locked."""
+    from unittest.mock import MagicMock, patch
+    from services.field_assessment.connectors.msgraph_bridge import _persist_candidates
+
+    db = MagicMock()
+    candidate = MagicMock()
+    candidate.status = "detected"
+
+    with patch(
+        "services.field_assessment.connectors.msgraph_bridge.upsert_candidate",
+        return_value=(candidate, False),
+    ) as mock_upsert, patch(
+        "services.field_assessment.connectors.msgraph_bridge.auto_promote_if_eligible"
+    ) as mock_promote:
+        _persist_candidates(
+            db=db,
+            tenant_id="tenant-test",
+            engagement_id="eng-test",
+            scan_result_id="scan-test",
+            report_id=None,
+            candidates_payload=[
+                {
+                    "candidate_type": "ai_application",
+                    "risk_signal": "shadow_ai",
+                    "confidence": 90,
+                    "suggested_name": "Shadow AI",
+                    "suggested_asset_type": "ai_application",
+                }
+            ],
+            manifest_hash="abc123",
+            engagement_status="delivered",
+        )
+
+    mock_upsert.assert_called_once()
+    mock_promote.assert_not_called()
+
+
+def test_persist_candidates_auto_promotes_when_not_delivered() -> None:
+    """_persist_candidates must call auto_promote_if_eligible when engagement is in_progress."""
+    from unittest.mock import MagicMock, patch
+    from services.field_assessment.connectors.msgraph_bridge import _persist_candidates
+
+    db = MagicMock()
+    candidate = MagicMock()
+    candidate.status = "detected"
+
+    with patch(
+        "services.field_assessment.connectors.msgraph_bridge.upsert_candidate",
+        return_value=(candidate, False),
+    ) as mock_upsert, patch(
+        "services.field_assessment.connectors.msgraph_bridge.auto_promote_if_eligible"
+    ) as mock_promote:
+        _persist_candidates(
+            db=db,
+            tenant_id="tenant-test",
+            engagement_id="eng-test",
+            scan_result_id="scan-test",
+            report_id=None,
+            candidates_payload=[
+                {
+                    "candidate_type": "ai_application",
+                    "risk_signal": "shadow_ai",
+                    "confidence": 90,
+                    "suggested_name": "Shadow AI",
+                    "suggested_asset_type": "ai_application",
+                }
+            ],
+            manifest_hash="abc123",
+            engagement_status="in_progress",
+        )
+
+    mock_upsert.assert_called_once()
+    mock_promote.assert_called_once_with(db, candidate=candidate)
+
+
+def test_rebuild_graph_skips_when_delivered() -> None:
+    """_rebuild_graph_for_engagement must not call build_graph_for_engagement when locked."""
+    from unittest.mock import patch
+    from services.field_assessment.connectors.msgraph_bridge import (
+        _rebuild_graph_for_engagement,
+    )
+
+    with patch(
+        "services.governance_graph.builder.build_graph_for_engagement"
+    ) as mock_build:
+        _rebuild_graph_for_engagement(
+            db=None,
+            tenant_id="tenant-test",
+            engagement_id="eng-test",
+            engagement_status="delivered",
+        )
+
+    mock_build.assert_not_called()
+
+
+def test_rebuild_graph_runs_and_logs_failure_when_not_delivered() -> None:
+    """_rebuild_graph_for_engagement logs failure and does not re-raise when unlocked."""
+    from unittest.mock import MagicMock, patch
+    from services.field_assessment.connectors.msgraph_bridge import (
+        _rebuild_graph_for_engagement,
+    )
+
+    with patch(
+        "services.governance_graph.builder.build_graph_for_engagement",
+        side_effect=RuntimeError("no graph available"),
+    ) as mock_build:
+        # Should not raise — errors are logged, not re-raised.
+        _rebuild_graph_for_engagement(
+            db=MagicMock(),
+            tenant_id="tenant-test",
+            engagement_id="eng-test",
+            engagement_status="in_progress",
+        )
+
+    mock_build.assert_called_once()
