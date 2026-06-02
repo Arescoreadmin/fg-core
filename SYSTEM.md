@@ -1,10 +1,10 @@
 # FrostGate — Unified System Document
 
-**Version:** 1.1  
-**Last updated:** 2026-05-27  
+**Version:** 1.2  
+**Last updated:** 2026-06-02  
 **Branch:** `main`  
 **Author:** Jason Cosat  
-**Status:** Active Development — Infrastructure + Field Assessment (PRs 1–22) complete; client readiness in progress
+**Status:** Active Development — Field Assessment complete through Phase 2 client readiness (PRs 1–45 + forensic audit); Phase 3 enterprise plan active (see ENTERPRISE_PLAN.md)
 
 ---
 
@@ -148,7 +148,7 @@ What was added from AIEG:
 │                         PostgreSQL 16                                  │
 │                         localhost:5432                                 │
 │                                                                        │
-│  33 migrations applied (0001–0033)                                     │
+│  77 migrations applied (0001–0077)                                     │
 │  New (0032): org_profiles, assessments, assessment_schemas,            │
 │              prompt_versions, reports                                  │
 │  RLS enforced on all tenant-owned tables                               │
@@ -358,7 +358,7 @@ Full contract: `contracts/core/openapi.json`
 
 ## 7. Database schema
 
-### Migrations applied: 0001–0033
+### Migrations applied: 0001–0077
 
 | Migration | Description |
 |-----------|-------------|
@@ -716,7 +716,7 @@ Never "certified" or "compliant with" until formal certification is obtained.
 - [x] Docker Compose + Helm/K8s deployment configs
 - [x] CI/CD pipelines (GitHub Actions)
 - [x] Device agent (enrollment, telemetry, phase 2 enterprise)
-- [x] Migrations 0001–0033 (33 total)
+- [x] Migrations 0001–0077 (77 total)
 - [x] Postgres auth authority (persistent key store, multi-worker safe)
 
 ### Customer-facing (Tier 1) ✅
@@ -762,100 +762,46 @@ Never "certified" or "compliant with" until formal certification is obtained.
 
 > For full roadmap with PR tracking see `ROADMAP.md`.
 
-### Field Assessment — Client readiness (target: 2026-06-27)
+### Field Assessment — Phase 2 client readiness ✅ Complete (PRs 23–45)
 
-- [ ] **Portal authentication** — `middleware.ts` login gate; portal currently has no auth
-- [ ] **Scan trigger UI** — operator-initiated MS Graph scan from console (currently CLI-only)
-- [ ] **NIST AI RMF questionnaire** — structured per-control manual evidence input
-- [ ] **Fix `VERIFY_BASE_URL`** — hardcoded wrong domain in `services/connectors/msgraph/report.py`
-- [ ] **`.env.example`** — document all required env vars (`FG_MSAL_CLIENT_ID`, `FG_ACKNOWLEDGMENT_KEY`, etc.)
-- [ ] **Executive summary in report** — narrative opening section for client delivery
-- [ ] **NIST control coverage matrix** — portal view: which controls have evidence vs. gaps
-- [ ] **HIPAA playbook** — dedicated HIPAA gates (currently falls back to comprehensive)
+All Phase 2 P0 and P1 items are shipped. See `ROADMAP.md` Phase 2 section for the complete list.
 
-### Tier 1 — Complete the customer funnel
+Key deliverables shipped since SYSTEM.md v1.1:
+- [x] Portal authentication (HMAC-SHA256 session cookies, `/login`, `PORTAL_SESSION_SECRET`)
+- [x] Scan trigger UI (all 9 connectors, device-code + polling panels in console)
+- [x] NIST AI RMF questionnaire (69 controls, per-control evidence, auto-link to findings)
+- [x] HIPAA + SOC 2 + CMMC + ISO 27001 dedicated playbooks
+- [x] Executive PDF export (cover, AI summary, findings, remediation, framework coverage, manifest hash)
+- [x] Remediation closed loop (client marks resolved, evidence created, gates cleared)
+- [x] Risk posture dashboard (NIST coverage bar, severity strip, heatmap, immediate actions)
+- [x] QA approve UI, guided panel live refresh, tab navigation
+- [x] Auth0 OIDC console login (next-auth v5, middleware protection)
+- [x] Production deployment on Railway (FG_ENV=prod, all 20+ startup validators satisfied)
+- [x] All 9 scan connectors: MS Graph, OAuth Inventory, OAuth Risk, Endpoint Inventory,
+      Entra Governance, SharePoint + OneDrive, DNS + Email, Web Headers, Network Scan
+- [x] Workforce intelligence: AI query attribution, risk scoring, keyword triggers, alerting
 
-- [ ] **Stripe checkout** — $299/$599/$999 tiers wired to `/onboarding` final step
-  - Add `stripe_session_id` to `assessments` table (migration 0034)
-  - Gate report generation behind payment confirmation
-  - Webhook handler for `checkout.session.completed`
+### Phase 3 — Enterprise (active)
 
-- [ ] **Email delivery** — Send completed report link via Resend
-  - Collect email in onboarding Step 1
-  - Trigger on `reports.status = complete` in `_generate_report_sync`
-  - Template: link to `/reports/{id}` + executive summary preview
+**See `ENTERPRISE_PLAN.md` for the full phased specification.**
 
-- [ ] **Production deployment** — VPS (DigitalOcean or Hetzner)
-  - Provision PostgreSQL, Redis, NATS, MinIO
-  - Apply migrations 0001–0033
-  - Set `FG_ENV=production`, `FG_AUTH_ENABLED=1`
-  - Configure domain + TLS
+This is the authoritative document for all Phase 3 work. Summary gates:
 
-- [ ] **PDF export** — Currently returns a stub
-  - WeasyPrint or Playwright → PDF from report content
-  - Upload to MinIO, return signed URL from `GET /reports/{id}/download`
+| Gate | Estimate |
+|------|----------|
+| Phase 0: Containment (C5 audio SSRF, C6 scanner SSRF, C7 portal model, H13 audit atomicity) | Weeks 1–2 |
+| Phase 1: Trusted Pilot (H11 drift RLS, H12 durable jobs, H14 RBAC, PI20 FA/Gov boundary) | Weeks 3–6 |
+| Phase 2: Enterprise Production (document pipeline, retention, workers, observability) | Weeks 7–14 |
+| Phase 3: Moat Layer (longitudinal evidence graph, verification bundles, benchmarks) | Months 3–6 |
+| Phase 4: Regulated Enterprise (SOC 2, FedRAMP, HITRUST, air-gap) | Months 4–12 |
 
-### Stage 2 — Intelligence tier ($5K–15K/year)
+### Autonomous Governance tiers (deferred until FA moat is built)
 
-- [ ] **Auth system** — JWT + refresh tokens for multi-user access
-  - Users table (migration 0035)
-  - RBAC roles: exec, auditor, admin, operator, viewer
-  - Link assessments/reports to user who created them
-
-- [ ] **SAML/OIDC enterprise SSO** — Already have Keycloak config in `/keycloak/`
-
-- [ ] **RAG service** — Org policy document upload + retrieval
-  - `documents` + `document_chunks` tables (add to 0035)
-  - pgvector extension (text-embedding-3-small, 1536 dimensions)
-  - Upload endpoint → chunk → embed → store
-  - Retrieval in report generation to ground recommendations in org's own policies
-
-- [ ] **Benchmarking service** — Anonymous cross-org scoring
-  - Aggregate scores by profile_type + industry (no PII)
-  - Dashboard widget: "Your org vs. community banking median"
-
-- [ ] **Compliance mapping dashboard** — Per-framework control-level detail
-  - Map each question to specific control IDs per framework
-  - Store mapping in assessment_schemas questions (add `framework_mappings` field)
-
-- [ ] **Assessment delegation** — Department-level assessment splitting
-  - Allow assessment to be split into sections by department
-  - Each section has a separate share link (UUID)
-
-- [ ] **Trend tracking** — Risk score over time
-  - Multiple assessments per org → score history chart
-
-### Stage 3 — Control tier ($50K–100K/year)
-
-- [ ] **AI gateway proxy** — Drop-in Anthropic/OpenAI-compatible API
-  - Go/Fiber or Python FastAPI — new service or module in fg-core
-  - Employees point their AI tools at this endpoint instead of Anthropic directly
-  - fg-core's existing decision engine, OPA, and audit chain already support this
-
-- [ ] **Input classification** — Presidio for PII/PHI/CUI detection
-  - `services/phi_classifier/` already exists — extend it
-  - Block or redact before AI boundary
-
-- [ ] **PII tokenization** — Reversible tokens before AI boundary
-  - Token store in Redis (TTL-bound)
-  - De-tokenize in response before returning to client
-
-- [ ] **Provider routing** — Route to different models by classification
-  - Public → any provider
-  - PHI → HIPAA-approved only + BAA check (provider_baa_records already exists)
-  - CUI → air-gap mandatory
-
-- [ ] **Response validation** — Hallucination detection
-  - Grounding check against org's RAG context
-
-- [ ] **Expose audit chain to customers** — Dashboard for Tier 3 clients showing every AI request
-
-### Stage 4 — Autonomous tier
-
-- [ ] Continuous drift detection (fg-core has drift infra — surface to customers)
-- [ ] Auto-remediation suggestions
-- [ ] Predictive risk modeling
-- [ ] Custom compliance module builder
+These remain on the long-term roadmap but are explicitly deferred:
+- Tier 3 — AI Gateway proxy (PII/PHI tokenization, OPA enforcement, provider routing)
+- Tier 4 — Continuous monitoring, auto-remediation, predictive risk, custom compliance modules
+- Endpoint agent fleet, command bus, rings, missions, rules of engagement
+- Autonomous remediation agents, governed AI assistant, RAG retrieval product
 
 ---
 

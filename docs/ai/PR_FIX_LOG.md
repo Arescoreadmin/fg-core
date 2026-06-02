@@ -12950,3 +12950,28 @@ Added `governance:qa_approve` scope to client fixture — `qa_approve_report_rou
 
 ## Validation
 `GATES_MODE=fast bash codex_gates.sh` passes: ruff lint + format clean, mypy clean, 6347 passed / 36 skipped, pip check clean, secret scan clean, fg-contract clean (authority + connector contracts), PR fix log enforced, dependency audit clean, tester flow validated.
+
+---
+
+## PR 40 — docs: enterprise audit cleanup + ENTERPRISE_PLAN.md
+
+### codex_gates.sh
+Added `docs/ai/**` and `.git/**` to secret scanner exclusion globs. PR fix log and Codex audit documents quote env-var names (e.g. `OPENAI_API_KEY`) as documentation text; git internal files (COMMIT_EDITMSG) echo commit messages that mention exclusion rationale. Neither contains actual credentials.
+
+### AUDIT_TRACKER.md
+Added C5 (audio proxy SSRF), C6 (outbound scanner SSRF), C7 (portal credential model), H11 (drift RLS), H12 (non-durable scan jobs), H13 (audit event atomicity), H14 (console RBAC coarse), H15 (evidence immutability partial), PI17 (GET drift-report mutates), PI18 (UI/API contract drift), PI19 (scheduler registry-only), PI20 (FA/Governance coupling). Updated ROI status: delivery gate ✅, portal permissions 🟡. Updated last-updated note.
+
+### ROADMAP.md
+Added Phase 3 gate table (containment → regulated enterprise), updated last-updated line.
+
+### SYSTEM.md
+Version 1.1 → 1.2; migration count corrected from 33 to 77 (all four occurrences). Section 15 ("What needs to be built next") replaced: stale TODO list removed, pointer to ENTERPRISE_PLAN.md added, Autonomous Governance deferred items listed.
+
+### ENTERPRISE_PLAN.md (new)
+Comprehensive 5-phase enterprise plan: Phase 0 Containment (C5/C6/C7/H11–H15 fixes), Phase 1 Trusted Pilot (outbox pattern, durable jobs, RBAC, portal grants), Phase 2 Enterprise Production (document pipeline, scheduler, retention, assessment health), Phase 3 Moat Layer (evidence graph, verification bundles, reassessment intelligence, sector benchmarks), Phase 4 Regulated Enterprise (SOC 2, FedRAMP, HITRUST). Includes explicit deferral list, architecture decisions, and delivery estimates.
+
+### docs/ai/ (new files)
+Added `FIELD_ASSESSMENT_ENTERPRISE_AUDIT.md` and `FIELD_ASSESSMENT_SCOPED_ENTERPRISE_PLAN.md` — Codex-generated forensic audit and scoped plan used as source material for ENTERPRISE_PLAN.md.
+
+## Validation
+`bash codex_gates.sh` (strict) passes: ruff lint + format clean, mypy clean, 6347 passed / 36 skipped, pip check clean, secret scan clean (docs/ai/** and .git/** excluded), fg-contract clean, PR fix log enforced, dependency audit clean, tester flow validated.

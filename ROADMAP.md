@@ -136,6 +136,23 @@ All Phase 0 tasks are complete (tasks 1.1 – 18.6).
 
 ---
 
+## Phase 3 — Enterprise Ready
+*Detailed delivery plan in `ENTERPRISE_PLAN.md` (authoritative for all Phase 3+ work).*
+
+**Gate:** Controlled pilot → Enterprise production → Regulated enterprise.
+
+Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
+
+| Gate | Key work | Estimate |
+|------|----------|----------|
+| **Phase 0 — Containment** | C5 audio proxy SSRF fix, C6 scanner private-range blocking, C7 portal grant model, H13 audit atomicity, H15 evidence lifecycle locks | Weeks 1–2 |
+| **Phase 1 — Trusted Pilot** | H11 drift RLS, H12 durable job store, H14 console RBAC + actor attribution, PI20 FA/Gov outbox boundary, DB hardening, portal session identity | Weeks 3–6 |
+| **Phase 2 — Enterprise Production** | Governed document pipeline, retention + legal hold, scheduler execution, observability dashboards, assessor assignment workflows, client account identity, OpenAPI → TypeScript codegen | Weeks 7–14 |
+| **Phase 3 — Moat Layer** | Longitudinal evidence graph (across reassessments), regulator-ready verification bundles (signed, replayable), reassessment intelligence (drift, regression, remediation velocity), consent-based sector benchmarks | Months 3–6 |
+| **Phase 4 — Regulated Enterprise** | SOC 2 Type II readiness, FedRAMP preparation, HITRUST, air-gap mode, penetration testing | Months 4–12 |
+
+---
+
 ## How to add a PR to this roadmap
 
 When a PR merges:
@@ -145,4 +162,4 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-06-01 (Sprint 1–3 FA audit hardening complete; all 19 audit findings + 3 competitive differentiators shipped; field assessment module hardened end-to-end)*
+*Last updated: 2026-06-02 (Phase 3 Enterprise plan added — see ENTERPRISE_PLAN.md; Codex forensic audit complete: 15 new test modules, gate fixes, connector contracts; AUDIT_TRACKER updated with C5/C6/C7/H11–H15/PI17–PI20)*
