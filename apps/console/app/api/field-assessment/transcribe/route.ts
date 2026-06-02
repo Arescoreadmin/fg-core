@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
   // Run blob upload + entity extraction concurrently — both can proceed with transcript ready.
   const [blobResult, entitiesResult] = await Promise.allSettled([
     process.env.BLOB_READ_WRITE_TOKEN
-      ? put(blobPath, audioFile, { access: 'public', contentType: audioFile.type || 'audio/webm' })
+      ? put(blobPath, audioFile, { access: 'private', contentType: audioFile.type || 'audio/webm' })
       : Promise.reject(new Error('BLOB_READ_WRITE_TOKEN not configured')),
     extractEntities(openai, transcriptText),
   ]);

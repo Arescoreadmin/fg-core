@@ -96,6 +96,14 @@ function extractAudioUrl(payload: Record<string, unknown>): string | null {
   return null;
 }
 
+// Route blob audio through the auth-gated proxy so private blobs are accessible.
+function toBlobAudioUrl(url: string): string {
+  if (url.includes('.blob.vercel-storage.com')) {
+    return `/api/field-assessment/audio-url?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 function AuditEventModal({ event, onClose }: { event: AuditEvent; onClose: () => void }) {
   const audioUrl = extractAudioUrl(event.payload);
   const jsonText = JSON.stringify(event.payload, null, 2);
@@ -161,9 +169,9 @@ function AuditEventModal({ event, onClose }: { event: AuditEvent; onClose: () =>
         {audioUrl && (
           <div className="px-4 py-3 border-b border-border bg-surface-2 shrink-0 space-y-2">
             <p className="text-xs text-muted font-medium">Recording</p>
-            <audio controls src={audioUrl} className="w-full" />
+            <audio controls src={toBlobAudioUrl(audioUrl)} className="w-full" />
             <a
-              href={audioUrl}
+              href={toBlobAudioUrl(audioUrl)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-primary hover:underline"
@@ -1061,7 +1069,7 @@ export default function EngagementWorkspacePage() {
                                 </p>
                                 <audio
                                   controls
-                                  src={audioUrl}
+                                  src={toBlobAudioUrl(audioUrl)}
                                   className="w-full h-8"
                                   aria-label="Interview recording playback"
                                 />
@@ -1194,7 +1202,7 @@ export default function EngagementWorkspacePage() {
                               )}
                               {audioUrl && (
                                 <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-                                  <audio controls src={audioUrl} className="w-full h-8" />
+                                  <audio controls src={toBlobAudioUrl(audioUrl)} className="w-full h-8" />
                                 </div>
                               )}
                             </div>
