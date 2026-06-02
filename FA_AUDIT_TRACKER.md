@@ -64,3 +64,6 @@ Status: `open` | `in_progress` | `done` | `deferred`
 | 2026-06-01 | — | Control gap matrix: obs-derived, CMMC added, key normalization | 4a616ff0 |
 | 2026-06-01 | — | Blocking gate navigation links | 4a616ff0 |
 | 2026-06-02 | — | Persist + replay interview audio recordings via Vercel Blob | 1e730e43 |
+| 2026-06-01 | Sprint 1 (7 items) | Auth, opaque blobs, scope enforcement, UX quick wins | 30190c6c |
+| 2026-06-01 | Sprint 2 (7 items) | Role validation, audio evidence validation, framework filtering, bulk import, type enum expansion | 4b996e12 |
+| 2026-06-01 | Sprint 3 + DIFF (8 items) | Soft-delete, PATCH, cascade-delete, interview templates, clickable matrix, entity extraction, reg clauses | dc8d1484 |
