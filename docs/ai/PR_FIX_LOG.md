@@ -12975,3 +12975,16 @@ Added `FIELD_ASSESSMENT_ENTERPRISE_AUDIT.md` and `FIELD_ASSESSMENT_SCOPED_ENTERP
 
 ## Validation
 `bash codex_gates.sh` (strict) passes: ruff lint + format clean, mypy clean, 6347 passed / 36 skipped, pip check clean, secret scan clean (docs/ai/** and .git/** excluded), fg-contract clean, PR fix log enforced, dependency audit clean, tester flow validated.
+
+---
+
+## PR 41 — docs: ENTERPRISE_PLAN.md v1.1 + AUDIT_TRACKER.md additions
+
+### ENTERPRISE_PLAN.md
+Revised to v1.1. Phase 0 split into Phase 0A (Revenue-Safe Launch: C5/C6/C7/H13/H15) and Phase 0B (Enterprise Multi-Tenant Safety: H14/H11/H12/PI20). H14 (Console RBAC) and PI20 (FA/Governance decoupling) elevated from Phase 1 to Phase 0B — human actor attribution is foundational for regulated environments; FA/Governance decoupling unlocks revenue diversification. Phase 1 expanded with Evidence Provenance Ledger, Private Interview Vault, Evidence Integrity Score, Assessment Health Dashboard. Phase 2 reframed around Reassessment Cloning, Client Remediation Workspace, Framework Expansion Engine, Assessor Automation. Phase 3 renamed Compounding Moat; M0 Autonomous Trust Fabric added as the foundational moat layer before M1 Longitudinal Evidence Graph. Phase 4 expanded with CMMC and government expansion. Delivery estimates table updated.
+
+### AUDIT_TRACKER.md
+Added M0 Autonomous Trust Fabric (Evidence Confidence Engine: Evidence → Control → Finding → Assessment → Organization confidence hierarchy; operationalizes "Trust but Verify" for machine-trustable reports). Added P1 Evidence Provenance Ledger (collection method, collector, timestamp, content hash, classification, retention policy, chain status, verification status per evidence item). Updated last-updated note.
+
+## Validation
+No source code changed — docs only. `bash codex_gates.sh` (strict) passes unchanged.
