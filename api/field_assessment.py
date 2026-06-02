@@ -1134,6 +1134,7 @@ def transition_engagement_route(
             "readiness_score": execution_state.readiness_score,
         }
 
+    old_status = eng.status
     try:
         eng = transition_engagement(
             db,
@@ -1153,7 +1154,8 @@ def transition_engagement_route(
         )
 
     transition_payload: dict[str, Any] = {
-        "new_status": body.new_status,
+        "before": {"status": old_status},
+        "after": {"status": body.new_status},
         "reason": body.reason,
         **gate_snapshot,
     }
@@ -1758,6 +1760,11 @@ def update_observation_route(
     ).scalar_one_or_none()
     if obs is None:
         raise HTTPException(status_code=404, detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"))
+    before = {
+        "title": obs.title,
+        "description": obs.description,
+        "severity": obs.severity,
+    }
     now = utc_iso8601_z_now()
     if body.title is not None:
         obs.title = body.title
@@ -1777,7 +1784,15 @@ def update_observation_route(
         event_type="observation.updated",
         actor=actor,
         reason_code="OBSERVATION_UPDATED",
-        payload={"observation_id": observation_id},
+        payload={
+            "observation_id": observation_id,
+            "before": before,
+            "after": {
+                "title": obs.title,
+                "description": obs.description,
+                "severity": obs.severity,
+            },
+        },
     )
     db.commit()
     db.refresh(obs)
@@ -1824,7 +1839,15 @@ def delete_observation_route(
         event_type="observation.deleted",
         actor=actor,
         reason_code="OBSERVATION_SOFT_DELETED",
-        payload={"observation_id": observation_id},
+        payload={
+            "observation_id": observation_id,
+            "before": {
+                "title": obs.title,
+                "description": obs.description,
+                "severity": obs.severity,
+                "observation_type": obs.observation_type,
+            },
+        },
     )
     db.commit()
 
@@ -2065,7 +2088,8 @@ def patch_finding_status_route(
         reason_code="client_remediation",
         payload={
             "finding_id": finding_id,
-            "new_status": body.status,
+            "before": {"status": finding.status},
+            "after": {"status": body.status},
             "observation_id": observation.id,
             "questionnaire_controls_updated": controls_updated,
         },
@@ -6376,6 +6400,24 @@ def submit_questionnaire_route(
             detail=api_error("QUESTIONNAIRE_NOT_FOUND", "Questionnaire not found"),
         )
     # Audit against q.engagement_id (verified from DB), not the route path param.
+    responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
+    evidence_map_snap = _build_response_evidence_map(
+        db,
+        engagement_id=q.engagement_id,
+        tenant_id=tenant_id,
+        response_ids=[r.id for r in responses],
+    )
+    response_snapshot = [
+        {
+            "control_id": r.control_id,
+            "category": r.category,
+            "response_status": r.response_status,
+            "has_evidence_text": bool(r.evidence_text),
+            "has_evidence_doc": r.id in evidence_map_snap,
+        }
+        for r in responses
+        if r.response_status != "not_assessed"
+    ]
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,
@@ -6383,17 +6425,16 @@ def submit_questionnaire_route(
         event_type="questionnaire.submitted",
         actor=actor,
         reason_code="QUESTIONNAIRE_SUBMIT",
-        payload={"questionnaire_id": q.id, "framework": q.framework},
+        payload={
+            "questionnaire_id": q.id,
+            "framework": q.framework,
+            "total_controls": len(responses),
+            "assessed_count": len(response_snapshot),
+            "responses": response_snapshot,
+        },
     )
     db.commit()
-    responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
-    evidence_map = _build_response_evidence_map(
-        db,
-        engagement_id=q.engagement_id,
-        tenant_id=tenant_id,
-        response_ids=[r.id for r in responses],
-    )
-    return _questionnaire_to_response(q, responses, evidence_map=evidence_map)
+    return _questionnaire_to_response(q, responses, evidence_map=evidence_map_snap)
 
 
 @router.get(
