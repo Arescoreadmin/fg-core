@@ -4764,6 +4764,7 @@ class CreateEngagementReportRequest(BaseModel):
 
     report_type: str
     include_sections: list[str] | None = None
+    compiled_by: str | None = None
 
 
 class EngagementReportSummary(BaseModel):
@@ -5074,7 +5075,7 @@ def create_engagement_report_route(
             version=version,
             schema_version="1.0",
             report_type=body.report_type,
-            compiled_by=actor,
+            compiled_by=(body.compiled_by.strip() if body.compiled_by and body.compiled_by.strip() else None) or actor,
             manifest_hash=manifest_hash,
             report_json=report_json,
             section_hashes=section_hashes,

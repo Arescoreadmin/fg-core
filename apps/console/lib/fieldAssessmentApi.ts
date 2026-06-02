@@ -419,6 +419,7 @@ export interface ReportVerifyResult {
 export interface GenerateReportPayload {
   report_type: ReportType;
   include_sections?: string[];
+  compiled_by?: string;
 }
 
 export interface GenerateReportResponse {

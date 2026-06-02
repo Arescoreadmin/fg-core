@@ -204,7 +204,7 @@ function FindingRow({
   );
 }
 
-function EvidenceRefRow({ ref: ev }: { ref: Record<string, unknown> }) {
+function EvidenceRefRow({ ev }: { ev: Record<string, unknown> }) {
   const id = safeStr(ev.evidence_id) || safeStr(ev.id);
   const source = safeStr(ev.source);
   const classification = safeStr(ev.classification);
@@ -390,7 +390,7 @@ export function ReportViewer({ document: doc, loading, error, engagementId, onSh
           <SectionAccordion title={`Evidence Lineage (${evidenceAppendix.length})`}>
             <div className="space-y-1.5">
               {evidenceAppendix.map((ev, i) => (
-                <EvidenceRefRow key={i} ref={safeObj(ev)} />
+                <EvidenceRefRow key={i} ev={safeObj(ev)} />
               ))}
             </div>
           </SectionAccordion>

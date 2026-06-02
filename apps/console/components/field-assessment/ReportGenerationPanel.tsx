@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@fg/ui';
+import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import {
   fieldAssessmentApi,
@@ -37,6 +37,7 @@ interface Props {
 
 export function ReportGenerationPanel({ engagementId, onGenerated }: Props) {
   const [reportType, setReportType] = useState<ReportType>('full_assessment');
+  const [compiledBy, setCompiledBy] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successVersion, setSuccessVersion] = useState<number | null>(null);
@@ -51,7 +52,10 @@ export function ReportGenerationPanel({ engagementId, onGenerated }: Props) {
     setError(null);
     setSuccessVersion(null);
     try {
-      const result = await fieldAssessmentApi.generateReport(engagementId, { report_type: reportType });
+      const result = await fieldAssessmentApi.generateReport(engagementId, {
+        report_type: reportType,
+        ...(compiledBy.trim() ? { compiled_by: compiledBy.trim() } : {}),
+      });
 
       if (result.status !== 'generating') {
         if (mountedRef.current) {
@@ -94,6 +98,19 @@ export function ReportGenerationPanel({ engagementId, onGenerated }: Props) {
 
   return (
     <div className="space-y-4" aria-label="report-generation-panel">
+      <div className="space-y-1">
+        <Label htmlFor="compiled-by-input" className="text-xs">Compiled by</Label>
+        <Input
+          id="compiled-by-input"
+          placeholder="Your name — e.g. Jane Smith, Senior Assessor"
+          value={compiledBy}
+          onChange={(e) => setCompiledBy(e.target.value)}
+          disabled={submitting}
+          className="text-xs h-8"
+        />
+        <p className="text-[11px] text-muted">Who is compiling this report? Recorded on the report cover. Defaults to your account login if left blank.</p>
+      </div>
+
       <div className="space-y-1">
         <Label htmlFor="report-type-select" className="text-xs">Report Type</Label>
         <Select
