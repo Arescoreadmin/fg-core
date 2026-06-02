@@ -20,6 +20,10 @@ const ASSESSMENT_TYPES: { value: AssessmentType; label: string }[] = [
   { value: 'hipaa', label: 'HIPAA' },
   { value: 'soc2', label: 'SOC 2' },
   { value: 'iso27001', label: 'ISO 27001' },
+  { value: 'pci_dss', label: 'PCI DSS' },
+  { value: 'dora', label: 'DORA' },
+  { value: 'fedramp', label: 'FedRAMP' },
+  { value: 'nist_800_171', label: 'NIST 800-171' },
   { value: 'comprehensive', label: 'Comprehensive' },
 ];
 

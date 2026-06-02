@@ -30,7 +30,7 @@ from fastapi import (
     Response,
     status,
 )
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -283,6 +283,22 @@ class CaptureObservationRequest(BaseModel):
     interview_role: str | None = None
     structured_evidence: dict[str, Any] = Field(default_factory=dict)
     linked_finding_ids: list[Any] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_audio_evidence(self) -> "CaptureObservationRequest":
+        ev = self.structured_evidence
+        url = ev.get("_audio_url")
+        if url is not None:
+            if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+                raise ValueError("_audio_url must be an http(s) URL string")
+        for key in ("_audio_duration_sec", "_audio_size_kb"):
+            val = ev.get(key)
+            if val is not None and not isinstance(val, (int, float)):
+                raise ValueError(f"{key} must be a number")
+        audio_hash = ev.get("_audio_hash")
+        if audio_hash is not None and not isinstance(audio_hash, str):
+            raise ValueError("_audio_hash must be a string")
+        return self
 
 
 class CreateEvidenceLinkRequest(BaseModel):
@@ -1476,6 +1492,17 @@ def capture_observation_route(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+    if body.interview_role:
+        _playbook = get_playbook(eng.assessment_type)
+        if body.interview_role not in _playbook.required_interview_roles:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error(
+                    "INVALID_INTERVIEW_ROLE",
+                    f"'{body.interview_role}' is not a valid role for this playbook. "
+                    f"Valid roles: {list(_playbook.required_interview_roles)}",
+                ),
+            )
     observation = create_observation(
         db,
         tenant_id=tenant_id,
@@ -1506,6 +1533,90 @@ def capture_observation_route(
     db.commit()
     db.refresh(observation)
     return _observation_to_response(observation)
+
+
+class BulkObservationImportResult(BaseModel):
+    created: int
+    skipped: int
+    errors: list[str]
+    observation_ids: list[str]
+
+
+@router.post(
+    "/engagements/{engagement_id}/observations/bulk",
+    response_model=BulkObservationImportResult,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def bulk_import_observations_route(
+    engagement_id: str,
+    request: Request,
+    body: list[CaptureObservationRequest],
+    db: Session = Depends(auth_ctx_db_session),
+) -> BulkObservationImportResult:
+    """Import multiple observations in a single call. Processes each row independently —
+    invalid rows are collected in errors and skipped; valid rows are committed atomically."""
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    if not body:
+        raise HTTPException(status_code=400, detail=api_error("EMPTY_IMPORT", "No observations provided"))
+    if len(body) > 200:
+        raise HTTPException(status_code=400, detail=api_error("IMPORT_TOO_LARGE", "Maximum 200 observations per import"))
+
+    _playbook = get_playbook(eng.assessment_type)
+    created_ids: list[str] = []
+    errors: list[str] = []
+    skipped = 0
+
+    for idx, row in enumerate(body):
+        try:
+            if row.interview_role and row.interview_role not in _playbook.required_interview_roles:
+                errors.append(f"Row {idx}: invalid interview_role '{row.interview_role}'")
+                skipped += 1
+                continue
+            obs = create_observation(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                domain=row.domain.value,
+                observation_type=row.observation_type.value,
+                severity=row.severity.value,
+                title=row.title,
+                description=row.description,
+                interview_role=row.interview_role,
+                structured_evidence=row.structured_evidence,
+                linked_finding_ids=row.linked_finding_ids,
+                assessor_id=eng.assessor_id,
+            )
+            created_ids.append(obs.id)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Row {idx}: {exc}")
+            skipped += 1
+
+    if created_ids:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="observation.bulk_imported",
+            actor=actor,
+            reason_code="BULK_OBSERVATION_IMPORT",
+            payload={"count": len(created_ids), "skipped": skipped},
+        )
+        db.commit()
+
+    return BulkObservationImportResult(
+        created=len(created_ids),
+        skipped=skipped,
+        errors=errors,
+        observation_ids=created_ids,
+    )
 
 
 @router.get(
@@ -4942,11 +5053,27 @@ def _build_engagement_report_json(
             "training": "ai_maturity",
         }
 
+        # Frameworks relevant to each assessment type — None means all frameworks shown
+        _ASSESSMENT_FRAMEWORK_ALLOW: dict[str, set[str] | None] = {
+            "ai_governance": {"NIST-AI-RMF", "SOC2", "ISO-27001"},
+            "hipaa": {"HIPAA", "NIST-AI-RMF", "SOC2"},
+            "soc2": {"SOC2", "NIST-AI-RMF", "ISO-27001"},
+            "cmmc": {"CMMC", "NIST-AI-RMF"},
+            "iso27001": {"ISO-27001", "SOC2", "NIST-AI-RMF"},
+            "pci_dss": {"SOC2", "NIST-AI-RMF", "ISO-27001"},
+            "dora": {"ISO-27001", "NIST-AI-RMF"},
+            "fedramp": {"NIST-AI-RMF", "CMMC"},
+            "nist_800_171": {"NIST-AI-RMF", "CMMC"},
+            "comprehensive": None,
+        }
+        _allowed_fws: set[str] | None = _ASSESSMENT_FRAMEWORK_ALLOW.get(eng.assessment_type)
+
         fw_summary: dict[str, set[str]] = {}
 
         def _add_fw_refs(fw: str, ctrl: str) -> None:
-            # Normalize underscore-keyed framework names to hyphenated form for UI
             fw_key = fw.replace("_", "-")
+            if _allowed_fws is not None and fw_key not in _allowed_fws:
+                return
             fw_summary.setdefault(fw_key, set()).add(ctrl)
 
         # 1. Derive from field observations (manual assessment) — gap/finding types
@@ -4958,7 +5085,10 @@ def _build_engagement_report_json(
             )
         ).scalars().all()
         for obs in obs_rows:
-            fw_domain = _OBS_DOMAIN_MAP.get(obs.domain, obs.domain)
+            fw_domain = _OBS_DOMAIN_MAP.get(obs.domain)
+            if fw_domain is None:
+                log.warning("Observation domain '%s' has no framework mapping — skipping", obs.domain)
+                continue
             for fm in _get_fw_maps(control_id=fw_domain, domain=fw_domain):
                 _add_fw_refs(fm.framework, fm.control_ref)
 

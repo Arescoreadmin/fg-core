@@ -21,6 +21,10 @@ class AssessmentType(str, Enum):
     HIPAA = "hipaa"
     SOC2 = "soc2"
     ISO27001 = "iso27001"
+    PCI_DSS = "pci_dss"
+    DORA = "dora"
+    FEDRAMP = "fedramp"
+    NIST_800_171 = "nist_800_171"
     COMPREHENSIVE = "comprehensive"
 
 

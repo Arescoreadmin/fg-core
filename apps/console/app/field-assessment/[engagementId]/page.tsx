@@ -27,6 +27,7 @@ import { FindingPreviewPanel } from '@/components/field-assessment/FindingPrevie
 import { EngagementSummaryPanel } from '@/components/field-assessment/EngagementSummaryPanel';
 import { ReportGenerationPanel } from '@/components/field-assessment/ReportGenerationPanel';
 import { ReportVersionHistory } from '@/components/field-assessment/ReportVersionHistory';
+import { BulkObservationImport } from '@/components/field-assessment/BulkObservationImport';
 import { ReportViewer } from '@/components/field-assessment/ReportViewer';
 import { ReportExportBar } from '@/components/field-assessment/ReportExportBar';
 import { ControlGapMatrix } from '@/components/field-assessment/ControlGapMatrix';
@@ -702,6 +703,10 @@ export default function EngagementWorkspacePage() {
                         loadExecutionState();
                       }}
                     />
+                    <BulkObservationImport
+                      engagementId={engagementId}
+                      onImported={() => { loadCollections(); loadSummary(); loadExecutionState(); }}
+                    />
                   </CardContent>
                 </Card>
                 {observations.filter((o) => o.observation_type !== 'interview').length > 0 && (
@@ -994,7 +999,7 @@ export default function EngagementWorkspacePage() {
                     refreshKey={reportsRefreshKey}
                     selectedVersion={selectedReportVersion}
                     onSelectVersion={setSelectedReportVersion}
-                    onQaApproved={() => { loadSummary(); loadExecutionState(); }}
+                    onQaApproved={() => { loadEngagement(); loadSummary(); loadExecutionState(); }}
                   />
 
                   {selectedReportVersion !== null && (

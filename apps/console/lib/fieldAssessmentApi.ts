@@ -31,6 +31,10 @@ export type AssessmentType =
   | 'hipaa'
   | 'soc2'
   | 'iso27001'
+  | 'pci_dss'
+  | 'dora'
+  | 'fedramp'
+  | 'nist_800_171'
   | 'comprehensive';
 
 export type ScanSourceType =
@@ -721,6 +725,13 @@ export const fieldAssessmentApi = {
     return request(`/engagements/${engagementId}/observations`, {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+
+  bulkImportObservations(engagementId: string, rows: CaptureObservationPayload[]): Promise<{ created: number; skipped: number; errors: string[]; observation_ids: string[] }> {
+    return request(`/engagements/${engagementId}/observations/bulk`, {
+      method: 'POST',
+      body: JSON.stringify(rows),
     });
   },
 
