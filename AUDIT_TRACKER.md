@@ -22,7 +22,7 @@ Nothing in this file can be closed without a PR reference and explicit review.
 
 | # | Finding | Location | Status | PR |
 |---|---------|----------|--------|----|
-| H5 | **Audit events not immutable** — `fa_engagement_audit_events` claims append-only semantics in code but no Postgres trigger enforces it; table absent from RLS startup assertion. | `api/db_models_field_assessment.py:12` | 🔴 Open | — |
+| H5 | **Audit events not immutable** — `fa_engagement_audit_events` claims append-only semantics in code but no Postgres trigger enforces it; table absent from RLS startup assertion. | `api/db_models_field_assessment.py:12` | ✅ Fixed | — |
 | H6 | **Audio uploaded as public blob, sent to hardcoded OpenAI** — sensitive regulated-industry recordings bypass platform provider-governance path. | `apps/console/app/api/field-assessment/transcribe/route.ts:109,128` | 🔴 Open | — |
 | H7 | **`evidence_doc_id` accepts arbitrary values** — `patch_questionnaire_response` does not verify the document belongs to the same engagement/tenant. Stale `finding → document_analysis` auto-links not cleaned when response status drops. | `api/field_assessment.py:6274` | ✅ Fixed | — |
 | H8 | **Observation delete leaves dangling evidence links** — cascade removes source links but not target links (common remediation path). Source link delete also missing `engagement_id` predicate. | `api/field_assessment.py:1827` | ✅ Fixed | — |
@@ -86,4 +86,4 @@ Nothing in this file can be closed without a PR reference and explicit review.
 
 ---
 
-*Last updated: 2026-06-02 — H7, H8, PI14 fixed; C4 fixed (PortalClientScopeMiddleware); C1 fixed (QA gate enforcement + promote_engagement_to_governance on auto-advance); C2 fixed (create_all before apply_migrations + IF NOT EXISTS guards on 0073/0074); C3 fixed (migration 0075 — RLS + FORCE + tenant_isolation policy on all 11 FA/governance tables; assert_tenant_rls coverage extended); 8 items remain open.*
+*Last updated: 2026-06-02 — H7, H8, PI14 fixed; C4 fixed (PortalClientScopeMiddleware); C1 fixed (QA gate enforcement + promote_engagement_to_governance on auto-advance); C2 fixed (create_all before apply_migrations + IF NOT EXISTS guards on 0073/0074); C3 fixed (migration 0075 — RLS + FORCE + tenant_isolation policy on all 11 FA/governance tables; assert_tenant_rls coverage extended); H5 fixed (migration 0076 — BEFORE UPDATE/DELETE triggers on fa_engagement_audit_events; assert_append_only_triggers coverage extended); 7 items remain open.*

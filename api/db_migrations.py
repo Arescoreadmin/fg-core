@@ -115,6 +115,7 @@ def assert_append_only_triggers(engine: Engine) -> None:
         "compliance_snapshots",
         "audit_exam_sessions",
         "compliance_requirement_updates",
+        "fa_engagement_audit_events",
     }
     with engine.begin() as conn:
         rows = conn.exec_driver_sql(

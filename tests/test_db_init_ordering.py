@@ -1,4 +1,4 @@
-"""tests/test_db_init_ordering.py — C2 + C3 regression guards.
+"""tests/test_db_init_ordering.py — C2 + C3 + H5 regression guards.
 
 Verifies that:
   1. init_db() on Postgres calls create_all() BEFORE apply_migrations() so that
@@ -8,6 +8,8 @@ Verifies that:
   3. No other migration ADD COLUMNs without IF NOT EXISTS target FA tables.
   4. Migration 0075 enables RLS + FORCE on all FA and governance tables (C3).
   5. assert_tenant_rls() expected_tables covers all FA and governance tables (C3).
+  6. Migration 0076 adds append-only triggers on fa_engagement_audit_events (H5).
+  7. assert_append_only_triggers() expected_tables includes fa_engagement_audit_events (H5).
 """
 from __future__ import annotations
 
@@ -131,6 +133,46 @@ class TestFaRls:
         missing = [t for t in _FA_RLS_TABLES if t not in source]
         assert not missing, (
             f"assert_tenant_rls() is missing FA tables: {missing}"
+        )
+
+
+class TestFaAuditEventsAppendOnly:
+    """H5 structural guards — fa_engagement_audit_events append-only enforcement."""
+
+    def test_0076_creates_update_trigger(self) -> None:
+        """Migration 0076 must create the append-only UPDATE trigger."""
+        sql = _migration_sql("0076_fa_audit_events_append_only.sql")
+        assert "fa_engagement_audit_events_append_only_update" in sql, (
+            "0076 must create fa_engagement_audit_events_append_only_update trigger"
+        )
+        assert "BEFORE UPDATE" in sql.upper(), (
+            "0076 update trigger must fire BEFORE UPDATE"
+        )
+
+    def test_0076_creates_delete_trigger(self) -> None:
+        """Migration 0076 must create the append-only DELETE trigger."""
+        sql = _migration_sql("0076_fa_audit_events_append_only.sql")
+        assert "fa_engagement_audit_events_append_only_delete" in sql, (
+            "0076 must create fa_engagement_audit_events_append_only_delete trigger"
+        )
+        assert "BEFORE DELETE" in sql.upper(), (
+            "0076 delete trigger must fire BEFORE DELETE"
+        )
+
+    def test_0076_uses_append_only_guard(self) -> None:
+        """Migration 0076 must wire triggers to the shared append_only_guard() function."""
+        sql = _migration_sql("0076_fa_audit_events_append_only.sql")
+        assert "append_only_guard" in sql, (
+            "0076 triggers must use append_only_guard()"
+        )
+
+    def test_assert_append_only_triggers_covers_fa_audit_events(self) -> None:
+        """assert_append_only_triggers() must include fa_engagement_audit_events."""
+        from api.db_migrations import assert_append_only_triggers
+
+        source = inspect.getsource(assert_append_only_triggers)
+        assert "fa_engagement_audit_events" in source, (
+            "assert_append_only_triggers() must include fa_engagement_audit_events"
         )
 
 
