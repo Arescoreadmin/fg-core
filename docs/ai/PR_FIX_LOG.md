@@ -13278,3 +13278,58 @@ Two related bugs under H13:
 ## Tests (33 tests)
 
 33 tests in `tests/test_h13_audit_atomicity.py` across 12 security layers. 2 tests skipped when no scan findings are available (scan-dependent paths). Rollback injection tests use `raise_server_exceptions=False` client.
+
+---
+
+### 2026-06-03 — PR fix 47: H13.5 Audit Coverage Enforcement Framework
+
+**Finding:** H13 closed the split-commit bug and added audit to 5 missing paths, but there was no CI gate
+preventing a future developer from adding a new mutation route without an audit call. Any new
+`@router.post/put/patch/delete` handler that omits `emit_engagement_audit_event` or
+`audit_atomicity_svc.emit` would silently bypass the entire audit atomicity system.
+
+**Root cause:** No automated enforcement — audit coverage was a convention, not a verified invariant.
+
+**Fix:** `AuditCoverageValidator` — mandatory `make audit-coverage-check` gate in `fg-fast`:
+- AST scan of `api/field_assessment.py` + `api/portal.py` discovers all mutation routes
+- For each route: checks function body (recursively via `ast.walk`) for audit calls
+- Unaudited routes must appear in `tools/ci/audit_exceptions.yaml` with all required fields and a non-expired `expiration_date`
+- Exit 0 = pass, 1 = violation, 2 = config error
+- Generates `artifacts/audit_coverage_report.json` with per-route breakdown and `coverage_pct`
+
+**Bootstrap exceptions:** 14 currently-unaudited routes registered in `audit_exceptions.yaml`:
+- 12 in `api/field_assessment.py`: async scan launchers (7), promote_connector_run_assets, create_connector_schedule, promote_engagement_route, verify_engagement_report_route, patch_questionnaire_response
+- 2 in `api/portal.py`: portal_authenticate, portal_revoke_session
+- All exceptions expire 2026-09-01; `approval_reference: H13.5-bootstrap`; no permanent exceptions allowed
+
+**Result at ship time:** 38 mutation routes total — 24 directly audited + 14 excepted = 100% coverage, 0 violations.
+
+### Modified files
+- `tools/ci/check_audit_coverage.py` — NEW: AST validator (exit 0/1/2)
+- `tools/ci/audit_exceptions.yaml` — NEW: 14-entry bootstrap exceptions registry
+- `tests/security/test_audit_coverage_gate.py` — NEW: 25-test security suite
+- `Makefile` — `audit-coverage-check` target added; integrated into `fg-fast`
+- `artifacts/platform_inventory.det.json` — `audit_coverage` section + `audit_atomicity_coverage_enforced: true`
+- `AUDIT_TRACKER.md` — v1.5 update
+- `ROADMAP.md` — Phase 0A H13.5 row added
+
+## 9 mandatory security layers (H13.5)
+
+- **L1** Route auto-discovery — AST scans all `@router.post/put/patch/delete` handlers; no manual registration required
+- **L2** Audit call detection — `ast.walk` recursively checks entire function body, including nested blocks
+- **L3** Exceptions registry — YAML file; missing registry exits with code 2 (config error, blocks CI)
+- **L4** Required fields enforcement — all 7 fields mandatory; missing fields are config errors
+- **L5** Expiration enforcement — `expiration_date < today` fails with exit code 1 (same as violation)
+- **L6** No permanent exceptions — all entries must have `expiration_date`; registry design prevents indefinite bypass
+- **L7** Coverage report artifact — `artifacts/audit_coverage_report.json` written every run; coverage_pct tracked
+- **L8** Platform inventory integration — `audit_atomicity_coverage_enforced: true` in governance manifest
+- **L9** fg-fast integration — `audit-coverage-check` is a dependency of `fg-fast`; blocks all merges
+
+## Tests (25 tests)
+
+25 tests in `tests/security/test_audit_coverage_gate.py`:
+- `TestRouteDiscovery` (3): AST finds POST/PATCH/DELETE; ignores GET
+- `TestAuditCallDetection` (5): direct call, svc.emit, no call, nested block, string mention (false-positive guard)
+- `TestExceptionsRegistry` (5): valid load, expired flag, missing field → exit 2, invalid date → exit 2, missing file → exit 2, malformed YAML → exit 2
+- `TestGateBehaviour` (8): audited passes, unaudited fails, valid exception passes, expired fails, invalid config → 2, svc.emit counts, mixed counts correct, GET-only ignored
+- `TestRealCodebaseGate` (3): real repo gate passes, report written, coverage_pct == 100.0

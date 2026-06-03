@@ -324,7 +324,8 @@
     "rls_sensitive_tables_present": true,
     "route_inventory_enforced": true,
     "self_heal_bounded_off_by_default": true,
-    "tenant_binding_coverage": false
+    "tenant_binding_coverage": false,
+    "audit_atomicity_coverage_enforced": true
   },
   "routes_by_plane": {
     "agent": [
@@ -872,5 +873,18 @@
       "POST /workforce/users",
       "POST /workforce/users/accept-invite"
     ]
+  },
+  "audit_coverage": {
+    "validator": "tools/ci/check_audit_coverage.py",
+    "exceptions_registry": "tools/ci/audit_exceptions.yaml",
+    "report": "artifacts/audit_coverage_report.json",
+    "ci_gate": "make audit-coverage-check",
+    "total_mutation_routes": 38,
+    "audited_direct": 24,
+    "excepted": 14,
+    "violations": 0,
+    "coverage_pct": 100.0,
+    "schema_version": "H13.5",
+    "last_updated": "2026-06-03"
   }
 }

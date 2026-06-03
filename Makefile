@@ -395,7 +395,7 @@ dos-hardening-check: _require-venv
 .PHONY: gap-audit release-gate generate-scorecard \
 	prod-unsafe-config-check security-regression-gates soc-invariants enforcement-mode-matrix \
 	route-inventory-audit route-inventory-generate test-quality-gate soc-review-sync pr-base-mainline-check \
-	rebase-main-instructions audit-chain-verify compliance-chain-verify canonicalization-guard \
+	rebase-main-instructions audit-chain-verify audit-coverage-check compliance-chain-verify canonicalization-guard \
 	check-connectors-rls check_plane_registry check_plane_registry_runtime_app check-decision-roe \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
@@ -536,6 +536,9 @@ rebase-main-instructions:
 
 audit-chain-verify: venv
 	@$(PY) scripts/verify_audit_chain.py
+
+audit-coverage-check: venv
+	@PYTHONPATH=. $(PY) tools/ci/check_audit_coverage.py
 
 compliance-chain-verify: venv
 	@$(PY) scripts/verify_compliance_chain.py
@@ -719,7 +722,7 @@ connectors-gate: venv _require-pytest-venv
 fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	prod-unsafe-config-check safe-telemetry-check security-regression-gates soc-invariants soc-manifest-verify \
 	route-inventory-audit check-decision-roe test-quality-gate soc-review-sync pr-base-mainline-check \
-	audit-chain-verify dos-hardening-check sql-migration-percent-guard gap-audit check-connectors-rls \
+	audit-chain-verify audit-coverage-check dos-hardening-check sql-migration-percent-guard gap-audit check-connectors-rls \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \

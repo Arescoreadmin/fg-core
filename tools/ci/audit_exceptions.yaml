@@ -1,0 +1,165 @@
+# H13.5 Audit Coverage Exception Registry
+#
+# Every mutation route that lacks a direct audit call (emit_engagement_audit_event /
+# audit_atomicity_svc.emit) must appear here with a non-expired expiration_date.
+#
+# Required fields per entry:
+#   id               — unique exception identifier (e.g. EXC-FA-001)
+#   function_name    — exact Python function name
+#   file             — repo-relative path (e.g. api/field_assessment.py)
+#   reason           — why the route is currently unaudited
+#   owner            — team/person accountable for remediation
+#   expiration_date  — YYYY-MM-DD; exception auto-fails after this date
+#   approval_reference — PR or ticket that approved the exception
+#
+# NO permanent exceptions are allowed. All entries must have an expiration_date.
+# When a route is remediated, remove its entry here and add the audit call.
+
+exceptions:
+  - id: EXC-FA-001
+    function_name: initiate_msgraph_scan
+    file: api/field_assessment.py
+    reason: >
+      Connector scan launcher; fires an async job and returns a run_id. Audit
+      coverage deferred to H13.5-remediation because the async job result path
+      is the semantically meaningful mutation and requires a different audit
+      pattern (job-completion hook). Interim: scan job IDs are logged in the
+      connector runs table which itself has audit coverage.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-002
+    function_name: initiate_oauth_inventory_scan
+    file: api/field_assessment.py
+    reason: >
+      Same async-launcher pattern as EXC-FA-001. Audit to be added alongside
+      connector-run completion hooks in a follow-on PR.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-003
+    function_name: initiate_endpoint_inventory_scan
+    file: api/field_assessment.py
+    reason: >
+      Same async-launcher pattern as EXC-FA-001.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-004
+    function_name: initiate_dns_email_scan
+    file: api/field_assessment.py
+    reason: >
+      Same async-launcher pattern as EXC-FA-001.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-005
+    function_name: initiate_entra_governance_scan
+    file: api/field_assessment.py
+    reason: >
+      Same async-launcher pattern as EXC-FA-001.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-006
+    function_name: initiate_sharepoint_scan
+    file: api/field_assessment.py
+    reason: >
+      Same async-launcher pattern as EXC-FA-001.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-007
+    function_name: initiate_oauth_risk_scan
+    file: api/field_assessment.py
+    reason: >
+      Same async-launcher pattern as EXC-FA-001.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-008
+    function_name: promote_connector_run_assets
+    file: api/field_assessment.py
+    reason: >
+      Asset promotion from a completed connector run. The run itself is already
+      captured in the connector audit trail; direct engagement-level audit for
+      this path is a P2 item pending connector-audit unification.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-009
+    function_name: create_connector_schedule
+    file: api/field_assessment.py
+    reason: >
+      Schedule configuration write; low-risk control-plane operation with no
+      direct impact on assessment findings or evidence. Audit to be added as
+      part of connector-plane governance hardening.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-010
+    function_name: promote_engagement_route
+    file: api/field_assessment.py
+    reason: >
+      Engagement promotion path; transitions engagement to production-ready
+      state. Audit deliberately deferred until the engagement state-machine
+      audit approach (H14) is finalised to avoid two conflicting patterns.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-011
+    function_name: verify_engagement_report_route
+    file: api/field_assessment.py
+    reason: >
+      Report verification endpoint; marks a report as QA-verified. Audit
+      deferred pending report lifecycle audit consolidation with qa_approve
+      pattern (which is audited). Both paths will share an audit wrapper in
+      the next report-lifecycle hardening sprint.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-FA-012
+    function_name: patch_questionnaire_response
+    file: api/field_assessment.py
+    reason: >
+      Questionnaire response patching; high-frequency incremental write
+      (partial answer saves). Current auditing approach for questionnaires
+      is to audit the submit action (which is audited). Per-patch audit would
+      generate excessive noise; a batched audit strategy is planned for H14.
+    owner: field-assessment-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-PORTAL-001
+    function_name: portal_authenticate
+    file: api/portal.py
+    reason: >
+      Portal authentication endpoint; uses a dedicated auth token flow that
+      predates the AuditAtomicityService. Auth events are captured by the
+      portal session model. Direct audit integration requires portal-auth
+      refactor planned for H14.
+    owner: portal-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
+
+  - id: EXC-PORTAL-002
+    function_name: portal_revoke_session
+    file: api/portal.py
+    reason: >
+      Portal session revocation; same auth-layer reasoning as EXC-PORTAL-001.
+      Session termination is recorded in the portal session table. Audit
+      consolidation planned alongside portal-auth refactor.
+    owner: portal-team
+    expiration_date: "2026-09-01"
+    approval_reference: H13.5-bootstrap
