@@ -21,11 +21,39 @@ const STATUS_LABEL: Record<string, string> = {
   tamper_detected: 'Tamper Detected',
 };
 
+const COVERAGE_CLASS: Record<string, string> = {
+  complete: 'border-green-500/20 bg-green-500/5 text-green-300',
+  partial: 'border-amber-500/20 bg-amber-500/5 text-amber-200',
+  missing_report: 'border-amber-500/20 bg-amber-500/5 text-amber-200',
+  missing_evidence: 'border-amber-500/20 bg-amber-500/5 text-amber-200',
+  missing_decisions: 'border-amber-500/20 bg-amber-500/5 text-amber-200',
+  tampered: 'border-red-500/20 bg-red-500/5 text-red-300',
+};
+
+const COVERAGE_LABEL: Record<string, string> = {
+  complete: 'Coverage: Complete',
+  partial: 'Coverage: Partial',
+  missing_report: 'Coverage: Missing Report',
+  missing_evidence: 'Coverage: Missing Evidence',
+  missing_decisions: 'Coverage: Missing Decisions',
+  tampered: 'Coverage: Tampered',
+};
+
 function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_CLASS[status] ?? 'border-border bg-surface-3 text-muted';
   const label = STATUS_LABEL[status] ?? status;
   return (
     <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs border font-medium ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+function CoverageBadge({ status }: { status: string }) {
+  const cls = COVERAGE_CLASS[status] ?? 'border-border bg-surface-3 text-muted';
+  const label = COVERAGE_LABEL[status] ?? `Coverage: ${status}`;
+  return (
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs border ${cls}`}>
       {label}
     </span>
   );
@@ -47,6 +75,7 @@ export function VerificationBundlePanel({ engagementId }: Props) {
   const [bundle, setBundle] = useState<VerificationBundle | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadBundle = useCallback(async () => {
@@ -79,6 +108,23 @@ export function VerificationBundlePanel({ engagementId }: Props) {
     }
   }
 
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      const blob = await fieldAssessmentApi.downloadVerificationBundle(engagementId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `verification_bundle_${engagementId.slice(0, 12)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Download failed. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <Card className="border-border" aria-label="verification-bundle-panel">
       <CardHeader className="pb-2 pt-4 px-4">
@@ -86,17 +132,29 @@ export function VerificationBundlePanel({ engagementId }: Props) {
           <div>
             <CardTitle className="text-sm">Verification Bundle</CardTitle>
             <p className="text-xs text-muted mt-0.5">
-              SHA-256 hashed snapshot of all 9 engagement components for auditor verification
+              Regulatory-grade SHA-256 hashed snapshot of all engagement components
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={generating}
-            className="shrink-0 rounded border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-3 disabled:opacity-50 transition-colors"
-          >
-            {generating ? 'Generating…' : 'Generate Bundle'}
-          </button>
+          <div className="flex gap-2 shrink-0">
+            {bundle && (
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={downloading}
+                className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-3 disabled:opacity-50 transition-colors"
+              >
+                {downloading ? 'Preparing…' : 'Download ZIP'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generating}
+              className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-3 disabled:opacity-50 transition-colors"
+            >
+              {generating ? 'Generating…' : 'Generate Bundle'}
+            </button>
+          </div>
         </div>
       </CardHeader>
 
@@ -123,10 +181,13 @@ export function VerificationBundlePanel({ engagementId }: Props) {
 
         {bundle && (
           <div className="space-y-3">
-            {/* Status + hashes */}
+            {/* Status + coverage badges */}
             <div className="rounded border border-border bg-surface-2 p-3 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={bundle.verification_status} />
+                {bundle.coverage_status && (
+                  <CoverageBadge status={bundle.coverage_status} />
+                )}
                 <span className="text-xs text-muted">
                   Generated {new Date(bundle.generated_at).toLocaleString()} by{' '}
                   <span className="font-mono text-foreground">{bundle.generated_by}</span>
@@ -139,10 +200,16 @@ export function VerificationBundlePanel({ engagementId }: Props) {
                 <dd className="font-mono text-foreground truncate">{bundle.bundle_hash}</dd>
                 <dt className="text-muted">Manifest Hash</dt>
                 <dd className="font-mono text-foreground truncate">{bundle.manifest_hash}</dd>
+                {bundle.report_artifact_hash && (
+                  <>
+                    <dt className="text-muted">Report Artifact Hash</dt>
+                    <dd className="font-mono text-foreground truncate">{bundle.report_artifact_hash}</dd>
+                  </>
+                )}
               </dl>
             </div>
 
-            {/* Component summary */}
+            {/* Component counts */}
             <div className="space-y-1">
               <p className="text-xs font-medium text-foreground">Components</p>
               <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
@@ -153,7 +220,9 @@ export function VerificationBundlePanel({ engagementId }: Props) {
                   { label: 'Decisions', value: bundle.decision_count },
                   { label: 'Risk Accepts.', value: bundle.risk_acceptance_count },
                   { label: 'Exceptions', value: bundle.exception_count },
-                  { label: 'Audit Events', value: bundle.audit_event_count },
+                  { label: 'Scan Audit', value: bundle.audit_event_count },
+                  { label: 'Eng. Audit', value: bundle.engagement_audit_event_count ?? 0 },
+                  { label: 'Custody', value: bundle.chain_of_custody_count ?? 0 },
                   { label: 'Report', value: bundle.has_report ? 1 : 0 },
                 ].map(({ label, value }) => (
                   <div key={label} className="rounded border border-border bg-surface-2 px-2.5 py-2">
@@ -186,7 +255,7 @@ export function VerificationBundlePanel({ engagementId }: Props) {
               <div className="mt-2 space-y-1">
                 {bundle.component_summary.map((c) => (
                   <div key={c.name} className="flex gap-3 items-baseline">
-                    <span className="w-28 shrink-0 capitalize text-muted">{c.name.replace(/_/g, ' ')}</span>
+                    <span className="w-36 shrink-0 text-muted">{c.name.replace(/_/g, ' ')}</span>
                     <span className="text-muted mr-2">{c.count}</span>
                     <span className="font-mono text-foreground truncate">{c.hash}</span>
                   </div>

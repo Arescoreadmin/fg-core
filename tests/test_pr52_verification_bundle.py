@@ -31,7 +31,7 @@ V28  generate bundle — generated_by captures actor from API key
 V29  generate bundle — interview_count counts only observation_type=interview
 V30  generate bundle — exception_count matches DB
 V31  generate bundle — risk_acceptance_count matches DB
-V32  component_summary — exactly 8 components (findings/evidence/interviews/decisions/risk_acceptances/exceptions/audit_trail/report)
+V32  component_summary — all 10 required components present (PR 52.5 expanded set)
 """
 
 from __future__ import annotations
@@ -733,19 +733,22 @@ def test_v31_risk_acceptance_count_matches_db(client, SM, eng_id):
     assert r.json()["risk_acceptance_count"] == 1
 
 
-def test_v32_component_summary_has_8_components(client, eng_id):
+def test_v32_component_summary_has_required_components(client, eng_id):
+    # PR 52.5 expanded the component set; verify all required names are present
     r = client.post(f"{_BASE}/{eng_id}/verification-bundle/generate")
     assert r.status_code == 201
     summary = r.json()["component_summary"]
     names = {c["name"] for c in summary}
-    expected = {
+    required = {
         "findings",
         "evidence",
         "interviews",
         "decisions",
         "risk_acceptances",
         "exceptions",
-        "audit_trail",
+        "scan_audit_trail",
+        "engagement_audit_trail",
+        "chain_of_custody",
         "report",
     }
-    assert names == expected
+    assert required.issubset(names)

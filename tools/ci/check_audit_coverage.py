@@ -205,13 +205,13 @@ def run(*, write_report: bool = True) -> int:
             covered.append(route)
             continue
 
-        exc = exceptions.get(key)
-        if exc is None:
+        exception_record = exceptions.get(key)
+        if exception_record is None:
             violations.append(route)
-        elif exc["expired"]:
-            expired_exceptions.append({**route, "exception": exc})
+        elif exception_record["expired"]:
+            expired_exceptions.append({**route, "exception": exception_record})
         else:
-            excepted.append({**route, "exception": exc})
+            excepted.append({**route, "exception": exception_record})
 
     total = len(all_routes)
     audited_count = len(covered) + len(excepted)

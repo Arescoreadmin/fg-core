@@ -136,6 +136,7 @@ export interface VerificationBundle {
   bundle_hash: string;
   manifest_hash: string;
   verification_status: 'verified' | 'incomplete' | 'tamper_detected';
+  coverage_status: 'complete' | 'partial' | 'missing_report' | 'missing_evidence' | 'missing_decisions' | 'tampered' | 'unknown';
   generated_by: string;
   generated_at: string;
   finding_count: number;
@@ -145,7 +146,11 @@ export interface VerificationBundle {
   risk_acceptance_count: number;
   exception_count: number;
   audit_event_count: number;
+  engagement_audit_event_count: number;
+  chain_of_custody_count: number;
   has_report: boolean;
+  report_artifact_hash: string | null;
+  report_artifact_hash_status: 'available' | 'not_available';
   tamper_details: string[] | null;
   component_summary: VerificationBundleComponentSummary[];
 }

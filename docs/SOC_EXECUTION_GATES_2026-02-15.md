@@ -1,3 +1,34 @@
+## 2026-06-03 — PR 52.5 Regulatory-Grade Verification Bundle Hardening: 1 new route + 10 hardening items
+
+**Classification:** Additive extension of existing verification bundle surface. No new auth logic. New download route requires `governance:read`. No secrets stored. DB append-only enforcement added via Postgres triggers (migration 0087). No cross-tenant data access.
+
+**SOC review:**
+- `GET /field-assessment/engagements/{id}/verification-bundle/download` — returns the offline verification ZIP (`application/zip`) for the latest bundle. Requires `governance:read`. Read-only. Tenant-isolated. Returns 404 if no bundle exists.
+- Migration `0087_fa_verification_bundles_append_only.sql` adds 8 new columns to `fa_verification_bundles` (engagement_audit_event_count, coverage_status, report_artifact_hash, report_artifact_hash_status, chain_of_custody_count, signature_metadata, regulatory_context, governance_activity) and creates BEFORE UPDATE/DELETE triggers that raise exceptions — DB-level append-only enforcement.
+- No new BFF proxy changes: existing `field-assessment/engagements` GET rule covers the download route for both console and portal.
+- `verify_bundle_file()` is a pure offline function (no DB access); safe for auditor-side use.
+- All tamper detection logic is read-only; no mutations triggered by tamper discovery.
+
+**Hardening items:**
+- H1: Service layer has no update/delete methods; DB triggers add Postgres-level enforcement.
+- H2: FaEngagementAuditEvent captured as separate `engagement_audit_trail` component.
+- H3: ZIP export (`export_bundle_zip`) + offline verifier (`verify_bundle_file`).
+- H4: `signature_metadata` attribution record (actor, timestamps, hashes — non-cryptographic).
+- H5: `report_artifact_hash` / `report_artifact_hash_status` from finalized report manifest_hash.
+- H6: `chain_of_custody` component from FaEvidenceLifecycleEvent + FaLegalHold per evidence item.
+- H7: H14 `evidence_snapshot_hash` validation against current evidence state; mismatch → tamper issue.
+- H8: `coverage_status` field (complete/partial/missing_report/missing_evidence/missing_decisions/tampered).
+- H9: `regulatory_context` manifest section (assessment_type, generated_for, frameworks, jurisdiction, industry).
+- H10: `governance_activity` chronological timeline (decisions, risk acceptances, exceptions, legal holds, lifecycle transitions).
+
+**Artifacts regenerated:**
+- `make route-inventory-generate` updated `tools/ci/route_inventory.json` and related summary files.
+- `make contract-authority-refresh` refreshed authority metadata (sha256=2f69b35a47dc8384867808bace26f986c46fa6c223b79c19642012026094b881).
+
+**Validation evidence:**
+- `pytest tests/test_pr52_5_verification_bundle_hardening.py -q` — 30 passed.
+- `pytest tests/test_pr52_verification_bundle.py -q` — 32 passed (no regressions).
+
 ## 2026-06-03 — PR 52 Verification Bundle V1: 3 new routes + SHA-256 hashed engagement snapshot
 
 **Classification:** Additive operator-only verification bundle surface. No auth logic changes. Generate route requires `governance:write`; read routes require `governance:read`. No secrets or credentials stored. No cross-tenant data access.

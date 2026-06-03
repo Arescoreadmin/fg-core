@@ -17614,6 +17614,10 @@
             "title": "Bundle Id",
             "type": "string"
           },
+          "chain_of_custody_count": {
+            "title": "Chain Of Custody Count",
+            "type": "integer"
+          },
           "component_summary": {
             "items": {
               "$ref": "#/components/schemas/VerificationBundleComponentSummary"
@@ -17621,8 +17625,16 @@
             "title": "Component Summary",
             "type": "array"
           },
+          "coverage_status": {
+            "title": "Coverage Status",
+            "type": "string"
+          },
           "decision_count": {
             "title": "Decision Count",
+            "type": "integer"
+          },
+          "engagement_audit_event_count": {
+            "title": "Engagement Audit Event Count",
             "type": "integer"
           },
           "engagement_id": {
@@ -17661,6 +17673,21 @@
             "title": "Manifest Hash",
             "type": "string"
           },
+          "report_artifact_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Artifact Hash"
+          },
+          "report_artifact_hash_status": {
+            "title": "Report Artifact Hash Status",
+            "type": "string"
+          },
           "risk_acceptance_count": {
             "title": "Risk Acceptance Count",
             "type": "integer"
@@ -17690,6 +17717,7 @@
           "bundle_hash",
           "manifest_hash",
           "verification_status",
+          "coverage_status",
           "generated_by",
           "generated_at",
           "finding_count",
@@ -17699,7 +17727,11 @@
           "risk_acceptance_count",
           "exception_count",
           "audit_event_count",
+          "engagement_audit_event_count",
+          "chain_of_custody_count",
           "has_report",
+          "report_artifact_hash",
+          "report_artifact_hash_status",
           "tamper_details",
           "component_summary"
         ],
@@ -39263,6 +39295,63 @@
           }
         },
         "summary": "Get Verification Bundle Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/verification-bundle/download": {
+      "get": {
+        "description": "Download the offline verification package as a ZIP archive.\n\nReturns a ZIP containing manifest.json, bundle.json, and\nverification_report.json suitable for auditor-side offline verification.",
+        "operationId": "download_verification_bundle_route_field_assessment_engagements__engagement_id__verification_bundle_download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Verification Bundle Route",
         "tags": [
           "field-assessment"
         ]
