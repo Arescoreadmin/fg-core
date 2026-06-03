@@ -31,6 +31,7 @@ Future analysis surfaces:
   - Which accepted risks become findings?
   - Which governance patterns correlate with compliance success?
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -137,7 +138,9 @@ class GovernanceDecisionService:
             review_date=review_date,
             transaction_id=tx_id,
             correlation_id=correlation_id,
-            decision_metadata=json.dumps(decision_metadata) if decision_metadata else None,
+            decision_metadata=json.dumps(decision_metadata)
+            if decision_metadata
+            else None,
         )
         db.add(decision)
         db.flush()

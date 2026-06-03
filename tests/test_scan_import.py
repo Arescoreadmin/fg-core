@@ -291,6 +291,8 @@ class TestSchemaVersionEnforcement:
             "network_scan": "hosts",
             "endpoint_inventory": "endpoints",
             "oauth_inventory": "apps",
+            "oauth_risk": "grants",
+            "ai_tool_discovery": "tools",
         }
         for source_type, field in required_field.items():
             resp = _ingest(

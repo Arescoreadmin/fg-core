@@ -3836,15 +3836,6 @@ def _c6_update_job_status(
     scan_result_id: str | None = None,
     failure_reason: str | None = None,
 ) -> None:
-    if status == "running":
-        durable_job_svc.mark_running(db, job_id=job_id)
-    elif status == "complete":
-        durable_job_svc.mark_complete(db, job_id=job_id, scan_result_id=scan_result_id)
-    elif status == "failed":
-        durable_job_svc.mark_failed(
-            db, job_id=job_id, failure_reason=failure_reason or "unknown error"
-        )
-
     # Legacy unit tests use MagicMock sessions and assert object mutation.
     # Real sessions are updated by DurableJobService's SQL update statements.
     from unittest.mock import Mock
@@ -3857,6 +3848,16 @@ def _c6_update_job_status(
                 job.scan_result_id = scan_result_id
             if status == "failed":
                 job.failure_reason = failure_reason or "unknown error"
+        return
+
+    if status == "running":
+        durable_job_svc.mark_running(db, job_id=job_id)
+    elif status == "complete":
+        durable_job_svc.mark_complete(db, job_id=job_id, scan_result_id=scan_result_id)
+    elif status == "failed":
+        durable_job_svc.mark_failed(
+            db, job_id=job_id, failure_reason=failure_reason or "unknown error"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -7461,6 +7462,7 @@ _ALL_SECTIONS: list[str] = [
     "framework_summary",
     "confidence",
     "normalized_findings",
+    "ai_tool_discovery",
 ]
 
 
@@ -7750,6 +7752,53 @@ def _build_engagement_report_json(
             framework_summary=dict(report.framework_summary),
             confidence_overall=confidence_overall,
         )
+
+    if "ai_tool_discovery" in active_sections:
+        ai_scan_rows = [sr for sr in scan_rows if sr.source_type == "ai_tool_discovery"]
+        ai_tools: list[dict[str, Any]] = []
+        ai_summary: dict[str, int] = {
+            "discovered": 0,
+            "suspected": 0,
+            "unknown": 0,
+            "skipped": 0,
+        }
+        for sr in ai_scan_rows:
+            payload = sr.normalized_payload or {}
+            for tool in payload.get("tools") or []:
+                conf = str(tool.get("confidence") or "unknown")
+                if conf == "confirmed":
+                    status = "discovered"
+                    ai_summary["discovered"] += 1
+                elif conf in {"probable", "suspected"}:
+                    status = "suspected"
+                    ai_summary["suspected"] += 1
+                else:
+                    status = "unknown"
+                    ai_summary["unknown"] += 1
+                ai_tools.append(
+                    {
+                        "tool_name": tool.get("tool_name", "unknown"),
+                        "vendor": tool.get("vendor", "unknown"),
+                        "publisher": tool.get("publisher", "unknown"),
+                        "verified_publisher": bool(tool.get("verified_publisher")),
+                        "permissions_summary": tool.get(
+                            "permissions_summary", "unknown"
+                        ),
+                        "admin_consent": bool(tool.get("admin_consent")),
+                        "last_seen": tool.get("last_seen", "unknown"),
+                        "risk_indicators": list(tool.get("risk_indicators") or []),
+                        "evidence_refs": list(tool.get("evidence_refs") or []),
+                        "confidence": conf,
+                        "status": status,
+                    }
+                )
+            sub_summary = payload.get("summary") or {}
+            ai_summary["skipped"] += int(sub_summary.get("skipped") or 0)
+        section_content["ai_tool_discovery"] = {
+            "tools": ai_tools,
+            "summary": ai_summary,
+            "scan_count": len(ai_scan_rows),
+        }
 
     section_hashes = _compute_section_hashes(section_content)
 

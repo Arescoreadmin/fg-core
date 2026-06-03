@@ -7788,8 +7788,8 @@
       "file": "api/portal.py",
       "method": "POST",
       "path": "/portal/authenticate",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -7804,8 +7804,8 @@
       "file": "api/portal.py",
       "method": "GET",
       "path": "/portal/me",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -7820,8 +7820,8 @@
       "file": "api/portal.py",
       "method": "DELETE",
       "path": "/portal/sessions/{session_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -9368,7 +9368,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-03T20:26:08.593089+00:00",
+  "generated_at": "2026-06-03T20:59:06.310093+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

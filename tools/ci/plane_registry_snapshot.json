@@ -569,6 +569,7 @@
         "/breakglass",
         "/governance",
         "/field-assessment",
+        "/portal",
         "/config",
         "/planes",
         "/health",
@@ -1084,7 +1085,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-03T20:26:08.599746+00:00",
+  "generated_at": "2026-06-03T20:59:06.316404+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

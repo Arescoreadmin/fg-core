@@ -57,7 +57,7 @@
 - `POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate` — starts an H12 durable job for read-only Microsoft Graph AI-connected application discovery; tenant resolved from auth context; engagement scoped before launch; MSAL device-code flow follows existing OAuth/Graph scan pattern.
 - Scanner sources are app registrations, service principals, OAuth permission grants, app role assignments, sign-in timestamps, audit-log availability, and data-driven AI vendor signatures. Prompt content, document content, email content, browsing history, secrets, and tokens are not collected or stored.
 - Import bridge stores evidence-backed output in `fa_scan_results`, creates normalized findings only for observable governance review conditions, and links scan evidence through existing evidence-link/lifecycle infrastructure.
-- PostgreSQL migration `0086_ai_tool_discovery_scan.sql` extends the durable scan-job scanner_type constraint for `ai_tool_discovery`; no new tenant-sharing or cross-engagement table is introduced.
+- PostgreSQL migration `0088_ai_tool_discovery_scan.sql` extends the durable scan-job scanner_type constraint for `ai_tool_discovery`; no new tenant-sharing or cross-engagement table is introduced.
 
 **Artifacts regenerated:**
 - `make route-inventory-generate` updated `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256`.

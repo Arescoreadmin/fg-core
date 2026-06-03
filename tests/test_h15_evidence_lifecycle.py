@@ -809,7 +809,9 @@ class TestLinksNotLocked:
                     entity_type="field_observation",
                 )
         assert exc_info.value.status_code == 409
-        assert exc_info.value.detail["code"] == "EVIDENCE_LINK_LOCKED"
+        detail = exc_info.value.detail
+        assert isinstance(detail, dict)
+        assert detail["code"] == "EVIDENCE_LINK_LOCKED"
 
     def test_assert_links_not_locked_raises_when_link_is_legal_hold(
         self, build_app

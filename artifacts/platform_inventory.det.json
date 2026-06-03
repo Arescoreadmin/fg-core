@@ -36,21 +36,12 @@
       "plane": "workforce",
       "suggested_fix": "Add SOC gate mapping entry for plane.",
       "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": [
-        "/portal/authenticate",
-        "/portal/me",
-        "/portal/sessions/{session_id}"
-      ],
-      "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
-      "type": "unexpected_route_prefixes"
     }
   ],
   "governance": {
-    "contract_count": 430,
+    "contract_count": 445,
     "contract_only": [],
-    "runtime_count": 535,
+    "runtime_count": 550,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -158,7 +149,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "8e470a82c1cb1216e13e37cc9274bad64649e78356647b76a132ec5cf0da37a2",
+  "governance_fingerprint": "19cea6f1d5936fea746f2d4b7df261bff3a5e8d0ca8670ec5d7ebd8156609045",
   "planes": [
     {
       "compat": {
@@ -230,6 +221,7 @@
         "/internal",
         "/metrics",
         "/planes",
+        "/portal",
         "/rag",
         "/status"
       ]
@@ -324,8 +316,7 @@
     "rls_sensitive_tables_present": true,
     "route_inventory_enforced": true,
     "self_heal_bounded_off_by_default": true,
-    "tenant_binding_coverage": false,
-    "audit_atomicity_coverage_enforced": true
+    "tenant_binding_coverage": false
   },
   "routes_by_plane": {
     "agent": [
@@ -371,6 +362,7 @@
       "DELETE /field-assessment/engagements/{engagement_id}/observations/{observation_id}",
       "DELETE /field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}",
       "DELETE /governance/assets/{asset_id}/owners/{ownership_id}",
+      "DELETE /portal/sessions/{session_id}",
       "GET /_debug/routes",
       "GET /admin/agent/devices",
       "GET /admin/agent/devices/{device_id}/status",
@@ -487,10 +479,14 @@
       "GET /field-assessment/engagements/{engagement_id}/drift-report/correlation/{finding_id}",
       "GET /field-assessment/engagements/{engagement_id}/drift-velocity",
       "GET /field-assessment/engagements/{engagement_id}/evidence-links",
+      "GET /field-assessment/engagements/{engagement_id}/exceptions",
+      "GET /field-assessment/engagements/{engagement_id}/exceptions/{exception_id}",
       "GET /field-assessment/engagements/{engagement_id}/execution-state",
       "GET /field-assessment/engagements/{engagement_id}/findings",
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain",
+      "GET /field-assessment/engagements/{engagement_id}/governance-decisions",
+      "GET /field-assessment/engagements/{engagement_id}/governance-decisions/{decision_id}",
       "GET /field-assessment/engagements/{engagement_id}/next-actions",
       "GET /field-assessment/engagements/{engagement_id}/observations",
       "GET /field-assessment/engagements/{engagement_id}/portal-grants",
@@ -502,9 +498,16 @@
       "GET /field-assessment/engagements/{engagement_id}/reports",
       "GET /field-assessment/engagements/{engagement_id}/reports/{version}",
       "GET /field-assessment/engagements/{engagement_id}/reports/{version}/export",
+      "GET /field-assessment/engagements/{engagement_id}/risk-acceptances",
+      "GET /field-assessment/engagements/{engagement_id}/risk-acceptances/{acceptance_id}",
+      "GET /field-assessment/engagements/{engagement_id}/scan-jobs",
+      "GET /field-assessment/engagements/{engagement_id}/scan-jobs/{job_id}",
       "GET /field-assessment/engagements/{engagement_id}/scan-results",
       "GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
       "GET /field-assessment/engagements/{engagement_id}/summary",
+      "GET /field-assessment/engagements/{engagement_id}/verification-bundle",
+      "GET /field-assessment/engagements/{engagement_id}/verification-bundle/download",
+      "GET /field-assessment/engagements/{engagement_id}/verification-bundle/manifest",
       "GET /field-assessment/interview-templates",
       "GET /field-assessment/reports/verify/{report_hash}",
       "GET /governance/assets",
@@ -547,6 +550,7 @@
       "GET /health/ready",
       "GET /metrics",
       "GET /planes",
+      "GET /portal/me",
       "GET /rag/corpora",
       "GET /rag/corpora/{corpus_id}",
       "GET /rag/corpora/{corpus_id}/documents",
@@ -662,6 +666,7 @@
       "POST /field-assessment/engagements",
       "POST /field-assessment/engagements/{engagement_id}/artifacts",
       "POST /field-assessment/engagements/{engagement_id}/baseline",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/dns-email/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/entra-governance/initiate",
@@ -676,6 +681,7 @@
       "POST /field-assessment/engagements/{engagement_id}/connector-schedules",
       "POST /field-assessment/engagements/{engagement_id}/document-analyses",
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",
+      "POST /field-assessment/engagements/{engagement_id}/exceptions",
       "POST /field-assessment/engagements/{engagement_id}/observations",
       "POST /field-assessment/engagements/{engagement_id}/observations/bulk",
       "POST /field-assessment/engagements/{engagement_id}/portal-grants",
@@ -686,7 +692,9 @@
       "POST /field-assessment/engagements/{engagement_id}/reports",
       "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-approve",
       "POST /field-assessment/engagements/{engagement_id}/reports/{version}/verify",
+      "POST /field-assessment/engagements/{engagement_id}/risk-acceptances",
       "POST /field-assessment/engagements/{engagement_id}/scan-results",
+      "POST /field-assessment/engagements/{engagement_id}/verification-bundle/generate",
       "POST /governance/assets",
       "POST /governance/assets/{asset_id}/attestations",
       "POST /governance/assets/{asset_id}/decommission",
@@ -705,6 +713,7 @@
       "POST /governance/workflows",
       "POST /governance/workflows/{workflow_id}/evidence",
       "POST /internal/connectors/{connector_id}/ingest",
+      "POST /portal/authenticate",
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",
       "PUT /admin/agent/version-floor",
@@ -873,18 +882,5 @@
       "POST /workforce/users",
       "POST /workforce/users/accept-invite"
     ]
-  },
-  "audit_coverage": {
-    "validator": "tools/ci/check_audit_coverage.py",
-    "exceptions_registry": "tools/ci/audit_exceptions.yaml",
-    "report": "artifacts/audit_coverage_report.json",
-    "ci_gate": "make audit-coverage-check",
-    "total_mutation_routes": 38,
-    "audited_direct": 24,
-    "excepted": 14,
-    "violations": 0,
-    "coverage_pct": 100.0,
-    "schema_version": "H13.5",
-    "last_updated": "2026-06-03"
   }
 }
