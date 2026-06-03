@@ -4448,3 +4448,34 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
 - `tools/ci/route_inventory.json` + related artifacts — regenerated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+
+---
+
+## Route Inventory Governance: Explicit Health-Route Exception (2026-06-02)
+
+**Change:** `tools/ci/check_route_inventory.py` — added `ALLOWED_RUNTIME_ONLY_ROUTES` set with exact-match logic preceding prefix matching in `_classify_runtime_only()`.
+
+**Routes explicitly approved as runtime-only:**
+- `GET /health` — liveness probe; no tenant data, no scopes, no auth; consumed directly by load-balancer / Railway healthcheck infra.
+- `HEAD /health` — same endpoint; HEAD variant for HTTP-only probers.
+
+**Why runtime-only (absent from public contract):** These are infrastructure-facing probes, not customer-facing APIs. They carry no tenant state, require no scopes, and are never called by any client application. Including them in the public OpenAPI contract would be misleading and would expand the reviewed API surface incorrectly.
+
+**Why NOT added to `ALLOWED_INTERNAL_PREFIXES`:** A prefix `/health` would implicitly allow future routes `GET /health/debug`, `GET /health/internal`, `GET /health/config`, etc. to bypass governance review. Exact-route exceptions in `ALLOWED_RUNTIME_ONLY_ROUTES` are checked first and grant NO sub-path coverage.
+
+**Security posture:** No change — `GET /health` and `HEAD /health` already existed and already returned no tenant data. This change corrects the governance classification so `make fg-fast` no longer fails with a false-positive UNAUTHORIZED drift error.
+
+**Tests added (`tests/tools/test_route_inventory_summary.py`):**
+- `test_classify_runtime_only_health_routes_allowed` — GET/HEAD /health → allowed
+- `test_classify_runtime_only_health_sub_paths_are_unauthorized` — GET/HEAD /health/debug → unauthorized (prefix NOT widened)
+- `test_classify_runtime_only_metrics_still_allowed_via_prefix` — /metrics still passes via prefix policy (no regression)
+
+**Artifacts regenerated:**
+- Route inventory regenerated via `make route-inventory-generate`
+
+**Files touched:**
+- `tools/ci/check_route_inventory.py` — `ALLOWED_RUNTIME_ONLY_ROUTES` set + exact-match guard in `_classify_runtime_only()`
+- `tests/tools/test_route_inventory_summary.py` — 3 new test cases
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`, `contract_routes.json`, `plane_registry_snapshot.json` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry

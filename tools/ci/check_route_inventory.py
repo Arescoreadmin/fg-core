@@ -98,6 +98,20 @@ ALLOWED_INTERNAL_PREFIXES: tuple[str, ...] = (
     "/metrics",  # Prometheus scrape endpoint; internal-only, no tenant data
 )
 
+# Explicit route-level exceptions.  These are checked BEFORE prefix matching so
+# that adding a route here never implicitly allows deeper paths (e.g. allowing
+# "GET /health" does NOT allow "GET /health/debug" or "GET /health/internal").
+# Use this set for routes that don't belong to any internal-plane prefix family
+# and are structurally correct to be absent from the public contract.
+#
+#   GET /health, HEAD /health — liveness probe; no tenant data, no scopes.
+#     Absent from the public contract because load-balancer / infra tooling
+#     consumes it directly; it is not a customer-facing API.
+ALLOWED_RUNTIME_ONLY_ROUTES: set[str] = {
+    "GET /health",
+    "HEAD /health",
+}
+
 
 # -----------------------------
 # small, boring, correct utils
@@ -300,6 +314,11 @@ def _classify_runtime_only(
     allowed: list[str] = []
     unauthorized: list[str] = []
     for entry in runtime_only:
+        # Exact-route exceptions checked first — matching here does NOT permit
+        # any sub-path (e.g. "GET /health" does not cover "GET /health/debug").
+        if entry in ALLOWED_RUNTIME_ONLY_ROUTES:
+            allowed.append(entry)
+            continue
         parts = entry.split(" ", 1)
         path = parts[1] if len(parts) == 2 else entry
         if any(

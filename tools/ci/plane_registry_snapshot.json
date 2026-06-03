@@ -490,6 +490,14 @@
         {
           "class_name": "public",
           "expires_at": "",
+          "justification": "Unauthenticated health probe for uptime monitoring.",
+          "method": "HEAD",
+          "path": "/health",
+          "permanent": true
+        },
+        {
+          "class_name": "public",
+          "expires_at": "",
           "justification": "Kubernetes liveness probe.",
           "method": "GET",
           "path": "/health/live",
@@ -1076,7 +1084,7 @@
       ]
     }
   ],
-  "generated_at": "2026-05-29T13:58:51.533257+00:00",
+  "generated_at": "2026-06-03T00:13:41.158990+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

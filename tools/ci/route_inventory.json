@@ -4778,6 +4778,57 @@
         "tenant"
       ],
       "file": "api/field_assessment.py",
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/artifacts",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/artifacts/{artifact_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/audit-events",
       "plane": "control",
@@ -4797,6 +4848,57 @@
       "file": "api/field_assessment.py",
       "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/baseline",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/dns-email/initiate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/entra-governance/initiate",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -4853,6 +4955,91 @@
       "scoped": true,
       "scopes": [
         "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/network-scan/initiate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/oauth-inventory/initiate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/oauth-risk/initiate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/sharepoint/initiate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/web-headers/initiate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -5135,6 +5322,23 @@
         "tenant"
       ],
       "file": "api/field_assessment.py",
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/findings/{finding_id}/remediation",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/next-actions",
       "plane": "control",
@@ -5171,6 +5375,57 @@
       "file": "api/field_assessment.py",
       "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/observations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/observations/bulk",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "DELETE",
+      "path": "/field-assessment/engagements/{engagement_id}/observations/{observation_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/observations/{observation_id}",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -5379,7 +5634,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "governance:qa_approve"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -5511,6 +5766,23 @@
       "file": "api/field_assessment.py",
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/summary",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
+      "path": "/field-assessment/interview-templates",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -6516,7 +6788,7 @@
     {
       "dependency_categories": [],
       "file": "api/main.py",
-      "method": "GET",
+      "method": "HEAD",
       "path": "/health",
       "plane": "control",
       "plane_id": "control",
@@ -8725,7 +8997,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-05-29T13:58:51.527212+00:00",
+  "generated_at": "2026-06-03T00:03:48.658886+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

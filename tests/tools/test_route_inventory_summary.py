@@ -62,6 +62,30 @@ def test_classify_runtime_only_empty():
     assert unauthorized == []
 
 
+def test_classify_runtime_only_health_routes_allowed():
+    # GET /health and HEAD /health are explicit runtime-only exceptions.
+    routes = ["GET /health", "HEAD /health"]
+    allowed, unauthorized = check_route_inventory._classify_runtime_only(routes)
+    assert set(allowed) == {"GET /health", "HEAD /health"}
+    assert unauthorized == []
+
+
+def test_classify_runtime_only_health_sub_paths_are_unauthorized():
+    # Exact-route matching must NOT cover sub-paths.
+    routes = ["GET /health/debug", "HEAD /health/debug"]
+    allowed, unauthorized = check_route_inventory._classify_runtime_only(routes)
+    assert allowed == []
+    assert set(unauthorized) == {"GET /health/debug", "HEAD /health/debug"}
+
+
+def test_classify_runtime_only_metrics_still_allowed_via_prefix():
+    # /metrics must remain allowed via ALLOWED_INTERNAL_PREFIXES (not affected by health fix).
+    routes = ["GET /metrics"]
+    allowed, unauthorized = check_route_inventory._classify_runtime_only(routes)
+    assert allowed == ["GET /metrics"]
+    assert unauthorized == []
+
+
 # ---------------------------------------------------------------------------
 # main() hard-fail on unauthorized runtime_only
 # ---------------------------------------------------------------------------
