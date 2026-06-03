@@ -49,6 +49,7 @@ from services.field_assessment.audit import (
     audit_atomicity_svc,
     emit_engagement_audit_event,
 )
+from services.field_assessment.evidence_lifecycle import evidence_lifecycle_svc
 from services.field_assessment.connectors.msgraph_bridge import (
     ConnectorAcknowledgmentRequired,
     ConnectorBridgeError,
@@ -1832,6 +1833,13 @@ def update_observation_route(
             status_code=404,
             detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"),
         )
+    evidence_lifecycle_svc.assert_mutable(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        evidence_type="field_observation",
+        evidence_id=observation_id,
+    )
     if body.linked_finding_ids is not None and body.linked_finding_ids:
         candidate_ids = [str(fid) for fid in body.linked_finding_ids]
         found_ids = set(
@@ -1923,6 +1931,20 @@ def delete_observation_route(
             status_code=404,
             detail=api_error("OBSERVATION_NOT_FOUND", "Observation not found"),
         )
+    evidence_lifecycle_svc.assert_mutable(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        evidence_type="field_observation",
+        evidence_id=observation_id,
+    )
+    evidence_lifecycle_svc.assert_links_not_locked(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        entity_id=observation_id,
+        entity_type="field_observation",
+    )
     now = utc_iso8601_z_now()
     obs.deleted_at = now
     # Cascade-remove evidence links that source this observation
@@ -5610,6 +5632,14 @@ def qa_approve_report_route(
             portal_raw_secret = grant_result.raw_secret
             portal_expires_at = grant_result.grant.expires_at
 
+    evidence_lifecycle_svc.lock_evidence_for_engagement(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        actor_type="human_operator",
+        reason=f"QA approval of report {report_id}",
+    )
     db.commit()
 
     return ReportQaApproveResponse(
@@ -7215,6 +7245,15 @@ def patch_questionnaire_response(
             status_code=404, detail=api_error("CONTROL_NOT_FOUND", exc.message)
         )
 
+    # Guard: block if any existing evidence links from this response are locked.
+    evidence_lifecycle_svc.assert_links_not_locked(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        entity_id=r.id,
+        entity_type="questionnaire_response",
+    )
+
     # Manage questionnaire_response → document_analysis evidence link.
     resolved_doc_id: str | None = None
     if body.evidence_doc_id and body.response_status in ("implemented", "partial"):
@@ -7234,6 +7273,13 @@ def patch_questionnaire_response(
                     "Document does not belong to this engagement",
                 ),
             )
+        evidence_lifecycle_svc.assert_mutable(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            evidence_type="document_analysis",
+            evidence_id=body.evidence_doc_id,
+        )
         # Delete any existing doc link for this response (upsert semantics).
         db.execute(
             delete(FaEvidenceLink).where(

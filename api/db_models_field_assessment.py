@@ -12,20 +12,29 @@ Tenant isolation:
 Append-only contract:
   fa_engagement_audit_events is append-only. No UPDATE or DELETE.
   fa_scan_audit_events is append-only. No UPDATE or DELETE.
+  fa_evidence_lifecycle_events is append-only. No UPDATE or DELETE.
+
+Lifecycle states (H15):
+  Evidence tables carry lifecycle_state in ('collected', 'locked', 'legal_hold').
+  'collected' is the default; 'locked' is applied at QA approval via
+  EvidenceLifecycleService.lock_evidence_for_engagement(); 'legal_hold' is
+  operator-applied. Locked and legal-hold evidence cannot be mutated or deleted.
 
 Tables:
-  fa_engagements              — top-level engagement tracking
-  fa_scan_results             — structured scan ingestion
-  fa_document_analyses        — document analysis records
-  fa_field_observations       — structured assessor observations
-  fa_normalized_findings      — core governance finding objects
-  fa_evidence_links           — evidence relationship graph
-  fa_engagement_audit_events  — append-only audit trail
-  fa_quarantined_scans        — rejected scan ingest attempts (audit trail)
-  fa_artifacts                — artifact registry (audio, documents); storage keys never client-visible
-  fa_verified_targets         — C6: pre-validated scanner targets (SSRF-safe)
-  fa_scan_jobs                — C6: durable job records (H12-ready)
-  fa_scan_audit_events        — C6: append-only scanner audit trail
+  fa_engagements                 — top-level engagement tracking
+  fa_scan_results                — structured scan ingestion
+  fa_document_analyses           — document analysis records
+  fa_field_observations          — structured assessor observations
+  fa_normalized_findings         — core governance finding objects
+  fa_evidence_links              — evidence relationship graph
+  fa_engagement_audit_events     — append-only audit trail
+  fa_quarantined_scans           — rejected scan ingest attempts (audit trail)
+  fa_artifacts                   — artifact registry (audio, documents); storage keys never client-visible
+  fa_verified_targets            — C6: pre-validated scanner targets (SSRF-safe)
+  fa_scan_jobs                   — C6: durable job records (H12-ready)
+  fa_scan_audit_events           — C6: append-only scanner audit trail
+  fa_evidence_lifecycle_events   — H15: append-only chain-of-custody trail for lifecycle transitions
+  fa_legal_holds                 — H15: legal hold application and removal audit record
 """
 
 from __future__ import annotations
@@ -86,6 +95,9 @@ class FaScanResult(Base):
     )
     collected_at: Mapped[str] = mapped_column(String(64), nullable=False)
     evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="collected"
+    )
     raw_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     normalized_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     object_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -126,6 +138,9 @@ class FaDocumentAnalysis(Base):
     )
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="collected"
+    )
 
     __table_args__ = (
         Index("ix_fa_doc_analyses_engagement_tenant", "engagement_id", "tenant_id"),
@@ -157,6 +172,9 @@ class FaFieldObservation(Base):
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     deleted_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="collected"
+    )
 
     __table_args__ = (
         Index("ix_fa_field_obs_engagement_tenant", "engagement_id", "tenant_id"),
@@ -218,6 +236,9 @@ class FaEvidenceLink(Base):
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
+    )
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="collected"
     )
 
     __table_args__ = (
@@ -438,4 +459,66 @@ class FaScanAuditEvent(Base):
         Index("ix_fa_scan_audit_tenant_engagement", "tenant_id", "engagement_id"),
         Index("ix_fa_scan_audit_tenant_event", "tenant_id", "event_type"),
         Index("ix_fa_scan_audit_job", "scan_job_id"),
+    )
+
+
+class FaEvidenceLifecycleEvent(Base):
+    """H15: Append-only chain-of-custody trail for evidence lifecycle transitions.
+
+    One row per state transition. Written inside the same DB transaction as the
+    transition itself via AuditAtomicityService. No UPDATE or DELETE permitted.
+    """
+
+    __tablename__ = "fa_evidence_lifecycle_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    old_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    new_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    transaction_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index("ix_fa_lifecycle_events_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_lifecycle_events_evidence", "evidence_type", "evidence_id"),
+    )
+
+
+class FaLegalHold(Base):
+    """H15: Legal hold application and removal audit record.
+
+    One row per apply/remove action. The current hold state is encoded in the
+    evidence item's lifecycle_state column; this table is the authoritative
+    attribution record (who applied the hold and why).
+    """
+
+    __tablename__ = "fa_legal_holds"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)  # applied | removed
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    transaction_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index("ix_fa_legal_holds_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_legal_holds_evidence", "evidence_type", "evidence_id"),
     )
