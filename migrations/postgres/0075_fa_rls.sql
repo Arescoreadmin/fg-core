@@ -33,8 +33,8 @@ DECLARE
 BEGIN
     FOREACH t IN ARRAY tables LOOP
         IF to_regclass('public.' || t) IS NOT NULL THEN
-            EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
-            EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+            EXECUTE format('ALTER TABLE %%I ENABLE ROW LEVEL SECURITY', t);
+            EXECUTE format('ALTER TABLE %%I FORCE ROW LEVEL SECURITY', t);
         END IF;
     END LOOP;
 END $$;
@@ -68,7 +68,7 @@ BEGIN
         ) THEN
             EXECUTE format(
                 $policy$
-                CREATE POLICY %I ON %I
+                CREATE POLICY %%I ON %%I
                     USING (
                         tenant_id IS NOT NULL
                         AND current_setting('app.tenant_id', true) IS NOT NULL
