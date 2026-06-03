@@ -1024,7 +1024,7 @@ class TestDurableJobPersistence:
             db, job_id="j2", status="failed", failure_reason="DNS failed"
         )
         assert job.status == "failed"
-        assert "DNS failed" in job.failure_reason
+        assert job.failure_reason is not None and "DNS failed" in job.failure_reason
 
 
 # ---------------------------------------------------------------------------
@@ -1052,6 +1052,7 @@ class TestAuditEventGeneration:
         assert isinstance(added, FaScanAuditEvent)
         assert added.event_type == "scan.initiated"
         assert added.scan_job_id == "job-abc"
+        assert added.payload_summary is not None
         payload = json.loads(added.payload_summary)
         assert payload["target_count"] == 3
 
