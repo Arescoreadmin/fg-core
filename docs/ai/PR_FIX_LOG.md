@@ -13176,3 +13176,57 @@ Outbound scanners accepted arbitrary IPs, CIDRs, and URLs with no containment:
 - `TestDurableJobPersistence` — 3 cases (job created before background, status transitions, failure recorded)
 - `TestAuditEventGeneration` — 4 cases (scan.initiated, scan.completed, scan.rate_limited, resolved_ips in rejection event)
 - `TestValidationResultImmutability` — 3 cases (frozen dataclass, ok result shape, rejected result shape)
+
+---
+
+# PR fix 45 — C7 Portal Grant Model Hardening
+
+**Branch:** main | **Status:** Complete | **Gate:** `make fg-fast` PASS
+
+## Summary
+
+Full replacement of plaintext `client_access_code` portal authorization with a cryptographically-hardened portal grant system. Implements all 15 mandatory security control layers.
+
+## Files Changed
+
+### New files
+- `migrations/postgres/0080_c7_portal_grants.sql` — three tables (`portal_grants`, `portal_grant_audit_events`, `portal_grant_sessions`) with full RLS; audit table uses split SELECT+INSERT policies (append-only enforcement)
+- `api/db_models_portal.py` — SQLAlchemy ORM for all three C7 tables
+- `services/portal_grant_service.py` — `PortalGrantService` single source of truth: Argon2id hashing (OWASP params), create/revoke/rotate grant lifecycle, authenticate (secret → session), validate_session (per-request engagement check), in-memory rate limiting (10/IP, 50/tenant per 15min), append-only audit events
+- `api/portal.py` — `portal_router`: `POST /portal/authenticate`, `GET /portal/me`, `DELETE /portal/sessions/{id}`
+- `tests/test_c7_portal_grants.py` — 46 security tests covering all 15 layers
+
+### Modified files
+- `api/middleware/portal_scope.py` — **rewritten**: validates `X-FG-Portal-Session` header (not query param); calls `portal_grant_svc.validate_session`; fails closed; injects `portal_client_id` and `portal_engagement_id` from DB record
+- `api/field_assessment.py` — `EngagementResponse` removes `client_access_code`; QA-approve uses `_portal_grant_svc.create_grant`; 4 new portal-grant management routes added; `list_engagements` `access_code_filter` param removed
+- `api/main.py` — `portal_router` registered in both build functions
+- `api/db.py` — `db_models_portal` registered in `_ensure_models_imported`
+- `services/field_assessment/store.py` — `access_code_filter` removed from `list_engagements`
+- `apps/portal/lib/session.ts` — `createGrantSession`/`getGrantSessionId` replacing `createAccessCodeSession`/`getSessionAccessCode`
+- `apps/portal/app/api/auth/login/route.ts` — **rewritten**: calls `POST /portal/authenticate`; stores opaque `session_id` in HMAC-signed cookie
+- `apps/portal/app/api/core/[...path]/route.ts` — injects `X-FG-Portal-Session` header; removes `client_access_code` query param injection; `portal` added to `PROXY_RULES`
+- `tests/test_field_assessment.py` — portal tests updated to session-based auth; `PORTAL_ACCESS_CODE_REQUIRED` → `PORTAL_SESSION_REQUIRED`
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — PR 35 entry appended
+- Contract/route inventory regenerated: `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`
+
+## Security Invariants Implemented
+
+- **L1** Argon2id (time=3, mem=64MiB, par=4) for all grant hashes; no plaintext stored
+- **L2** Correct secret required; wrong secret → 401; no oracle leak
+- **L3** Expired grants denied at authentication and per-request middleware check
+- **L4** Revoked grants/sessions denied immediately
+- **L5** Rotation: old secret invalidated, `rotation_counter` incremented, new secret issued
+- **L6** Portal identity (`client_id`) derived server-side from DB; no caller-asserted headers honored
+- **L7** Replay protection: revoked sessions fail middleware validation
+- **L8** Append-only audit trail: create/use/deny/revoke/rotate events written
+- **L9** Cross-tenant sessions denied (session `tenant_id` checked against API-key tenant)
+- **L10** Wrong-engagement denied (`PORTAL_ENGAGEMENT_ACCESS_DENIED`) when grant missing
+- **L11** Evidence boundary: sub-resource paths (e.g., `/findings`) also gated per engagement
+- **L12** Rate limiting: 10/IP and 50/tenant per 15-minute window
+- **L13** Session TTL: 8-hour expiry enforced server-side; revocation via `DELETE /portal/sessions/{id}`
+- **L14** Portal scope middleware: `X-FG-Portal-Session` header required; query-param auth removed
+- **L15** No plaintext: `grant_hash` absent from all API responses; `raw_secret` shown once only
+
+## Tests (46 tests)
+
+46 tests across 15 security layers in `tests/test_c7_portal_grants.py`, plus 7 updated portal tests in `tests/test_field_assessment.py`.

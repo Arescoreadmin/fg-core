@@ -1,19 +1,37 @@
+"""Portal scope middleware — C7 grant-based engagement access.
+
+Enforces that portal requests to /field-assessment/engagements/{id}/* carry
+a valid server-side session token (X-FG-Portal-Session header) backed by an
+active portal grant in the database.
+
+Security invariants:
+- Portal identity is derived server-side from the validated session record.
+  It is NEVER derived from caller-asserted headers, query parameters, or the
+  request body.
+- X-Portal-Source marks a request as portal-origin; the middleware then
+  requires X-FG-Portal-Session and validates it against the DB.
+- Engagement binding: validated via portal_grants.(client_id, engagement_id).
+  A valid session alone is insufficient; an active grant for the specific
+  engagement must exist.
+- Any DB or validation exception → 403 fail-closed.
+"""
+
 from __future__ import annotations
 
 import re
 from typing import Callable
 
 from fastapi import Request
-from sqlalchemy import func, select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from api.db import get_sessionmaker
-from api.db_models_field_assessment import FaEngagement
+from services.portal_grant_service import portal_grant_svc
 
 _PORTAL_ENGAGEMENT_RE = re.compile(r"^/field-assessment/engagements/([^/]+)")
 _PORTAL_SOURCE_HEADER = "x-portal-source"
 _PORTAL_SOURCE_VALUE = "client-portal"
+_PORTAL_SESSION_HEADER = "x-fg-portal-session"
 
 
 def _json_403(message: str, code: str) -> JSONResponse:
@@ -25,11 +43,10 @@ def _json_403(message: str, code: str) -> JSONResponse:
 
 
 class PortalClientScopeMiddleware(BaseHTTPMiddleware):
-    """Enforce that portal requests to /field-assessment/engagements/{id}/* can
-    only access engagements whose client_access_code matches the session value.
+    """Enforce session-based engagement access for portal requests.
 
-    AuthGateMiddleware runs before this middleware and populates
-    request.state.tenant_id.  No-op for non-portal (operator/console) requests.
+    AuthGateMiddleware runs before this and populates request.state.tenant_id.
+    No-op for requests without X-Portal-Source: client-portal.
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -42,11 +59,11 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         engagement_id = m.group(1)
-        client_access_code = request.query_params.get("client_access_code")
-        if not client_access_code:
+        session_id = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
+        if not session_id:
             return _json_403(
-                "client_access_code required for portal engagement access",
-                "PORTAL_ACCESS_CODE_REQUIRED",
+                "Portal session required for engagement access",
+                "PORTAL_SESSION_REQUIRED",
             )
 
         tenant_id = getattr(getattr(request, "state", None), "tenant_id", None)
@@ -56,12 +73,11 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
         SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
-            count = db.scalar(
-                select(func.count(FaEngagement.id)).where(
-                    FaEngagement.id == engagement_id,
-                    FaEngagement.tenant_id == tenant_id,
-                    FaEngagement.client_access_code == client_access_code,
-                )
+            result = portal_grant_svc.validate_session(
+                db,
+                session_id=session_id,
+                tenant_id=str(tenant_id),
+                engagement_id=engagement_id,
             )
         except Exception:
             db.close()
@@ -69,7 +85,14 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
         finally:
             db.close()
 
-        if not count:
-            return _json_403("Access denied", "PORTAL_ACCESS_DENIED")
+        if not result.ok:
+            return _json_403(
+                result.denial_reason or "Access denied",
+                result.denial_code or "PORTAL_ACCESS_DENIED",
+            )
+
+        # Inject portal context for downstream handlers
+        request.state.portal_client_id = result.client_id
+        request.state.portal_engagement_id = engagement_id
 
         return await call_next(request)

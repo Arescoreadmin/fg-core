@@ -140,6 +140,8 @@ from api.db_models_field_assessment import (
 from services.connectors.safe_target_validator import (
     SafeTargetValidationService as _SafeValidator,
 )
+from api.db_models_portal import PortalGrant
+from services.portal_grant_service import portal_grant_svc as _portal_grant_svc
 from api.db_models_governance_asset_candidates import GaAssetCandidate
 from api.db_models_governance_assets import GaAsset
 from api.db_models_governance_promotion import GovernancePromotion
@@ -371,7 +373,6 @@ class EngagementResponse(BaseModel):
     assessment_type: str
     status: str
     scheduled_date: str | None
-    client_access_code: str | None = None
     engagement_metadata: dict[str, Any]
     schema_version: str
     created_at: str
@@ -770,7 +771,6 @@ def _engagement_to_response(eng: FaEngagement) -> EngagementResponse:
         assessment_type=eng.assessment_type,
         status=status,
         scheduled_date=eng.scheduled_date,
-        client_access_code=eng.client_access_code,
         engagement_metadata=eng.engagement_metadata or {},
         schema_version=eng.schema_version,
         created_at=eng.created_at,
@@ -979,7 +979,6 @@ def list_engagements_route(
     status_filter: str | None = Query(None, alias="status"),
     limit: int = Query(50, ge=1, le=100),
     cursor: str | None = Query(None),
-    client_access_code: str | None = Query(None),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementListResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -989,16 +988,11 @@ def list_engagements_route(
         status_filter=status_filter,
         limit=limit,
         cursor=cursor,
-        access_code_filter=client_access_code,
     )
     next_cursor = rows[-1].created_at if len(rows) == limit else None
     count_stmt = select(func.count(FaEngagement.id)).where(
         FaEngagement.tenant_id == tenant_id
     )
-    if client_access_code:
-        count_stmt = count_stmt.where(
-            FaEngagement.client_access_code == client_access_code
-        )
     total = db.execute(count_stmt).scalar_one()
     return EngagementListResponse(
         items=[_engagement_to_response(r) for r in rows],
@@ -5400,7 +5394,11 @@ class ReportQaApproveResponse(BaseModel):
     qa_approved_by: str
     qa_approved_at: str
     engagement_status: str
-    client_access_code: str | None = None
+    portal_grant_id: str | None = None
+    portal_raw_secret: str | None = (
+        None  # Shown ONCE — not stored; deliver to client securely
+    )
+    portal_expires_at: str | None = None
     delivery_blocked: bool = False
     delivery_blockers: list[dict[str, Any]] = []
 
@@ -5509,7 +5507,9 @@ def qa_approve_report_route(
             FaEngagement.tenant_id == tenant_id,
         )
     ).scalar_one()
-    client_access_code: str | None = None
+    portal_grant_id: str | None = None
+    portal_raw_secret: str | None = None
+    portal_expires_at: str | None = None
     delivery_blocked: bool = False
     delivery_blockers: list[dict[str, Any]] = []
 
@@ -5534,7 +5534,7 @@ def qa_approve_report_route(
                 if g.gate_id in blocked_gate_ids and g.status == "blocked"
             ]
         else:
-            # All gates pass — advance to delivered.
+            # All gates pass — advance to delivered. Create a portal grant.
             gate_snapshot: dict[str, Any] = {
                 "gates_evaluated": [g.gate_id for g in execution_state.gates],
                 "gates_passed": [
@@ -5544,24 +5544,6 @@ def qa_approve_report_route(
             }
             eng.status = "delivered"
             eng.updated_at = now
-            # Reuse any existing code already issued for this client so they can
-            # log in with one password and see all their engagements over time.
-            existing_code = db.execute(
-                select(FaEngagement.client_access_code)
-                .where(
-                    FaEngagement.tenant_id == tenant_id,
-                    FaEngagement.client_name == eng.client_name,
-                    FaEngagement.client_access_code.isnot(None),
-                    FaEngagement.id != engagement_id,
-                )
-                .limit(1)
-            ).scalar_one_or_none()
-            if existing_code:
-                client_access_code = existing_code
-            else:
-                alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-                client_access_code = "".join(secrets.choice(alphabet) for _ in range(8))
-            eng.client_access_code = client_access_code
             db.flush()
             emit_engagement_audit_event(
                 db,
@@ -5583,8 +5565,17 @@ def qa_approve_report_route(
                 gate_snapshot=gate_snapshot,
                 baseline_readiness_score=gate_snapshot.get("readiness_score", 0),
             )
-    else:
-        client_access_code = eng.client_access_code
+            # Create a hashed portal grant for client delivery access.
+            grant_result = _portal_grant_svc.create_grant(
+                db,
+                tenant_id=tenant_id,
+                client_id=eng.client_name,
+                engagement_id=engagement_id,
+                created_by=actor,
+            )
+            portal_grant_id = grant_result.grant.id
+            portal_raw_secret = grant_result.raw_secret
+            portal_expires_at = grant_result.grant.expires_at
 
     db.commit()
 
@@ -5593,9 +5584,188 @@ def qa_approve_report_route(
         qa_approved_by=display_name,
         qa_approved_at=now,
         engagement_status=eng.status,
-        client_access_code=client_access_code,
+        portal_grant_id=portal_grant_id,
+        portal_raw_secret=portal_raw_secret,
+        portal_expires_at=portal_expires_at,
         delivery_blocked=delivery_blocked,
         delivery_blockers=delivery_blockers,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes — Portal grant management (operator-facing; C7)
+# ---------------------------------------------------------------------------
+
+
+class PortalGrantResponse(BaseModel):
+    id: str
+    engagement_id: str
+    client_id: str
+    grant_type: str
+    status: str
+    created_by: str
+    created_at: str
+    expires_at: str
+    last_used_at: str | None = None
+    revoked_at: str | None = None
+    rotation_counter: int
+
+
+class CreatePortalGrantRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ttl_days: int = 14
+
+
+class CreatePortalGrantResponse(BaseModel):
+    grant: PortalGrantResponse
+    raw_secret: str  # Shown once — store securely before dismissing this response
+
+
+class RotatePortalGrantResponse(BaseModel):
+    grant: PortalGrantResponse
+    raw_secret: str
+
+
+def _grant_to_response(g: PortalGrant) -> PortalGrantResponse:
+    return PortalGrantResponse(
+        id=g.id,
+        engagement_id=g.engagement_id,
+        client_id=g.client_id,
+        grant_type=g.grant_type,
+        status=g.status,
+        created_by=g.created_by,
+        created_at=g.created_at,
+        expires_at=g.expires_at,
+        last_used_at=g.last_used_at,
+        revoked_at=g.revoked_at,
+        rotation_counter=g.rotation_counter,
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/portal-grants",
+    response_model=CreatePortalGrantResponse,
+    status_code=201,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def create_portal_grant(
+    engagement_id: str,
+    request: Request,
+    body: CreatePortalGrantRequest = CreatePortalGrantRequest(),
+    db: Session = Depends(auth_ctx_db_session),
+) -> CreatePortalGrantResponse:
+    """Create a portal grant for client delivery access. Raw secret shown once — not stored."""
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    eng = db.execute(
+        select(FaEngagement).where(
+            FaEngagement.id == engagement_id,
+            FaEngagement.tenant_id == tenant_id,
+        )
+    ).scalar_one()
+
+    result = _portal_grant_svc.create_grant(
+        db,
+        tenant_id=tenant_id,
+        client_id=eng.client_name,
+        engagement_id=engagement_id,
+        created_by=actor,
+        ttl_days=max(1, min(body.ttl_days, 365)),
+    )
+    db.commit()
+    return CreatePortalGrantResponse(
+        grant=_grant_to_response(result.grant),
+        raw_secret=result.raw_secret,
+    )
+
+
+@router.get(
+    "/engagements/{engagement_id}/portal-grants",
+    response_model=list[PortalGrantResponse],
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_portal_grants(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[PortalGrantResponse]:
+    """List portal grants for an engagement (no secrets exposed)."""
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    grants = _portal_grant_svc.list_grants(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    return [_grant_to_response(g) for g in grants]
+
+
+@router.delete(
+    "/engagements/{engagement_id}/portal-grants/{grant_id}",
+    status_code=204,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def revoke_portal_grant(
+    engagement_id: str,
+    grant_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> None:
+    """Revoke a portal grant immediately. All active sessions for this engagement become invalid."""
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    found = _portal_grant_svc.revoke_grant(
+        db, grant_id=grant_id, tenant_id=tenant_id, revoked_by=actor
+    )
+    if not found:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("PORTAL_GRANT_NOT_FOUND", f"Grant {grant_id!r} not found"),
+        )
+    db.commit()
+
+
+@router.post(
+    "/engagements/{engagement_id}/portal-grants/{grant_id}/rotate",
+    response_model=RotatePortalGrantResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def rotate_portal_grant(
+    engagement_id: str,
+    grant_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> RotatePortalGrantResponse:
+    """Rotate a portal grant. Old secret is immediately invalid; new secret returned once."""
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    result = _portal_grant_svc.rotate_grant(
+        db, grant_id=grant_id, tenant_id=tenant_id, rotated_by=actor
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "PORTAL_GRANT_NOT_FOUND", f"Active grant {grant_id!r} not found"
+            ),
+        )
+    db.commit()
+    return RotatePortalGrantResponse(
+        grant=_grant_to_response(result.grant),
+        raw_secret=result.raw_secret,
     )
 
 

@@ -145,7 +145,7 @@ Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
 
 | Gate | Key work | Estimate |
 |------|----------|----------|
-| **Phase 0A — Revenue-Safe** | ✅ C5 audio proxy SSRF — artifact-registry refactor (PR fix 43); ✅ C6 scanner containment hardening (PR fix 44): SafeTargetValidationService, 12-layer validation, DNS-rebinding protection, redirect revalidation, durable scan jobs, append-only audit trail, 114 security tests; C7 portal grant model, H13 audit atomicity, H15 evidence lifecycle locks | Weeks 1–2 |
+| **Phase 0A — Revenue-Safe** | ✅ C5 audio proxy SSRF — artifact-registry refactor (PR fix 43); ✅ C6 scanner containment hardening (PR fix 44): SafeTargetValidationService, 12-layer validation, DNS-rebinding protection, redirect revalidation, durable scan jobs, append-only audit trail, 114 security tests; ✅ C7 portal grant model (PR fix 45): Argon2id-hashed grants, server-side sessions, engagement-binding, append-only audit trail, middleware rewritten, 46 security tests, 15 security layers; H13 audit atomicity, H15 evidence lifecycle locks | Weeks 1–2 |
 | **Phase 1 — Trusted Pilot** | H11 drift RLS, H12 durable job store, H14 console RBAC + actor attribution, PI20 FA/Gov outbox boundary, DB hardening, portal session identity | Weeks 3–6 |
 | **Phase 2 — Enterprise Production** | Governed document pipeline, retention + legal hold, scheduler execution, observability dashboards, assessor assignment workflows, client account identity, OpenAPI → TypeScript codegen | Weeks 7–14 |
 | **Phase 3 — Moat Layer** | Longitudinal evidence graph (across reassessments), regulator-ready verification bundles (signed, replayable), reassessment intelligence (drift, regression, remediation velocity), consent-based sector benchmarks | Months 3–6 |

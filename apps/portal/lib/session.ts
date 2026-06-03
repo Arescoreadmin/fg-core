@@ -27,20 +27,20 @@ export async function createSessionToken(): Promise<string> {
   return `${payloadB64}.${sigB64}`;
 }
 
-// ─── Access-code session (per-client, carries access code) ────────────────────
+// ─── Grant session (C7: carries opaque backend session_id) ────────────────────
 
-export async function createAccessCodeSession(accessCode: string): Promise<string> {
+export async function createGrantSession(sessionId: string): Promise<string> {
   const key = await getKey();
   if (!key) throw new Error('PORTAL_SESSION_SECRET not configured');
   const exp = Date.now() + SESSION_TTL_MS;
-  const payload = JSON.stringify({ ok: true, exp, accessCode });
+  const payload = JSON.stringify({ ok: true, exp, sessionId });
   const payloadB64 = btoa(unescape(encodeURIComponent(payload)));
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadB64));
   const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
   return `${payloadB64}.${sigB64}`;
 }
 
-export async function getSessionAccessCode(token: string | undefined): Promise<string | null> {
+export async function getGrantSessionId(token: string | undefined): Promise<string | null> {
   if (!token) return null;
   const key = await getKey();
   if (!key) return null;
@@ -53,10 +53,10 @@ export async function getSessionAccessCode(token: string | undefined): Promise<s
     const valid = await crypto.subtle.verify('HMAC', key, sig, new TextEncoder().encode(payloadB64));
     if (!valid) return null;
     const payloadRaw = atob(payloadB64);
-    if (payloadRaw.startsWith('ok:')) return null; // legacy password-only session
+    if (payloadRaw.startsWith('ok:')) return null;
     const parsed = JSON.parse(decodeURIComponent(escape(payloadRaw)));
     if (!parsed.ok || Date.now() > (parsed.exp ?? 0)) return null;
-    return (parsed.accessCode as string) ?? null;
+    return (parsed.sessionId as string) ?? null;
   } catch {
     return null;
   }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAccessCodeSession, COOKIE_NAME } from '@/lib/session';
+import { createGrantSession, COOKIE_NAME } from '@/lib/session';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 
@@ -23,12 +23,12 @@ function clearLoginAttempts(ip: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const secret = process.env.PORTAL_SESSION_SECRET;
+  const sessionSecret = process.env.PORTAL_SESSION_SECRET;
   const coreApiUrl = (process.env.CORE_API_URL || '').replace(/\/$/, '');
   const coreApiKey = process.env.CORE_API_KEY;
   const coreTenantId = process.env.CORE_TENANT_ID;
 
-  if (!secret || !coreApiUrl || !coreApiKey || !coreTenantId) {
+  if (!sessionSecret || !coreApiUrl || !coreApiKey || !coreTenantId) {
     return NextResponse.json(
       { error: 'Portal authentication is not configured.' },
       { status: 503 },
@@ -54,39 +54,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
   }
 
-  const accessCode = (body.password ?? '').trim().toUpperCase();
-  if (!accessCode) {
-    return NextResponse.json({ error: 'Access code is required.' }, { status: 401 });
+  const secret = (body.password ?? '').trim();
+  if (!secret) {
+    return NextResponse.json({ error: 'Access secret is required.' }, { status: 401 });
   }
 
-  // Validate: check that at least one engagement exists for this access code.
+  // Exchange secret for a server-side session via POST /portal/authenticate.
+  // The backend validates against Argon2id hashes — no plaintext stored.
+  let sessionId: string;
   try {
-    const resp = await fetch(
-      `${coreApiUrl}/field-assessment/engagements?client_access_code=${encodeURIComponent(accessCode)}&limit=1`,
-      {
-        headers: {
-          'X-API-Key': coreApiKey,
-          'X-Tenant-ID': coreTenantId,
-          'X-Portal-Source': 'client-portal-auth',
-        },
-        cache: 'no-store',
+    const resp = await fetch(`${coreApiUrl}/portal/authenticate`, {
+      method: 'POST',
+      headers: {
+        'X-API-Key': coreApiKey,
+        'X-Tenant-ID': coreTenantId,
+        'Content-Type': 'application/json',
       },
-    );
-    if (!resp.ok) throw new Error(`backend ${resp.status}`);
-    const data = await resp.json();
-    if (!Array.isArray(data.items) || data.items.length === 0) {
-      return NextResponse.json({ error: 'Invalid access code.' }, { status: 401 });
+      body: JSON.stringify({ secret }),
+      cache: 'no-store',
+    });
+    if (resp.status === 429) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Try again in a few minutes.' },
+        { status: 429 },
+      );
     }
+    if (!resp.ok) {
+      return NextResponse.json({ error: 'Invalid access secret.' }, { status: 401 });
+    }
+    const data = await resp.json();
+    sessionId = data.session_id as string;
+    if (!sessionId) throw new Error('no session_id in response');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('401') || msg.includes('Invalid')) {
-      return NextResponse.json({ error: 'Invalid access code.' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid access secret.' }, { status: 401 });
     }
     return NextResponse.json({ error: 'Authentication service unavailable.' }, { status: 503 });
   }
 
   clearLoginAttempts(clientIp);
-  const token = await createAccessCodeSession(accessCode);
+  // Store the opaque backend session_id in a signed HMAC cookie.
+  const token = await createGrantSession(sessionId);
   const res = NextResponse.json({ ok: true });
   res.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,

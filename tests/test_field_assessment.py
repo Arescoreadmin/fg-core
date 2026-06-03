@@ -831,10 +831,9 @@ def portal_client(build_app: object) -> TestClient:
 
 
 def _create_delivered_engagement(client: TestClient) -> dict:
-    """Create an engagement and QA-approve it to get a client_access_code."""
+    """Create an engagement and QA-approve it (for testing the delivery gate)."""
     eng = _create_engagement(client)
     eng_id = eng["id"]
-    # Ingest a scan + findings so a report can be generated
     report_resp = client.post(
         f"/field-assessment/engagements/{eng_id}/reports",
         json={"schema_version": "1.0", "sections": {}, "section_hashes": {}},
@@ -844,54 +843,89 @@ def _create_delivered_engagement(client: TestClient) -> dict:
         client.post(
             f"/field-assessment/engagements/{eng_id}/reports/{version}/qa-approve"
         )
-    # Re-fetch to get current state including client_access_code
     detail = client.get(f"/field-assessment/engagements/{eng_id}")
     return detail.json()
 
 
-def test_portal_engagement_access_requires_code(
+def _make_portal_session(client: TestClient, eng_id: str) -> str:
+    """Create a portal grant and authenticate to obtain a session_id."""
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/portal-grants",
+        json={"ttl_days": 14},
+    )
+    assert resp.status_code == 201, resp.text
+    raw_secret = resp.json()["raw_secret"]
+    auth = client.post("/portal/authenticate", json={"secret": raw_secret})
+    assert auth.status_code == 200, auth.text
+    return auth.json()["session_id"]
+
+
+def test_portal_engagement_access_requires_session(
     portal_client: TestClient, client: TestClient
 ) -> None:
-    """Portal request without client_access_code is blocked with 403."""
+    """Portal request without X-FG-Portal-Session is blocked with PORTAL_SESSION_REQUIRED."""
     eng = _create_engagement(client)
-    eng_id = eng["id"]
-    resp = portal_client.get(f"/field-assessment/engagements/{eng_id}")
+    resp = portal_client.get(f"/field-assessment/engagements/{eng['id']}")
     assert resp.status_code == 403
-    assert resp.json()["code"] == "PORTAL_ACCESS_CODE_REQUIRED"
+    assert resp.json()["code"] == "PORTAL_SESSION_REQUIRED"
 
 
-def test_portal_engagement_wrong_code_denied(
+def test_portal_engagement_invalid_session_denied(
     portal_client: TestClient, client: TestClient
 ) -> None:
-    """Portal request with wrong access code is denied."""
+    """Portal request with an invalid session token is denied."""
     eng = _create_engagement(client)
-    eng_id = eng["id"]
     resp = portal_client.get(
-        f"/field-assessment/engagements/{eng_id}",
-        params={"client_access_code": "wrong-code"},
+        f"/field-assessment/engagements/{eng['id']}",
+        headers={"X-FG-Portal-Session": "invalid-session-id"},
     )
     assert resp.status_code == 403
-    assert resp.json()["code"] == "PORTAL_ACCESS_DENIED"
 
 
-def test_portal_engagement_wrong_code_denied_on_subresource(
+def test_portal_engagement_valid_session_allowed(
+    portal_client: TestClient, client: TestClient
+) -> None:
+    """Portal request with a valid session and matching grant is permitted."""
+    eng = _create_engagement(client)
+    session_id = _make_portal_session(client, eng["id"])
+    resp = portal_client.get(
+        f"/field-assessment/engagements/{eng['id']}",
+        headers={"X-FG-Portal-Session": session_id},
+    )
+    assert resp.status_code == 200
+
+
+def test_portal_engagement_wrong_engagement_denied(
+    portal_client: TestClient, client: TestClient
+) -> None:
+    """IDOR guard: session valid for one engagement cannot access another."""
+    eng1 = _create_engagement(client)
+    eng2 = _create_engagement(client)
+    session_id = _make_portal_session(client, eng1["id"])
+    resp = portal_client.get(
+        f"/field-assessment/engagements/{eng2['id']}",
+        headers={"X-FG-Portal-Session": session_id},
+    )
+    assert resp.status_code == 403
+
+
+def test_portal_engagement_wrong_session_denied_on_subresource(
     portal_client: TestClient, client: TestClient
 ) -> None:
     """IDOR guard also protects sub-resources like /findings."""
-    eng = _create_engagement(client)
-    eng_id = eng["id"]
+    eng1 = _create_engagement(client)
+    eng2 = _create_engagement(client)
+    session_id = _make_portal_session(client, eng1["id"])
     resp = portal_client.get(
-        f"/field-assessment/engagements/{eng_id}/findings",
-        params={"client_access_code": "not-the-real-code"},
+        f"/field-assessment/engagements/{eng2['id']}/findings",
+        headers={"X-FG-Portal-Session": session_id},
     )
     assert resp.status_code == 403
-    assert resp.json()["code"] == "PORTAL_ACCESS_DENIED"
 
 
-def test_portal_list_engagements_no_code_required(portal_client: TestClient) -> None:
-    """List route does not require client_access_code from the middleware (already filtered)."""
+def test_portal_list_engagements_no_session_required(portal_client: TestClient) -> None:
+    """List route is not gated by the middleware (only /{id}/* paths are)."""
     resp = portal_client.get("/field-assessment/engagements")
-    # List route is not gated by the middleware — the middleware only activates for /{id}/* paths
     assert resp.status_code == 200
 
 
@@ -957,7 +991,8 @@ def test_qa_approve_blocks_delivery_when_gates_incomplete(
     assert data["delivery_blocked"] is True
     assert len(data["delivery_blockers"]) > 0
     assert data["engagement_status"] == "in_progress"
-    assert data["client_access_code"] is None
+    # portal_grant_id is None because delivery gates are not yet all met
+    assert data["portal_grant_id"] is None
 
 
 def test_qa_approve_blockers_include_gate_id_and_title(qa_client: TestClient) -> None:

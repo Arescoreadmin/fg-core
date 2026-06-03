@@ -5441,6 +5441,74 @@
         "tenant"
       ],
       "file": "api/field_assessment.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "DELETE",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}/rotate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
       "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/promote",
       "plane": "control",
@@ -7460,6 +7528,54 @@
     },
     {
       "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/portal.py",
+      "method": "POST",
+      "path": "/portal/authenticate",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/portal.py",
+      "method": "GET",
+      "path": "/portal/me",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/portal.py",
+      "method": "DELETE",
+      "path": "/portal/sessions/{session_id}",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
         "auth",
         "tenant"
       ],
@@ -8997,7 +9113,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-03T00:03:48.658886+00:00",
+  "generated_at": "2026-06-03T09:54:04.282536+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

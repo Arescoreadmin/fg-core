@@ -1359,3 +1359,35 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 **Tools/CI changes:** `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256` regenerated for five new report export routes.
 
 **Tests:** `tests/test_governance_report_exports.py` covers stable canonical hashes, deterministic PDF/HTML exports, evidence appendix ordering, fail-closed missing sections, replay mismatch detection, reviewer/finalization lineage metadata, and AI narrative containment.
+
+
+---
+
+## PR fix 45 — C7 Portal Grant Model Hardening
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (middleware rewrite, contract and route inventory regeneration)
+
+**Scope:** Full replacement of plaintext `client_access_code` portal authorization with a cryptographically-hardened portal grant system. Covers 15 mandatory security control layers (Argon2id hashing, engagement binding, expiry, revocation, rotation, server-derived identity, replay protection, append-only audit trail, wrong-tenant/engagement protection, evidence boundary, rate limiting, session management, portal scope middleware, no-plaintext guarantee).
+
+**Middleware rewrite:** `api/middleware/portal_scope.py` rewritten to validate `X-FG-Portal-Session` header (opaque server-side session token) against `portal_grant_sessions` DB record. Replaces `client_access_code` query param validation. Fails closed on any DB or validation exception. Portal identity (`portal_client_id`, `portal_engagement_id`) derived from validated DB record — never from caller-asserted headers.
+
+**New service:** `services/portal_grant_service.py` — single source of truth for all portal authorization decisions. Argon2id (time_cost=3, memory=64MiB, parallelism=4, OWASP-compliant) for secret hashing. In-memory rate limiting: 10/IP and 50/tenant per 15-minute window. Audit events written for all lifecycle actions (create, use, deny, revoke, rotate).
+
+**New DB models and migration:** `api/db_models_portal.py` adds `portal_grants`, `portal_grant_audit_events`, `portal_grant_sessions` tables with RLS. Audit table uses split SELECT + INSERT policies (append-only). Sessions expire after 8 hours.
+
+**New portal router:** `api/portal.py` — `POST /portal/authenticate` (exchange secret for session_id), `GET /portal/me` (session info), `DELETE /portal/sessions/{id}` (logout). Registered in both `build_app` builder functions in `api/main.py`.
+
+**Security invariants:**
+- Argon2id hashes stored; raw secret shown once to operator, never persisted.
+- Session token is 64-char hex (256-bit entropy); stored server-side only.
+- Engagement binding validated per request by middleware (not just at login time).
+- Cross-tenant sessions denied (session `tenant_id` must match API-key-derived tenant).
+- Wrong-engagement sessions denied (`PORTAL_ENGAGEMENT_ACCESS_DENIED`).
+- Expired/revoked grants and sessions deny access immediately.
+- Query-param (`client_access_code`) auth path removed from all routes and middleware.
+
+**Tools/CI changes:** `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256` regenerated for 7 new portal and portal-grant routes.
+
+**Tests:** `tests/test_c7_portal_grants.py` — 46 tests covering all 15 security layers. `tests/test_field_assessment.py` portal section updated to session-based auth.
+
+**Validation:** `make fg-fast` PASS.

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { COOKIE_NAME, getSessionUser, getSessionAccessCode } from '@/lib/session';
+import { COOKIE_NAME, getSessionUser, getGrantSessionId } from '@/lib/session';
 import { getRedisClient } from '@/lib/redis';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
@@ -39,6 +39,7 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'governance/assets', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'field-assessment/engagements', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'ui/ai/chat', methods: new Set(['POST']) },
+  { prefix: 'portal', methods: new Set(['GET', 'HEAD']) },
 ];
 
 // Explicit write paths allowed through the portal BFF.
@@ -102,19 +103,13 @@ function jsonError(message: string, status: number, requestId: string): NextResp
   );
 }
 
-function buildCoreUrl(path: string[], request: NextRequest, accessCode?: string | null): string {
+function buildCoreUrl(path: string[], request: NextRequest): string {
   const incoming = new URL(request.url);
   const query = new URLSearchParams(incoming.search);
   // Never forward client-supplied tenant_id — resolved server-side from CORE_TENANT_ID
   query.delete('tenant_id');
-  // Scope engagement queries to the authenticated client's access code so they
-  // only ever see their own reports, regardless of what ID they pass in the URL.
-  const joined = path.join('/');
-  if (accessCode && joined.startsWith('field-assessment/engagements')) {
-    query.set('client_access_code', accessCode);
-  }
   const qs = query.toString();
-  return `${CORE_API_URL}/${joined}${qs ? `?${qs}` : ''}`;
+  return `${CORE_API_URL}/${path.join('/')}${qs ? `?${qs}` : ''}`;
 }
 
 async function proxyToCore(
@@ -130,9 +125,9 @@ async function proxyToCore(
 
   const sessionToken = request.cookies.get(COOKIE_NAME)?.value;
   const sessionUser = await getSessionUser(sessionToken);
-  const sessionAccessCode = await getSessionAccessCode(sessionToken);
+  const sessionId = await getGrantSessionId(sessionToken);
 
-  const target = buildCoreUrl(path, request, sessionAccessCode);
+  const target = buildCoreUrl(path, request);
   try {
     const { hostname } = new URL(target);
     if (NODE_ENV !== 'development' && isPrivateHost(hostname)) {
@@ -148,6 +143,9 @@ async function proxyToCore(
   headers.set('X-Request-ID', requestId);
   headers.set('X-Portal-Source', 'client-portal');
 
+  if (sessionId) {
+    headers.set('X-FG-Portal-Session', sessionId);
+  }
   if (sessionUser) {
     headers.set('X-FG-User-ID', sessionUser.userId);
     headers.set('X-FG-User-Email', sessionUser.email);

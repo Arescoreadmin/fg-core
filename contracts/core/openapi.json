@@ -4355,6 +4355,35 @@
         "title": "CreateOrgRequest",
         "type": "object"
       },
+      "CreatePortalGrantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ttl_days": {
+            "default": 14,
+            "title": "Ttl Days",
+            "type": "integer"
+          }
+        },
+        "title": "CreatePortalGrantRequest",
+        "type": "object"
+      },
+      "CreatePortalGrantResponse": {
+        "properties": {
+          "grant": {
+            "$ref": "#/components/schemas/PortalGrantResponse"
+          },
+          "raw_secret": {
+            "title": "Raw Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant",
+          "raw_secret"
+        ],
+        "title": "CreatePortalGrantResponse",
+        "type": "object"
+      },
       "CreateRelationshipRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6414,17 +6443,6 @@
           "assessor_id": {
             "title": "Assessor Id",
             "type": "string"
-          },
-          "client_access_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Access Code"
           },
           "client_domain": {
             "anyOf": [
@@ -12035,6 +12053,152 @@
         "title": "PolicyStageRequest",
         "type": "object"
       },
+      "PortalAuthenticateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret"
+        ],
+        "title": "PortalAuthenticateRequest",
+        "type": "object"
+      },
+      "PortalAuthenticateResponse": {
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "engagement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Engagement Ids",
+            "type": "array"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "expires_at",
+          "client_id",
+          "engagement_ids"
+        ],
+        "title": "PortalAuthenticateResponse",
+        "type": "object"
+      },
+      "PortalGrantResponse": {
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "grant_type": {
+            "title": "Grant Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "rotation_counter": {
+            "title": "Rotation Counter",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "engagement_id",
+          "client_id",
+          "grant_type",
+          "status",
+          "created_by",
+          "created_at",
+          "expires_at",
+          "rotation_counter"
+        ],
+        "title": "PortalGrantResponse",
+        "type": "object"
+      },
+      "PortalMeResponse": {
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "engagement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Engagement Ids",
+            "type": "array"
+          },
+          "session_expires_at": {
+            "title": "Session Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "session_expires_at",
+          "engagement_ids"
+        ],
+        "title": "PortalMeResponse",
+        "type": "object"
+      },
       "PromoteConnectorAssetsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -13895,17 +14059,6 @@
       },
       "ReportQaApproveResponse": {
         "properties": {
-          "client_access_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Access Code"
-          },
           "delivery_blocked": {
             "default": false,
             "title": "Delivery Blocked",
@@ -13922,6 +14075,39 @@
           "engagement_status": {
             "title": "Engagement Status",
             "type": "string"
+          },
+          "portal_expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portal Expires At"
+          },
+          "portal_grant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portal Grant Id"
+          },
+          "portal_raw_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portal Raw Secret"
           },
           "qa_approved_at": {
             "title": "Qa Approved At",
@@ -14336,6 +14522,19 @@
         "title": "RevokeKeyResponse",
         "type": "object"
       },
+      "RevokeSessionResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "RevokeSessionResponse",
+        "type": "object"
+      },
       "RingPolicy": {
         "properties": {
           "audit_level": {
@@ -14605,6 +14804,23 @@
           "old_key_revoked"
         ],
         "title": "RotateKeyResponse",
+        "type": "object"
+      },
+      "RotatePortalGrantResponse": {
+        "properties": {
+          "grant": {
+            "$ref": "#/components/schemas/PortalGrantResponse"
+          },
+          "raw_secret": {
+            "title": "Raw Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant",
+          "raw_secret"
+        ],
+        "title": "RotatePortalGrantResponse",
         "type": "object"
       },
       "RotationOutcome": {
@@ -33020,22 +33236,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "client_access_code",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Client Access Code"
-            }
-          },
-          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -36008,6 +36208,267 @@
           }
         },
         "summary": "Update Observation Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/portal-grants": {
+      "get": {
+        "description": "List portal grants for an engagement (no secrets exposed).",
+        "operationId": "list_portal_grants_field_assessment_engagements__engagement_id__portal_grants_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PortalGrantResponse"
+                  },
+                  "title": "Response List Portal Grants Field Assessment Engagements  Engagement Id  Portal Grants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Portal Grants",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "description": "Create a portal grant for client delivery access. Raw secret shown once \u2014 not stored.",
+        "operationId": "create_portal_grant_field_assessment_engagements__engagement_id__portal_grants_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePortalGrantRequest",
+                "default": {
+                  "ttl_days": 14
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePortalGrantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Portal Grant",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}": {
+      "delete": {
+        "description": "Revoke a portal grant immediately. All active sessions for this engagement become invalid.",
+        "operationId": "revoke_portal_grant_field_assessment_engagements__engagement_id__portal_grants__grant_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "title": "Grant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Portal Grant",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}/rotate": {
+      "post": {
+        "description": "Rotate a portal grant. Old secret is immediately invalid; new secret returned once.",
+        "operationId": "rotate_portal_grant_field_assessment_engagements__engagement_id__portal_grants__grant_id__rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "title": "Grant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotatePortalGrantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate Portal Grant",
         "tags": [
           "field-assessment"
         ]
@@ -44141,6 +44602,175 @@
         "summary": "Get Planes",
         "tags": [
           "planes"
+        ]
+      }
+    },
+    "/portal/authenticate": {
+      "post": {
+        "description": "Exchange a portal grant secret for a short-lived server-side session token.\n\nCalled server-side by the portal BFF login handler \u2014 never exposed directly\nto the browser. The BFF authenticates with CORE_API_KEY; the portal user's\nsecret is in the request body only.",
+        "operationId": "portal_authenticate_portal_authenticate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalAuthenticateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalAuthenticateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Authenticate",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/portal/me": {
+      "get": {
+        "description": "Return session identity and accessible engagement IDs.",
+        "operationId": "portal_me_portal_me_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalMeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Me",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/portal/sessions/{session_id}": {
+      "delete": {
+        "description": "Revoke a portal session (server-side logout).",
+        "operationId": "portal_revoke_session_portal_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Revoke Session",
+        "tags": [
+          "portal"
         ]
       }
     },

@@ -201,6 +201,7 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_questionnaire"
     )  # PR 26: NIST AI RMF questionnaire
+    importlib.import_module("api.db_models_portal")  # C7: portal grant model
 
 
 def _get_base():

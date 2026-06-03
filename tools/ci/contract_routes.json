@@ -1585,6 +1585,30 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}/rotate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/promote",
       "scopes": [],
@@ -2287,6 +2311,24 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/portal/authenticate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/me",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/portal/sessions/{session_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/rag/corpora",
       "scopes": [],
@@ -2539,7 +2581,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-03T00:03:48.668649+00:00",
+  "generated_at": "2026-06-03T09:54:04.292406+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
