@@ -3,7 +3,6 @@
     "microsoft_graph",
     "oauth_inventory",
     "oauth_risk",
-    "ai_tool_discovery",
     "endpoint_inventory",
     "entra_governance",
     "sharepoint_onedrive",
@@ -47,51 +46,21 @@
     ],
     "dns_email": [],
     "web_headers": [],
-    "network_scan": [],
-    "ai_tool_discovery": [
-      "Application.Read.All",
-      "Directory.Read.All",
-      "AuditLog.Read.All"
-    ]
+    "network_scan": []
   },
-  "allowed_collections": [
-    "field-assessment"
-  ],
+  "allowed_collections": ["field-assessment"],
   "allowed_resources": {
-    "microsoft_graph": [
-      "tenant:*"
-    ],
-    "oauth_inventory": [
-      "tenant:*"
-    ],
-    "oauth_risk": [
-      "tenant:*"
-    ],
-    "endpoint_inventory": [
-      "tenant:*"
-    ],
-    "entra_governance": [
-      "tenant:*"
-    ],
-    "sharepoint_onedrive": [
-      "tenant:*"
-    ],
-    "dns_email": [
-      "domain:*"
-    ],
-    "web_headers": [
-      "url:*"
-    ],
-    "network_scan": [
-      "host:*"
-    ],
-    "ai_tool_discovery": [
-      "tenant:*"
-    ]
+    "microsoft_graph": ["tenant:*"],
+    "oauth_inventory": ["tenant:*"],
+    "oauth_risk": ["tenant:*"],
+    "endpoint_inventory": ["tenant:*"],
+    "entra_governance": ["tenant:*"],
+    "sharepoint_onedrive": ["tenant:*"],
+    "dns_email": ["domain:*"],
+    "web_headers": ["url:*"],
+    "network_scan": ["host:*"]
   },
-  "retention": {
-    "days": 90
-  },
+  "retention": {"days": 90},
   "redaction_mode": "strict",
   "rate_limits": {
     "tenant_dispatch_per_minute": 10,

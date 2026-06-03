@@ -41,7 +41,6 @@ SUPPORTED_SCHEMA_VERSIONS: dict[str, set[str]] = {
     ScanSourceType.ENTRA_GOVERNANCE.value: {"1.0"},
     ScanSourceType.SHAREPOINT_ONEDRIVE.value: {"1.0"},
     ScanSourceType.OAUTH_RISK.value: {"1.0"},
-    ScanSourceType.AI_TOOL_DISCOVERY.value: {"1.0"},
 }
 
 # ---------------------------------------------------------------------------
@@ -75,7 +74,6 @@ REQUIRED_FIELDS: dict[str, dict[str, type]] = {
     ScanSourceType.ENTRA_GOVERNANCE.value: {"role_assignments": list},
     ScanSourceType.SHAREPOINT_ONEDRIVE.value: {"sites": list},
     ScanSourceType.OAUTH_RISK.value: {"grants": list},
-    ScanSourceType.AI_TOOL_DISCOVERY.value: {"tools": list},
 }
 
 # ---------------------------------------------------------------------------
@@ -96,7 +94,6 @@ _SOURCE_QUARANTINE_OVERRIDES: dict[str, dict[str, int]] = {
     ScanSourceType.GOOGLE_WORKSPACE.value: {"MAX_FIELD_COUNT": 5_000},
     # OAuth inventories across many apps and scopes.
     ScanSourceType.OAUTH_INVENTORY.value: {"MAX_FIELD_COUNT": 5_000},
-    ScanSourceType.AI_TOOL_DISCOVERY.value: {"MAX_FIELD_COUNT": 5_000},
 }
 
 

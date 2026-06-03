@@ -1,1 +1,0 @@
-"""AI Tool Discovery connector."""

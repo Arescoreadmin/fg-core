@@ -463,13 +463,6 @@ _CONNECTOR_DATA_COLLECTED: dict[str, tuple[str, str]] = {
         "User-consented OAuth grants to third-party apps, AI tool data access "
         "patterns, over-privileged application permissions, publisher verification status",
     ),
-    "ai_tool_discovery": (
-        "AI Tool Discovery (MS Graph)",
-        "App registrations, service principals, OAuth permission grants, app role "
-        "assignments, sign-in timestamps, audit-log availability, known AI vendor "
-        "signature matches, and publisher verification status. Prompt, document, "
-        "email, and browsing content are never collected.",
-    ),
     "endpoint_inventory": (
         "Endpoint Inventory (MS Graph / Intune)",
         "Azure AD device list, Intune enrollment and compliance status, "
