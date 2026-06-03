@@ -51,6 +51,9 @@ from services.field_assessment.audit import (
 )
 from services.field_assessment.evidence_lifecycle import evidence_lifecycle_svc
 from services.field_assessment.durable_job_service import durable_job_svc
+from services.field_assessment.governance_decision_service import (
+    governance_decision_svc,
+)
 from services.field_assessment.connectors.msgraph_bridge import (
     ConnectorAcknowledgmentRequired,
     ConnectorBridgeError,
@@ -545,6 +548,11 @@ class FindingRemediationPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     remediation_hint: str = Field(..., min_length=1, max_length=2000)
+    # H14 actor attribution + decision reason for governance ledger
+    decision_reason: str | None = None
+    actor_name: str | None = None
+    actor_email: str | None = None
+    actor_role: str | None = None
 
 
 class FindingStatusPatchResponse(BaseModel):
@@ -2290,6 +2298,30 @@ def patch_finding_remediation_route(
         entity_id=finding_id,
         payload={"finding_id": finding_id},
     )
+
+    # H14: record governance decision for finding closure
+    governance_decision_svc.record_decision(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        decision_type="finding_closed",
+        entity_type="finding",
+        entity_id=finding_id,
+        actor_id=actor,
+        actor_name=body.actor_name,
+        actor_email=body.actor_email,
+        actor_role=body.actor_role,
+        decision_reason=(
+            body.decision_reason
+            or f"Finding remediation: {body.remediation_hint[:200]}"
+        ),
+        related_finding_ids=[finding_id],
+        decision_metadata={
+            "finding_id": finding_id,
+            "remediation_hint": body.remediation_hint,
+        },
+    )
+
     db.commit()
     db.refresh(finding)
     return {"finding_id": finding_id, "remediation_hint": finding.remediation_hint}
@@ -5318,6 +5350,315 @@ def get_msgraph_run_status(
 
 
 # ---------------------------------------------------------------------------
+# Routes — Governance Decision Ledger (H14)
+# ---------------------------------------------------------------------------
+
+# ── Risk Acceptances ─────────────────────────────────────────────────────────
+
+
+class RiskAcceptanceCreateBody(BaseModel):
+    finding_id: str
+    risk_owner: str = Field(..., min_length=1)
+    risk_owner_email: str | None = None
+    business_justification: str = Field(..., min_length=10)
+    accepted_risk_level: Literal["low", "medium", "high", "critical"]
+    expires_at: str = Field(
+        ..., description="ISO-8601 UTC expiry — no permanent risk acceptance"
+    )
+    review_date: str = Field(..., description="ISO-8601 UTC scheduled review date")
+    evidence_refs: list[str] | None = None
+    approver_name: str | None = None
+    approver_email: str | None = None
+    actor_name: str | None = None
+    actor_email: str | None = None
+    actor_role: str | None = None
+    decision_reason: str | None = None
+    decision_notes: str | None = None
+
+
+@router.post(
+    "/engagements/{engagement_id}/risk-acceptances",
+    status_code=201,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def create_risk_acceptance_route(
+    engagement_id: str,
+    request: Request,
+    body: RiskAcceptanceCreateBody,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Record a formal risk acceptance with owner, justification, and mandatory expiry."""
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    try:
+        get_finding(
+            db,
+            finding_id=body.finding_id,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+        )
+    except FindingNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("FINDING_NOT_FOUND", exc.message)
+        )
+
+    decision, acceptance = governance_decision_svc.record_decision_with_risk_acceptance(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        finding_id=body.finding_id,
+        actor_id=actor,
+        actor_name=body.actor_name,
+        actor_email=body.actor_email,
+        actor_role=body.actor_role,
+        decision_reason=body.decision_reason or body.business_justification,
+        risk_owner=body.risk_owner,
+        risk_owner_email=body.risk_owner_email,
+        business_justification=body.business_justification,
+        accepted_risk_level=body.accepted_risk_level,
+        expires_at=body.expires_at,
+        review_date=body.review_date,
+        evidence_refs=body.evidence_refs,
+        approver_name=body.approver_name,
+        approver_email=body.approver_email,
+        decision_notes=body.decision_notes,
+    )
+    db.commit()
+    return {
+        **governance_decision_svc.risk_acceptance_to_dict(acceptance),
+        "decision": governance_decision_svc.decision_to_dict(decision),
+    }
+
+
+@router.get(
+    "/engagements/{engagement_id}/risk-acceptances",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_risk_acceptances_route(
+    engagement_id: str,
+    request: Request,
+    status: str | None = None,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    acceptances = governance_decision_svc.list_risk_acceptances(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, status=status
+    )
+    return {
+        "risk_acceptances": [
+            governance_decision_svc.risk_acceptance_to_dict(a) for a in acceptances
+        ]
+    }
+
+
+@router.get(
+    "/engagements/{engagement_id}/risk-acceptances/{acceptance_id}",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_risk_acceptance_route(
+    engagement_id: str,
+    acceptance_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    tenant_id = _resolve_caller_tenant(request)
+    acceptance = governance_decision_svc.get_risk_acceptance(
+        db, acceptance_id=acceptance_id, tenant_id=tenant_id
+    )
+    if acceptance is None or acceptance.engagement_id != engagement_id:
+        raise HTTPException(
+            status_code=404, detail=api_error("NOT_FOUND", "risk acceptance not found")
+        )
+    return governance_decision_svc.risk_acceptance_to_dict(acceptance)
+
+
+# ── Governance Exceptions ─────────────────────────────────────────────────────
+
+
+class GovernanceExceptionCreateBody(BaseModel):
+    exception_type: str = Field(..., min_length=1)
+    owner: str = Field(..., min_length=1)
+    owner_email: str | None = None
+    business_justification: str = Field(..., min_length=10)
+    expires_at: str = Field(
+        ..., description="ISO-8601 UTC expiry — no permanent exceptions"
+    )
+    review_schedule: str | None = None
+    related_control_ids: list[str] | None = None
+    related_finding_ids: list[str] | None = None
+    compensating_controls: list[str] | None = None
+    approver_name: str | None = None
+    actor_name: str | None = None
+    actor_email: str | None = None
+    actor_role: str | None = None
+    decision_reason: str | None = None
+    decision_notes: str | None = None
+
+
+@router.post(
+    "/engagements/{engagement_id}/exceptions",
+    status_code=201,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def create_governance_exception_route(
+    engagement_id: str,
+    request: Request,
+    body: GovernanceExceptionCreateBody,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Record a governance exception with owner, justification, and mandatory expiry."""
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    decision, exception = governance_decision_svc.record_decision_with_exception(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor_id=actor,
+        actor_name=body.actor_name,
+        actor_email=body.actor_email,
+        actor_role=body.actor_role,
+        decision_reason=body.decision_reason or body.business_justification,
+        exception_type=body.exception_type,
+        owner=body.owner,
+        owner_email=body.owner_email,
+        business_justification=body.business_justification,
+        expires_at=body.expires_at,
+        review_schedule=body.review_schedule,
+        related_control_ids=body.related_control_ids,
+        related_finding_ids=body.related_finding_ids,
+        compensating_controls=body.compensating_controls,
+        approver_name=body.approver_name,
+        decision_notes=body.decision_notes,
+    )
+    db.commit()
+    return {
+        **governance_decision_svc.exception_to_dict(exception),
+        "decision": governance_decision_svc.decision_to_dict(decision),
+    }
+
+
+@router.get(
+    "/engagements/{engagement_id}/exceptions",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_governance_exceptions_route(
+    engagement_id: str,
+    request: Request,
+    status: str | None = None,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    exceptions = governance_decision_svc.list_exceptions(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, status=status
+    )
+    return {
+        "exceptions": [governance_decision_svc.exception_to_dict(e) for e in exceptions]
+    }
+
+
+@router.get(
+    "/engagements/{engagement_id}/exceptions/{exception_id}",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_governance_exception_route(
+    engagement_id: str,
+    exception_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    tenant_id = _resolve_caller_tenant(request)
+    exception = governance_decision_svc.get_exception(
+        db, exception_id=exception_id, tenant_id=tenant_id
+    )
+    if exception is None or exception.engagement_id != engagement_id:
+        raise HTTPException(
+            status_code=404, detail=api_error("NOT_FOUND", "exception not found")
+        )
+    return governance_decision_svc.exception_to_dict(exception)
+
+
+# ── Decision Ledger ──────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/engagements/{engagement_id}/governance-decisions",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_governance_decisions_route(
+    engagement_id: str,
+    request: Request,
+    decision_type: str | None = None,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    decisions = governance_decision_svc.list_decisions(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        decision_type=decision_type,
+    )
+    return {
+        "decisions": [governance_decision_svc.decision_to_dict(d) for d in decisions]
+    }
+
+
+@router.get(
+    "/engagements/{engagement_id}/governance-decisions/{decision_id}",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_governance_decision_route(
+    engagement_id: str,
+    decision_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    tenant_id = _resolve_caller_tenant(request)
+    decision = governance_decision_svc.get_decision(
+        db, decision_id=decision_id, tenant_id=tenant_id
+    )
+    if decision is None or decision.engagement_id != engagement_id:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("NOT_FOUND", "governance decision not found"),
+        )
+    return governance_decision_svc.decision_to_dict(decision)
+
+
+# ---------------------------------------------------------------------------
 # Routes — Durable scan-job list + detail (H12)
 # ---------------------------------------------------------------------------
 
@@ -6205,6 +6546,10 @@ class ReportQaApproveBody(BaseModel):
     reviewer_name: str | None = (
         None  # Human-readable name; falls back to JWT actor if omitted
     )
+    # H14 actor attribution — captured in governance decision ledger
+    actor_email: str | None = None
+    actor_role: str | None = None
+    decision_notes: str | None = None
 
 
 @router.post(
@@ -6294,6 +6639,24 @@ def qa_approve_report_route(
             "qa_approved_at": now,
             "jwt_actor": actor,
         },
+    )
+
+    # H14: record immutable governance decision with full actor attribution
+    governance_decision_svc.record_decision(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        decision_type="report_approved",
+        entity_type="report",
+        entity_id=report_id,
+        actor_id=actor,
+        actor_name=display_name if display_name != actor else body.reviewer_name,
+        actor_email=body.actor_email,
+        actor_role=body.actor_role,
+        decision_reason=f"Report QA-approved for client delivery by {display_name}",
+        decision_notes=body.decision_notes,
+        related_finding_ids=None,
+        decision_metadata={"qa_approved_by": display_name, "report_id": report_id},
     )
 
     # Attempt auto-advance in_progress → delivered.

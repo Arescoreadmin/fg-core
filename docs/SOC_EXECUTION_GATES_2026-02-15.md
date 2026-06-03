@@ -1,3 +1,41 @@
+## 2026-06-03 — H14 governance decision ledger: 8 new routes + append-only tables
+
+**Classification:** Additive write + read-only routes under the existing field-assessment plane. No auth logic changes. Write routes require `governance:write` scope; read routes require `governance:read`. Tenant binding enforced at DB query layer on all routes. No new auth bypass. No new planes.
+
+**SOC review:**
+- `POST /field-assessment/engagements/{id}/risk-acceptances` — creates FaRiskAcceptance + FaGovernanceDecision atomically; requires `governance:write`; tenant isolation via `_resolve_caller_tenant()`; finding_id validated against engagement + tenant before creation
+- `GET /field-assessment/engagements/{id}/risk-acceptances` — read-only list; requires `governance:read`; engagement isolation enforced
+- `GET /field-assessment/engagements/{id}/risk-acceptances/{acceptance_id}` — read-only detail; 404 if `engagement_id` or `tenant_id` mismatches
+- `POST /field-assessment/engagements/{id}/exceptions` — creates FaGovernanceException + FaGovernanceDecision atomically; requires `governance:write`
+- `GET /field-assessment/engagements/{id}/exceptions` — read-only list; requires `governance:read`
+- `GET /field-assessment/engagements/{id}/exceptions/{exception_id}` — read-only detail; tenant + engagement isolation
+- `GET /field-assessment/engagements/{id}/governance-decisions` — read-only decision ledger; requires `governance:read`
+- `GET /field-assessment/engagements/{id}/governance-decisions/{decision_id}` — read-only detail; 404 on cross-tenant or cross-engagement access
+
+**Why these routes are safe:**
+- All 3 POST routes write to append-only tables — DB triggers prevent UPDATE/DELETE at Postgres layer
+- Tenant isolation enforced at SQL `WHERE tenant_id = ?` level before any data is returned or written
+- No PII beyond what operators explicitly provide in governance decision fields (actor_name, actor_email)
+- No new scopes introduced; existing `governance:write` / `governance:read` scopes apply
+- Decision + audit event commit atomically (H13 AuditAtomicityService pattern)
+
+**Existing routes modified:**
+- `POST /engagements/{id}/reports/{id}/qa-approve` — now also creates `FaGovernanceDecision(decision_type="report_approved")`; no change to existing behavior or response shape; new body fields `actor_email`, `actor_role`, `decision_notes` are optional
+- `PATCH /engagements/{id}/findings/{id}/remediation` — now also creates `FaGovernanceDecision(decision_type="finding_closed")`; new body fields `decision_reason`, `actor_name`, `actor_email`, `actor_role` are optional; existing `remediation_hint`-only callers unaffected
+
+**Artifacts regenerated:**
+- Route inventory regenerated via `make route-inventory-generate`
+
+**Files touched:**
+- `api/db_models_governance_decision.py` — 3 new ORM models (FaGovernanceDecision, FaRiskAcceptance, FaGovernanceException)
+- `services/field_assessment/governance_decision_service.py` — GovernanceDecisionService (created)
+- `migrations/postgres/0085_fa_governance_decisions.sql` — 3 tables + append-only triggers
+- `api/db.py` — db_models_governance_decision registered in _ensure_models_imported()
+- `api/field_assessment.py` — 8 new routes + qa_approve + finding_remediation wired to decision service
+- `tests/test_h14_governance_decisions.py` — 35 tests (all passing)
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`, `plane_registry_snapshot.json` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
 ## 2026-06-03 — H12 durable scan jobs: new read-only scan-jobs routes
 
 **Classification:** Additive read-only routes under the existing field-assessment plane. No auth logic changes. Routes require `governance:read` scope + tenant binding (same as all field-assessment routes). No new planes, no new auth bypass, no contract authority change beyond the already-updated hash.

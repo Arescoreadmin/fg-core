@@ -243,3 +243,40 @@ exceptions:
     business_justification: Same auth-layer justification as EXC-PORTAL-001.
     approval_date: "2026-06-03"
     approved_by: EmpireOverloard
+
+  - id: EXC-FA-013
+    function_name: create_risk_acceptance_route
+    file: api/field_assessment.py
+    reason: >
+      Audit is emitted inside GovernanceDecisionService.record_decision_with_risk_acceptance()
+      via emit_engagement_audit_event() with event_type="decision.risk_accepted". The AST
+      scanner does not traverse service method bodies, so the audit call is invisible to it.
+      The decision + audit commit atomically in the same transaction (H13 pattern).
+    owner: governance-team
+    expiration_date: "2027-01-01"
+    approval_reference: H14-governance-decision-ledger
+    jira_ticket: null
+    business_justification: >
+      Audit call happens inside GovernanceDecisionService.record_decision() — the canonical
+      H14 write path. Direct duplication of the audit call in the route would create a
+      redundant event. Service-level audit is the architectural intent.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
+
+  - id: EXC-FA-014
+    function_name: create_governance_exception_route
+    file: api/field_assessment.py
+    reason: >
+      Audit is emitted inside GovernanceDecisionService.record_decision_with_exception()
+      via emit_engagement_audit_event() with event_type="decision.exception_granted". The
+      AST scanner does not traverse service method bodies. Decision + audit commit atomically
+      in the same transaction (H13 pattern).
+    owner: governance-team
+    expiration_date: "2027-01-01"
+    approval_reference: H14-governance-decision-ledger
+    jira_ticket: null
+    business_justification: >
+      Same rationale as EXC-FA-013. Governance decision service is the single audit write
+      authority for all governance decisions per H14 design.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
