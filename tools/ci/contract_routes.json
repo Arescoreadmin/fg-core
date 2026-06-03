@@ -1700,6 +1700,18 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-jobs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-jobs/{job_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/scan-results",
       "scopes": [],
       "source": "contract"
@@ -2581,7 +2593,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-03T09:54:04.292406+00:00",
+  "generated_at": "2026-06-03T15:32:30.344864+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

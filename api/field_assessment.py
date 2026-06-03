@@ -50,6 +50,7 @@ from services.field_assessment.audit import (
     emit_engagement_audit_event,
 )
 from services.field_assessment.evidence_lifecycle import evidence_lifecycle_svc
+from services.field_assessment.durable_job_service import durable_job_svc
 from services.field_assessment.connectors.msgraph_bridge import (
     ConnectorAcknowledgmentRequired,
     ConnectorBridgeError,
@@ -2824,7 +2825,17 @@ class MsgraphScanInitiateResponse(BaseModel):
 class MsgraphRunStatusResponse(BaseModel):
     run_id: str
     status: Literal[
-        "pending_auth", "authenticating", "scanning", "importing", "complete", "failed"
+        "pending_auth",
+        "authenticating",
+        "scanning",
+        "importing",
+        "complete",
+        "failed",
+        # DB-sourced statuses (process-restart recovery path)
+        "queued",
+        "running",
+        "dead_letter",
+        "cancelled",
     ]
     user_code: str | None = None
     verification_uri: str | None = None
@@ -2835,6 +2846,7 @@ class MsgraphRunStatusResponse(BaseModel):
 def _msgraph_scan_background(
     *,
     run_id: str,
+    job_id: str,
     tenant_id: str,
     engagement_id: str,
     receipt: _MsgraphReceipt,
@@ -2846,14 +2858,43 @@ def _msgraph_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
     try:
         _set(status="authenticating")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
         token_result = msal_app.acquire_token_by_device_flow(flow)
         if "access_token" not in token_result:
-            _set(
-                status="failed",
-                error=token_result.get("error_description", "Token acquisition failed"),
+            error_msg = token_result.get(
+                "error_description", "Token acquisition failed"
             )
+            _set(status="failed", error=error_msg)
+            db = SessionLocal()
+            try:
+                _c6_update_job_status(
+                    db, job_id=job_id, status="failed", failure_reason=error_msg
+                )
+                _c6_write_audit_event(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    event_type="scan.failed",
+                    actor=actor,
+                    scan_job_id=job_id,
+                    scanner_type="microsoft_graph",
+                    rejection_reason=error_msg[:500],
+                )
+                db.commit()
+            finally:
+                db.close()
             return
 
         _set(status="scanning")
@@ -2865,9 +2906,6 @@ def _msgraph_scan_background(
         )
 
         _set(status="importing")
-        from api.db import get_sessionmaker
-
-        SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             envelope = ConnectorImportEnvelope.model_validate(
@@ -2892,16 +2930,69 @@ def _msgraph_scan_background(
                 scan_result_id=import_result.scan_result_id,
                 source_type="microsoft_graph",
             )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=import_result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="microsoft_graph",
+                scan_result_id=import_result.scan_result_id,
+            )
             db.commit()
             _set(status="complete", scan_result_id=import_result.scan_result_id)
         except Exception as exc:
             log.error("msgraph_background: import failed — %s", exc)
             db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="microsoft_graph",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
         finally:
             db.close()
     except Exception as exc:
         log.error("msgraph_background: scan failed — %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="microsoft_graph",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
         _set(status="failed", error=str(exc)[:200])
 
 
@@ -2967,7 +3058,25 @@ def initiate_msgraph_scan(
             ),
         )
 
-    run_id = str(_uuid_module.uuid4())
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="microsoft_graph",
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="microsoft_graph",
+    )
+    db.commit()
+
+    run_id = job.id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -2980,6 +3089,7 @@ def initiate_msgraph_scan(
     background_tasks.add_task(
         _msgraph_scan_background,
         run_id=run_id,
+        job_id=job.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         receipt=receipt,
@@ -3005,6 +3115,7 @@ def initiate_msgraph_scan(
 def _oauth_inventory_scan_background(
     *,
     run_id: str,
+    job_id: str,
     tenant_id: str,
     engagement_id: str,
     msal_app: Any,
@@ -3015,14 +3126,43 @@ def _oauth_inventory_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
     try:
         _set(status="authenticating")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
         token_result = msal_app.acquire_token_by_device_flow(flow)
         if "access_token" not in token_result:
-            _set(
-                status="failed",
-                error=token_result.get("error_description", "Token acquisition failed"),
+            error_msg = token_result.get(
+                "error_description", "Token acquisition failed"
             )
+            _set(status="failed", error=error_msg)
+            db = SessionLocal()
+            try:
+                _c6_update_job_status(
+                    db, job_id=job_id, status="failed", failure_reason=error_msg
+                )
+                _c6_write_audit_event(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    event_type="scan.failed",
+                    actor=actor,
+                    scan_job_id=job_id,
+                    scanner_type="oauth_inventory",
+                    rejection_reason=error_msg[:500],
+                )
+                db.commit()
+            finally:
+                db.close()
             return
 
         _set(status="scanning")
@@ -3035,9 +3175,6 @@ def _oauth_inventory_scan_background(
         )
 
         _set(status="importing")
-        from api.db import get_sessionmaker
-
-        SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             result = import_oauth_inventory_scan(
@@ -3054,16 +3191,69 @@ def _oauth_inventory_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="oauth_inventory",
             )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="oauth_inventory",
+                scan_result_id=result.scan_result_id,
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("oauth_inventory_background: import failed — %s", exc)
             db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="oauth_inventory",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
         finally:
             db.close()
     except Exception as exc:
         log.error("oauth_inventory_background: scan failed — %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="oauth_inventory",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
         _set(status="failed", error=str(exc)[:200])
 
 
@@ -3114,7 +3304,25 @@ def initiate_oauth_inventory_scan(
             ),
         )
 
-    run_id = str(_uuid_module.uuid4())
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="oauth_inventory",
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="oauth_inventory",
+    )
+    db.commit()
+
+    run_id = job.id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -3127,6 +3335,7 @@ def initiate_oauth_inventory_scan(
     background_tasks.add_task(
         _oauth_inventory_scan_background,
         run_id=run_id,
+        job_id=job.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -3151,6 +3360,7 @@ def initiate_oauth_inventory_scan(
 def _endpoint_inventory_scan_background(
     *,
     run_id: str,
+    job_id: str,
     tenant_id: str,
     engagement_id: str,
     msal_app: Any,
@@ -3161,14 +3371,43 @@ def _endpoint_inventory_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
     try:
         _set(status="authenticating")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
         token_result = msal_app.acquire_token_by_device_flow(flow)
         if "access_token" not in token_result:
-            _set(
-                status="failed",
-                error=token_result.get("error_description", "Token acquisition failed"),
+            error_msg = token_result.get(
+                "error_description", "Token acquisition failed"
             )
+            _set(status="failed", error=error_msg)
+            db = SessionLocal()
+            try:
+                _c6_update_job_status(
+                    db, job_id=job_id, status="failed", failure_reason=error_msg
+                )
+                _c6_write_audit_event(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    event_type="scan.failed",
+                    actor=actor,
+                    scan_job_id=job_id,
+                    scanner_type="endpoint_inventory",
+                    rejection_reason=error_msg[:500],
+                )
+                db.commit()
+            finally:
+                db.close()
             return
 
         _set(status="scanning")
@@ -3181,9 +3420,6 @@ def _endpoint_inventory_scan_background(
         )
 
         _set(status="importing")
-        from api.db import get_sessionmaker
-
-        SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             result = import_endpoint_inventory_scan(
@@ -3200,16 +3436,69 @@ def _endpoint_inventory_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="endpoint_inventory",
             )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="endpoint_inventory",
+                scan_result_id=result.scan_result_id,
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("endpoint_inventory_background: import failed — %s", exc)
             db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="endpoint_inventory",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
         finally:
             db.close()
     except Exception as exc:
         log.error("endpoint_inventory_background: scan failed — %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="endpoint_inventory",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
         _set(status="failed", error=str(exc)[:200])
 
 
@@ -3260,7 +3549,25 @@ def initiate_endpoint_inventory_scan(
             ),
         )
 
-    run_id = str(_uuid_module.uuid4())
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="endpoint_inventory",
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="endpoint_inventory",
+    )
+    db.commit()
+
+    run_id = job.id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -3273,6 +3580,7 @@ def initiate_endpoint_inventory_scan(
     background_tasks.add_task(
         _endpoint_inventory_scan_background,
         run_id=run_id,
+        job_id=job.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -3436,23 +3744,17 @@ def _c6_create_scan_job(
     engagement_id: str,
     actor: str,
     scanner_type: str,
-    verified_target_rows: list[FaVerifiedTarget],
+    verified_target_rows: list[FaVerifiedTarget] | None = None,
 ) -> FaScanJob:
-    import json as _json
-
-    job = FaScanJob(
-        id=str(_uuid_module.uuid4()),
+    target_ids = [r.id for r in verified_target_rows] if verified_target_rows else []
+    return durable_job_svc.create_job(
+        db,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
-        verified_target_ids=_json.dumps([r.id for r in verified_target_rows]),
-        scanner_type=scanner_type,
-        status="queued",
-        attempt_count=0,
         actor=actor,
-        created_at=datetime.now(timezone.utc).isoformat(),
+        scanner_type=scanner_type,
+        target_ids=target_ids,
     )
-    db.add(job)
-    return job
 
 
 def _c6_update_job_status(
@@ -3463,20 +3765,14 @@ def _c6_update_job_status(
     scan_result_id: str | None = None,
     failure_reason: str | None = None,
 ) -> None:
-    now = datetime.now(timezone.utc).isoformat()
-    job = db.query(FaScanJob).filter(FaScanJob.id == job_id).first()
-    if job is None:
-        return
-    job.status = status
     if status == "running":
-        job.started_at = now
-        job.attempt_count = (job.attempt_count or 0) + 1
-    elif status in ("complete", "failed"):
-        job.completed_at = now
-        if scan_result_id:
-            job.scan_result_id = scan_result_id
-        if failure_reason:
-            job.failure_reason = failure_reason[:2000]
+        durable_job_svc.mark_running(db, job_id=job_id)
+    elif status == "complete":
+        durable_job_svc.mark_complete(db, job_id=job_id, scan_result_id=scan_result_id)
+    elif status == "failed":
+        durable_job_svc.mark_failed(
+            db, job_id=job_id, failure_reason=failure_reason or "unknown error"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -3775,6 +4071,7 @@ class DnsEmailScanInitiateResponse(BaseModel):
 def _dns_email_scan_background(
     *,
     run_id: str,
+    job_id: str,
     tenant_id: str,
     engagement_id: str,
     domains: list[str],
@@ -3785,16 +4082,24 @@ def _dns_email_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
     try:
         _set(status="scanning")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
         from services.connectors.dns_email.runner import run as run_dns_email
 
         scan_result = run_dns_email(domains=domains, dkim_selectors=dkim_selectors)
 
         _set(status="importing")
-        from api.db import get_sessionmaker
-
-        SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             result = import_dns_email_scan(
@@ -3811,16 +4116,69 @@ def _dns_email_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="dns_email",
             )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="dns_email",
+                scan_result_id=result.scan_result_id,
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("dns_email_scan_background: import failed — %s", exc)
             db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="dns_email",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
         finally:
             db.close()
     except Exception as exc:
         log.error("dns_email_scan_background: scan failed — %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="dns_email",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
         _set(status="failed", error=str(exc)[:200])
 
 
@@ -3845,7 +4203,26 @@ def initiate_dns_email_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    run_id = str(_uuid_module.uuid4())
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="dns_email",
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="dns_email",
+        payload_summary={"domain_count": len(body.domains)},
+    )
+    db.commit()
+
+    run_id = job.id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "scanning",
@@ -3858,6 +4235,7 @@ def initiate_dns_email_scan(
     background_tasks.add_task(
         _dns_email_scan_background,
         run_id=run_id,
+        job_id=job.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         domains=body.domains,
@@ -4160,6 +4538,7 @@ _ENTRA_GOVERNANCE_SCOPES: tuple[str, ...] = (
 def _entra_governance_scan_background(
     *,
     run_id: str,
+    job_id: str,
     tenant_id: str,
     engagement_id: str,
     msal_app: Any,
@@ -4170,14 +4549,43 @@ def _entra_governance_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
     try:
         _set(status="authenticating")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
         token_result = msal_app.acquire_token_by_device_flow(flow)
         if "access_token" not in token_result:
-            _set(
-                status="failed",
-                error=token_result.get("error_description", "Token acquisition failed"),
+            error_msg = token_result.get(
+                "error_description", "Token acquisition failed"
             )
+            _set(status="failed", error=error_msg)
+            db = SessionLocal()
+            try:
+                _c6_update_job_status(
+                    db, job_id=job_id, status="failed", failure_reason=error_msg
+                )
+                _c6_write_audit_event(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    event_type="scan.failed",
+                    actor=actor,
+                    scan_job_id=job_id,
+                    scanner_type="entra_governance",
+                    rejection_reason=error_msg[:500],
+                )
+                db.commit()
+            finally:
+                db.close()
             return
 
         _set(status="scanning")
@@ -4190,9 +4598,6 @@ def _entra_governance_scan_background(
         )
 
         _set(status="importing")
-        from api.db import get_sessionmaker
-
-        SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             result = import_entra_governance_scan(
@@ -4209,16 +4614,69 @@ def _entra_governance_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="entra_governance",
             )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="entra_governance",
+                scan_result_id=result.scan_result_id,
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("entra_governance_background: import failed — %s", exc)
             db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="entra_governance",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
         finally:
             db.close()
     except Exception as exc:
         log.error("entra_governance_background: scan failed — %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="entra_governance",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
         _set(status="failed", error=str(exc)[:200])
 
 
@@ -4269,7 +4727,25 @@ def initiate_entra_governance_scan(
             ),
         )
 
-    run_id = str(_uuid_module.uuid4())
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="entra_governance",
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="entra_governance",
+    )
+    db.commit()
+
+    run_id = job.id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -4282,6 +4758,7 @@ def initiate_entra_governance_scan(
     background_tasks.add_task(
         _entra_governance_scan_background,
         run_id=run_id,
+        job_id=job.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -4312,6 +4789,7 @@ _SHAREPOINT_SCOPES: tuple[str, ...] = (
 def _sharepoint_scan_background(
     *,
     run_id: str,
+    job_id: str,
     tenant_id: str,
     engagement_id: str,
     msal_app: Any,
@@ -4322,14 +4800,43 @@ def _sharepoint_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
     try:
         _set(status="authenticating")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
         token_result = msal_app.acquire_token_by_device_flow(flow)
         if "access_token" not in token_result:
-            _set(
-                status="failed",
-                error=token_result.get("error_description", "Token acquisition failed"),
+            error_msg = token_result.get(
+                "error_description", "Token acquisition failed"
             )
+            _set(status="failed", error=error_msg)
+            db = SessionLocal()
+            try:
+                _c6_update_job_status(
+                    db, job_id=job_id, status="failed", failure_reason=error_msg
+                )
+                _c6_write_audit_event(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    event_type="scan.failed",
+                    actor=actor,
+                    scan_job_id=job_id,
+                    scanner_type="sharepoint_onedrive",
+                    rejection_reason=error_msg[:500],
+                )
+                db.commit()
+            finally:
+                db.close()
             return
 
         _set(status="scanning")
@@ -4342,9 +4849,6 @@ def _sharepoint_scan_background(
         )
 
         _set(status="importing")
-        from api.db import get_sessionmaker
-
-        SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             result = import_sharepoint_scan(
@@ -4361,16 +4865,69 @@ def _sharepoint_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="sharepoint_onedrive",
             )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="sharepoint_onedrive",
+                scan_result_id=result.scan_result_id,
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("sharepoint_scan_background: import failed — %s", exc)
             db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="sharepoint_onedrive",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
         finally:
             db.close()
     except Exception as exc:
         log.error("sharepoint_scan_background: scan failed — %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="sharepoint_onedrive",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
         _set(status="failed", error=str(exc)[:200])
 
 
@@ -4421,7 +4978,25 @@ def initiate_sharepoint_scan(
             ),
         )
 
-    run_id = str(_uuid_module.uuid4())
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="sharepoint_onedrive",
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="sharepoint_onedrive",
+    )
+    db.commit()
+
+    run_id = job.id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -4434,6 +5009,7 @@ def initiate_sharepoint_scan(
     background_tasks.add_task(
         _sharepoint_scan_background,
         run_id=run_id,
+        job_id=job.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -4464,6 +5040,7 @@ _OAUTH_RISK_SCOPES: tuple[str, ...] = (
 def _oauth_risk_scan_background(
     *,
     run_id: str,
+    job_id: str,
     tenant_id: str,
     engagement_id: str,
     msal_app: Any,
@@ -4474,14 +5051,43 @@ def _oauth_risk_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
     try:
         _set(status="authenticating")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
         token_result = msal_app.acquire_token_by_device_flow(flow)
         if "access_token" not in token_result:
-            _set(
-                status="failed",
-                error=token_result.get("error_description", "Token acquisition failed"),
+            error_msg = token_result.get(
+                "error_description", "Token acquisition failed"
             )
+            _set(status="failed", error=error_msg)
+            db = SessionLocal()
+            try:
+                _c6_update_job_status(
+                    db, job_id=job_id, status="failed", failure_reason=error_msg
+                )
+                _c6_write_audit_event(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    event_type="scan.failed",
+                    actor=actor,
+                    scan_job_id=job_id,
+                    scanner_type="oauth_risk",
+                    rejection_reason=error_msg[:500],
+                )
+                db.commit()
+            finally:
+                db.close()
             return
 
         _set(status="scanning")
@@ -4494,9 +5100,6 @@ def _oauth_risk_scan_background(
         )
 
         _set(status="importing")
-        from api.db import get_sessionmaker
-
-        SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             result = import_oauth_risk_scan(
@@ -4513,16 +5116,69 @@ def _oauth_risk_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="oauth_risk",
             )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="oauth_risk",
+                scan_result_id=result.scan_result_id,
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("oauth_risk_scan_background: import failed — %s", exc)
             db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="oauth_risk",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
         finally:
             db.close()
     except Exception as exc:
         log.error("oauth_risk_scan_background: scan failed — %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="oauth_risk",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
         _set(status="failed", error=str(exc)[:200])
 
 
@@ -4573,7 +5229,25 @@ def initiate_oauth_risk_scan(
             ),
         )
 
-    run_id = str(_uuid_module.uuid4())
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="oauth_risk",
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="oauth_risk",
+    )
+    db.commit()
+
+    run_id = job.id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -4586,6 +5260,7 @@ def initiate_oauth_risk_scan(
     background_tasks.add_task(
         _oauth_risk_scan_background,
         run_id=run_id,
+        job_id=job.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -4622,12 +5297,80 @@ def get_msgraph_run_status(
         )
     with _MSGRAPH_RUNS_LOCK:
         state = _MSGRAPH_RUNS.get(run_id)
-    if state is None:
+    if state is not None:
+        return MsgraphRunStatusResponse(run_id=run_id, **state)
+
+    # In-memory state absent (process restarted) — fall back to DB with tenant check.
+    job = durable_job_svc.get_job(db, job_id=run_id, tenant_id=tenant_id)
+    if job is None or job.engagement_id != engagement_id:
         raise HTTPException(
             status_code=404,
-            detail=api_error("RUN_NOT_FOUND", f"No active run found for id {run_id}"),
+            detail=api_error("RUN_NOT_FOUND", f"No run found for id {run_id}"),
         )
-    return MsgraphRunStatusResponse(run_id=run_id, **state)
+    return MsgraphRunStatusResponse(
+        run_id=run_id,
+        status=job.status,
+        user_code=None,
+        verification_uri=None,
+        error=job.failure_reason,
+        scan_result_id=job.scan_result_id,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes — Durable scan-job list + detail (H12)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/engagements/{engagement_id}/scan-jobs",
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def list_scan_jobs(
+    engagement_id: str,
+    request: Request,
+    status: str | None = None,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """List scan jobs for an engagement.  Supports optional ?status= filter."""
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    jobs = durable_job_svc.list_jobs(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, status=status
+    )
+    return {"jobs": [durable_job_svc.job_to_dict(j) for j in jobs]}
+
+
+@router.get(
+    "/engagements/{engagement_id}/scan-jobs/{job_id}",
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def get_scan_job(
+    engagement_id: str,
+    job_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Get a single scan job by ID.  Tenant-isolated: returns 404 for cross-tenant IDs."""
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    job = durable_job_svc.get_job(db, job_id=job_id, tenant_id=tenant_id)
+    if job is None or job.engagement_id != engagement_id:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("JOB_NOT_FOUND", f"No scan job found for id {job_id}"),
+        )
+    return durable_job_svc.job_to_dict(job)
 
 
 # ---------------------------------------------------------------------------

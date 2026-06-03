@@ -404,25 +404,39 @@ class FaVerifiedTarget(Base):
 
 
 class FaScanJob(Base):
-    """C6: Durable scan job record. Created before the background task starts so
-    job state survives process restart (preparation for H12 durable worker model).
-    lease_owner / lease_expires_at are reserved for H12 worker assignment."""
+    """H12: Durable scan job record. All nine scan routes create a row before
+    launching a background task so job state survives process restarts.
+
+    Lifecycle states: queued → running → complete | failed | dead_letter | cancelled
+    Lease model: lease_owner (hostname:pid) + lease_expires_at guard against
+        orphaned workers. DurableJobService.recover_orphans() requeues or
+        dead-letters jobs whose leases have lapsed.
+    Retry policy: attempt_count < max_retries → requeue (retryable scanner types
+        only); otherwise → dead_letter.  next_retry_at carries the backoff target.
+    Idempotency: idempotency_key (unique, partial) prevents duplicate submissions."""
 
     __tablename__ = "fa_scan_jobs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    verified_target_ids: Mapped[str] = mapped_column(Text, nullable=False)  # JSON array
+    verified_target_ids: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )  # JSON array; '[]' for MSAL scans
     scanner_type: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_acquired_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     lease_expires_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    next_retry_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     started_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     completed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scan_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON blob
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
 

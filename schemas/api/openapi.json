@@ -10668,7 +10668,11 @@
               "scanning",
               "importing",
               "complete",
-              "failed"
+              "failed",
+              "queued",
+              "running",
+              "dead_letter",
+              "cancelled"
             ],
             "title": "Status",
             "type": "string"
@@ -37508,6 +37512,151 @@
           }
         },
         "summary": "Verify Engagement Report Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/scan-jobs": {
+      "get": {
+        "description": "List scan jobs for an engagement.  Supports optional ?status= filter.",
+        "operationId": "list_scan_jobs_field_assessment_engagements__engagement_id__scan_jobs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Scan Jobs Field Assessment Engagements  Engagement Id  Scan Jobs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Scan Jobs",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/scan-jobs/{job_id}": {
+      "get": {
+        "description": "Get a single scan job by ID.  Tenant-isolated: returns 404 for cross-tenant IDs.",
+        "operationId": "get_scan_job_field_assessment_engagements__engagement_id__scan_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Scan Job Field Assessment Engagements  Engagement Id  Scan Jobs  Job Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Scan Job",
         "tags": [
           "field-assessment"
         ]

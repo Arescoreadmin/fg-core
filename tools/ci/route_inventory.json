@@ -5765,6 +5765,40 @@
       ],
       "file": "api/field_assessment.py",
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-jobs",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-jobs/{job_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/scan-results",
       "plane": "control",
       "plane_id": "control",
@@ -9113,7 +9147,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-03T09:54:04.282536+00:00",
+  "generated_at": "2026-06-03T15:32:30.332793+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

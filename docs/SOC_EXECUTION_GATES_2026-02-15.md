@@ -1,3 +1,29 @@
+## 2026-06-03 — H12 durable scan jobs: new read-only scan-jobs routes
+
+**Classification:** Additive read-only routes under the existing field-assessment plane. No auth logic changes. Routes require `governance:read` scope + tenant binding (same as all field-assessment routes). No new planes, no new auth bypass, no contract authority change beyond the already-updated hash.
+
+**SOC review:**
+- `GET /field-assessment/engagements/{engagement_id}/scan-jobs` — lists FaScanJob records for the tenant+engagement; scoped by tenant_id extracted from the authenticated API key; optional `?status=` filter; read-only
+- `GET /field-assessment/engagements/{engagement_id}/scan-jobs/{job_id}` — retrieves a single FaScanJob; enforces tenant_id AND engagement_id match before returning; 404 on cross-tenant or cross-engagement access attempts
+
+**Why these routes are safe:**
+- Both routes are read-only (GET); no state mutations possible
+- Tenant isolation enforced at the DB query layer (`WHERE tenant_id = ?`) before any data is returned
+- Engagement-scoping adds a second isolation layer; a job from another engagement under the same tenant is also 404'd
+- No new scopes introduced; existing `governance:read` scope required
+
+**Artifacts regenerated:**
+- Route inventory regenerated via `make route-inventory-generate`
+
+**Files touched:**
+- `api/field_assessment.py` — 2 new GET routes
+- `services/field_assessment/durable_job_service.py` — new service (created)
+- `migrations/postgres/0084_fa_durable_jobs.sql` — migration adding lease/retry columns
+- `api/db_models_field_assessment.py` — ORM columns for H12 fields
+- `tests/test_h12_durable_jobs.py` — 21 new tests
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`, `contract_routes.json`, `plane_registry_snapshot.json` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
 ## 2026-05-29 — PR 36 plane registry: workforce plane definition
 
 **Classification:** Additive plane registry entry. No auth logic changes. No new routes added (routes already existed from PR 36). Plane registry now formally acknowledges and classifies all 6 workforce routes.
