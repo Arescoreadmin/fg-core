@@ -13230,3 +13230,51 @@ Full replacement of plaintext `client_access_code` portal authorization with a c
 ## Tests (46 tests)
 
 46 tests across 15 security layers in `tests/test_c7_portal_grants.py`, plus 7 updated portal tests in `tests/test_field_assessment.py`.
+
+# PR fix 46 — H13 Audit Atomicity & Evidence Transaction Integrity
+
+## Root cause
+
+Two related bugs under H13:
+
+1. **Split-commit in report creation** (`api/field_assessment.py:6382–6398`): `db.commit()` ran at line 6382 committing the report row, then `emit_engagement_audit_event()` ran at line 6385 in a new implicit transaction. Since no second `db.commit()` followed, `db.close()` rolled back the audit event on session close. Report existed in DB; audit event was silently discarded.
+
+2. **Missing audit coverage**: five mutation paths had no FA audit events: `patch_engagement_route`, `patch_finding_remediation_route`, `create_portal_grant`, `revoke_portal_grant`, `rotate_portal_grant`.
+
+## Files changed
+
+### New files
+- `services/field_assessment/audit.py` — Updated: added `AuditAtomicityService` class + `audit_atomicity_svc` singleton; `emit_engagement_audit_event()` extended to accept 7 new optional fields; schema_version `"2.0"` for events emitted via service
+- `migrations/postgres/0082_fa_audit_transaction_columns.sql` — New: adds `transaction_id`, `correlation_id`, `before_hash`, `after_hash`, `entity_type`, `entity_id`, `actor_type` columns + 2 indexes to `fa_engagement_audit_events`
+- `tests/test_h13_audit_atomicity.py` — New: 33-test security suite
+
+### Modified files
+- `api/db_models_field_assessment.py` — Added 7 nullable columns + 1 index to `FaEngagementAuditEvent`
+- `api/field_assessment.py` — Added `audit_atomicity_svc` import; fixed 6 paths:
+  - Report creation: moved `emit_engagement_audit_event` to before `db.commit()` (split-commit fix)
+  - `patch_engagement_route`: added `audit_atomicity_svc.emit()` + `db.flush()` before commit
+  - `patch_finding_remediation_route`: added `audit_atomicity_svc.emit()` + `db.flush()` before commit
+  - `create_portal_grant`: added `audit_atomicity_svc.emit()` before commit
+  - `revoke_portal_grant`: added `audit_atomicity_svc.emit()` before commit
+  - `rotate_portal_grant`: added `audit_atomicity_svc.emit()` before commit
+- `AUDIT_TRACKER.md` — H13 row updated to ✅ Fixed
+- `ROADMAP.md` — Phase 0A row updated
+
+## 12 mandatory security layers
+
+- **L1** Transaction atomicity — mutation + audit flush in same `db.commit()`
+- **L2** Rollback on audit failure — injected failure rolls back mutation (verified by monkeypatch tests)
+- **L3** No orphan commits — report creation audit event now persisted (was discarded before fix)
+- **L4** `entity_type` — standardised entity class on v2.0 events
+- **L5** `entity_id` — PK of mutated entity on v2.0 events
+- **L6** `transaction_id` — unique UUID per operation, non-null on v2.0 events
+- **L7** `correlation_id` — optional cross-service identifier
+- **L8** `compute_entity_hash` — deterministic SHA-256, key-order-independent
+- **L9** `actor_type` — `human_operator` / `portal_client` / `api_key` / `system`
+- **L10** `AuditAtomicityService` — importable singleton; `emit()` returns `transaction_id`
+- **L11** Append-only enforcement — existing triggers (migration 0076) prevent UPDATE/DELETE; no API routes for mutation
+- **L12** Coverage — all 6 previously-unaudited mutation paths now emit FA audit events
+
+## Tests (33 tests)
+
+33 tests in `tests/test_h13_audit_atomicity.py` across 12 security layers. 2 tests skipped when no scan findings are available (scan-dependent paths). Rollback injection tests use `raise_server_exceptions=False` client.

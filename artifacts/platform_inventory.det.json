@@ -36,12 +36,21 @@
       "plane": "workforce",
       "suggested_fix": "Add SOC gate mapping entry for plane.",
       "type": "missing_soc_gate_reference"
+    },
+    {
+      "details": [
+        "/portal/authenticate",
+        "/portal/me",
+        "/portal/sessions/{session_id}"
+      ],
+      "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
+      "type": "unexpected_route_prefixes"
     }
   ],
   "governance": {
-    "contract_count": 408,
+    "contract_count": 430,
     "contract_only": [],
-    "runtime_count": 512,
+    "runtime_count": 535,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -63,6 +72,7 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
+      "GET /health",
       "GET /metrics",
       "GET /ui/ai",
       "GET /ui/ai/experience",
@@ -107,6 +117,7 @@
       "GET /ui/provider/routing",
       "GET /ui/scopes",
       "GET /ui/token",
+      "HEAD /health",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",
@@ -147,7 +158,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "41801c32634fc2950480a3f99679f174bf0f3536348fdf106896f860521a946f",
+  "governance_fingerprint": "8e470a82c1cb1216e13e37cc9274bad64649e78356647b76a132ec5cf0da37a2",
   "planes": [
     {
       "compat": {
@@ -356,6 +367,8 @@
     ],
     "control": [
       "DELETE /control-plane/v2/delegation/{delegation_id}",
+      "DELETE /field-assessment/engagements/{engagement_id}/observations/{observation_id}",
+      "DELETE /field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}",
       "DELETE /governance/assets/{asset_id}/owners/{ownership_id}",
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -463,6 +476,7 @@
       "GET /enterprise-controls/frameworks",
       "GET /field-assessment/engagements",
       "GET /field-assessment/engagements/{engagement_id}",
+      "GET /field-assessment/engagements/{engagement_id}/artifacts/{artifact_id}",
       "GET /field-assessment/engagements/{engagement_id}/audit-events",
       "GET /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}",
       "GET /field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/status",
@@ -478,6 +492,7 @@
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain",
       "GET /field-assessment/engagements/{engagement_id}/next-actions",
       "GET /field-assessment/engagements/{engagement_id}/observations",
+      "GET /field-assessment/engagements/{engagement_id}/portal-grants",
       "GET /field-assessment/engagements/{engagement_id}/questionnaires",
       "GET /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}",
       "GET /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/coverage",
@@ -489,6 +504,7 @@
       "GET /field-assessment/engagements/{engagement_id}/scan-results",
       "GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
       "GET /field-assessment/engagements/{engagement_id}/summary",
+      "GET /field-assessment/interview-templates",
       "GET /field-assessment/reports/verify/{report_hash}",
       "GET /governance/assets",
       "GET /governance/assets/attestation-health",
@@ -538,7 +554,11 @@
       "GET /rag/retrieval-policy",
       "GET /rag/uploads",
       "GET /status",
+      "HEAD /health",
+      "PATCH /field-assessment/engagements/{engagement_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
+      "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}/remediation",
+      "PATCH /field-assessment/engagements/{engagement_id}/observations/{observation_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/responses/{control_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/status",
       "PATCH /governance/assets/{asset_id}",
@@ -639,14 +659,26 @@
       "POST /exceptions/requests",
       "POST /exceptions/requests/{request_id}/approve",
       "POST /field-assessment/engagements",
+      "POST /field-assessment/engagements/{engagement_id}/artifacts",
       "POST /field-assessment/engagements/{engagement_id}/baseline",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/dns-email/initiate",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/entra-governance/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/initiate",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/network-scan/initiate",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/oauth-inventory/initiate",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/oauth-risk/initiate",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/sharepoint/initiate",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/web-headers/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
       "POST /field-assessment/engagements/{engagement_id}/connector-schedules",
       "POST /field-assessment/engagements/{engagement_id}/document-analyses",
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",
       "POST /field-assessment/engagements/{engagement_id}/observations",
+      "POST /field-assessment/engagements/{engagement_id}/observations/bulk",
+      "POST /field-assessment/engagements/{engagement_id}/portal-grants",
+      "POST /field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}/rotate",
       "POST /field-assessment/engagements/{engagement_id}/promote",
       "POST /field-assessment/engagements/{engagement_id}/questionnaires",
       "POST /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/submit",

@@ -45,7 +45,10 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_scopes
 from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
-from services.field_assessment.audit import emit_engagement_audit_event
+from services.field_assessment.audit import (
+    audit_atomicity_svc,
+    emit_engagement_audit_event,
+)
 from services.field_assessment.connectors.msgraph_bridge import (
     ConnectorAcknowledgmentRequired,
     ConnectorBridgeError,
@@ -1089,18 +1092,34 @@ def patch_engagement_route(
 ) -> EngagementResponse:
     """Shallow-merge engagement_metadata fields. Other top-level fields are immutable here."""
     tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+    updated_fields: list[str] = []
     if body.engagement_metadata is not None:
         eng.engagement_metadata = {
             **(eng.engagement_metadata or {}),
             **body.engagement_metadata,
         }
         eng.updated_at = utc_iso8601_z_now()
+        updated_fields.append("engagement_metadata")
+    db.flush()
+    audit_atomicity_svc.emit(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="engagement.metadata_updated",
+        actor=actor,
+        actor_type="human_operator",
+        reason_code="ENGAGEMENT_METADATA_UPDATED",
+        entity_type="engagement",
+        entity_id=engagement_id,
+        payload={"updated_fields": updated_fields},
+    )
     db.commit()
     db.refresh(eng)
     return _engagement_to_response(eng)
@@ -2212,6 +2231,7 @@ def patch_finding_remediation_route(
 ) -> dict:
     """Set remediation_hint on a finding to satisfy the readiness gate."""
     tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -2234,6 +2254,19 @@ def patch_finding_remediation_route(
 
     finding.remediation_hint = body.remediation_hint
     finding.updated_at = utc_iso8601_z_now()
+    db.flush()
+    audit_atomicity_svc.emit(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="finding.remediation_hint_updated",
+        actor=actor,
+        actor_type="human_operator",
+        reason_code="FINDING_REMEDIATION_HINT_UPDATED",
+        entity_type="finding",
+        entity_id=finding_id,
+        payload={"finding_id": finding_id},
+    )
     db.commit()
     db.refresh(finding)
     return {"finding_id": finding_id, "remediation_hint": finding.remediation_hint}
@@ -5680,6 +5713,18 @@ def create_portal_grant(
         created_by=actor,
         ttl_days=max(1, min(body.ttl_days, 365)),
     )
+    audit_atomicity_svc.emit(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="portal_grant.created",
+        actor=actor,
+        actor_type="human_operator",
+        reason_code="PORTAL_GRANT_CREATED",
+        entity_type="portal_grant",
+        entity_id=result.grant.id,
+        payload={"grant_id": result.grant.id, "client_id": eng.client_name},
+    )
     db.commit()
     return CreatePortalGrantResponse(
         grant=_grant_to_response(result.grant),
@@ -5734,6 +5779,18 @@ def revoke_portal_grant(
             status_code=404,
             detail=api_error("PORTAL_GRANT_NOT_FOUND", f"Grant {grant_id!r} not found"),
         )
+    audit_atomicity_svc.emit(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="portal_grant.revoked",
+        actor=actor,
+        actor_type="human_operator",
+        reason_code="PORTAL_GRANT_REVOKED",
+        entity_type="portal_grant",
+        entity_id=grant_id,
+        payload={"grant_id": grant_id},
+    )
     db.commit()
 
 
@@ -5762,6 +5819,18 @@ def rotate_portal_grant(
                 "PORTAL_GRANT_NOT_FOUND", f"Active grant {grant_id!r} not found"
             ),
         )
+    audit_atomicity_svc.emit(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="portal_grant.rotated",
+        actor=actor,
+        actor_type="human_operator",
+        reason_code="PORTAL_GRANT_ROTATED",
+        entity_type="portal_grant",
+        entity_id=grant_id,
+        payload={"grant_id": grant_id, "new_grant_id": result.grant.id},
+    )
     db.commit()
     return RotatePortalGrantResponse(
         grant=_grant_to_response(result.grant),
@@ -6379,16 +6448,19 @@ def create_engagement_report_route(
             ),
         )
 
-    db.commit()
-    db.refresh(record)
-
-    emit_engagement_audit_event(
+    # Emit audit BEFORE commit so report row and audit event commit atomically.
+    # (Previously: commit happened first; audit was in a new transaction that was
+    # never committed and silently discarded on session close — H13 fix.)
+    audit_atomicity_svc.emit(
         db,
-        engagement_id=engagement_id,
         tenant_id=tenant_id,
+        engagement_id=engagement_id,
         event_type="engagement_report_created",
         actor=actor,
-        reason_code="report_created",
+        actor_type="human_operator",
+        reason_code="ENGAGEMENT_REPORT_CREATED",
+        entity_type="report",
+        entity_id=record.id,
         payload={
             "report_id": record.id,
             "version": version,
@@ -6396,6 +6468,8 @@ def create_engagement_report_route(
             "manifest_hash": manifest_hash,
         },
     )
+    db.commit()
+    db.refresh(record)
 
     return {
         "report_id": record.id,

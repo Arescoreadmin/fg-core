@@ -239,7 +239,11 @@ class FaEvidenceLink(Base):
 
 
 class FaEngagementAuditEvent(Base):
-    """Append-only audit event for engagement lifecycle mutations."""
+    """Append-only audit event for engagement lifecycle mutations.
+
+    Schema v1.0: original columns only (transaction_id and friends are NULL).
+    Schema v2.0: emitted by AuditAtomicityService; all correlation columns populated.
+    """
 
     __tablename__ = "fa_engagement_audit_events"
 
@@ -254,6 +258,16 @@ class FaEngagementAuditEvent(Base):
         String(16), nullable=False, default="1.0"
     )
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    # H13 transaction correlation columns (nullable; schema v2.0+ only)
+    transaction_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    correlation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    before_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    after_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    actor_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     __table_args__ = (
         Index(
@@ -263,6 +277,7 @@ class FaEngagementAuditEvent(Base):
             "created_at",
         ),
         Index("ix_fa_audit_events_tenant_type", "tenant_id", "event_type"),
+        Index("ix_fa_audit_events_entity", "entity_type", "entity_id"),
     )
 
 
