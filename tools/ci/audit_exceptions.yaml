@@ -4,13 +4,23 @@
 # audit_atomicity_svc.emit) must appear here with a non-expired expiration_date.
 #
 # Required fields per entry:
-#   id               — unique exception identifier (e.g. EXC-FA-001)
-#   function_name    — exact Python function name
-#   file             — repo-relative path (e.g. api/field_assessment.py)
-#   reason           — why the route is currently unaudited
-#   owner            — team/person accountable for remediation
-#   expiration_date  — YYYY-MM-DD; exception auto-fails after this date
-#   approval_reference — PR or ticket that approved the exception
+#   id                   — unique exception identifier (e.g. EXC-FA-001)
+#   function_name        — exact Python function name
+#   file                 — repo-relative path (e.g. api/field_assessment.py)
+#   reason               — technical explanation of why the route is unaudited
+#   owner                — team/person accountable for remediation
+#   expiration_date      — YYYY-MM-DD; exception auto-fails after this date
+#   approval_reference   — PR or ticket that approved the exception
+#
+# Debt-tracking fields (optional but strongly encouraged):
+#   jira_ticket          — tracking ticket for the remediation work
+#   business_justification — why leaving this unaudited is acceptable right now
+#   approval_date        — YYYY-MM-DD when the exception was approved
+#   approved_by          — who approved (github handle or team lead)
+#
+# These optional fields are reported in artifacts/audit_exception_report.json
+# every CI run. Missing jira_ticket or approved_by entries are flagged so
+# the debt picture stays visible.
 #
 # NO permanent exceptions are allowed. All entries must have an expiration_date.
 # When a route is remediated, remove its entry here and add the audit call.
@@ -28,6 +38,12 @@ exceptions:
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: >
+      Async scan launchers return a run_id; the job-completion path is the
+      auditable event. Acceptable until connector-run audit hooks are built.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-002
     function_name: initiate_oauth_inventory_scan
@@ -38,51 +54,70 @@ exceptions:
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: Same async-launcher justification as EXC-FA-001.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-003
     function_name: initiate_endpoint_inventory_scan
     file: api/field_assessment.py
-    reason: >
-      Same async-launcher pattern as EXC-FA-001.
+    reason: Same async-launcher pattern as EXC-FA-001.
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: Same async-launcher justification as EXC-FA-001.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-004
     function_name: initiate_dns_email_scan
     file: api/field_assessment.py
-    reason: >
-      Same async-launcher pattern as EXC-FA-001.
+    reason: Same async-launcher pattern as EXC-FA-001.
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: Same async-launcher justification as EXC-FA-001.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-005
     function_name: initiate_entra_governance_scan
     file: api/field_assessment.py
-    reason: >
-      Same async-launcher pattern as EXC-FA-001.
+    reason: Same async-launcher pattern as EXC-FA-001.
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: Same async-launcher justification as EXC-FA-001.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-006
     function_name: initiate_sharepoint_scan
     file: api/field_assessment.py
-    reason: >
-      Same async-launcher pattern as EXC-FA-001.
+    reason: Same async-launcher pattern as EXC-FA-001.
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: Same async-launcher justification as EXC-FA-001.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-007
     function_name: initiate_oauth_risk_scan
     file: api/field_assessment.py
-    reason: >
-      Same async-launcher pattern as EXC-FA-001.
+    reason: Same async-launcher pattern as EXC-FA-001.
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: Same async-launcher justification as EXC-FA-001.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-008
     function_name: promote_connector_run_assets
@@ -94,6 +129,13 @@ exceptions:
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: >
+      Connector run audit trail covers the upstream mutation. Engagement-level
+      audit consolidation is a P2 item; acceptable until connector-audit
+      unification sprint.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-009
     function_name: create_connector_schedule
@@ -105,6 +147,12 @@ exceptions:
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: >
+      Schedule records have no findings or evidence impact. Low-risk config
+      write; acceptable until connector-plane governance hardening sprint.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-010
     function_name: promote_engagement_route
@@ -116,6 +164,13 @@ exceptions:
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: >
+      Adding audit here before H14 state-machine audit pattern is agreed would
+      create two incompatible audit approaches in the same engagement lifecycle.
+      Defer to H14 to get it right once.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-011
     function_name: verify_engagement_report_route
@@ -128,6 +183,13 @@ exceptions:
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: >
+      qa_approve_report (the adjacent path) is already audited. Verification
+      and approval will share one audit wrapper; adding a standalone audit here
+      now would duplicate work done in the consolidation sprint.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-FA-012
     function_name: patch_questionnaire_response
@@ -140,6 +202,13 @@ exceptions:
     owner: field-assessment-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: >
+      Submit action is audited; per-keystroke audit would flood the audit log.
+      Batched audit strategy (H14) will capture the semantically meaningful
+      state change without noise.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-PORTAL-001
     function_name: portal_authenticate
@@ -152,6 +221,13 @@ exceptions:
     owner: portal-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: >
+      Portal session table records auth events; no gap in event coverage.
+      Unifying to AuditAtomicityService requires portal-auth refactor (H14);
+      doing it piecemeal would leave an inconsistent audit schema.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard
 
   - id: EXC-PORTAL-002
     function_name: portal_revoke_session
@@ -163,3 +239,7 @@ exceptions:
     owner: portal-team
     expiration_date: "2026-09-01"
     approval_reference: H13.5-bootstrap
+    jira_ticket: null
+    business_justification: Same auth-layer justification as EXC-PORTAL-001.
+    approval_date: "2026-06-03"
+    approved_by: EmpireOverloard

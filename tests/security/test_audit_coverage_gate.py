@@ -562,3 +562,44 @@ class TestRealCodebaseGate:
             f"Coverage is {report['coverage_pct']}%, expected 100%. "
             f"Violations: {report['violation_list']}"
         )
+
+    def test_exception_report_structure(self, tmp_path: Path) -> None:
+        """audit_exception_report.json has the debt-tracking fields we need."""
+        import json
+        import tools.ci.check_audit_coverage as mod
+
+        exc_report_path = tmp_path / "exc_report.json"
+        original = mod.EXCEPTION_REPORT_FILE
+        mod.EXCEPTION_REPORT_FILE = exc_report_path
+        try:
+            mod.run(write_report=True)
+        finally:
+            mod.EXCEPTION_REPORT_FILE = original
+
+        assert exc_report_path.exists()
+        report = json.loads(exc_report_path.read_text())
+
+        assert "total_exceptions" in report
+        assert "expiring_in_30_days" in report
+        assert "expiring_in_60_days" in report
+        assert "expiring_in_90_days" in report
+        assert "missing_jira_ticket" in report
+        assert "missing_approved_by" in report
+        assert "exceptions" in report
+        assert report["total_exceptions"] > 0
+
+        # Entries are sorted soonest-to-expire first
+        days = [e["days_remaining"] for e in report["exceptions"]]
+        assert days == sorted(days)
+
+        # Every entry has the debt-tracking keys (values may be null)
+        for entry in report["exceptions"]:
+            for field in (
+                "jira_ticket",
+                "business_justification",
+                "approval_date",
+                "approved_by",
+            ):
+                assert field in entry, (
+                    f"exception {entry['id']} missing debt field '{field}'"
+                )

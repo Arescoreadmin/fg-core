@@ -42,6 +42,16 @@ SCANNED_FILES = [
 
 EXCEPTIONS_FILE = REPO / "tools" / "ci" / "audit_exceptions.yaml"
 REPORT_FILE = REPO / "artifacts" / "audit_coverage_report.json"
+EXCEPTION_REPORT_FILE = REPO / "artifacts" / "audit_exception_report.json"
+
+# Optional debt-tracking fields — not required, but included in the exception report
+# and flagged as missing so the debt picture stays visible every CI run.
+EXCEPTION_DEBT_FIELDS = (
+    "jira_ticket",
+    "business_justification",
+    "approval_date",
+    "approved_by",
+)
 
 EXCEPTION_REQUIRED_FIELDS = frozenset(
     {
@@ -227,11 +237,68 @@ def run(*, write_report: bool = True) -> int:
             json.dumps(report, indent=2, default=str), encoding="utf-8"
         )
 
+    _generate_exception_report(exceptions, write_report=write_report)
     _print_summary(report)
 
     if violations or expired_exceptions:
         return 1
     return 0
+
+
+def _generate_exception_report(
+    registry: dict[str, dict[str, Any]], *, write_report: bool = True
+) -> dict[str, Any]:
+    today = date.today()
+    entries = []
+    for exc in registry.values():
+        exp_date = exc["expiration_date"]
+        days_remaining = (exp_date - today).days
+        entries.append(
+            {
+                "id": exc["id"],
+                "function_name": exc["function_name"],
+                "file": exc["file"],
+                "owner": exc["owner"],
+                "expiration_date": exp_date.isoformat(),
+                "days_remaining": days_remaining,
+                "expired": exc["expired"],
+                "jira_ticket": exc.get("jira_ticket"),
+                "business_justification": exc.get("business_justification"),
+                "approval_date": exc.get("approval_date"),
+                "approved_by": exc.get("approved_by"),
+            }
+        )
+
+    entries.sort(key=lambda e: e["days_remaining"])
+
+    missing_jira = sum(1 for e in entries if not e["jira_ticket"])
+    missing_approved_by = sum(1 for e in entries if not e["approved_by"])
+
+    report: dict[str, Any] = {
+        "generated_at": today.isoformat(),
+        "total_exceptions": len(entries),
+        "expiring_in_30_days": sum(
+            1 for e in entries if 0 <= e["days_remaining"] <= 30
+        ),
+        "expiring_in_60_days": sum(
+            1 for e in entries if 0 <= e["days_remaining"] <= 60
+        ),
+        "expiring_in_90_days": sum(
+            1 for e in entries if 0 <= e["days_remaining"] <= 90
+        ),
+        "expired": sum(1 for e in entries if e["expired"]),
+        "missing_jira_ticket": missing_jira,
+        "missing_approved_by": missing_approved_by,
+        "exceptions": entries,
+    }
+
+    if write_report:
+        EXCEPTION_REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        EXCEPTION_REPORT_FILE.write_text(
+            json.dumps(report, indent=2, default=str), encoding="utf-8"
+        )
+
+    return report
 
 
 def _print_summary(report: dict[str, Any]) -> None:
