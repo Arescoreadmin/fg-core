@@ -1056,6 +1056,86 @@
         "title": "ApprovalVerifyRequest",
         "type": "object"
       },
+      "ArtifactInternalResponse": {
+        "description": "Extended response used by the BFF proxy \u2014 includes storage_key.\n\nThis response shape must only be returned to authenticated server-side\ncallers (BFF proxy). The storage_key must never be forwarded to browsers.",
+        "properties": {
+          "artifact_type": {
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "retention_class": {
+            "title": "Retention Class",
+            "type": "string"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "storage_key": {
+            "title": "Storage Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "engagement_id",
+          "artifact_type",
+          "sha256",
+          "size_bytes",
+          "content_type",
+          "created_by",
+          "created_at",
+          "retention_class",
+          "storage_key"
+        ],
+        "title": "ArtifactInternalResponse",
+        "type": "object"
+      },
       "ArtifactMeta": {
         "properties": {
           "name": {
@@ -1079,6 +1159,80 @@
           "sha256"
         ],
         "title": "ArtifactMeta",
+        "type": "object"
+      },
+      "ArtifactResponse": {
+        "properties": {
+          "artifact_type": {
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "retention_class": {
+            "title": "Retention Class",
+            "type": "string"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          }
+        },
+        "required": [
+          "id",
+          "engagement_id",
+          "artifact_type",
+          "sha256",
+          "size_bytes",
+          "content_type",
+          "created_by",
+          "created_at",
+          "retention_class"
+        ],
+        "title": "ArtifactResponse",
         "type": "object"
       },
       "AssessmentOutcome": {
@@ -13029,6 +13183,74 @@
           "status"
         ],
         "title": "RegenerateReportResponse",
+        "type": "object"
+      },
+      "RegisterArtifactRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_type": {
+            "enum": [
+              "audio",
+              "document",
+              "export"
+            ],
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "retention_class": {
+            "default": "standard_3y",
+            "maxLength": 64,
+            "title": "Retention Class",
+            "type": "string"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "storage_key": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Storage Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_type",
+          "storage_key"
+        ],
+        "title": "RegisterArtifactRequest",
         "type": "object"
       },
       "RegisterDocumentAnalysisRequest": {
@@ -33035,6 +33257,142 @@
           }
         },
         "summary": "Patch Engagement Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/artifacts": {
+      "post": {
+        "operationId": "register_artifact_route_field_assessment_engagements__engagement_id__artifacts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterArtifactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Artifact Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/artifacts/{artifact_id}": {
+      "get": {
+        "description": "Retrieve artifact metadata including storage_key for the BFF proxy.\n\nThis endpoint is called server-side by the console audio proxy. The\nstorage_key is used to generate a short-lived signed download URL and\nmust never be forwarded to the browser. The caller is responsible for\nkeeping storage_key confidential.\n\nEmits an audit event on every access (success and denial) so that the\nimmutable audit trail records who retrieved each artifact and when.",
+        "operationId": "get_artifact_route_field_assessment_engagements__engagement_id__artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactInternalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Artifact Route",
         "tags": [
           "field-assessment"
         ]
