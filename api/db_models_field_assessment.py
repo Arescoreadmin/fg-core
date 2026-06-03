@@ -11,6 +11,7 @@ Tenant isolation:
 
 Append-only contract:
   fa_engagement_audit_events is append-only. No UPDATE or DELETE.
+  fa_scan_audit_events is append-only. No UPDATE or DELETE.
 
 Tables:
   fa_engagements              — top-level engagement tracking
@@ -22,6 +23,9 @@ Tables:
   fa_engagement_audit_events  — append-only audit trail
   fa_quarantined_scans        — rejected scan ingest attempts (audit trail)
   fa_artifacts                — artifact registry (audio, documents); storage keys never client-visible
+  fa_verified_targets         — C6: pre-validated scanner targets (SSRF-safe)
+  fa_scan_jobs                — C6: durable job records (H12-ready)
+  fa_scan_audit_events        — C6: append-only scanner audit trail
 """
 
 from __future__ import annotations
@@ -326,4 +330,97 @@ class FaArtifact(Base):
     __table_args__ = (
         Index("ix_fa_artifacts_tenant_engagement", "tenant_id", "engagement_id"),
         Index("ix_fa_artifacts_tenant_type", "tenant_id", "artifact_type"),
+    )
+
+
+class FaVerifiedTarget(Base):
+    """C6: Pre-validated scanner target. Storage of the validation result prevents
+    re-validation on every scan and creates an immutable record that a target was
+    approved before any network activity. verification_method='platform_validation'
+    means SafeTargetValidationService cleared the target; future methods may include
+    'manual' (operator override) or 'dns_txt' (domain ownership proof)."""
+
+    __tablename__ = "fa_verified_targets"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    target: Mapped[str] = mapped_column(String(2048), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    verification_method: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="platform_validation"
+    )
+    verification_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="verified"
+    )
+    verified_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    verified_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    resolved_ips: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    rejection_reason: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    rejection_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ownership_evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_vt_tenant_engagement", "tenant_id", "engagement_id"),
+        Index("ix_fa_vt_tenant_status", "tenant_id", "verification_status"),
+    )
+
+
+class FaScanJob(Base):
+    """C6: Durable scan job record. Created before the background task starts so
+    job state survives process restart (preparation for H12 durable worker model).
+    lease_owner / lease_expires_at are reserved for H12 worker assignment."""
+
+    __tablename__ = "fa_scan_jobs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    verified_target_ids: Mapped[str] = mapped_column(Text, nullable=False)  # JSON array
+    scanner_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_expires_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    started_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    completed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_scan_jobs_tenant_engagement", "tenant_id", "engagement_id"),
+        Index("ix_fa_scan_jobs_tenant_status", "tenant_id", "status"),
+        Index("ix_fa_scan_jobs_engagement_status", "engagement_id", "status"),
+    )
+
+
+class FaScanAuditEvent(Base):
+    """C6: Append-only scanner audit trail. Written on every scan initiation,
+    validation rejection, completion, and failure. No UPDATE or DELETE permitted.
+    payload_summary stores lightweight metadata (no credentials, no raw findings)."""
+
+    __tablename__ = "fa_scan_audit_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    scan_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    target: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    resolved_ips: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    scanner_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    rejection_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload_summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_scan_audit_tenant_engagement", "tenant_id", "engagement_id"),
+        Index("ix_fa_scan_audit_tenant_event", "tenant_id", "event_type"),
+        Index("ix_fa_scan_audit_job", "scan_job_id"),
     )

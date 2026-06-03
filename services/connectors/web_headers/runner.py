@@ -1,16 +1,25 @@
-"""Web Security Headers connector — inspects HTTP security headers for target URLs."""
+"""Web Security Headers connector — inspects HTTP security headers for target URLs.
+
+Redirect safety: follow_redirects=False is set on the httpx client. Each redirect
+Location is revalidated through SafeTargetValidationService before following, so
+a redirect chain cannot reach private infrastructure even if the initial URL is public.
+"""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
+
+from services.connectors.safe_target_validator import SafeTargetValidationService
 
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+_MAX_REDIRECT_HOPS = 5
+_validator = SafeTargetValidationService()
 
 _SECURITY_HEADERS = [
     "strict-transport-security",
@@ -31,6 +40,41 @@ def _normalize_url(target: str) -> str:
     if not target.startswith(("http://", "https://")):
         return f"https://{target}"
     return target
+
+
+def _follow_redirects_safely(
+    client: httpx.Client, initial_url: str
+) -> tuple[httpx.Response, str | None]:
+    """Follow redirects manually, re-validating every hop through the validator.
+
+    Returns (final_response, rejection_reason).
+    rejection_reason is non-None if a redirect was blocked; in that case
+    final_response is the response that issued the blocked redirect.
+    """
+    current_url = initial_url
+    for _ in range(_MAX_REDIRECT_HOPS):
+        resp = client.head(current_url, follow_redirects=False)
+        if resp.status_code not in (301, 302, 303, 307, 308):
+            return resp, None
+
+        location = resp.headers.get("location", "")
+        if not location:
+            return resp, None
+
+        # Resolve relative redirect URLs against current URL.
+        next_url = urljoin(current_url, location)
+
+        result = _validator.validate(next_url, target_type="url")
+        if not result.ok:
+            return resp, (
+                f"redirect to {next_url!r} blocked: "
+                f"[{result.rejection_code}] {result.rejection_reason}"
+            )
+        current_url = next_url
+
+    # Exceeded hop limit — treat as non-redirect final response.
+    resp = client.head(current_url, follow_redirects=False)
+    return resp, None
 
 
 def _check_hsts(value: str | None) -> list[dict]:
@@ -192,15 +236,47 @@ def _check_plain_http(url: str, response_url: str) -> list[dict]:
 
 def scan_target(url: str) -> dict[str, Any]:
     normalized = _normalize_url(url)
+
+    # Validate the initial URL before opening any connection (Layer 1 + 2 + 3–5).
+    pre_check = _validator.validate(normalized, target_type="url")
+    if not pre_check.ok:
+        return {
+            "url": normalized,
+            "final_url": None,
+            "status_code": None,
+            "headers_present": [],
+            "headers_missing": list(_SECURITY_HEADERS),
+            "score": 0,
+            "findings": [],
+            "error": f"target blocked by scanner policy: [{pre_check.rejection_code}] {pre_check.rejection_reason}",
+            "blocked": True,
+            "rejection_code": pre_check.rejection_code,
+        }
+
     findings: list[dict] = []
     headers_found: dict[str, str] = {}
     error = None
 
     try:
+        # follow_redirects=False — every redirect hop is manually revalidated.
         with httpx.Client(
-            timeout=_TIMEOUT, follow_redirects=True, verify=True
+            timeout=_TIMEOUT, follow_redirects=False, verify=True
         ) as client:
-            resp = client.head(normalized)
+            resp, redirect_block = _follow_redirects_safely(client, normalized)
+            if redirect_block:
+                return {
+                    "url": normalized,
+                    "final_url": None,
+                    "status_code": resp.status_code,
+                    "headers_present": [],
+                    "headers_missing": list(_SECURITY_HEADERS),
+                    "score": 0,
+                    "findings": [],
+                    "error": redirect_block,
+                    "blocked": True,
+                    "rejection_code": "UNSAFE_REDIRECT",
+                }
+
             final_url = str(resp.url)
             for h in _SECURITY_HEADERS:
                 val = resp.headers.get(h)
@@ -234,6 +310,7 @@ def scan_target(url: str) -> dict[str, Any]:
                 "score": score,
                 "findings": findings,
                 "error": None,
+                "blocked": False,
             }
     except httpx.ConnectError:
         error = f"Connection refused or DNS resolution failed for {normalized}"
@@ -247,10 +324,11 @@ def scan_target(url: str) -> dict[str, Any]:
         "final_url": None,
         "status_code": None,
         "headers_present": [],
-        "headers_missing": _SECURITY_HEADERS,
+        "headers_missing": list(_SECURITY_HEADERS),
         "score": 0,
         "findings": [],
         "error": error,
+        "blocked": False,
     }
 
 

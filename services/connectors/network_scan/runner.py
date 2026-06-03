@@ -1,4 +1,9 @@
-"""Network Scan connector — pure-Python port scanner with TLS inspection."""
+"""Network Scan connector — pure-Python port scanner with TLS inspection.
+
+All targets are validated through SafeTargetValidationService before any socket
+is opened. This is defence-in-depth: the API layer validates first; the runner
+validates again so that it is safe regardless of how it is invoked.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +14,10 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
+
+from services.connectors.safe_target_validator import SafeTargetValidationService
+
+_validator = SafeTargetValidationService()
 
 
 # Ports to probe: common services + AI model server ports
@@ -81,22 +90,46 @@ def _check_tls(host: str) -> dict[str, Any]:
     return result
 
 
-def _expand_targets(raw_hosts: list[str]) -> list[str]:
+def _expand_targets(raw_hosts: list[str]) -> tuple[list[str], list[dict[str, str]]]:
+    """Expand CIDRs and validate every resulting host through SafeTargetValidationService.
+
+    Returns (valid_hosts, rejections) so the caller can include rejections in the
+    scan result for audit purposes without silently discarding them.
+    """
     hosts: list[str] = []
+    rejections: list[dict[str, str]] = []
+
     for entry in raw_hosts:
         entry = entry.strip()
         if not entry:
             continue
+
+        # Determine whether to expand as CIDR or treat as IP/hostname.
         try:
             net = ipaddress.ip_network(entry, strict=False)
-            # Only expand small subnets inline (≤ /28 = 16 hosts)
             if net.num_addresses <= 16:
-                hosts.extend(str(ip) for ip in net.hosts())
+                candidates = [str(ip) for ip in net.hosts()]
             else:
-                hosts.append(str(net.network_address))
+                candidates = [str(net.network_address)]
         except ValueError:
-            hosts.append(entry)
-    return hosts[:_MAX_HOSTS]
+            candidates = [entry]
+
+        for candidate in candidates:
+            result = _validator.validate(candidate)
+            if result.ok:
+                if candidate not in hosts:
+                    hosts.append(candidate)
+            else:
+                rejections.append(
+                    {
+                        "target": candidate,
+                        "rejection_code": result.rejection_code or "VALIDATION_FAILED",
+                        "rejection_reason": result.rejection_reason
+                        or "target failed validation",
+                    }
+                )
+
+    return hosts[:_MAX_HOSTS], rejections
 
 
 def _scan_host(host: str) -> dict[str, Any]:
@@ -135,7 +168,7 @@ def run_network_scan(
     """
     scan_initiated_at = datetime.now(timezone.utc).isoformat()
 
-    expanded = _expand_targets(target_hosts)
+    expanded, rejections = _expand_targets(target_hosts)
     host_results: list[dict[str, Any]] = []
     for host in expanded:
         try:
@@ -263,12 +296,14 @@ def run_network_scan(
         "scan_completed_at": scan_completed_at,
         "scan_status": "completed",
         "hosts": host_results,
+        "rejected_targets": rejections,  # provenance: targets blocked by validator
         "summary": {
             "total_hosts": len(host_results),
             "hosts_with_open_ports": sum(
                 1 for h in host_results if h.get("open_ports")
             ),
             "total_open_ports": sum(len(h.get("open_ports", [])) for h in host_results),
+            "rejected_target_count": len(rejections),
         },
         "findings": findings,
     }

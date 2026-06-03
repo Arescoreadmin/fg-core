@@ -18,6 +18,7 @@ import os
 import secrets
 import threading
 import uuid as _uuid_module
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import (
@@ -132,8 +133,13 @@ from api.db_models_field_assessment import (
     FaFieldObservation,
     FaNormalizedFinding,
     FaScanResult,
+    FaScanAuditEvent,
+    FaScanJob,
+    FaVerifiedTarget,
 )
-
+from services.connectors.safe_target_validator import (
+    SafeTargetValidationService as _SafeValidator,
+)
 from api.db_models_governance_asset_candidates import GaAssetCandidate
 from api.db_models_governance_assets import GaAsset
 from api.db_models_governance_promotion import GovernancePromotion
@@ -169,6 +175,8 @@ from services.connectors.msgraph.schema.scan_result import (
 )
 
 log = logging.getLogger("frostgate.api.field_assessment")
+
+_safe_validator = _SafeValidator()
 
 _MSGRAPH_RUNS: dict[str, dict[str, Any]] = {}
 _MSGRAPH_RUNS_LOCK = threading.Lock()
@@ -3233,6 +3241,196 @@ def initiate_endpoint_inventory_scan(
 
 
 # ---------------------------------------------------------------------------
+# C6 scanner helpers — validation, verified targets, audit events, job tracking
+# ---------------------------------------------------------------------------
+
+_MAX_CONCURRENT_JOBS_PER_ENGAGEMENT = 3
+_MAX_CONCURRENT_JOBS_PER_TENANT = 10
+
+
+def _c6_count_active_jobs(
+    db: Session, *, tenant_id: str, engagement_id: str
+) -> tuple[int, int]:
+    """Return (per_engagement_count, per_tenant_count) of queued/running scan jobs."""
+    active = ("queued", "running")
+    per_eng = (
+        db.query(FaScanJob)
+        .filter(
+            FaScanJob.engagement_id == engagement_id,
+            FaScanJob.tenant_id == tenant_id,
+            FaScanJob.status.in_(active),
+        )
+        .count()
+    )
+    per_ten = (
+        db.query(FaScanJob)
+        .filter(
+            FaScanJob.tenant_id == tenant_id,
+            FaScanJob.status.in_(active),
+        )
+        .count()
+    )
+    return per_eng, per_ten
+
+
+def _c6_write_audit_event(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    event_type: str,
+    actor: str,
+    scan_job_id: str | None = None,
+    target: str | None = None,
+    resolved_ips: list[str] | None = None,
+    scanner_type: str | None = None,
+    rejection_reason: str | None = None,
+    rejection_code: str | None = None,
+    scan_result_id: str | None = None,
+    payload_summary: dict | None = None,
+) -> None:
+    import json as _json
+
+    event = FaScanAuditEvent(
+        id=str(_uuid_module.uuid4()),
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scan_job_id=scan_job_id,
+        event_type=event_type,
+        actor=actor,
+        target=target,
+        resolved_ips=_json.dumps(resolved_ips) if resolved_ips else None,
+        scanner_type=scanner_type,
+        rejection_reason=rejection_reason,
+        rejection_code=rejection_code,
+        scan_result_id=scan_result_id,
+        payload_summary=_json.dumps(payload_summary) if payload_summary else None,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    db.add(event)
+
+
+def _c6_validate_and_store_targets(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    actor: str,
+    raw_targets: list[str],
+    scanner_type: str,
+    target_type_hint: str | None = None,
+) -> tuple[list[FaVerifiedTarget], list[dict]]:
+    """Validate all targets through SafeTargetValidationService.
+
+    Writes FaVerifiedTarget rows for every target (verified and rejected).
+    Writes scan.validation_rejected audit events for rejected targets.
+    Returns (verified_rows, rejection_dicts).
+    If any rejection exists, the caller should abort the scan.
+    """
+    import json as _json
+
+    now = datetime.now(timezone.utc).isoformat()
+    verified: list[FaVerifiedTarget] = []
+    rejections: list[dict] = []
+
+    for raw in raw_targets:
+        result = _safe_validator.validate(raw, target_type=target_type_hint)
+        row = FaVerifiedTarget(
+            id=str(_uuid_module.uuid4()),
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            target=result.normalized or raw,
+            target_type=result.target_type,
+            verification_method="platform_validation",
+            verification_status="verified" if result.ok else "rejected",
+            verified_at=now,
+            verified_by=actor,
+            resolved_ips=_json.dumps(result.resolved_ips)
+            if result.resolved_ips
+            else None,
+            rejection_reason=result.rejection_reason,
+            rejection_code=result.rejection_code,
+            created_at=now,
+        )
+        db.add(row)
+
+        if result.ok:
+            verified.append(row)
+        else:
+            rejections.append(
+                {
+                    "target": raw,
+                    "rejection_code": result.rejection_code,
+                    "rejection_reason": result.rejection_reason,
+                }
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.validation_rejected",
+                actor=actor,
+                target=raw,
+                resolved_ips=result.resolved_ips,
+                scanner_type=scanner_type,
+                rejection_reason=result.rejection_reason,
+                rejection_code=result.rejection_code,
+            )
+
+    return verified, rejections
+
+
+def _c6_create_scan_job(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    actor: str,
+    scanner_type: str,
+    verified_target_rows: list[FaVerifiedTarget],
+) -> FaScanJob:
+    import json as _json
+
+    job = FaScanJob(
+        id=str(_uuid_module.uuid4()),
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        verified_target_ids=_json.dumps([r.id for r in verified_target_rows]),
+        scanner_type=scanner_type,
+        status="queued",
+        attempt_count=0,
+        actor=actor,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    db.add(job)
+    return job
+
+
+def _c6_update_job_status(
+    db: Session,
+    *,
+    job_id: str,
+    status: str,
+    scan_result_id: str | None = None,
+    failure_reason: str | None = None,
+) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    job = db.query(FaScanJob).filter(FaScanJob.id == job_id).first()
+    if job is None:
+        return
+    job.status = status
+    if status == "running":
+        job.started_at = now
+        job.attempt_count = (job.attempt_count or 0) + 1
+    elif status in ("complete", "failed"):
+        job.completed_at = now
+        if scan_result_id:
+            job.scan_result_id = scan_result_id
+        if failure_reason:
+            job.failure_reason = failure_reason[:2000]
+
+
+# ---------------------------------------------------------------------------
 # Route — Network Scan (pure Python, no auth required)
 # ---------------------------------------------------------------------------
 
@@ -3254,6 +3452,7 @@ class NetworkScanInitiateResponse(BaseModel):
 def _network_scan_background(
     *,
     run_id: str,
+    job_id: str,
     tenant_id: str,
     engagement_id: str,
     target_hosts: list[str],
@@ -3263,8 +3462,19 @@ def _network_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
     try:
         _set(status="scanning")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
         from services.connectors.network_scan.runner import run_network_scan
 
         scan_result = run_network_scan(
@@ -3273,9 +3483,6 @@ def _network_scan_background(
         )
 
         _set(status="importing")
-        from api.db import get_sessionmaker
-
-        SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             result = import_network_scan(
@@ -3292,16 +3499,73 @@ def _network_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="network_scan",
             )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="network_scan",
+                scan_result_id=result.scan_result_id,
+                payload_summary={
+                    "hosts_scanned": result.hosts_scanned,
+                    "findings_imported": result.findings_imported,
+                },
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("network_scan_background: import failed — %s", exc)
             db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="network_scan",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
         finally:
             db.close()
     except Exception as exc:
         log.error("network_scan_background: scan failed — %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="network_scan",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
         _set(status="failed", error=str(exc)[:200])
 
 
@@ -3326,7 +3590,93 @@ def initiate_network_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    run_id = str(_uuid_module.uuid4())
+    # Rate limit check.
+    per_eng, per_ten = _c6_count_active_jobs(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    if per_eng >= _MAX_CONCURRENT_JOBS_PER_ENGAGEMENT:
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.rate_limited",
+            actor=actor,
+            scanner_type="network_scan",
+            rejection_reason=f"engagement has {per_eng} active scan jobs (limit {_MAX_CONCURRENT_JOBS_PER_ENGAGEMENT})",
+            rejection_code="RATE_LIMIT_ENGAGEMENT",
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=429,
+            detail=api_error(
+                "SCAN_RATE_LIMITED",
+                f"Too many concurrent scans for this engagement "
+                f"(max {_MAX_CONCURRENT_JOBS_PER_ENGAGEMENT})",
+            ),
+        )
+    if per_ten >= _MAX_CONCURRENT_JOBS_PER_TENANT:
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.rate_limited",
+            actor=actor,
+            scanner_type="network_scan",
+            rejection_reason=f"tenant has {per_ten} active scan jobs (limit {_MAX_CONCURRENT_JOBS_PER_TENANT})",
+            rejection_code="RATE_LIMIT_TENANT",
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=429,
+            detail=api_error(
+                "SCAN_RATE_LIMITED",
+                f"Too many concurrent scans for this tenant "
+                f"(max {_MAX_CONCURRENT_JOBS_PER_TENANT})",
+            ),
+        )
+
+    # Pre-validate all targets — reject the entire batch on any failure.
+    verified_rows, rejections = _c6_validate_and_store_targets(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        raw_targets=body.target_hosts,
+        scanner_type="network_scan",
+    )
+    if rejections:
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "SCAN_TARGET_VALIDATION_FAILED",
+                "message": "One or more scan targets failed validation",
+                "rejected_targets": rejections,
+            },
+        )
+
+    # Create durable job record before launching background task.
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="network_scan",
+        verified_target_rows=verified_rows,
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="network_scan",
+        payload_summary={"target_count": len(verified_rows)},
+    )
+    db.commit()
+
+    run_id = job.id  # reuse job.id as run_id for in-memory state lookup
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "scanning",
@@ -3339,16 +3689,17 @@ def initiate_network_scan(
     background_tasks.add_task(
         _network_scan_background,
         run_id=run_id,
+        job_id=job.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
-        target_hosts=body.target_hosts,
+        target_hosts=[r.target for r in verified_rows],
         actor=actor,
     )
 
     return NetworkScanInitiateResponse(
         run_id=run_id,
         status="scanning",
-        target_count=len(body.target_hosts),
+        target_count=len(verified_rows),
     )
 
 
@@ -3494,6 +3845,7 @@ class WebHeadersScanInitiateResponse(BaseModel):
 def _web_headers_scan_background(
     *,
     run_id: str,
+    job_id: str,
     tenant_id: str,
     engagement_id: str,
     targets: list[str],
@@ -3503,16 +3855,24 @@ def _web_headers_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
     try:
         _set(status="scanning")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
         from services.connectors.web_headers.runner import run as run_web_headers
 
         scan_result = run_web_headers(targets=targets)
 
         _set(status="importing")
-        from api.db import get_sessionmaker
-
-        SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             result = import_web_headers_scan(
@@ -3529,16 +3889,73 @@ def _web_headers_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="web_headers",
             )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="web_headers",
+                scan_result_id=result.scan_result_id,
+                payload_summary={
+                    "targets_scanned": result.targets_scanned,
+                    "findings_imported": result.findings_imported,
+                },
+            )
             db.commit()
             _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("web_headers_scan_background: import failed — %s", exc)
             db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="web_headers",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
         finally:
             db.close()
     except Exception as exc:
         log.error("web_headers_scan_background: scan failed — %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="web_headers",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
         _set(status="failed", error=str(exc)[:200])
 
 
@@ -3563,7 +3980,93 @@ def initiate_web_headers_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    run_id = str(_uuid_module.uuid4())
+    # Rate limit check.
+    per_eng, per_ten = _c6_count_active_jobs(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    if per_eng >= _MAX_CONCURRENT_JOBS_PER_ENGAGEMENT:
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.rate_limited",
+            actor=actor,
+            scanner_type="web_headers",
+            rejection_reason=f"engagement has {per_eng} active scan jobs (limit {_MAX_CONCURRENT_JOBS_PER_ENGAGEMENT})",
+            rejection_code="RATE_LIMIT_ENGAGEMENT",
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=429,
+            detail=api_error(
+                "SCAN_RATE_LIMITED",
+                f"Too many concurrent scans for this engagement "
+                f"(max {_MAX_CONCURRENT_JOBS_PER_ENGAGEMENT})",
+            ),
+        )
+    if per_ten >= _MAX_CONCURRENT_JOBS_PER_TENANT:
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.rate_limited",
+            actor=actor,
+            scanner_type="web_headers",
+            rejection_reason=f"tenant has {per_ten} active scan jobs (limit {_MAX_CONCURRENT_JOBS_PER_TENANT})",
+            rejection_code="RATE_LIMIT_TENANT",
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=429,
+            detail=api_error(
+                "SCAN_RATE_LIMITED",
+                f"Too many concurrent scans for this tenant "
+                f"(max {_MAX_CONCURRENT_JOBS_PER_TENANT})",
+            ),
+        )
+
+    # Pre-validate all URL targets — reject the entire batch on any failure.
+    verified_rows, rejections = _c6_validate_and_store_targets(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        raw_targets=body.targets,
+        scanner_type="web_headers",
+        target_type_hint="url",
+    )
+    if rejections:
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "SCAN_TARGET_VALIDATION_FAILED",
+                "message": "One or more scan targets failed validation",
+                "rejected_targets": rejections,
+            },
+        )
+
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="web_headers",
+        verified_target_rows=verified_rows,
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="web_headers",
+        payload_summary={"target_count": len(verified_rows)},
+    )
+    db.commit()
+
+    run_id = job.id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "scanning",
@@ -3576,16 +4079,17 @@ def initiate_web_headers_scan(
     background_tasks.add_task(
         _web_headers_scan_background,
         run_id=run_id,
+        job_id=job.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
-        targets=body.targets,
+        targets=[r.target for r in verified_rows],
         actor=actor,
     )
 
     return WebHeadersScanInitiateResponse(
         run_id=run_id,
         status="scanning",
-        target_count=len(body.targets),
+        target_count=len(verified_rows),
     )
 
 

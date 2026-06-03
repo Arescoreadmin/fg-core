@@ -13099,3 +13099,80 @@ Prove structural impossibility of attacks — no live network or auth required:
 - `proxy_emits_metric_events` / `proxy_rejects_wrong_artifact_type` / `proxy_validates_artifact_id_format`
 - `transcribe_registers_artifact_not_audio_url` / `transcribe_returns_artifact_id_not_audio_url`
 - `form_stores_audio_artifact_id_not_audio_url` / `page_builds_proxy_url_with_artifact_id` / `page_has_no_raw_blob_url_routing`
+
+---
+
+## PR fix 44 — feat(security): C6 — scanner containment hardening (SafeTargetValidationService)
+
+**Date:** 2026-06-02
+**Files changed:** 7 (services/connectors/safe_target_validator.py [NEW], migrations/postgres/0079_c6_scanner_containment.sql [NEW], tests/test_c6_scanner_containment.py [NEW], api/db_models_field_assessment.py, services/connectors/network_scan/runner.py, services/connectors/web_headers/runner.py, api/field_assessment.py)
+**Tests:** 114 C6 security tests pass / all 398 fg-fast tests pass.
+
+### Problem
+Outbound scanners accepted arbitrary IPs, CIDRs, and URLs with no containment:
+- Network scanner opened sockets to private RFC1918, loopback, link-local, cloud metadata
+  (`169.254.169.254`), and CGNAT addresses. CIDR expansion could enumerate internal networks.
+- Web-header scanner followed HTTP redirects without revalidation, allowing SSRF via redirect chains.
+- No rate limiting, no durable job state, no audit trail for scan operations.
+
+### Solution: centralized SafeTargetValidationService
+
+**`services/connectors/safe_target_validator.py`** — injectable validator with full 12-layer pipeline:
+1. Input normalization (strip, type detection: ip/hostname/cidr/url)
+2. IPv4 private-range rejection (RFC1918 + loopback + link-local + CGNAT + documentation + multicast + reserved + broadcast + benchmark — 17 CIDR ranges)
+3. IPv6 private-range rejection (loopback, ULA, link-local, multicast, unspecified, documentation, 6to4, IPv4-mapped private)
+4. Cloud metadata endpoint rejection (169.254.169.254, 100.100.100.200, 169.254.0.1, fd00:ec2::254 + hostname blocklist)
+5. DNS resolution with ALL-IPs-must-pass rebinding protection (first-safe/second-private = hard rejection)
+6. CIDR validation (small CIDRs ≤16 hosts: validate every host; large CIDRs: validate network address)
+7. URL validation (hostname extracted, full pipeline applied)
+8. `ValidationResult` is a frozen dataclass (immutable: ok, normalized, target_type, resolved_ips, rejection_reason, rejection_code)
+
+**`services/connectors/web_headers/runner.py`** — redirect containment:
+- `follow_redirects=False` on httpx client — library never auto-follows
+- `_follow_redirects_safely()` manually follows up to 5 hops, re-validating every Location header through the full validator pipeline
+- Pre-validates initial URL before opening any connection
+- Scan result carries `blocked: bool` and `rejection_code` fields
+
+**`services/connectors/network_scan/runner.py`** — host validation:
+- `_expand_targets()` now validates every candidate through `SafeTargetValidationService`
+- Rejected targets included in `rejected_targets` key for audit provenance
+- Return shape adds `rejected_target_count` to summary
+
+**`api/field_assessment.py`** — C6 API helpers:
+- `_c6_count_active_jobs()` — rate-limit check (3 per engagement, 10 per tenant)
+- `_c6_write_audit_event()` — append-only audit event writer
+- `_c6_validate_and_store_targets()` — batch validates + persists `FaVerifiedTarget` rows; any private target → batch 422
+- `_c6_create_scan_job()` — creates durable `FaScanJob` before background task launches
+- `_c6_update_job_status()` — transitions job state (queued → running → completed/failed)
+- `initiate_network_scan` + `initiate_web_headers_scan` updated: rate-limit check → target validation → durable job create → audit event → background task with job_id
+
+### Schema additions (called out — schema change)
+`migrations/postgres/0079_c6_scanner_containment.sql`:
+- `fa_verified_targets` — per-target validation record with status, rejection_code, resolved_ips; RLS enforced
+- `fa_scan_jobs` — durable scan job state (queued/running/completed/failed) with lease columns for H12 fix; RLS enforced
+- `fa_scan_audit_events` — append-only audit log: SELECT + INSERT policies only, no UPDATE/DELETE policy
+
+### Security guarantees
+- Private network pivoting structurally impossible: validator runs in both scanner runners and API layer (defence-in-depth)
+- DNS rebinding blocked: all resolved IPs must pass, not just the first
+- IPv4-mapped IPv6 bypass blocked: `::ffff:10.0.0.1` → embedded IPv4 checked
+- Redirect SSRF blocked: every redirect hop re-validated before following
+- Rate limiting prevents scan job abuse (429 with `scan.rate_limited` audit event)
+- All scan operations produce durable audit trail with target + resolved IPs
+
+### Tests (114 security tests across 15 classes)
+- `TestPrivateIPv4Rejection` — 24 parametrized cases (RFC1918, loopback, link-local, CGNAT, documentation, multicast, reserved, benchmark)
+- `TestPrivateIPv6Rejection` — 15 cases (loopback, ULA, link-local, multicast, unspecified, documentation, IPv4-mapped private/public)
+- `TestCloudMetadataRejection` — 6 cases (AWS/Azure/GCP IP, Alibaba IP, hostname blocklist, URL form)
+- `TestDnsRebindingRejection` — 7 cases including first-safe/second-private rejection
+- `TestCidrRejection` — 9 cases (private CIDRs, per-host validation, invalid CIDR)
+- `TestRedirectContainment` — 4 cases (private redirect blocked, public allowed, scan_target result flags)
+- `TestNetworkScanRunnerValidation` — 6 cases (private/loopback excluded, CIDR expansion, rejected_targets field)
+- `TestValidPublicTargets` — 9 cases (public IPv4, public IPv6, hostname, URL, CIDR)
+- `TestInputValidation` — 10 cases (empty, whitespace, invalid IP/CIDR, non-http URL, type detection)
+- `TestC6ApiHelpers` — 7 cases (count_active_jobs, write_audit_event, create_scan_job, update_job_status)
+- `TestValidateAndStoreTargets` — 4 cases (private → rejected row, public → verified row, mixed batch, URL hint)
+- `TestRateLimiting` — 2 cases (per-engagement limit, per-tenant limit)
+- `TestDurableJobPersistence` — 3 cases (job created before background, status transitions, failure recorded)
+- `TestAuditEventGeneration` — 4 cases (scan.initiated, scan.completed, scan.rate_limited, resolved_ips in rejection event)
+- `TestValidationResultImmutability` — 3 cases (frozen dataclass, ok result shape, rejected result shape)
