@@ -45,7 +45,9 @@ export type ScanSourceType =
   | 'gcp'
   | 'network_scan'
   | 'endpoint_inventory'
-  | 'oauth_inventory';
+  | 'oauth_inventory'
+  | 'oauth_risk'
+  | 'ai_tool_discovery';
 
 export type DocumentClassification =
   | 'ai_policy'
@@ -619,6 +621,47 @@ export interface QuestionnaireCoverage {
 }
 
 // ---------------------------------------------------------------------------
+// Verification Bundle (PR 52)
+// ---------------------------------------------------------------------------
+
+export interface VerificationBundleComponentSummary {
+  name: string;
+  count: number;
+  hash: string;
+}
+
+export interface VerificationBundle {
+  bundle_id: string;
+  engagement_id: string;
+  bundle_hash: string;
+  manifest_hash: string;
+  verification_status: 'verified' | 'incomplete' | 'tamper_detected';
+  generated_by: string;
+  generated_at: string;
+  finding_count: number;
+  evidence_count: number;
+  interview_count: number;
+  decision_count: number;
+  risk_acceptance_count: number;
+  exception_count: number;
+  audit_event_count: number;
+  has_report: boolean;
+  tamper_details: string[] | null;
+  component_summary: VerificationBundleComponentSummary[];
+}
+
+export interface VerificationBundleManifest {
+  bundle_id: string;
+  engagement_id: string;
+  manifest_hash: string;
+  bundle_hash: string;
+  generated_at: string;
+  generated_by: string;
+  verification_status: 'verified' | 'incomplete' | 'tamper_detected';
+  component_summary: VerificationBundleComponentSummary[];
+}
+
+// ---------------------------------------------------------------------------
 // API error
 // ---------------------------------------------------------------------------
 
@@ -891,6 +934,13 @@ export const fieldAssessmentApi = {
     });
   },
 
+  initiateAiToolDiscoveryScan(engagementId: string, payload: MsgraphScanInitiatePayload): Promise<MsgraphScanInitiated> {
+    return request(`/engagements/${engagementId}/connector-runs/ai-tool-discovery/initiate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // Audit events (read-only — append-only server-side)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/engagements/${engagementId}/audit-events`);
@@ -974,5 +1024,20 @@ export const fieldAssessmentApi = {
 
   getQuestionnaireCoverage(engagementId: string, questionnaireId: string): Promise<QuestionnaireCoverage> {
     return request(`/engagements/${engagementId}/questionnaires/${questionnaireId}/coverage`);
+  },
+
+  // Verification Bundle (PR 52) — operator generates; portal reads
+  generateVerificationBundle(engagementId: string): Promise<VerificationBundle> {
+    return request(`/engagements/${engagementId}/verification-bundle/generate`, {
+      method: 'POST',
+    });
+  },
+
+  getVerificationBundle(engagementId: string): Promise<VerificationBundle> {
+    return request(`/engagements/${engagementId}/verification-bundle`);
+  },
+
+  getVerificationBundleManifest(engagementId: string): Promise<VerificationBundleManifest> {
+    return request(`/engagements/${engagementId}/verification-bundle/manifest`);
   },
 };

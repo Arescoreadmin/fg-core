@@ -1,3 +1,42 @@
+## 2026-06-03 — PR 52 Verification Bundle V1: 3 new routes + SHA-256 hashed engagement snapshot
+
+**Classification:** Additive operator-only verification bundle surface. No auth logic changes. Generate route requires `governance:write`; read routes require `governance:read`. No secrets or credentials stored. No cross-tenant data access.
+
+**SOC review:**
+- `POST /field-assessment/engagements/{id}/verification-bundle/generate` — generates a verification bundle capturing SHA-256 hashes of all 9 engagement components (findings, evidence, interviews, decisions, risk acceptances, exceptions, audit trail, report). Requires `governance:write`. Emits `verification_bundle.generated` audit event. Tamper detection runs synchronously at generation time. No external network calls.
+- `GET /field-assessment/engagements/{id}/verification-bundle` — returns latest bundle status, hashes, and component counts. Requires `governance:read`. Read-only.
+- `GET /field-assessment/engagements/{id}/verification-bundle/manifest` — returns manifest-only view (hashes, component summary, status). Requires `governance:read`. Read-only.
+- Console BFF proxy: existing `field-assessment/engagements` rule covers all 3 routes (POST/GET). No BFF proxy changes needed.
+- Portal BFF proxy: existing `field-assessment/engagements` GET rule covers the 2 read routes. Portal cannot generate bundles (no POST in portal proxy for this path).
+- Migration `0086_fa_verification_bundles.sql` creates `fa_verification_bundles` table (append-only by convention; service exposes no mutation methods). No cross-engagement or cross-tenant columns.
+
+**Artifacts regenerated:**
+- `make route-inventory-generate` updated `tools/ci/route_inventory.json` and related summary files.
+- `make contract-authority-refresh` refreshed `BLUEPRINT_STAGED.md`, `CONTRACT.md`, and OpenAPI spec authority metadata.
+
+**Validation evidence:**
+- `pytest tests/test_pr52_verification_bundle.py -q` — 32 passed.
+- TypeScript compilation verified.
+
+## 2026-06-03 — PR 1 AI Tool Discovery Scan: field-assessment route + inventory refresh
+
+**Classification:** Additive Microsoft Graph discovery scan under the existing field-assessment plane. No auth logic changes. Initiate route requires `governance:write`; result, finding, evidence, and portal read paths reuse existing tenant-scoped field-assessment APIs. No token or secret storage. No content collection.
+
+**SOC review:**
+- `POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate` — starts an H12 durable job for read-only Microsoft Graph AI-connected application discovery; tenant resolved from auth context; engagement scoped before launch; MSAL device-code flow follows existing OAuth/Graph scan pattern.
+- Scanner sources are app registrations, service principals, OAuth permission grants, app role assignments, sign-in timestamps, audit-log availability, and data-driven AI vendor signatures. Prompt content, document content, email content, browsing history, secrets, and tokens are not collected or stored.
+- Import bridge stores evidence-backed output in `fa_scan_results`, creates normalized findings only for observable governance review conditions, and links scan evidence through existing evidence-link/lifecycle infrastructure.
+- PostgreSQL migration `0086_ai_tool_discovery_scan.sql` extends the durable scan-job scanner_type constraint for `ai_tool_discovery`; no new tenant-sharing or cross-engagement table is introduced.
+
+**Artifacts regenerated:**
+- `make route-inventory-generate` updated `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256`.
+- `make contract-authority-refresh` refreshed `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `contracts/core/openapi.json`, and `schemas/api/openapi.json` authority metadata.
+
+**Validation evidence:**
+- `.venv/bin/python -m pytest tests/test_ai_tool_discovery.py tests/test_scan_import.py tests/test_h12_durable_jobs.py -q` — 104 passed.
+- `npm run typecheck` in `apps/console` — passed.
+- `npm test` in `apps/portal` — 30 passed.
+
 ## 2026-06-03 — H14 governance decision ledger: 8 new routes + append-only tables
 
 **Classification:** Additive write + read-only routes under the existing field-assessment plane. No auth logic changes. Write routes require `governance:write` scope; read routes require `governance:read`. Tenant binding enforced at DB query layer on all routes. No new auth bypass. No new planes.

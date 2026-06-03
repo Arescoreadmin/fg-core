@@ -205,6 +205,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_decision"
     )  # H14: governance decision ledger
+    importlib.import_module(
+        "api.db_models_verification_bundle"
+    )  # PR 52: verification bundle
 
 
 def _get_base():

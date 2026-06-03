@@ -124,6 +124,43 @@ export interface ReportVerifyResult {
   verified_at: string | null;
 }
 
+export interface VerificationBundleComponentSummary {
+  name: string;
+  count: number;
+  hash: string;
+}
+
+export interface VerificationBundle {
+  bundle_id: string;
+  engagement_id: string;
+  bundle_hash: string;
+  manifest_hash: string;
+  verification_status: 'verified' | 'incomplete' | 'tamper_detected';
+  generated_by: string;
+  generated_at: string;
+  finding_count: number;
+  evidence_count: number;
+  interview_count: number;
+  decision_count: number;
+  risk_acceptance_count: number;
+  exception_count: number;
+  audit_event_count: number;
+  has_report: boolean;
+  tamper_details: string[] | null;
+  component_summary: VerificationBundleComponentSummary[];
+}
+
+export interface VerificationBundleManifest {
+  bundle_id: string;
+  engagement_id: string;
+  manifest_hash: string;
+  bundle_hash: string;
+  generated_at: string;
+  generated_by: string;
+  verification_status: 'verified' | 'incomplete' | 'tamper_detected';
+  component_summary: VerificationBundleComponentSummary[];
+}
+
 export interface GovernanceAsset {
   asset_id: string;
   asset_name: string;
@@ -323,6 +360,10 @@ export interface ScanResult {
   created_at: string;
 }
 
+export interface ScanResultDetail extends ScanResult {
+  normalized_payload: Record<string, unknown> | null;
+}
+
 export interface EngagementDocument {
   id: string;
   engagement_id: string;
@@ -510,6 +551,10 @@ export const portalApi = {
     return request(`/field-assessment/engagements/${engagementId}/scan-results`);
   },
 
+  getScan(engagementId: string, scanResultId: string): Promise<ScanResultDetail> {
+    return request(`/field-assessment/engagements/${engagementId}/scan-results/${scanResultId}`);
+  },
+
   // Documents (read-only)
   listDocuments(engagementId: string): Promise<EngagementDocument[]> {
     return request(`/field-assessment/engagements/${engagementId}/document-analyses`);
@@ -536,5 +581,14 @@ export const portalApi = {
   // Audit trail (read-only)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/field-assessment/engagements/${engagementId}/audit-events`);
+  },
+
+  // Verification Bundle (PR 52) — read-only in portal
+  getVerificationBundle(engagementId: string): Promise<VerificationBundle> {
+    return request(`/field-assessment/engagements/${engagementId}/verification-bundle`);
+  },
+
+  getVerificationBundleManifest(engagementId: string): Promise<VerificationBundleManifest> {
+    return request(`/field-assessment/engagements/${engagementId}/verification-bundle/manifest`);
   },
 } as const;

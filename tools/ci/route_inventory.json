@@ -4864,6 +4864,23 @@
       ],
       "file": "api/field_assessment.py",
       "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/connector-runs/dns-email/initiate",
       "plane": "control",
       "plane_id": "control",
@@ -6004,6 +6021,57 @@
       "file": "api/field_assessment.py",
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/summary",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/verification-bundle",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/verification-bundle/generate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/verification-bundle/manifest",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -9283,7 +9351,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-03T17:33:33.415907+00:00",
+  "generated_at": "2026-06-03T19:39:11.019645+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

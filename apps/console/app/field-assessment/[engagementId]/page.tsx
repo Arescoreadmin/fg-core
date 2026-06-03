@@ -18,6 +18,7 @@ import { WebHeadersScanPanel } from '@/components/field-assessment/WebHeadersSca
 import { EntraGovernanceScanPanel } from '@/components/field-assessment/EntraGovernanceScanPanel';
 import { SharepointScanPanel } from '@/components/field-assessment/SharepointScanPanel';
 import { OauthRiskScanPanel } from '@/components/field-assessment/OauthRiskScanPanel';
+import { AiToolDiscoveryScanPanel } from '@/components/field-assessment/AiToolDiscoveryScanPanel';
 import { DocumentRegistrationPanel } from '@/components/field-assessment/DocumentRegistrationPanel';
 import { ObservationForm } from '@/components/field-assessment/ObservationForm';
 import { InterviewForm } from '@/components/field-assessment/InterviewForm';
@@ -30,6 +31,7 @@ import { ReportVersionHistory } from '@/components/field-assessment/ReportVersio
 import { BulkObservationImport } from '@/components/field-assessment/BulkObservationImport';
 import { ReportViewer } from '@/components/field-assessment/ReportViewer';
 import { ReportExportBar } from '@/components/field-assessment/ReportExportBar';
+import { VerificationBundlePanel } from '@/components/field-assessment/VerificationBundlePanel';
 import { ControlGapMatrix } from '@/components/field-assessment/ControlGapMatrix';
 import { QuestionnairePanel } from '@/components/field-assessment/QuestionnairePanel';
 import { ConsoleTopNav } from '@/components/ConsoleTopNav';
@@ -697,6 +699,25 @@ export default function EngagementWorkspacePage() {
                 </Card>
                 <Card className="border-border mb-4">
                   <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run AI Tool Discovery Scan</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Device-code flow — discovers AI-connected apps, publishers, permissions, consent, and evidence references
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <AiToolDiscoveryScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border-border mb-4">
+                  <CardHeader className="pb-2 pt-4 px-4">
                     <CardTitle className="text-sm">Run Endpoint Inventory Scan</CardTitle>
                     <p className="text-xs text-muted mt-0.5">
                       Device-code flow — enumerates Azure AD devices and Intune managed endpoints
@@ -1276,6 +1297,8 @@ export default function EngagementWorkspacePage() {
                       />
                     </>
                   )}
+
+                  <VerificationBundlePanel engagementId={engagementId} />
                 </div>
               </TabsContent>
 

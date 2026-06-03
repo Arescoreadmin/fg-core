@@ -54,6 +54,8 @@ from services.field_assessment.durable_job_service import durable_job_svc
 from services.field_assessment.governance_decision_service import (
     governance_decision_svc,
 )
+from services.verification_bundle.bundle_service import verification_bundle_svc
+from api.db_models_verification_bundle import FaVerificationBundle
 from services.field_assessment.connectors.msgraph_bridge import (
     ConnectorAcknowledgmentRequired,
     ConnectorBridgeError,
@@ -87,6 +89,9 @@ from services.field_assessment.connectors.sharepoint_bridge import (
 )
 from services.field_assessment.connectors.oauth_risk_bridge import (
     import_oauth_risk_scan,
+)
+from services.field_assessment.connectors.ai_tool_discovery_bridge import (
+    import_ai_tool_discovery_scan,
 )
 from services.field_assessment.models import (
     AssessmentType,
@@ -905,6 +910,7 @@ _SCAN_SOURCE_LABELS: dict[str, str] = {
     "microsoft_graph": "MS Graph Core Scan",
     "oauth_inventory": "OAuth Inventory Scan",
     "oauth_risk": "OAuth Risk Scan",
+    "ai_tool_discovery": "AI Tool Discovery Scan",
     "entra_governance": "Entra Governance Scan",
     "endpoint_inventory": "Endpoint Inventory Scan",
     "sharepoint_onedrive": "SharePoint & OneDrive Scan",
@@ -5309,6 +5315,261 @@ def initiate_oauth_risk_scan(
     )
 
 
+# ---------------------------------------------------------------------------
+# AI Tool Discovery connector (MSAL device-code, MS Graph)
+# ---------------------------------------------------------------------------
+
+_AI_TOOL_DISCOVERY_SCOPES: tuple[str, ...] = (
+    "Application.Read.All",
+    "Directory.Read.All",
+    "AuditLog.Read.All",
+)
+
+
+def _ai_tool_discovery_scan_background(
+    *,
+    run_id: str,
+    job_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    msal_app: Any,
+    flow: dict[str, Any],
+    actor: str,
+) -> None:
+    def _set(**kw: Any) -> None:
+        with _MSGRAPH_RUNS_LOCK:
+            _MSGRAPH_RUNS[run_id].update(kw)
+
+    from api.db import get_sessionmaker
+
+    SessionLocal = get_sessionmaker()
+
+    try:
+        _set(status="authenticating")
+        db = SessionLocal()
+        try:
+            _c6_update_job_status(db, job_id=job_id, status="running")
+            db.commit()
+        finally:
+            db.close()
+
+        token_result = msal_app.acquire_token_by_device_flow(flow)
+        if "access_token" not in token_result:
+            error_msg = token_result.get(
+                "error_description", "Token acquisition failed"
+            )
+            _set(status="failed", error=error_msg)
+            db = SessionLocal()
+            try:
+                _c6_update_job_status(
+                    db, job_id=job_id, status="failed", failure_reason=error_msg
+                )
+                _c6_write_audit_event(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    event_type="scan.failed",
+                    actor=actor,
+                    scan_job_id=job_id,
+                    scanner_type="ai_tool_discovery",
+                    rejection_reason=error_msg[:500],
+                )
+                db.commit()
+            finally:
+                db.close()
+            return
+
+        _set(status="scanning")
+        from services.connectors.ai_tool_discovery.runner import run_ai_tool_discovery
+
+        scan_result = run_ai_tool_discovery(
+            access_token=token_result["access_token"],
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+        )
+
+        _set(status="importing")
+        db = SessionLocal()
+        try:
+            result = import_ai_tool_discovery_scan(
+                db=db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result=scan_result,
+                actor=actor,
+            )
+            _auto_link_scan_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                source_type="ai_tool_discovery",
+            )
+            _c6_update_job_status(
+                db,
+                job_id=job_id,
+                status="complete",
+                scan_result_id=result.scan_result_id,
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="ai_tool_discovery",
+                scan_result_id=result.scan_result_id,
+                payload_summary={
+                    "tools_discovered": result.tools_discovered,
+                    "findings_imported": result.findings_imported,
+                },
+            )
+            db.commit()
+            _set(status="complete", scan_result_id=result.scan_result_id)
+        except Exception as exc:
+            log.error("ai_tool_discovery_background: import failed - %s", exc)
+            db.rollback()
+            _c6_update_job_status(
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="ai_tool_discovery",
+                rejection_reason=str(exc)[:500],
+            )
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
+        finally:
+            db.close()
+    except Exception as exc:
+        log.error("ai_tool_discovery_background: scan failed - %s", exc)
+        db2 = SessionLocal()
+        try:
+            _c6_update_job_status(
+                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type="ai_tool_discovery",
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:
+            db2.rollback()
+        finally:
+            db2.close()
+        _set(status="failed", error=str(exc)[:200])
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
+    response_model=MsgraphScanInitiateResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def initiate_ai_tool_discovery_scan(
+    engagement_id: str,
+    request: Request,
+    body: MsgraphScanInitiateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth_ctx_db_session),
+) -> MsgraphScanInitiateResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    if not client_id:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+        )
+    try:
+        import msal  # type: ignore[import-untyped]
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error("MSAL_NOT_INSTALLED", "msal package is not installed"),
+        )
+
+    authority = f"https://login.microsoftonline.com/{body.azure_tenant_id}"
+    msal_app = msal.PublicClientApplication(client_id, authority=authority)
+    flow = msal_app.initiate_device_flow(scopes=list(_AI_TOOL_DISCOVERY_SCOPES))
+    if "user_code" not in flow:
+        raise HTTPException(
+            status_code=502,
+            detail=api_error(
+                "DEVICE_FLOW_FAILED",
+                flow.get("error_description", "Device flow initiation failed"),
+            ),
+        )
+
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="ai_tool_discovery",
+    )
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="ai_tool_discovery",
+    )
+    db.commit()
+
+    run_id = job.id
+    with _MSGRAPH_RUNS_LOCK:
+        _MSGRAPH_RUNS[run_id] = {
+            "status": "pending_auth",
+            "user_code": flow["user_code"],
+            "verification_uri": flow["verification_uri"],
+            "error": None,
+            "scan_result_id": None,
+        }
+
+    background_tasks.add_task(
+        _ai_tool_discovery_scan_background,
+        run_id=run_id,
+        job_id=job.id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        msal_app=msal_app,
+        flow=flow,
+        actor=actor,
+    )
+
+    return MsgraphScanInitiateResponse(
+        run_id=run_id,
+        user_code=flow["user_code"],
+        verification_uri=flow["verification_uri"],
+        expires_in=flow.get("expires_in", 900),
+        message=flow.get("message", ""),
+    )
+
+
 @router.get(
     "/engagements/{engagement_id}/connector-runs/{run_id}/status",
     response_model=MsgraphRunStatusResponse,
@@ -9027,4 +9288,214 @@ def get_artifact_route(
         created_at=artifact.created_at,
         retention_class=artifact.retention_class,
         storage_key=artifact.storage_key,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes — Verification Bundle (PR 52)
+# ---------------------------------------------------------------------------
+
+
+class VerificationBundleComponentSummary(BaseModel):
+    name: str
+    count: int
+    hash: str
+
+
+class VerificationBundleResponse(BaseModel):
+    bundle_id: str
+    engagement_id: str
+    bundle_hash: str
+    manifest_hash: str
+    verification_status: str
+    generated_by: str
+    generated_at: str
+    finding_count: int
+    evidence_count: int
+    interview_count: int
+    decision_count: int
+    risk_acceptance_count: int
+    exception_count: int
+    audit_event_count: int
+    has_report: bool
+    tamper_details: list[str] | None
+    component_summary: list[VerificationBundleComponentSummary]
+
+
+class VerificationBundleManifestResponse(BaseModel):
+    bundle_id: str
+    engagement_id: str
+    manifest_hash: str
+    bundle_hash: str
+    generated_at: str
+    generated_by: str
+    verification_status: str
+    component_summary: list[VerificationBundleComponentSummary]
+
+
+def _bundle_to_response(b: FaVerificationBundle) -> VerificationBundleResponse:
+    import json as _json
+
+    tamper = _json.loads(b.tamper_details) if b.tamper_details else None
+    summary_raw = _json.loads(b.component_summary) if b.component_summary else []
+    summary = [VerificationBundleComponentSummary(**c) for c in summary_raw]
+    return VerificationBundleResponse(
+        bundle_id=b.id,
+        engagement_id=b.engagement_id,
+        bundle_hash=b.bundle_hash,
+        manifest_hash=b.manifest_hash,
+        verification_status=b.verification_status,
+        generated_by=b.generated_by,
+        generated_at=b.generated_at,
+        finding_count=b.finding_count,
+        evidence_count=b.evidence_count,
+        interview_count=b.interview_count,
+        decision_count=b.decision_count,
+        risk_acceptance_count=b.risk_acceptance_count,
+        exception_count=b.exception_count,
+        audit_event_count=b.audit_event_count,
+        has_report=b.has_report,
+        tamper_details=tamper,
+        component_summary=summary,
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/verification-bundle/generate",
+    response_model=VerificationBundleResponse,
+    status_code=201,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def generate_verification_bundle_route(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> VerificationBundleResponse:
+    """Generate a verification bundle for an engagement.
+
+    Collects all 9 components (findings, evidence, interviews, decisions,
+    risk acceptances, exceptions, audit trail, report), hashes each, runs
+    tamper detection, and persists the bundle record. Emits an audit event.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    bundle = verification_bundle_svc.generate_bundle(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor_id=actor,
+    )
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="verification_bundle.generated",
+        actor=actor,
+        reason_code="VERIFICATION_BUNDLE_GENERATED",
+        payload={
+            "bundle_id": bundle.id,
+            "bundle_hash": bundle.bundle_hash,
+            "verification_status": bundle.verification_status,
+            "finding_count": bundle.finding_count,
+            "evidence_count": bundle.evidence_count,
+            "tamper_issue_count": len(
+                __import__("json").loads(bundle.tamper_details)
+                if bundle.tamper_details
+                else []
+            ),
+        },
+    )
+    db.commit()
+    db.refresh(bundle)
+    return _bundle_to_response(bundle)
+
+
+@router.get(
+    "/engagements/{engagement_id}/verification-bundle",
+    response_model=VerificationBundleResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_verification_bundle_route(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> VerificationBundleResponse:
+    """Retrieve the latest verification bundle for an engagement."""
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    bundle = verification_bundle_svc.get_latest_bundle(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    if bundle is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "VERIFICATION_BUNDLE_NOT_FOUND",
+                "No verification bundle has been generated for this engagement.",
+            ),
+        )
+    return _bundle_to_response(bundle)
+
+
+@router.get(
+    "/engagements/{engagement_id}/verification-bundle/manifest",
+    response_model=VerificationBundleManifestResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_verification_bundle_manifest_route(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> VerificationBundleManifestResponse:
+    """Retrieve the manifest from the latest verification bundle."""
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    bundle = verification_bundle_svc.get_latest_bundle(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    if bundle is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "VERIFICATION_BUNDLE_NOT_FOUND",
+                "No verification bundle has been generated for this engagement.",
+            ),
+        )
+    import json as _json
+
+    summary_raw = (
+        _json.loads(bundle.component_summary) if bundle.component_summary else []
+    )
+    summary = [VerificationBundleComponentSummary(**c) for c in summary_raw]
+    return VerificationBundleManifestResponse(
+        bundle_id=bundle.id,
+        engagement_id=bundle.engagement_id,
+        manifest_hash=bundle.manifest_hash,
+        bundle_hash=bundle.bundle_hash,
+        generated_at=bundle.generated_at,
+        generated_by=bundle.generated_by,
+        verification_status=bundle.verification_status,
+        component_summary=summary,
     )

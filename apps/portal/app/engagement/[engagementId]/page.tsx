@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { Fragment, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
@@ -9,10 +9,12 @@ import {
   type EngagementDetail,
   type EngagementCounts,
   type ScanResult,
+  type ScanResultDetail,
   type EngagementDocument,
   type Observation,
   type EvidenceLink,
   type AuditEvent,
+  type VerificationBundle,
 } from '@/lib/portalApi';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -135,6 +137,80 @@ function apiError(e: unknown): string {
 
 // ─── Tab panels ───────────────────────────────────────────────────────────────
 
+const BUNDLE_STATUS_CLASS: Record<string, string> = {
+  verified:        'border-green-500/30 bg-green-500/5 text-green-300',
+  incomplete:      'border-amber-500/30 bg-amber-500/5 text-amber-200',
+  tamper_detected: 'border-red-500/30 bg-red-500/5 text-red-300',
+};
+const BUNDLE_STATUS_LABEL: Record<string, string> = {
+  verified:        'Verified',
+  incomplete:      'Incomplete',
+  tamper_detected: 'Tamper Detected',
+};
+
+function VerificationBundleCard({ engagementId }: { engagementId: string }) {
+  const [bundle, setBundle] = useState<VerificationBundle | null>(null);
+  const [bundleLoading, setBundleLoading] = useState(true);
+
+  useEffect(() => {
+    portalApi.getVerificationBundle(engagementId)
+      .then(setBundle)
+      .catch(() => setBundle(null))
+      .finally(() => setBundleLoading(false));
+  }, [engagementId]);
+
+  if (bundleLoading) return null;
+  if (!bundle) {
+    return (
+      <div className="rounded border border-border bg-surface p-4">
+        <h3 className="text-sm font-medium text-foreground mb-1">Verification Bundle</h3>
+        <p className="text-xs text-muted">No verification bundle available yet.</p>
+      </div>
+    );
+  }
+
+  const statusCls = BUNDLE_STATUS_CLASS[bundle.verification_status] ?? 'border-border bg-surface-3 text-muted';
+  const statusLabel = BUNDLE_STATUS_LABEL[bundle.verification_status] ?? bundle.verification_status;
+
+  return (
+    <div className="rounded border border-border bg-surface p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-medium text-foreground">Verification Bundle</h3>
+        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs border font-medium ${statusCls}`}>
+          {statusLabel}
+        </span>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        <dt className="text-muted">Generated</dt>
+        <dd className="text-foreground">{fmtDateTime(bundle.generated_at)}</dd>
+        <dt className="text-muted">Bundle Hash</dt>
+        <dd className="font-mono text-muted truncate">{bundle.bundle_hash.slice(0, 20)}…</dd>
+        <dt className="text-muted">Manifest Hash</dt>
+        <dd className="font-mono text-muted truncate">{bundle.manifest_hash.slice(0, 20)}…</dd>
+        <dt className="text-muted">Findings</dt>
+        <dd className="text-foreground">{bundle.finding_count}</dd>
+        <dt className="text-muted">Evidence</dt>
+        <dd className="text-foreground">{bundle.evidence_count}</dd>
+        <dt className="text-muted">Decisions</dt>
+        <dd className="text-foreground">{bundle.decision_count}</dd>
+      </dl>
+      {bundle.tamper_details && bundle.tamper_details.length > 0 && (
+        <div className="rounded border border-red-500/30 bg-red-500/5 p-2.5 space-y-1">
+          <p className="text-xs font-semibold text-red-300">
+            {bundle.tamper_details.length} integrity issue{bundle.tamper_details.length !== 1 ? 's' : ''} detected
+          </p>
+          {bundle.tamper_details.slice(0, 3).map((issue, i) => (
+            <p key={i} className="text-xs text-red-300/80 font-mono">{issue}</p>
+          ))}
+          {bundle.tamper_details.length > 3 && (
+            <p className="text-xs text-red-300/60">+{bundle.tamper_details.length - 3} more</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OverviewTab({
   engagement,
   counts,
@@ -199,6 +275,9 @@ function OverviewTab({
         </div>
       )}
 
+      {/* Verification bundle */}
+      <VerificationBundleCard engagementId={engagementId} />
+
       {/* Quick navigation */}
       <div className="rounded border border-border bg-surface p-4 space-y-2">
         <h3 className="text-sm font-medium text-foreground">Assessment pages</h3>
@@ -223,14 +302,79 @@ function OverviewTab({
   );
 }
 
+
+function sourceLabel(sourceType: string) {
+  if (sourceType === 'ai_tool_discovery') return 'AI Tool Discovery';
+  return sourceType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+type AiTool = {
+  tool_name?: string;
+  vendor?: string;
+  publisher?: string;
+  verified_publisher?: boolean;
+  permissions_summary?: string;
+  admin_consent?: boolean;
+  last_seen?: string;
+  risk_indicators?: string[];
+  evidence_refs?: string[];
+  confidence?: string;
+};
+
+function AiToolDetails({ detail }: { detail: ScanResultDetail }) {
+  const payload = detail.normalized_payload ?? {};
+  const tools = Array.isArray(payload.tools) ? (payload.tools as AiTool[]) : [];
+  if (!tools.length) return <p className="text-xs text-muted">No AI tools were discovered in this scan.</p>;
+  return (
+    <div className="space-y-2">
+      {tools.slice(0, 8).map((tool, idx) => (
+        <div key={`${tool.vendor}-${tool.tool_name}-${idx}`} className="rounded border border-border bg-surface-2 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-foreground">{tool.tool_name ?? 'Unknown AI tool'}</span>
+            <span className="text-xs text-muted">{tool.vendor ?? 'Unknown vendor'}</span>
+            <span className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted">{tool.confidence ?? 'unknown'}</span>
+          </div>
+          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+            <div><dt className="text-muted">Publisher</dt><dd className="text-foreground">{tool.publisher ?? 'unknown'}</dd></div>
+            <div><dt className="text-muted">Verified</dt><dd className="text-foreground">{tool.verified_publisher ? 'yes' : 'no'}</dd></div>
+            <div><dt className="text-muted">Admin consent</dt><dd className="text-foreground">{tool.admin_consent ? 'yes' : 'no'}</dd></div>
+            <div><dt className="text-muted">Permissions</dt><dd className="text-foreground">{tool.permissions_summary ?? 'unknown'}</dd></div>
+            <div><dt className="text-muted">Last seen</dt><dd className="text-foreground">{tool.last_seen ?? 'unknown'}</dd></div>
+            <div><dt className="text-muted">Evidence refs</dt><dd className="font-mono text-muted">{(tool.evidence_refs ?? []).slice(0, 2).join(', ') || 'unknown'}</dd></div>
+          </dl>
+          {tool.risk_indicators?.length ? (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {tool.risk_indicators.slice(0, 8).map((risk) => (
+                <span key={risk} className="rounded border border-amber-500/30 bg-amber-500/5 px-1.5 py-0.5 text-[11px] text-amber-200">{risk.replace(/_/g, ' ')}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ))}
+      {tools.length > 8 && <p className="text-xs text-muted">Showing 8 of {tools.length} discovered tools.</p>}
+    </div>
+  );
+}
+
 function ScansTab({ engagementId }: { engagementId: string }) {
   const [state, setState] = useState<Async<ScanResult[]>>(idle());
+  const [aiDetails, setAiDetails] = useState<Record<string, ScanResultDetail>>({});
 
   useEffect(() => {
     setState((s) => ({ ...s, loading: true }));
     portalApi
       .listScans(engagementId)
-      .then((data) => setState({ data, loading: false, error: null }))
+      .then((data) => {
+        setState({ data, loading: false, error: null });
+        const aiScans = data.filter((scan) => scan.source_type === 'ai_tool_discovery');
+        Promise.all(aiScans.map((scan) => portalApi.getScan(engagementId, scan.id).catch(() => null)))
+          .then((details) => {
+            const next: Record<string, ScanResultDetail> = {};
+            details.forEach((detail) => { if (detail) next[detail.id] = detail; });
+            setAiDetails(next);
+          })
+          .catch(() => {});
+      })
       .catch((e) => setState({ data: null, loading: false, error: apiError(e) }));
   }, [engagementId]);
 
@@ -252,17 +396,26 @@ function ScansTab({ engagementId }: { engagementId: string }) {
         </thead>
         <tbody className="divide-y divide-border">
           {state.data.map((scan) => (
-            <tr key={scan.id} className="bg-surface hover:bg-surface-2 transition-colors">
-              <td className="px-3 py-2 text-foreground font-medium">
-                {scan.source_type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-              </td>
-              <td className="px-3 py-2 text-foreground">{scan.object_count.toLocaleString()}</td>
-              <td className="px-3 py-2 font-mono text-muted" title={scan.evidence_hash}>
-                {truncate(scan.evidence_hash, 16)}
-              </td>
-              <td className="px-3 py-2 text-muted">{fmtDateTime(scan.collected_at)}</td>
-              <td className="px-3 py-2 text-muted">{fmtDateTime(scan.created_at)}</td>
-            </tr>
+            <Fragment key={scan.id}>
+              <tr className="bg-surface hover:bg-surface-2 transition-colors">
+                <td className="px-3 py-2 text-foreground font-medium">
+                  {sourceLabel(scan.source_type)}
+                </td>
+                <td className="px-3 py-2 text-foreground">{scan.object_count.toLocaleString()}</td>
+                <td className="px-3 py-2 font-mono text-muted" title={scan.evidence_hash}>
+                  {truncate(scan.evidence_hash, 16)}
+                </td>
+                <td className="px-3 py-2 text-muted">{fmtDateTime(scan.collected_at)}</td>
+                <td className="px-3 py-2 text-muted">{fmtDateTime(scan.created_at)}</td>
+              </tr>
+              {scan.source_type === 'ai_tool_discovery' && aiDetails[scan.id] && (
+                <tr key={`${scan.id}-ai-details`} className="bg-surface">
+                  <td colSpan={5} className="px-3 py-3">
+                    <AiToolDetails detail={aiDetails[scan.id]} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -277,7 +430,9 @@ function DocumentsTab({ engagementId }: { engagementId: string }) {
     setState((s) => ({ ...s, loading: true }));
     portalApi
       .listDocuments(engagementId)
-      .then((data) => setState({ data, loading: false, error: null }))
+      .then((data) => {
+        setState({ data, loading: false, error: null });
+      })
       .catch((e) => setState({ data: null, loading: false, error: apiError(e) }));
   }, [engagementId]);
 
@@ -362,7 +517,9 @@ function ObservationsTab({ engagementId }: { engagementId: string }) {
     setState((s) => ({ ...s, loading: true }));
     portalApi
       .listObservations(engagementId)
-      .then((data) => setState({ data, loading: false, error: null }))
+      .then((data) => {
+        setState({ data, loading: false, error: null });
+      })
       .catch((e) => setState({ data: null, loading: false, error: apiError(e) }));
   }, [engagementId]);
 
@@ -452,7 +609,9 @@ function EvidenceTab({ engagementId }: { engagementId: string }) {
     setState((s) => ({ ...s, loading: true }));
     portalApi
       .listEvidenceLinks(engagementId)
-      .then((data) => setState({ data, loading: false, error: null }))
+      .then((data) => {
+        setState({ data, loading: false, error: null });
+      })
       .catch((e) => setState({ data: null, loading: false, error: apiError(e) }));
   }, [engagementId]);
 
@@ -504,7 +663,9 @@ function HistoryTab({ engagementId }: { engagementId: string }) {
     setState((s) => ({ ...s, loading: true }));
     portalApi
       .listAuditEvents(engagementId)
-      .then((data) => setState({ data, loading: false, error: null }))
+      .then((data) => {
+        setState({ data, loading: false, error: null });
+      })
       .catch((e) => setState({ data: null, loading: false, error: apiError(e) }));
   }, [engagementId]);
 
