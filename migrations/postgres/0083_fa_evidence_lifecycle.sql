@@ -40,7 +40,7 @@ BEGIN
              WHERE table_name = 'fa_scan_results' AND column_name = 'lifecycle_state'
         ) THEN
             ALTER TABLE fa_scan_results
-                ADD COLUMN lifecycle_state VARCHAR(32) NOT NULL DEFAULT 'collected';
+                ADD COLUMN IF NOT EXISTS lifecycle_state VARCHAR(32) NOT NULL DEFAULT 'collected';
         END IF;
     END IF;
 END $$;
@@ -53,7 +53,7 @@ BEGIN
              WHERE table_name = 'fa_document_analyses' AND column_name = 'lifecycle_state'
         ) THEN
             ALTER TABLE fa_document_analyses
-                ADD COLUMN lifecycle_state VARCHAR(32) NOT NULL DEFAULT 'collected';
+                ADD COLUMN IF NOT EXISTS lifecycle_state VARCHAR(32) NOT NULL DEFAULT 'collected';
         END IF;
     END IF;
 END $$;
@@ -66,7 +66,7 @@ BEGIN
              WHERE table_name = 'fa_field_observations' AND column_name = 'lifecycle_state'
         ) THEN
             ALTER TABLE fa_field_observations
-                ADD COLUMN lifecycle_state VARCHAR(32) NOT NULL DEFAULT 'collected';
+                ADD COLUMN IF NOT EXISTS lifecycle_state VARCHAR(32) NOT NULL DEFAULT 'collected';
         END IF;
     END IF;
 END $$;
@@ -79,7 +79,7 @@ BEGIN
              WHERE table_name = 'fa_evidence_links' AND column_name = 'lifecycle_state'
         ) THEN
             ALTER TABLE fa_evidence_links
-                ADD COLUMN lifecycle_state VARCHAR(32) NOT NULL DEFAULT 'collected';
+                ADD COLUMN IF NOT EXISTS lifecycle_state VARCHAR(32) NOT NULL DEFAULT 'collected';
         END IF;
     END IF;
 END $$;

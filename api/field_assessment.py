@@ -3953,10 +3953,15 @@ def _c6_update_job_status(
         job = db.query(FaScanJob).filter(FaScanJob.id == job_id).first()
         if job is not None:
             job.status = status
+            if status == "running":
+                job.attempt_count = (job.attempt_count or 0) + 1
+                job.started_at = utc_iso8601_z_now()
             if status == "complete":
                 job.scan_result_id = scan_result_id
+                job.completed_at = utc_iso8601_z_now()
             if status == "failed":
                 job.failure_reason = failure_reason or "unknown error"
+                job.completed_at = utc_iso8601_z_now()
         return
 
     if status == "running":
