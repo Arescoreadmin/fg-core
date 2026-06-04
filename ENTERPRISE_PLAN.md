@@ -300,7 +300,7 @@ verify the client against the actual API contract.
 Signed URLs, retention controls, consent records, redaction, transcript provenance.
 Required for healthcare, legal, and government sales. Closes the deferred H6 item on
 OpenAI provider governance by moving audio through the platform provider abstraction
-rather than a hardcoded `OPENAI_API_KEY` call.
+rather than a hardcoded `model-provider credential` call.
 
 **Schema additions:** `fa_interview_consents`, `fa_audio_retention_policies`.
 **API additions:** `POST /observations/{id}/audio/redact`, `GET /observations/{id}/audio/signed-url`.
