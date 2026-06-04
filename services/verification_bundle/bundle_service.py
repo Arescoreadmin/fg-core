@@ -447,7 +447,86 @@ class VerificationBundleService:
         ]
         ai_risk_hash = _sha256_of(sorted([r["id"] for r in ai_risk_data]))
 
-        # ── 11. Report (latest finalized version) ─────────────────────────────
+        # ── 11. AI Vendor Governance records ─────────────────────────────────
+        from api.db_models_ai_vendor_governance import (
+            FaAiVendorGovernanceDecision,
+            FaAiVendorGovernanceRecord,
+        )
+
+        gov_records = (
+            db.execute(
+                select(FaAiVendorGovernanceRecord).where(
+                    FaAiVendorGovernanceRecord.engagement_id == engagement_id,
+                    FaAiVendorGovernanceRecord.tenant_id == tenant_id,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        gov_data = [
+            {
+                "id": r.id,
+                "vendor": r.vendor,
+                "tool_name": r.tool_name,
+                "target_type": getattr(r, "target_type", "ai_tool"),
+                "workflow_state": r.workflow_state,
+                "governance_readiness": r.governance_readiness,
+                "business_owner": r.business_owner,
+                "technical_owner": r.technical_owner,
+                "executive_sponsor": getattr(r, "executive_sponsor", None),
+                "dpa_status": getattr(r, "dpa_status", "unknown"),
+                "baa_status": getattr(r, "baa_status", "unknown"),
+                "contract_status": getattr(r, "contract_status", "unknown"),
+                "security_review_status": getattr(
+                    r, "security_review_status", "not_started"
+                ),
+                "privacy_review_status": getattr(
+                    r, "privacy_review_status", "not_started"
+                ),
+                "soc2_available": getattr(r, "soc2_available", False),
+                "iso27001_available": getattr(r, "iso27001_available", False),
+                "risk_acceptance_status": getattr(
+                    r, "risk_acceptance_status", "unknown"
+                ),
+                "risk_score": r.risk_score,
+                "risk_categories": r.risk_categories or [],
+                "regulatory_flags": r.regulatory_flags or [],
+                "review_due_date": getattr(r, "review_due_date", None),
+                "last_reviewed_at": getattr(r, "last_reviewed_at", None),
+                "updated_at": r.updated_at,
+            }
+            for r in gov_records
+        ]
+        gov_hash = _sha256_of(sorted([r["id"] for r in gov_data]))
+
+        gov_decisions = (
+            db.execute(
+                select(FaAiVendorGovernanceDecision).where(
+                    FaAiVendorGovernanceDecision.engagement_id == engagement_id,
+                    FaAiVendorGovernanceDecision.tenant_id == tenant_id,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        gov_decision_data = [
+            {
+                "decision_id": d.decision_id,
+                "vendor": d.vendor,
+                "tool_name": d.tool_name,
+                "decision": d.decision,
+                "previous_state": d.previous_state,
+                "new_state": d.new_state,
+                "actor_name": d.actor_name,
+                "created_at": d.created_at,
+            }
+            for d in gov_decisions
+        ]
+        gov_decision_hash = _sha256_of(
+            sorted([d["decision_id"] for d in gov_decision_data])
+        )
+
+        # ── 12. Report (latest finalized version) ─────────────────────────────
         report = db.execute(
             select(GovernanceReportRecord)
             .where(
@@ -671,6 +750,16 @@ class VerificationBundleService:
                 "hash": ai_risk_hash,
             },
             {
+                "name": "ai_vendor_governance",
+                "count": len(gov_records),
+                "hash": gov_hash,
+            },
+            {
+                "name": "ai_vendor_governance_decisions",
+                "count": len(gov_decisions),
+                "hash": gov_decision_hash,
+            },
+            {
                 "name": "report",
                 "count": 1 if has_report else 0,
                 "hash": report_hash,
@@ -700,6 +789,8 @@ class VerificationBundleService:
             "chain_of_custody": chain_of_custody,
             "governance_activity": gov_activity,
             "ai_risk_register": ai_risk_data,
+            "ai_vendor_governance": gov_data,
+            "ai_vendor_governance_decisions": gov_decision_data,
         }
         bundle_hash = _sha256_of(bundle_doc_partial)
 
@@ -897,6 +988,11 @@ def verify_bundle_file(path_or_bytes: "str | bytes | Path") -> dict:
                 "manifest_hash": recorded_manifest_hash,
                 "chain_of_custody": bundle_doc.get("chain_of_custody", []),
                 "governance_activity": bundle_doc.get("governance_activity", []),
+                "ai_risk_register": bundle_doc.get("ai_risk_register", []),
+                "ai_vendor_governance": bundle_doc.get("ai_vendor_governance", []),
+                "ai_vendor_governance_decisions": bundle_doc.get(
+                    "ai_vendor_governance_decisions", []
+                ),
             }
             derived_bundle_hash = _sha256_of(bundle_doc_for_hash)
 

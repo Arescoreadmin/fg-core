@@ -1465,3 +1465,43 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 **Validation:** `make fg-fast` PASS.
 
 **Validation:** `make fg-fast` PASS.
+
+## PR 4 — Third-Party AI Governance Workflow Engine
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new FA connector chain; no auth subsystem changes; all routes tenant-isolated; append-only decision ledger with DB-level mutation triggers)
+
+**New routes (`api/field_assessment.py`):**
+- `POST /engagements/{id}/connector-runs/ai-vendor-governance/run` — `field_assessment:write` scope. Reads PR 3 (External AI Risk Register) scan results, runs deterministic governance record generation (no LLM), persists `FaAiVendorGovernanceRecord` and `FaAiVendorGovernanceDecision` rows, creates a `FaScanResult`. H12/H13/H15 pattern.
+- `GET /engagements/{id}/ai-vendor-governance` — `field_assessment:read` scope. Returns governance records + executive summary. Filterable by `workflow_state`, `governance_readiness`.
+- `PATCH /engagements/{id}/ai-vendor-governance/{record_id}` — `field_assessment:write` scope. Updates mutable governance fields (ownership, DPA/BAA, security review, etc.). `governance_readiness` always recomputed server-side. Immutable fields (id, tenant_id, engagement_id, governance_readiness) are rejected via `extra="forbid"` on the Pydantic model.
+- `POST /engagements/{id}/ai-vendor-governance/{record_id}/transition` — `field_assessment:write` scope. Executes validated state machine transitions; creates append-only `FaAiVendorGovernanceDecision` record. Invalid transitions rejected before any DB write.
+- `GET /engagements/{id}/ai-vendor-governance/decisions` — `field_assessment:read` scope. Read-only access to append-only decision ledger.
+
+**New DB models (`api/db_models_ai_vendor_governance.py`, migration `0092_ai_vendor_governance.sql`):**
+- `fa_ai_vendor_governance_records` — one row per (tenant_id, engagement_id, tool_name); ~70 columns organized by: core identity, ownership, business context, data governance, contract governance, DPA, BAA, security review, privacy review, compliance evidence, risk governance, lifecycle, and PR cross-references. Unique constraint on (engagement_id, tenant_id, tool_name).
+- `fa_ai_vendor_governance_decisions` — append-only decision ledger. Postgres-level UPDATE/DELETE triggers (`trg_prevent_vendor_gov_decision_update`, `trg_prevent_vendor_gov_decision_delete`) enforce immutability at DB layer.
+
+**State machine (`services/connectors/ai_vendor_governance/state_machine.py`):**
+- 8 states: `discovered → needs_owner → needs_review → approved/restricted/rejected/exception_granted → retired`. Transition map enforced server-side via `validate_transition()`. `retired` is terminal (no outbound transitions). All transitions deterministic; no LLM calls.
+
+**Governance engine (`services/connectors/ai_vendor_governance/governance_engine.py`):**
+- `governance_readiness` (complete/partial/minimal/unknown) always recomputed server-side from record fields — not directly patchable.
+- 16 finding types mapped to NIST AI RMF controls (GOVERN 1.1, 1.2, 1.3, 1.4, 6.1, 6.2, MAP 1.1, MANAGE 2.2, 2.4).
+- `target_type` field supports: vendor/ai_tool/ai_agent/autonomous_system/agent_swarm/decision_engine/agi_provider (AGI governance without schema migration).
+
+**Security invariants:**
+- All 5 new routes require a valid tenant-scoped API key; tenant_id extracted from API key, never from request body.
+- PATCH route validates `record_id` belongs to caller's tenant_id before any mutation (404 on tenant mismatch).
+- `governance_readiness` is deterministic and server-side only — operators cannot set it directly.
+- `exception_granted` workflow_state is preserved across re-scans (never overwritten by bridge).
+- Append-only decision ledger enforced at DB layer via Postgres triggers — cannot be modified via API or direct UPDATE.
+- `AiVendorGovernanceUpdateRequest` uses `extra="forbid"` to reject immutable fields in PATCH body.
+- Audit coverage gate remains 100% — no exceptions added to `audit_exceptions.yaml`.
+
+**Verification bundle:** `bundle_service.py` extended with `ai_vendor_governance` and `ai_vendor_governance_decisions` components (SHA-256 hashed snapshots; tamper-evident).
+
+**Tools/CI changes:** `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256` regenerated for 5 new AI vendor governance routes.
+
+**Tests:** `tests/test_ai_vendor_governance.py` — 67 tests. W-series (W1–W18): state machine transitions + initial state determinism + TARGET_TYPES/DECISION_TYPES/WORKFLOW_STATES invariants. G-series (G1–G31): governance readiness computation, finding generation, record generation, build_summary metrics. S-series (S1–S4): tenant isolation, engagement isolation, exception_granted preservation, independent engagement records. L-series (L1–L6): bridge scan result creation, record creation, idempotency, finding creation, result fields, re-evaluation. R-series (R1–R4): scan registry version acceptance, required field validation, ScanSourceType enum. D-series (D1–D4): determinism invariants.
+
+**Validation:** `make fg-fast` PASS.

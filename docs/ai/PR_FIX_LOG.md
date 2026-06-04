@@ -13418,3 +13418,78 @@ Route directly calls `_c6_write_audit_event` for `scan.initiated`, `scan.complet
 - PR 3 (planned): review_status workflow — operator can mark mappings reviewed/accepted
 - PR 4 (planned): group/department scope resolution via MS Graph group membership
 - Future: add `confidence` float to `framework_mappings` entries for full GovernanceFinding compatibility
+
+---
+
+# PR 4 — Third-Party AI Governance Workflow Engine
+
+**PR/context:** PR 4 — AI Vendor Governance Workflow Engine — passive connector building governance asset layer on top of PR 1 (AI Tool Discovery), PR 2 (AI Data Access Mapping), and PR 3 (External AI Risk Register)
+
+**Classification:** New FA scan connector (13th scan type). Reads PR 3 risk records; no new MS Graph calls. 8-state governance workflow; append-only decision ledger with DB-level mutation triggers.
+
+**Problem:** PR 3 identified external AI tools and scored their risk. There was no mechanism to convert discovered tools into governed organizational assets — no ownership assignment, no contract/DPA/BAA tracking, no formal governance workflow, and no decision ledger for regulatory defensibility.
+
+**Solution:** Deterministic governance engine that converts PR 3 risk records into `FaAiVendorGovernanceRecord` entries with full governance lifecycle (8-state machine), compliance evidence tracking, and append-only `FaAiVendorGovernanceDecision` records.
+
+**Files changed:**
+
+- `api/db_models_ai_vendor_governance.py` — new; `FaAiVendorGovernanceRecord` (~70 columns) and `FaAiVendorGovernanceDecision` (append-only, 20 columns) ORM models
+- `migrations/postgres/0092_ai_vendor_governance.sql` — creates both tables, 6 indexes, 2 append-only enforcement triggers (`trg_prevent_vendor_gov_decision_update`, `trg_prevent_vendor_gov_decision_delete`)
+- `services/connectors/ai_vendor_governance/__init__.py` — package init with "not standalone" declaration
+- `services/connectors/ai_vendor_governance/state_machine.py` — 8-state machine; `validate_transition()`, `determine_initial_state()`, `WORKFLOW_STATES`, `TARGET_TYPES`, `DECISION_TYPES`
+- `services/connectors/ai_vendor_governance/governance_engine.py` — governance readiness computation (complete/partial/minimal/unknown), 16 finding types → NIST AI RMF mappings, `generate_governance_records()`, `build_summary()` (14 executive metrics)
+- `services/field_assessment/connectors/ai_vendor_governance_bridge.py` — bridge; reads PR 3 scan, calls engine, upserts governance records, creates decision records, back-fills finding_refs
+- `services/field_assessment/models.py` — `AI_VENDOR_GOVERNANCE` added to `ScanSourceType` enum
+- `services/field_assessment/scan_registry.py` — schema version `1.0` + `governance_records` required field
+- `api/db.py` — import of `db_models_ai_vendor_governance`
+- `api/field_assessment.py` — 5 new routes + Pydantic models (AiVendorGovernanceRunRequest/Response, AiVendorGovernanceRecordResponse, AiVendorGovernanceUpdateRequest with `extra="forbid"`, AiVendorGovernanceTransitionRequest, AiVendorGovernanceDecisionResponse/ListResponse)
+- `services/verification_bundle/bundle_service.py` — `ai_vendor_governance` and `ai_vendor_governance_decisions` components (SHA-256 hashed)
+- `apps/console/components/field-assessment/AiGovernancePanel.tsx` — new console panel (500 lines; TanStack Query; executive metrics grid, record cards with transition modal, decision ledger table)
+- `apps/console/lib/fieldAssessmentApi.ts` — 5 new API client methods
+- `apps/portal/app/engagement/[engagementId]/page.tsx` — AI Governance tab + `AiGovernancePortalTab` read-only component
+- `tests/test_ai_vendor_governance.py` — 67 tests (W/G/S/L/R/D series)
+- `tools/ci/route_inventory.json` — regenerated (5 new routes)
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — PR 4 entry added
+- `BLUEPRINT_STAGED.md` — contract authority SHA refreshed
+- `ROADMAP.md` — PR 4 row added
+
+**Security posture:**
+
+No change to authentication or authorization model. All 5 routes require valid tenant-scoped API key; tenant_id extracted from API key, never from request body. `governance_readiness` is always computed server-side — not patchable. `exception_granted` workflow_state is preserved across re-scans (bridge). Append-only decision ledger enforced at Postgres DB layer via `BEFORE UPDATE OR DELETE` triggers. `extra="forbid"` on PATCH model prevents immutable field injection. No new MS Graph scopes — pure passive connector reading PR 3 evidence.
+
+**Audit posture:**
+
+`_c6_write_audit_event` called directly in all 3 mutating route bodies (run, PATCH, transition) — satisfies H13.5 AST coverage enforcement. Audit coverage gate remains 100%. No `audit_exceptions.yaml` entries added.
+
+**Evidence posture:**
+
+- H12: `FaScanJob` record created before scan executes
+- H13/H13.5: `_c6_write_audit_event` direct call in route body (AST-detectable)
+- H15: `FaScanResult` auto-enters `collected` lifecycle state
+- Verification bundle: `ai_vendor_governance` and `ai_vendor_governance_decisions` components added
+
+**Idempotency:** Uses PR 3 `collected_at` as stable timestamp → `compute_evidence_hash` → `create_scan_result` dedup on `(engagement_id, tenant_id, evidence_hash)`. Governance records upserted via `ON CONFLICT (engagement_id, tenant_id, tool_name)`. `exception_granted` state never overwritten on re-scan.
+
+**Tests/gates run:**
+
+- `pytest tests/test_ai_vendor_governance.py` — 67/67 passed
+- `make fg-fast` — PASS (all gates green, exit 0)
+- `bash codex_gates.sh` — ruff lint: PASS, ruff format: PASS, mypy: PASS
+- `python tools/ci/check_audit_coverage.py` — PASS (100% coverage, 0 violations)
+- `make route-inventory-generate && make route-inventory-audit` — PASS (5 routes registered)
+
+**Known limitations:**
+
+- Governance records start with `governance_readiness="unknown"` (no owners set at generation); operators must populate ownership fields via PATCH
+- `target_type` defaults to `"ai_tool"` for all records generated from PR 3; operators can PATCH to `ai_agent`, `autonomous_system`, `agi_provider`, etc.
+- Decision ledger is append-only and read-only via API; no bulk export endpoint yet (planned for PR 52.x verification bundle)
+
+**Follow-up work:**
+
+- Future: console PATCH form for governance record fields (ownership, DPA status, contract status)
+- Future: governance exception expiration alerting (scheduled check against `risk_acceptance_expiration`)
+- Future: bulk governance record export for audit packages

@@ -1,25 +1,3 @@
-from __future__ import annotations
-
-_VALID_REMEDIATION_STATUSES = {
-    "not_started",
-    "planned",
-    "in_progress",
-    "completed",
-    "risk_accepted",
-}
-
-_VALID_OWNER_TYPES = {
-    "IT",
-    "Security",
-    "Compliance",
-    "Legal",
-    "HR",
-    "Finance",
-    "Operations",
-    "Product",
-    "Unknown",
-}
-
 """Field Assessment Engagement Substrate API router.
 
 All routes are tenant-scoped. Tenant is resolved from auth context only —
@@ -33,6 +11,7 @@ Security invariants:
 - All list endpoints capped at 100 rows.
 """
 
+from __future__ import annotations
 
 import logging
 import os
@@ -119,6 +98,9 @@ from services.field_assessment.connectors.ai_tool_discovery_bridge import (
 )
 from services.field_assessment.connectors.ai_data_access_mapping_bridge import (
     import_ai_data_access_mapping_scan,
+)
+from services.field_assessment.connectors.ai_vendor_governance_bridge import (
+    import_ai_vendor_governance,
 )
 from services.field_assessment.models import (
     AssessmentType,
@@ -274,10 +256,6 @@ def _assert_engagement_accepts_evidence(eng: FaEngagement) -> None:
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
 _VALID_REVIEW_STATUSES = {
     "unreviewed",
     "under_review",
@@ -294,6 +272,56 @@ _VALID_GOVERNANCE_STATES = {
     "exception_granted",
     "unknown",
 }
+
+_VALID_REMEDIATION_STATUSES = {
+    "not_started",
+    "planned",
+    "in_progress",
+    "completed",
+    "risk_accepted",
+}
+
+_VALID_OWNER_TYPES = {
+    "IT",
+    "Security",
+    "Compliance",
+    "Legal",
+    "HR",
+    "Finance",
+    "Operations",
+    "Product",
+    "Unknown",
+}
+
+# PR 4 — AI Vendor Governance validation constants
+_VALID_VENDOR_WORKFLOW_STATES = {
+    "discovered",
+    "needs_owner",
+    "needs_review",
+    "approved",
+    "restricted",
+    "rejected",
+    "exception_granted",
+    "retired",
+}
+_VALID_VENDOR_DPA_STATUSES = {"executed", "pending", "not_required", "unknown"}
+_VALID_VENDOR_BAA_STATUSES = {"executed", "pending", "not_required", "unknown"}
+_VALID_VENDOR_CONTRACT_STATUSES = {"active", "expired", "none", "unknown"}
+_VALID_VENDOR_REVIEW_STATUSES = {
+    "completed",
+    "in_progress",
+    "not_started",
+    "not_required",
+    "unknown",
+}
+_VALID_VENDOR_RISK_ACCEPTANCE_STATUSES = {
+    "accepted",
+    "pending",
+    "not_required",
+    "expired",
+    "unknown",
+}
+_VALID_VENDOR_CRITICALITY = {"critical", "high", "medium", "low", "unknown"}
 
 
 class ExternalAiRiskReviewUpdateRequest(BaseModel):
@@ -7546,6 +7574,7 @@ _ALL_SECTIONS: list[str] = [
     "ai_tool_discovery",
     "ai_data_access_mapping",
     "external_ai_risk_register",
+    "ai_vendor_governance",
 ]
 
 
@@ -10005,4 +10034,866 @@ def download_verification_bundle_route(
         content=zip_bytes,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes — Third-Party AI Governance Workflow Engine (PR 4)
+# ---------------------------------------------------------------------------
+
+
+class AiVendorGovernanceRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pr3_scan_result_id: str | None = None
+
+
+class AiVendorGovernanceRunResponse(BaseModel):
+    scan_result_id: str
+    records_imported: int
+    findings_imported: int
+    status: str
+    summary: dict
+
+
+class AiVendorGovernanceRecordResponse(BaseModel):
+    id: str
+    engagement_id: str
+    vendor: str
+    tool_name: str
+    tool_id: str | None = None
+    target_type: str
+    workflow_state: str
+    governance_readiness: str
+    # Ownership
+    business_owner: str | None = None
+    technical_owner: str | None = None
+    executive_sponsor: str | None = None
+    # Business context
+    business_justification: str | None = None
+    business_process: str | None = None
+    department: str | None = None
+    criticality: str
+    # Data governance
+    data_processed: list = Field(default_factory=list)
+    sensitive_data_types: list = Field(default_factory=list)
+    regulated_data_present: bool
+    data_residency_notes: str | None = None
+    # Contract
+    contract_status: str
+    contract_owner: str | None = None
+    contract_expiration: str | None = None
+    renewal_date: str | None = None
+    # DPA
+    dpa_required: bool
+    dpa_status: str
+    dpa_review_date: str | None = None
+    # BAA
+    baa_required: bool
+    baa_status: str
+    baa_review_date: str | None = None
+    # Security
+    security_review_status: str
+    security_review_date: str | None = None
+    security_reviewer: str | None = None
+    # Privacy
+    privacy_review_status: str
+    privacy_review_date: str | None = None
+    privacy_reviewer: str | None = None
+    # Compliance evidence
+    soc2_available: bool
+    soc2_reviewed: bool
+    soc2_review_date: str | None = None
+    iso27001_available: bool
+    iso27001_reviewed: bool
+    iso_review_date: str | None = None
+    # Risk governance
+    risk_acceptance_required: bool
+    risk_acceptance_status: str
+    risk_acceptance_owner: str | None = None
+    risk_acceptance_expiration: str | None = None
+    # Lifecycle
+    review_due_date: str | None = None
+    last_review_date: str | None = None
+    renewal_due_date: str | None = None
+    retirement_date: str | None = None
+    # PR1/2/3 cross-refs
+    risk_score: str
+    risk_categories: list = Field(default_factory=list)
+    regulatory_flags: list = Field(default_factory=list)
+    pr1_scan_result_id: str | None = None
+    pr2_scan_result_id: str | None = None
+    pr3_risk_record_id: str | None = None
+    evidence_refs: list = Field(default_factory=list)
+    finding_refs: list = Field(default_factory=list)
+    # Graph nodes
+    graph_node_id: str | None = None
+    vendor_node_id: str | None = None
+    owner_node_id: str | None = None
+    contract_node_id: str | None = None
+    evidence_node_id: str | None = None
+    decision_node_id: str | None = None
+    governance_node_id: str | None = None
+    # Timestamps
+    created_at: str
+    updated_at: str
+    last_reviewed_at: str | None = None
+
+
+class AiVendorGovernanceListResponse(BaseModel):
+    items: list[AiVendorGovernanceRecordResponse]
+    total: int
+    limit: int
+    offset: int
+    summary: dict
+
+
+class AiVendorGovernanceUpdateRequest(BaseModel):
+    """Mutable governance fields — all other fields rejected via extra='forbid'."""
+
+    business_owner: str | None = None
+    technical_owner: str | None = None
+    executive_sponsor: str | None = None
+    business_justification: str | None = None
+    business_process: str | None = None
+    department: str | None = None
+    criticality: str | None = None
+    data_processed: list | None = None
+    sensitive_data_types: list | None = None
+    regulated_data_present: bool | None = None
+    data_residency_notes: str | None = None
+    contract_status: str | None = None
+    contract_owner: str | None = None
+    contract_expiration: str | None = None
+    renewal_date: str | None = None
+    dpa_required: bool | None = None
+    dpa_status: str | None = None
+    dpa_review_date: str | None = None
+    baa_required: bool | None = None
+    baa_status: str | None = None
+    baa_review_date: str | None = None
+    security_review_status: str | None = None
+    security_review_date: str | None = None
+    security_reviewer: str | None = None
+    privacy_review_status: str | None = None
+    privacy_review_date: str | None = None
+    privacy_reviewer: str | None = None
+    soc2_available: bool | None = None
+    soc2_reviewed: bool | None = None
+    soc2_review_date: str | None = None
+    iso27001_available: bool | None = None
+    iso27001_reviewed: bool | None = None
+    iso_review_date: str | None = None
+    risk_acceptance_required: bool | None = None
+    risk_acceptance_status: str | None = None
+    risk_acceptance_owner: str | None = None
+    risk_acceptance_expiration: str | None = None
+    review_due_date: str | None = None
+    last_review_date: str | None = None
+    renewal_due_date: str | None = None
+    retirement_date: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class AiVendorGovernanceTransitionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_state: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+    actor_name: str = Field(..., min_length=1)
+    actor_email: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    notes: str | None = None
+    exception_expiration: str | None = None
+
+
+class AiVendorGovernanceDecisionResponse(BaseModel):
+    decision_id: str
+    governance_record_id: str
+    vendor: str
+    tool_name: str
+    target_type: str
+    decision: str
+    reason: str
+    previous_state: str | None = None
+    new_state: str | None = None
+    actor_name: str
+    actor_email: str | None = None
+    evidence_refs: list = Field(default_factory=list)
+    notes: str | None = None
+    exception_expiration: str | None = None
+    created_at: str
+
+
+class AiVendorGovernanceDecisionListResponse(BaseModel):
+    items: list[AiVendorGovernanceDecisionResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+def _gov_record_to_response(
+    r: Any,
+) -> AiVendorGovernanceRecordResponse:
+    def _g(field: str, default: Any = None) -> Any:
+        return getattr(r, field, default)
+
+    return AiVendorGovernanceRecordResponse(
+        id=r.id,
+        engagement_id=r.engagement_id,
+        vendor=r.vendor,
+        tool_name=r.tool_name,
+        tool_id=_g("tool_id"),
+        target_type=_g("target_type", "ai_tool"),
+        workflow_state=_g("workflow_state", "discovered"),
+        governance_readiness=_g("governance_readiness", "unknown"),
+        business_owner=_g("business_owner"),
+        technical_owner=_g("technical_owner"),
+        executive_sponsor=_g("executive_sponsor"),
+        business_justification=_g("business_justification"),
+        business_process=_g("business_process"),
+        department=_g("department"),
+        criticality=_g("criticality", "unknown"),
+        data_processed=_g("data_processed") or [],
+        sensitive_data_types=_g("sensitive_data_types") or [],
+        regulated_data_present=_g("regulated_data_present", False),
+        data_residency_notes=_g("data_residency_notes"),
+        contract_status=_g("contract_status", "unknown"),
+        contract_owner=_g("contract_owner"),
+        contract_expiration=_g("contract_expiration"),
+        renewal_date=_g("renewal_date"),
+        dpa_required=_g("dpa_required", False),
+        dpa_status=_g("dpa_status", "unknown"),
+        dpa_review_date=_g("dpa_review_date"),
+        baa_required=_g("baa_required", False),
+        baa_status=_g("baa_status", "unknown"),
+        baa_review_date=_g("baa_review_date"),
+        security_review_status=_g("security_review_status", "not_started"),
+        security_review_date=_g("security_review_date"),
+        security_reviewer=_g("security_reviewer"),
+        privacy_review_status=_g("privacy_review_status", "not_started"),
+        privacy_review_date=_g("privacy_review_date"),
+        privacy_reviewer=_g("privacy_reviewer"),
+        soc2_available=_g("soc2_available", False),
+        soc2_reviewed=_g("soc2_reviewed", False),
+        soc2_review_date=_g("soc2_review_date"),
+        iso27001_available=_g("iso27001_available", False),
+        iso27001_reviewed=_g("iso27001_reviewed", False),
+        iso_review_date=_g("iso_review_date"),
+        risk_acceptance_required=_g("risk_acceptance_required", False),
+        risk_acceptance_status=_g("risk_acceptance_status", "unknown"),
+        risk_acceptance_owner=_g("risk_acceptance_owner"),
+        risk_acceptance_expiration=_g("risk_acceptance_expiration"),
+        review_due_date=_g("review_due_date"),
+        last_review_date=_g("last_review_date"),
+        renewal_due_date=_g("renewal_due_date"),
+        retirement_date=_g("retirement_date"),
+        risk_score=_g("risk_score", "unknown"),
+        risk_categories=_g("risk_categories") or [],
+        regulatory_flags=_g("regulatory_flags") or [],
+        pr1_scan_result_id=_g("pr1_scan_result_id"),
+        pr2_scan_result_id=_g("pr2_scan_result_id"),
+        pr3_risk_record_id=_g("pr3_risk_record_id"),
+        evidence_refs=_g("evidence_refs") or [],
+        finding_refs=_g("finding_refs") or [],
+        graph_node_id=_g("graph_node_id"),
+        vendor_node_id=_g("vendor_node_id"),
+        owner_node_id=_g("owner_node_id"),
+        contract_node_id=_g("contract_node_id"),
+        evidence_node_id=_g("evidence_node_id"),
+        decision_node_id=_g("decision_node_id"),
+        governance_node_id=_g("governance_node_id"),
+        created_at=r.created_at,
+        updated_at=r.updated_at,
+        last_reviewed_at=_g("last_reviewed_at"),
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/ai-vendor-governance/run",
+    response_model=AiVendorGovernanceRunResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def run_ai_vendor_governance(
+    engagement_id: str,
+    request: Request,
+    body: AiVendorGovernanceRunRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> AiVendorGovernanceRunResponse:
+    """Generate governance workflow records from PR3 risk evidence.
+
+    Reads the most recent External AI Risk Register scan result and creates one
+    FaAiVendorGovernanceRecord per tool. No new external calls are made.
+
+    H12: durable scan job created before work begins.
+    H13: scan.initiated and scan.completed audit events emitted directly (H13.5 compliant).
+    H15: FaScanResult enters collected lifecycle state automatically on creation.
+    """
+    from services.connectors.ai_vendor_governance.governance_engine import (
+        build_summary,
+        generate_findings,
+        generate_governance_records,
+    )
+
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message),
+        )
+
+    # Source: latest External AI Risk Register scan (PR3)
+    source_scan = get_latest_scan_result_by_source_type(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        source_type="external_ai_risk_register",
+    )
+    if source_scan is None:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "NO_EXTERNAL_AI_RISK_SCAN",
+                "External AI Risk Register scan (PR 3) must be completed before running "
+                "the AI Vendor Governance engine.",
+            ),
+        )
+
+    risk_records: list[dict] = (source_scan.normalized_payload or {}).get(
+        "risk_records"
+    ) or []
+
+    # H12 — durable job
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="ai_vendor_governance",
+    )
+    # H13 — scan.initiated (direct call satisfies H13.5 AST coverage check)
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="ai_vendor_governance",
+        payload_summary={
+            "source_scan_result_id": source_scan.id,
+            "risk_record_count": len(risk_records),
+        },
+    )
+    db.commit()
+
+    try:
+        from services.canonical import utc_iso8601_z_now
+
+        now_str = utc_iso8601_z_now()
+        # stable_ts: use source scan's collected_at for deterministic evidence_hash
+        stable_ts = source_scan.collected_at or source_scan.created_at
+
+        governance_recs = generate_governance_records(
+            risk_records,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            pr1_scan_result_id=None,
+            pr2_scan_result_id=None,
+            pr3_scan_result_id=source_scan.id,
+            now_str=now_str,
+        )
+
+        all_findings: list[dict] = []
+        for rec in governance_recs:
+            all_findings.extend(generate_findings(rec, now_str))
+
+        summary = build_summary(governance_recs)
+
+        scan_payload: dict = {
+            "scan_type": "ai_vendor_governance_v1",
+            "schema_version": "1.0",
+            "tenant_id": tenant_id,
+            "engagement_id": engagement_id,
+            "source_scan_result_id": source_scan.id,
+            "scan_completed_at": stable_ts,
+            "governance_records": governance_recs,
+            "findings": all_findings,
+            "summary": summary,
+        }
+
+        result = import_ai_vendor_governance(
+            db=db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result=scan_payload,
+            actor=actor,
+        )
+        _auto_link_scan_evidence(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result_id=result.scan_result_id,
+            source_type="ai_vendor_governance",
+        )
+        _c6_update_job_status(
+            db,
+            job_id=job.id,
+            status="complete",
+            scan_result_id=result.scan_result_id,
+        )
+        # H13 — scan.completed
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.completed",
+            actor=actor,
+            scan_job_id=job.id,
+            scanner_type="ai_vendor_governance",
+            scan_result_id=result.scan_result_id,
+            payload_summary={
+                "records_imported": result.records_imported,
+                "findings_imported": result.findings_imported,
+            },
+        )
+        db.commit()
+
+        return AiVendorGovernanceRunResponse(
+            scan_result_id=result.scan_result_id,
+            records_imported=result.records_imported,
+            findings_imported=result.findings_imported,
+            status="complete",
+            summary=summary,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("ai_vendor_governance: run failed — %s", exc)
+        db.rollback()
+        try:
+            _c6_update_job_status(
+                db, job_id=job.id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job.id,
+                scanner_type="ai_vendor_governance",
+                rejection_reason=str(exc)[:500],
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=api_error(
+                "GOVERNANCE_RUN_FAILED",
+                f"AI vendor governance run failed: {str(exc)[:200]}",
+            ),
+        )
+
+
+@router.get(
+    "/engagements/{engagement_id}/ai-vendor-governance",
+    response_model=AiVendorGovernanceListResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_ai_vendor_governance(
+    engagement_id: str,
+    request: Request,
+    workflow_state: str | None = None,
+    governance_readiness: str | None = None,
+    risk_score: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(auth_ctx_db_session),
+) -> AiVendorGovernanceListResponse:
+    """List governance records for an engagement with optional filters."""
+    from api.db_models_ai_vendor_governance import FaAiVendorGovernanceRecord
+    from services.connectors.ai_vendor_governance.governance_engine import build_summary
+
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    limit = min(max(1, limit), 200)
+    offset = max(0, offset)
+
+    q = db.query(FaAiVendorGovernanceRecord).filter_by(
+        tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    if workflow_state:
+        q = q.filter(FaAiVendorGovernanceRecord.workflow_state == workflow_state)
+    if governance_readiness:
+        q = q.filter(
+            FaAiVendorGovernanceRecord.governance_readiness == governance_readiness
+        )
+    if risk_score:
+        q = q.filter(FaAiVendorGovernanceRecord.risk_score == risk_score)
+
+    total = q.count()
+    rows = (
+        q.order_by(
+            FaAiVendorGovernanceRecord.risk_score,
+            FaAiVendorGovernanceRecord.tool_name,
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    all_rows = (
+        db.query(FaAiVendorGovernanceRecord)
+        .filter_by(tenant_id=tenant_id, engagement_id=engagement_id)
+        .all()
+    )
+    summary_dicts = [
+        {
+            "workflow_state": r.workflow_state,
+            "governance_readiness": r.governance_readiness,
+            "criticality": r.criticality,
+            "risk_score": r.risk_score,
+            "dpa_required": r.dpa_required,
+            "dpa_status": r.dpa_status,
+            "baa_required": r.baa_required,
+            "baa_status": r.baa_status,
+            "business_owner": r.business_owner,
+            "technical_owner": r.technical_owner,
+            "contract_status": r.contract_status,
+            "security_review_status": r.security_review_status,
+            "review_due_date": r.review_due_date,
+            "renewal_due_date": r.renewal_due_date,
+            "risk_acceptance_required": r.risk_acceptance_required,
+            "risk_acceptance_status": r.risk_acceptance_status,
+            "risk_acceptance_expiration": r.risk_acceptance_expiration,
+            "regulated_data_present": r.regulated_data_present,
+        }
+        for r in all_rows
+    ]
+    summary = build_summary(summary_dicts)
+
+    return AiVendorGovernanceListResponse(
+        items=[_gov_record_to_response(r) for r in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+        summary=summary,
+    )
+
+
+@router.patch(
+    "/engagements/{engagement_id}/ai-vendor-governance/{record_id}",
+    response_model=AiVendorGovernanceRecordResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def patch_ai_vendor_governance(
+    engagement_id: str,
+    record_id: str,
+    request: Request,
+    body: AiVendorGovernanceUpdateRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> AiVendorGovernanceRecordResponse:
+    """Update mutable governance fields on a vendor governance record.
+
+    Immutable fields (id, tenant_id, vendor, tool_name, risk_score, etc.) are
+    rejected via Pydantic extra='forbid'. governance_readiness is always
+    recomputed server-side and cannot be set directly.
+    """
+    from api.db_models_ai_vendor_governance import FaAiVendorGovernanceRecord
+    from services.connectors.ai_vendor_governance.governance_engine import (
+        compute_governance_readiness,
+    )
+
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    row = (
+        db.query(FaAiVendorGovernanceRecord)
+        .filter_by(id=record_id, tenant_id=tenant_id, engagement_id=engagement_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "GOVERNANCE_RECORD_NOT_FOUND", "Governance record not found."
+            ),
+        )
+
+    updates = body.model_dump(exclude_unset=True)
+
+    # Validate enum fields
+    _enum_checks = [
+        ("dpa_status", _VALID_VENDOR_DPA_STATUSES),
+        ("baa_status", _VALID_VENDOR_BAA_STATUSES),
+        ("contract_status", _VALID_VENDOR_CONTRACT_STATUSES),
+        ("security_review_status", _VALID_VENDOR_REVIEW_STATUSES),
+        ("privacy_review_status", _VALID_VENDOR_REVIEW_STATUSES),
+        ("risk_acceptance_status", _VALID_VENDOR_RISK_ACCEPTANCE_STATUSES),
+        ("criticality", _VALID_VENDOR_CRITICALITY),
+    ]
+    for field, valid_set in _enum_checks:
+        if field in updates and updates[field] not in valid_set:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error(
+                    "INVALID_FIELD_VALUE",
+                    f"Invalid {field}: {updates[field]!r}. Allowed: {sorted(valid_set)}",
+                ),
+            )
+
+    now = utc_iso8601_z_now()
+    for field, value in updates.items():
+        setattr(row, field, value)
+
+    # Recompute governance_readiness server-side — not patchable directly
+    row.governance_readiness = compute_governance_readiness(
+        {
+            "business_owner": row.business_owner,
+            "technical_owner": row.technical_owner,
+            "security_review_status": row.security_review_status,
+            "dpa_required": row.dpa_required,
+            "dpa_status": row.dpa_status,
+            "baa_required": row.baa_required,
+            "baa_status": row.baa_status,
+            "risk_acceptance_required": row.risk_acceptance_required,
+            "risk_acceptance_status": row.risk_acceptance_status,
+            "review_due_date": row.review_due_date,
+        }
+    )
+    # Auto-set last_reviewed_at when a review field is updated
+    review_fields = {
+        "security_review_status",
+        "privacy_review_status",
+        "dpa_status",
+        "baa_status",
+        "soc2_reviewed",
+        "iso27001_reviewed",
+        "risk_acceptance_status",
+        "last_review_date",
+    }
+    if updates.keys() & review_fields:
+        row.last_reviewed_at = now
+
+    row.updated_at = now
+    db.flush()
+
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="ai_vendor_governance_record.updated",
+        actor=actor,
+        payload_summary={
+            "record_id": record_id,
+            "fields_updated": sorted(updates.keys()),
+            "governance_readiness": row.governance_readiness,
+        },
+    )
+    db.commit()
+    return _gov_record_to_response(row)
+
+
+@router.post(
+    "/engagements/{engagement_id}/ai-vendor-governance/{record_id}/transition",
+    response_model=AiVendorGovernanceRecordResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def transition_ai_vendor_governance(
+    engagement_id: str,
+    record_id: str,
+    request: Request,
+    body: AiVendorGovernanceTransitionRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> AiVendorGovernanceRecordResponse:
+    """Perform a workflow state transition with actor attribution and decision ledger entry.
+
+    Validates the transition against the allowed-transitions map before any DB write.
+    Every transition creates an immutable FaAiVendorGovernanceDecision row.
+    """
+    from api.db_models_ai_vendor_governance import (
+        FaAiVendorGovernanceDecision,
+        FaAiVendorGovernanceRecord,
+    )
+    from services.connectors.ai_vendor_governance.state_machine import (
+        validate_transition,
+    )
+
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    row = (
+        db.query(FaAiVendorGovernanceRecord)
+        .filter_by(id=record_id, tenant_id=tenant_id, engagement_id=engagement_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "GOVERNANCE_RECORD_NOT_FOUND", "Governance record not found."
+            ),
+        )
+
+    # Validate transition before any write
+    try:
+        validate_transition(row.workflow_state, body.new_state)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error("INVALID_TRANSITION", str(exc)),
+        )
+
+    from services.canonical import utc_iso8601_z_now as _utc_now
+    import hashlib as _hashlib
+
+    now = _utc_now()
+    previous_state = row.workflow_state
+    row.workflow_state = body.new_state
+    row.updated_at = now
+
+    # Create append-only decision record
+    decision_id = _hashlib.sha256(
+        f"{record_id}:{previous_state}:{body.new_state}:{now}".encode()
+    ).hexdigest()[:64]
+
+    decision = FaAiVendorGovernanceDecision(
+        decision_id=decision_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        governance_record_id=record_id,
+        vendor=row.vendor,
+        tool_name=row.tool_name,
+        target_type=row.target_type,
+        decision="state_transition",
+        reason=body.reason,
+        previous_state=previous_state,
+        new_state=body.new_state,
+        actor_id=None,
+        actor_name=body.actor_name,
+        actor_email=body.actor_email,
+        evidence_refs=body.evidence_refs,
+        notes=body.notes,
+        exception_expiration=body.exception_expiration,
+        created_at=now,
+    )
+    db.add(decision)
+    db.flush()
+
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="ai_vendor_governance_record.transitioned",
+        actor=actor,
+        payload_summary={
+            "record_id": record_id,
+            "vendor": row.vendor,
+            "tool_name": row.tool_name,
+            "previous_state": previous_state,
+            "new_state": body.new_state,
+            "actor_name": body.actor_name,
+            "decision_id": decision_id,
+        },
+    )
+    db.commit()
+    return _gov_record_to_response(row)
+
+
+@router.get(
+    "/engagements/{engagement_id}/ai-vendor-governance/decisions",
+    response_model=AiVendorGovernanceDecisionListResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def list_ai_vendor_governance_decisions(
+    engagement_id: str,
+    request: Request,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(auth_ctx_db_session),
+) -> AiVendorGovernanceDecisionListResponse:
+    """Read-only paginated governance decision ledger."""
+    from api.db_models_ai_vendor_governance import FaAiVendorGovernanceDecision
+
+    tenant_id = _resolve_caller_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    limit = min(max(1, limit), 200)
+    offset = max(0, offset)
+
+    q = db.query(FaAiVendorGovernanceDecision).filter_by(
+        tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    total = q.count()
+    rows = (
+        q.order_by(FaAiVendorGovernanceDecision.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    def _d(d: Any) -> AiVendorGovernanceDecisionResponse:
+        return AiVendorGovernanceDecisionResponse(
+            decision_id=d.decision_id,
+            governance_record_id=d.governance_record_id,
+            vendor=d.vendor,
+            tool_name=d.tool_name,
+            target_type=getattr(d, "target_type", "ai_tool"),
+            decision=d.decision,
+            reason=d.reason,
+            previous_state=d.previous_state,
+            new_state=d.new_state,
+            actor_name=d.actor_name,
+            actor_email=getattr(d, "actor_email", None),
+            evidence_refs=getattr(d, "evidence_refs") or [],
+            notes=getattr(d, "notes", None),
+            exception_expiration=getattr(d, "exception_expiration", None),
+            created_at=d.created_at,
+        )
+
+    return AiVendorGovernanceDecisionListResponse(
+        items=[_d(r) for r in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
     )

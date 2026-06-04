@@ -35,7 +35,6 @@ EXACT_PUBLIC_ROUTE_EXCEPTIONS: set[tuple[str, str]] = {
 
 EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     ("GET", "/field-assessment/reports/verify/{report_hash}"),
-
     # C7 portal grant/session routes enforce tenant isolation through
     # PortalGrantSession validation and PortalScopeMiddleware rather than
     # standard tenant-bound route parameters.

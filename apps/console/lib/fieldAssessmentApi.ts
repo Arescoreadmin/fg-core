@@ -959,6 +959,93 @@ export const fieldAssessmentApi = {
     });
   },
 
+  // AI Vendor Governance (PR 4)
+  runAiVendorGovernance(engagementId: string): Promise<{
+    scan_result_id: string;
+    records_imported: number;
+    findings_imported: number;
+    status: string;
+    summary: Record<string, unknown>;
+  }> {
+    return request(`/engagements/${engagementId}/connector-runs/ai-vendor-governance/run`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  listAiVendorGovernance(
+    engagementId: string,
+    params?: {
+      workflow_state?: string;
+      governance_readiness?: string;
+      risk_score?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<{
+    items: Record<string, unknown>[];
+    total: number;
+    limit: number;
+    offset: number;
+    summary: Record<string, unknown>;
+  }> {
+    const q = new URLSearchParams();
+    if (params?.workflow_state) q.set('workflow_state', params.workflow_state);
+    if (params?.governance_readiness) q.set('governance_readiness', params.governance_readiness);
+    if (params?.risk_score) q.set('risk_score', params.risk_score);
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.offset != null) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return request(`/engagements/${engagementId}/ai-vendor-governance${qs ? `?${qs}` : ''}`);
+  },
+
+  patchAiVendorGovernance(
+    engagementId: string,
+    recordId: string,
+    payload: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return request(`/engagements/${engagementId}/ai-vendor-governance/${recordId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  transitionAiVendorGovernance(
+    engagementId: string,
+    recordId: string,
+    payload: {
+      new_state: string;
+      reason: string;
+      actor_name: string;
+      actor_email?: string;
+      notes?: string;
+      exception_expiration?: string;
+    },
+  ): Promise<Record<string, unknown>> {
+    return request(
+      `/engagements/${engagementId}/ai-vendor-governance/${recordId}/transition`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+  },
+
+  listAiVendorGovernanceDecisions(
+    engagementId: string,
+    params?: { limit?: number; offset?: number },
+  ): Promise<{
+    items: Record<string, unknown>[];
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
+    const q = new URLSearchParams();
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.offset != null) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return request(
+      `/engagements/${engagementId}/ai-vendor-governance/decisions${qs ? `?${qs}` : ''}`,
+    );
+  },
+
   // Audit events (read-only — append-only server-side)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/engagements/${engagementId}/audit-events`);

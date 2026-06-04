@@ -551,6 +551,1324 @@
         "title": "AiDataAccessMappingRunResponse",
         "type": "object"
       },
+      "AiVendorGovernanceDecisionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AiVendorGovernanceDecisionResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AiVendorGovernanceDecisionListResponse",
+        "type": "object"
+      },
+      "AiVendorGovernanceDecisionResponse": {
+        "properties": {
+          "actor_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Email"
+          },
+          "actor_name": {
+            "title": "Actor Name",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {},
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "exception_expiration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception Expiration"
+          },
+          "governance_record_id": {
+            "title": "Governance Record Id",
+            "type": "string"
+          },
+          "new_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New State"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "previous_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous State"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "vendor": {
+            "title": "Vendor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision_id",
+          "governance_record_id",
+          "vendor",
+          "tool_name",
+          "target_type",
+          "decision",
+          "reason",
+          "actor_name",
+          "created_at"
+        ],
+        "title": "AiVendorGovernanceDecisionResponse",
+        "type": "object"
+      },
+      "AiVendorGovernanceListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AiVendorGovernanceRecordResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "object"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "summary"
+        ],
+        "title": "AiVendorGovernanceListResponse",
+        "type": "object"
+      },
+      "AiVendorGovernanceRecordResponse": {
+        "properties": {
+          "baa_required": {
+            "title": "Baa Required",
+            "type": "boolean"
+          },
+          "baa_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baa Review Date"
+          },
+          "baa_status": {
+            "title": "Baa Status",
+            "type": "string"
+          },
+          "business_justification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Justification"
+          },
+          "business_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Owner"
+          },
+          "business_process": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Process"
+          },
+          "contract_expiration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Expiration"
+          },
+          "contract_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Node Id"
+          },
+          "contract_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Owner"
+          },
+          "contract_status": {
+            "title": "Contract Status",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "criticality": {
+            "title": "Criticality",
+            "type": "string"
+          },
+          "data_processed": {
+            "items": {},
+            "title": "Data Processed",
+            "type": "array"
+          },
+          "data_residency_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Residency Notes"
+          },
+          "decision_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Node Id"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "dpa_required": {
+            "title": "Dpa Required",
+            "type": "boolean"
+          },
+          "dpa_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dpa Review Date"
+          },
+          "dpa_status": {
+            "title": "Dpa Status",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "evidence_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Node Id"
+          },
+          "evidence_refs": {
+            "items": {},
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "executive_sponsor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executive Sponsor"
+          },
+          "finding_refs": {
+            "items": {},
+            "title": "Finding Refs",
+            "type": "array"
+          },
+          "governance_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Node Id"
+          },
+          "governance_readiness": {
+            "title": "Governance Readiness",
+            "type": "string"
+          },
+          "graph_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Node Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "iso27001_available": {
+            "title": "Iso27001 Available",
+            "type": "boolean"
+          },
+          "iso27001_reviewed": {
+            "title": "Iso27001 Reviewed",
+            "type": "boolean"
+          },
+          "iso_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iso Review Date"
+          },
+          "last_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Review Date"
+          },
+          "last_reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed At"
+          },
+          "owner_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Node Id"
+          },
+          "pr1_scan_result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr1 Scan Result Id"
+          },
+          "pr2_scan_result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr2 Scan Result Id"
+          },
+          "pr3_risk_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr3 Risk Record Id"
+          },
+          "privacy_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Review Date"
+          },
+          "privacy_review_status": {
+            "title": "Privacy Review Status",
+            "type": "string"
+          },
+          "privacy_reviewer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Reviewer"
+          },
+          "regulated_data_present": {
+            "title": "Regulated Data Present",
+            "type": "boolean"
+          },
+          "regulatory_flags": {
+            "items": {},
+            "title": "Regulatory Flags",
+            "type": "array"
+          },
+          "renewal_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal Date"
+          },
+          "renewal_due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal Due Date"
+          },
+          "retirement_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retirement Date"
+          },
+          "review_due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Due Date"
+          },
+          "risk_acceptance_expiration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Acceptance Expiration"
+          },
+          "risk_acceptance_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Acceptance Owner"
+          },
+          "risk_acceptance_required": {
+            "title": "Risk Acceptance Required",
+            "type": "boolean"
+          },
+          "risk_acceptance_status": {
+            "title": "Risk Acceptance Status",
+            "type": "string"
+          },
+          "risk_categories": {
+            "items": {},
+            "title": "Risk Categories",
+            "type": "array"
+          },
+          "risk_score": {
+            "title": "Risk Score",
+            "type": "string"
+          },
+          "security_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Review Date"
+          },
+          "security_review_status": {
+            "title": "Security Review Status",
+            "type": "string"
+          },
+          "security_reviewer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Reviewer"
+          },
+          "sensitive_data_types": {
+            "items": {},
+            "title": "Sensitive Data Types",
+            "type": "array"
+          },
+          "soc2_available": {
+            "title": "Soc2 Available",
+            "type": "boolean"
+          },
+          "soc2_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc2 Review Date"
+          },
+          "soc2_reviewed": {
+            "title": "Soc2 Reviewed",
+            "type": "boolean"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          },
+          "technical_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Owner"
+          },
+          "tool_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Id"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "vendor": {
+            "title": "Vendor",
+            "type": "string"
+          },
+          "vendor_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Node Id"
+          },
+          "workflow_state": {
+            "title": "Workflow State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "engagement_id",
+          "vendor",
+          "tool_name",
+          "target_type",
+          "workflow_state",
+          "governance_readiness",
+          "criticality",
+          "regulated_data_present",
+          "contract_status",
+          "dpa_required",
+          "dpa_status",
+          "baa_required",
+          "baa_status",
+          "security_review_status",
+          "privacy_review_status",
+          "soc2_available",
+          "soc2_reviewed",
+          "iso27001_available",
+          "iso27001_reviewed",
+          "risk_acceptance_required",
+          "risk_acceptance_status",
+          "risk_score",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AiVendorGovernanceRecordResponse",
+        "type": "object"
+      },
+      "AiVendorGovernanceRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "pr3_scan_result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr3 Scan Result Id"
+          }
+        },
+        "title": "AiVendorGovernanceRunRequest",
+        "type": "object"
+      },
+      "AiVendorGovernanceRunResponse": {
+        "properties": {
+          "findings_imported": {
+            "title": "Findings Imported",
+            "type": "integer"
+          },
+          "records_imported": {
+            "title": "Records Imported",
+            "type": "integer"
+          },
+          "scan_result_id": {
+            "title": "Scan Result Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "scan_result_id",
+          "records_imported",
+          "findings_imported",
+          "status",
+          "summary"
+        ],
+        "title": "AiVendorGovernanceRunResponse",
+        "type": "object"
+      },
+      "AiVendorGovernanceTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Email"
+          },
+          "actor_name": {
+            "minLength": 1,
+            "title": "Actor Name",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "exception_expiration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception Expiration"
+          },
+          "new_state": {
+            "minLength": 1,
+            "title": "New State",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_state",
+          "reason",
+          "actor_name"
+        ],
+        "title": "AiVendorGovernanceTransitionRequest",
+        "type": "object"
+      },
+      "AiVendorGovernanceUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Mutable governance fields \u2014 all other fields rejected via extra='forbid'.",
+        "properties": {
+          "baa_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baa Required"
+          },
+          "baa_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baa Review Date"
+          },
+          "baa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baa Status"
+          },
+          "business_justification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Justification"
+          },
+          "business_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Owner"
+          },
+          "business_process": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Process"
+          },
+          "contract_expiration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Expiration"
+          },
+          "contract_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Owner"
+          },
+          "contract_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Status"
+          },
+          "criticality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Criticality"
+          },
+          "data_processed": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Processed"
+          },
+          "data_residency_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Residency Notes"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "dpa_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dpa Required"
+          },
+          "dpa_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dpa Review Date"
+          },
+          "dpa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dpa Status"
+          },
+          "executive_sponsor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executive Sponsor"
+          },
+          "iso27001_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iso27001 Available"
+          },
+          "iso27001_reviewed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iso27001 Reviewed"
+          },
+          "iso_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iso Review Date"
+          },
+          "last_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Review Date"
+          },
+          "privacy_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Review Date"
+          },
+          "privacy_review_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Review Status"
+          },
+          "privacy_reviewer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Reviewer"
+          },
+          "regulated_data_present": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulated Data Present"
+          },
+          "renewal_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal Date"
+          },
+          "renewal_due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal Due Date"
+          },
+          "retirement_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retirement Date"
+          },
+          "review_due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Due Date"
+          },
+          "risk_acceptance_expiration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Acceptance Expiration"
+          },
+          "risk_acceptance_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Acceptance Owner"
+          },
+          "risk_acceptance_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Acceptance Required"
+          },
+          "risk_acceptance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Acceptance Status"
+          },
+          "security_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Review Date"
+          },
+          "security_review_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Review Status"
+          },
+          "security_reviewer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Reviewer"
+          },
+          "sensitive_data_types": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sensitive Data Types"
+          },
+          "soc2_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc2 Available"
+          },
+          "soc2_review_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc2 Review Date"
+          },
+          "soc2_reviewed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc2 Reviewed"
+          },
+          "technical_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Owner"
+          }
+        },
+        "title": "AiVendorGovernanceUpdateRequest",
+        "type": "object"
+      },
       "AlertInstanceResponse": {
         "properties": {
           "affected_control_ids": {
@@ -15436,7 +16754,9 @@
           "sharepoint_onedrive",
           "oauth_risk",
           "ai_tool_discovery",
-          "ai_data_access_mapping"
+          "ai_data_access_mapping",
+          "external_ai_risk_register",
+          "ai_vendor_governance"
         ],
         "title": "ScanSourceType",
         "type": "string"
@@ -34120,6 +35440,368 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/ai-vendor-governance": {
+      "get": {
+        "description": "List governance records for an engagement with optional filters.",
+        "operationId": "list_ai_vendor_governance_field_assessment_engagements__engagement_id__ai_vendor_governance_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workflow_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "governance_readiness",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Governance Readiness"
+            }
+          },
+          {
+            "in": "query",
+            "name": "risk_score",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Risk Score"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVendorGovernanceListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ai Vendor Governance",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/ai-vendor-governance/decisions": {
+      "get": {
+        "description": "Read-only paginated governance decision ledger.",
+        "operationId": "list_ai_vendor_governance_decisions_field_assessment_engagements__engagement_id__ai_vendor_governance_decisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVendorGovernanceDecisionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ai Vendor Governance Decisions",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}": {
+      "patch": {
+        "description": "Update mutable governance fields on a vendor governance record.\n\nImmutable fields (id, tenant_id, vendor, tool_name, risk_score, etc.) are\nrejected via Pydantic extra='forbid'. governance_readiness is always\nrecomputed server-side and cannot be set directly.",
+        "operationId": "patch_ai_vendor_governance_field_assessment_engagements__engagement_id__ai_vendor_governance__record_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiVendorGovernanceUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVendorGovernanceRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Ai Vendor Governance",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}/transition": {
+      "post": {
+        "description": "Perform a workflow state transition with actor attribution and decision ledger entry.\n\nValidates the transition against the allowed-transitions map before any DB write.\nEvery transition creates an immutable FaAiVendorGovernanceDecision row.",
+        "operationId": "transition_ai_vendor_governance_field_assessment_engagements__engagement_id__ai_vendor_governance__record_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiVendorGovernanceTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVendorGovernanceRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Ai Vendor Governance",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/artifacts": {
       "post": {
         "operationId": "register_artifact_route_field_assessment_engagements__engagement_id__artifacts_post",
@@ -34542,6 +36224,75 @@
           }
         },
         "summary": "Initiate Ai Tool Discovery Scan",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/connector-runs/ai-vendor-governance/run": {
+      "post": {
+        "description": "Generate governance workflow records from PR3 risk evidence.\n\nReads the most recent External AI Risk Register scan result and creates one\nFaAiVendorGovernanceRecord per tool. No new external calls are made.\n\nH12: durable scan job created before work begins.\nH13: scan.initiated and scan.completed audit events emitted directly (H13.5 compliant).\nH15: FaScanResult enters collected lifecycle state automatically on creation.",
+        "operationId": "run_ai_vendor_governance_field_assessment_engagements__engagement_id__connector_runs_ai_vendor_governance_run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiVendorGovernanceRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVendorGovernanceRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Ai Vendor Governance",
         "tags": [
           "field-assessment"
         ]
