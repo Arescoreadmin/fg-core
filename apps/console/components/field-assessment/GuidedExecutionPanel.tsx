@@ -169,7 +169,7 @@ export function GuidedExecutionPanel({
       fetchProgress();
     }
     prevCompletedRef.current = executionState.completed_gate_count;
-  }, [executionState?.completed_gate_count, fetchProgress]);
+  }, [executionState, fetchProgress]);
 
   if (loading) {
     return (

@@ -103,6 +103,7 @@ def import_external_ai_risk_register(
 
     imported_findings = 0
     finding_ids: list[str] = []
+    tool_finding_map: dict[str, list[str]] = {}
     for raw in raw_findings:
         finding_type = str(raw.get("type") or "external_ai_risk.finding")
         nist = _FINDING_NIST.get(
@@ -138,11 +139,14 @@ def import_external_ai_risk_register(
             remediation_hint=str(raw.get("recommendation") or ""),
         )
         finding_ids.append(finding.id)
+        tool_key = str(raw.get("tool_name") or "")
+        if tool_key:
+            tool_finding_map.setdefault(tool_key, []).append(finding.id)
         imported_findings += 1
 
-    # Back-reference finding IDs into risk records
-    if finding_ids:
-        _backfill_finding_refs(db, risk_records, finding_ids, scan_record.id)
+    # Back-reference finding IDs into risk records (per-tool, not global)
+    if tool_finding_map:
+        _backfill_finding_refs(db, risk_records, tool_finding_map, scan_record.id)
 
     return ExternalAiRiskImportResult(
         engagement_id=engagement_id,
@@ -301,20 +305,22 @@ def _upsert_risk_records(
 def _backfill_finding_refs(
     db: Session,
     risk_records: list[dict[str, Any]],
-    finding_ids: list[str],
+    tool_finding_map: dict[str, list[str]],
     scan_result_id: str,
 ) -> None:
-    """Attach finding_ids back to risk records that generated them."""
+    """Attach per-tool finding IDs back to the risk records that generated them."""
     from api.db_models_external_ai_risk import FaExternalAiRiskRecord
 
     now = utc_iso8601_z_now()
-    # Each finding maps to the risk record for its tool; use scan_result_id for all
     for rec in risk_records:
         if rec.get("risk_score") not in ("critical", "high"):
             continue
         tool_name = str(rec.get("tool_name") or "")
         tenant_id = str(rec.get("tenant_id") or "")
         engagement_id = str(rec.get("engagement_id") or "")
+        tool_findings = tool_finding_map.get(tool_name, [])
+        if not tool_findings:
+            continue
         existing = (
             db.query(FaExternalAiRiskRecord)
             .filter_by(
@@ -324,6 +330,8 @@ def _backfill_finding_refs(
             )
             .first()
         )
-        if existing and not existing.finding_refs:
-            existing.finding_refs = finding_ids
+        if existing:
+            existing.finding_refs = list(
+                set(list(existing.finding_refs or []) + tool_findings)
+            )
             existing.updated_at = now

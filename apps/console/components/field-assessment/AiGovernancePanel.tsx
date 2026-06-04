@@ -672,7 +672,7 @@ export function AiGovernancePanel({ engagementId }: { engagementId: string }) {
             <p className="text-sm text-gray-500">Loading…</p>
           ) : decisionsQuery.isError ? (
             <p className="text-sm text-red-600">Failed to load decision ledger.</p>
-          ) : (decisionsQuery.data as any)?.items?.length === 0 ? (
+          ) : (decisionsQuery.data?.items?.length ?? 0) === 0 ? (
             <p className="text-sm text-gray-500">No decisions recorded yet.</p>
           ) : (
             <div className="overflow-hidden rounded-lg border border-gray-200">
@@ -690,7 +690,7 @@ export function AiGovernancePanel({ engagementId }: { engagementId: string }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
-                  {((decisionsQuery.data as any)?.items || []).map(
+                  {(decisionsQuery.data?.items ?? []).map(
                     (d: GovernanceDecision) => (
                       <tr key={d.decision_id}>
                         <td className="px-3 py-2 font-medium text-gray-900">
