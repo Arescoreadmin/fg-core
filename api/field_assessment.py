@@ -43,6 +43,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
+from api.auth_dispatch import require_permission
+from api.actor_context import ActorContext
 from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
 from services.field_assessment.audit import (
@@ -5791,9 +5793,6 @@ class RiskAcceptanceCreateBody(BaseModel):
     evidence_refs: list[str] | None = None
     approver_name: str | None = None
     approver_email: str | None = None
-    actor_name: str | None = None
-    actor_email: str | None = None
-    actor_role: str | None = None
     decision_reason: str | None = None
     decision_notes: str | None = None
 
@@ -5807,6 +5806,7 @@ def create_risk_acceptance_route(
     engagement_id: str,
     request: Request,
     body: RiskAcceptanceCreateBody,
+    actor_ctx: ActorContext = Depends(require_permission("risk.accept")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Record a formal risk acceptance with owner, justification, and mandatory expiry."""
@@ -5837,10 +5837,10 @@ def create_risk_acceptance_route(
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         finding_id=body.finding_id,
-        actor_id=actor,
-        actor_name=body.actor_name,
-        actor_email=body.actor_email,
-        actor_role=body.actor_role,
+        actor_id=actor_ctx.subject,
+        actor_name=actor_ctx.name or None,
+        actor_email=actor_ctx.email or None,
+        actor_role=actor_ctx.primary_role(),
         decision_reason=body.decision_reason or body.business_justification,
         risk_owner=body.risk_owner,
         risk_owner_email=body.risk_owner_email,
@@ -5924,9 +5924,6 @@ class GovernanceExceptionCreateBody(BaseModel):
     related_finding_ids: list[str] | None = None
     compensating_controls: list[str] | None = None
     approver_name: str | None = None
-    actor_name: str | None = None
-    actor_email: str | None = None
-    actor_role: str | None = None
     decision_reason: str | None = None
     decision_notes: str | None = None
 
@@ -5940,6 +5937,7 @@ def create_governance_exception_route(
     engagement_id: str,
     request: Request,
     body: GovernanceExceptionCreateBody,
+    actor_ctx: ActorContext = Depends(require_permission("exception.grant")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Record a governance exception with owner, justification, and mandatory expiry."""
@@ -5957,10 +5955,10 @@ def create_governance_exception_route(
         db,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
-        actor_id=actor,
-        actor_name=body.actor_name,
-        actor_email=body.actor_email,
-        actor_role=body.actor_role,
+        actor_id=actor_ctx.subject,
+        actor_name=actor_ctx.name or None,
+        actor_email=actor_ctx.email or None,
+        actor_role=actor_ctx.primary_role(),
         decision_reason=body.decision_reason or body.business_justification,
         exception_type=body.exception_type,
         owner=body.owner,
@@ -6965,12 +6963,7 @@ class ReportQaApproveResponse(BaseModel):
 
 
 class ReportQaApproveBody(BaseModel):
-    reviewer_name: str | None = (
-        None  # Human-readable name; falls back to JWT actor if omitted
-    )
-    # H14 actor attribution — captured in governance decision ledger
-    actor_email: str | None = None
-    actor_role: str | None = None
+    reviewer_name: str | None = None  # optional display override; actor identity comes from JWT
     decision_notes: str | None = None
 
 
@@ -6985,6 +6978,7 @@ def qa_approve_report_route(
     report_id: str,
     request: Request,
     body: ReportQaApproveBody = ReportQaApproveBody(),
+    actor_ctx: ActorContext = Depends(require_permission("report.qa_approve")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ReportQaApproveResponse:
     """Mark a finalized report as QA-approved for client delivery.
@@ -7063,7 +7057,7 @@ def qa_approve_report_route(
         },
     )
 
-    # H14: record immutable governance decision with full actor attribution
+    # H14: record immutable governance decision with actor attribution from JWT
     governance_decision_svc.record_decision(
         db,
         tenant_id=tenant_id,
@@ -7071,10 +7065,10 @@ def qa_approve_report_route(
         decision_type="report_approved",
         entity_type="report",
         entity_id=report_id,
-        actor_id=actor,
-        actor_name=display_name if display_name != actor else body.reviewer_name,
-        actor_email=body.actor_email,
-        actor_role=body.actor_role,
+        actor_id=actor_ctx.subject,
+        actor_name=actor_ctx.name or display_name or None,
+        actor_email=actor_ctx.email or None,
+        actor_role=actor_ctx.primary_role(),
         decision_reason=f"Report QA-approved for client delivery by {display_name}",
         decision_notes=body.decision_notes,
         related_finding_ids=None,
@@ -9866,6 +9860,7 @@ def _bundle_to_response(b: FaVerificationBundle) -> VerificationBundleResponse:
 def generate_verification_bundle_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("bundle.generate")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> VerificationBundleResponse:
     """Generate a verification bundle for an engagement.
