@@ -1357,6 +1357,30 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/ai-vendor-governance",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/ai-vendor-governance/decisions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}/transition",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/artifacts",
       "scopes": [],
@@ -1389,6 +1413,12 @@
     {
       "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/ai-vendor-governance/run",
       "scopes": [],
       "source": "contract"
     },
@@ -2677,7 +2707,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-03T23:46:19.204468+00:00",
+  "generated_at": "2026-06-04T13:43:49.063477+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

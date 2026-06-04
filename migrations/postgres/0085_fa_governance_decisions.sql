@@ -68,9 +68,15 @@ CREATE OR REPLACE FUNCTION fn_fa_gov_decisions_append_only()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
-        RAISE EXCEPTION 'fa_governance_decisions is append-only: UPDATE forbidden (id=%)', OLD.id;
+        RAISE EXCEPTION USING MESSAGE =
+            'fa_governance_decisions is append-only: UPDATE forbidden (id='
+            || OLD.id
+            || ')';
     ELSIF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'fa_governance_decisions is append-only: DELETE forbidden (id=%)', OLD.id;
+        RAISE EXCEPTION USING MESSAGE =
+            'fa_governance_decisions is append-only: DELETE forbidden (id='
+            || OLD.id
+            || ')';
     END IF;
     RETURN NULL;
 END;
@@ -119,9 +125,15 @@ CREATE OR REPLACE FUNCTION fn_fa_risk_acceptances_append_only()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
-        RAISE EXCEPTION 'fa_risk_acceptances is append-only: UPDATE forbidden (id=%)', OLD.id;
+        RAISE EXCEPTION USING MESSAGE =
+            'fa_risk_acceptances is append-only: UPDATE forbidden (id='
+            || OLD.id
+            || ')';
     ELSIF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'fa_risk_acceptances is append-only: DELETE forbidden (id=%)', OLD.id;
+        RAISE EXCEPTION USING MESSAGE =
+            'fa_risk_acceptances is append-only: DELETE forbidden (id='
+            || OLD.id
+            || ')';
     END IF;
     RETURN NULL;
 END;
@@ -168,9 +180,15 @@ CREATE OR REPLACE FUNCTION fn_fa_gov_exceptions_append_only()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
-        RAISE EXCEPTION 'fa_governance_exceptions is append-only: UPDATE forbidden (id=%)', OLD.id;
+        RAISE EXCEPTION USING MESSAGE =
+            'fa_governance_exceptions is append-only: UPDATE forbidden (id='
+            || OLD.id
+            || ')';
     ELSIF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'fa_governance_exceptions is append-only: DELETE forbidden (id=%)', OLD.id;
+        RAISE EXCEPTION USING MESSAGE =
+            'fa_governance_exceptions is append-only: DELETE forbidden (id='
+            || OLD.id
+            || ')';
     END IF;
     RETURN NULL;
 END;

@@ -25,13 +25,13 @@ BEGIN
                AND column_name = 'transaction_id'
         ) THEN
             ALTER TABLE fa_engagement_audit_events
-                ADD COLUMN transaction_id  VARCHAR(64),
-                ADD COLUMN correlation_id  VARCHAR(128),
-                ADD COLUMN before_hash     VARCHAR(64),
-                ADD COLUMN after_hash      VARCHAR(64),
-                ADD COLUMN entity_type     VARCHAR(64),
-                ADD COLUMN entity_id       VARCHAR(64),
-                ADD COLUMN actor_type      VARCHAR(32);
+                ADD COLUMN IF NOT EXISTS transaction_id  VARCHAR(64),
+                ADD COLUMN IF NOT EXISTS correlation_id  VARCHAR(128),
+                ADD COLUMN IF NOT EXISTS before_hash     VARCHAR(64),
+                ADD COLUMN IF NOT EXISTS after_hash      VARCHAR(64),
+                ADD COLUMN IF NOT EXISTS entity_type     VARCHAR(64),
+                ADD COLUMN IF NOT EXISTS entity_id       VARCHAR(64),
+                ADD COLUMN IF NOT EXISTS actor_type      VARCHAR(32);
 
             CREATE INDEX ix_fa_audit_events_transaction_id
                 ON fa_engagement_audit_events (transaction_id)

@@ -43,6 +43,8 @@ SUPPORTED_SCHEMA_VERSIONS: dict[str, set[str]] = {
     ScanSourceType.OAUTH_RISK.value: {"1.0"},
     ScanSourceType.AI_TOOL_DISCOVERY.value: {"1.0"},
     ScanSourceType.AI_DATA_ACCESS_MAPPING.value: {"1.0"},
+    ScanSourceType.EXTERNAL_AI_RISK_REGISTER.value: {"1.0"},
+    ScanSourceType.AI_VENDOR_GOVERNANCE.value: {"1.0"},
 }
 
 # ---------------------------------------------------------------------------
@@ -78,6 +80,8 @@ REQUIRED_FIELDS: dict[str, dict[str, type]] = {
     ScanSourceType.OAUTH_RISK.value: {"grants": list},
     ScanSourceType.AI_TOOL_DISCOVERY.value: {"tools": list},
     ScanSourceType.AI_DATA_ACCESS_MAPPING.value: {"mappings": list},
+    ScanSourceType.EXTERNAL_AI_RISK_REGISTER.value: {"risk_records": list},
+    ScanSourceType.AI_VENDOR_GOVERNANCE.value: {"governance_records": list},
 }
 
 # ---------------------------------------------------------------------------

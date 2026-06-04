@@ -1390,4 +1390,118 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 
 **Tests:** `tests/test_c7_portal_grants.py` — 46 tests covering all 15 security layers. `tests/test_field_assessment.py` portal section updated to session-based auth.
 
+---
+
+## PR 3 — External AI Risk Register
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new FA connector; no auth subsystem changes; all routes tenant-isolated; review mutations scoped to owner/status fields only)
+
+**New routes (`api/field_assessment.py`):**
+- `POST /engagements/{id}/connector-runs/external-ai-risk-register/run` — `field_assessment:write` scope. Reads PR 1 (AI Tool Discovery) and PR 2 (AI Data Access Mapping) scan results for the engagement, runs deterministic risk scoring (no LLM), persists `FaExternalAiRiskRecord` rows and `FaNormalizedFinding` rows for high/critical risks, creates a `FaScanResult` (source_type=`external_ai_risk_register`) for audit chain. H12 durable scan job pattern; H13 audit event emitted on completion.
+- `GET /engagements/{id}/external-ai-risk-register` — `field_assessment:read` scope. Returns `FaExternalAiRiskRecord` rows filtered by tenant_id + engagement_id. Supports optional query params: `risk_score`, `risk_category`, `review_status`. No writes.
+- `PATCH /engagements/{id}/external-ai-risk-register/{risk_id}` — `field_assessment:write` scope. Updates mutable review fields only: `review_status`, `business_owner`, `technical_owner`. Risk scoring, categories, and evidence references are immutable after generation. Emits `emit_engagement_audit_event` with `reason_code="RISK_RECORD_UPDATED"`.
+
+**New DB model (`api/db_models_external_ai_risk.py`):**
+- Table `fa_external_ai_risk_records` — one row per (tenant_id, engagement_id, tool_name); unique constraint `uq_fa_ext_ai_risk_tool` prevents duplicates on regeneration. Risk scoring columns (`risk_score`, `risk_reason`, `risk_category`, `risk_categories`, `recommended_action`) are set deterministically at generation and treated as read-only. Mutable columns: `review_status`, `business_owner`, `technical_owner`.
+
+**New migration (`migrations/postgres/0090_external_ai_risk_register.sql`):**
+- Creates `fa_external_ai_risk_records` table with all required columns, indexes, and unique constraint. Extends `fa_scan_jobs_scanner_type_check` constraint to include `'external_ai_risk_register'`.
+
+**Risk engine (`services/connectors/external_ai_risk_register/risk_engine.py`):**
+- Deterministic scoring (no LLM). Eight risk categories: `tenant_wide_permissions`, `sensitive_data_access`, `unverified_publisher`, `overprivileged_oauth`, `shadow_ai`, `unknown_owner`, `no_dpa_baa_vendor_review`, `no_approval_record`. Score → label thresholds: 0–24 low, 25–49 moderate, 50–74 high, 75+ critical.
+
+**Security invariants:**
+- All three new routes require a valid tenant-scoped API key; tenant_id extracted from API key, never from request body.
+- PATCH route validates `risk_id` belongs to the caller's tenant_id before applying any mutation (404 on tenant mismatch).
+- Risk scoring is deterministic and immutable post-generation; no score field is writable via PATCH.
+- `FaExternalAiRiskRecord` upsert preserves `review_status` across regenerations — operator review decisions survive re-scans.
+- Findings generated only for high/critical risks; finding_refs back-filled to risk records after creation.
+- H13 audit event written atomically with each mutation; audit coverage gate remains at 100%.
+
+**Verification bundle:** `services/verification_bundle/bundle_service.py` extended to snapshot `FaExternalAiRiskRecord` rows as `ai_risk_register` component (SHA-256 hashed; tamper-evident).
+
+**Tools/CI changes:** `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256` regenerated for 3 new external AI risk register routes.
+
+**Tests:** `tests/test_external_ai_risk_register.py` — 81 tests covering all 8 risk categories, all 4 score bands, deterministic scoring, idempotent upsert, tenant/engagement isolation, review status mutations, finding generation, verification bundle integration, scan registry, report section, graph node IDs, and summary distribution.
+
+**Validation:** `make fg-fast` PASS.
+
+---
+
+## PR 3 Addendum — Governance Intelligence & Regulatory Hardening
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (schema extension on existing table; no new routes; PATCH route extended with new mutable fields; no auth subsystem changes)
+
+**Scope:** Extends `fa_external_ai_risk_records` with 25 new columns (Additions 1–10) without adding new routes. All existing audit, tenant-isolation, and immutability guarantees preserved.
+
+**New DB columns (`api/db_models_external_ai_risk.py`, migration `0091_external_ai_risk_register_addendum.sql`):**
+- Addition 1 — `risk_owner` (nullable), `owner_type` (default Unknown) — updatable via PATCH
+- Addition 2 — `governance_state` (deterministic at generation; `exception_granted` settable via PATCH)
+- Addition 3 — `decision_refs`, `risk_acceptance_refs`, `exception_refs`, `approval_refs` (JSON arrays; updatable via PATCH)
+- Addition 4 — `vendor_review_status`, `vendor_dpa_status`, `vendor_baa_status`, `vendor_security_review_status`, `vendor_last_reviewed_at` (defaults; future PR 3.5)
+- Addition 5 — `regulatory_flags` (deterministic JSON array; EU_AI_ACT, NIST_AI_RMF, ISO_42001, GDPR, HIPAA, PCI_DSS, SOX, GLBA, FFIEC, State_Privacy_Law)
+- Addition 6 — `risk_age_days`, `first_detected_at`, `last_observed_at`, `last_reviewed_at`
+- Addition 7 — `remediation_status`, `remediation_target_date`, `remediation_completed_at` — updatable via PATCH
+- Addition 10 — `risk_node_id`, `owner_node_id`, `vendor_node_id`, `decision_node_id`, `governance_node_id` (graph identifiers only; no traversal)
+
+**PATCH route extension:** `update_external_ai_risk_record` extended to accept and validate `risk_owner`, `owner_type`, `governance_state`, `decision_refs`, `risk_acceptance_refs`, `exception_refs`, `approval_refs`, `last_reviewed_at`, `remediation_status`, `remediation_target_date`, `remediation_completed_at`. New validation constants: `_VALID_OWNER_TYPES`, `_VALID_GOVERNANCE_STATES`, `_VALID_REMEDIATION_STATUSES`. H13 audit event payload extended to include `governance_state` and `remediation_status`.
+
+**Security invariants:**
+- Governance state: operators may set `exception_granted` via PATCH; deterministic generation does not produce `exception_granted` (operator-only value). Re-scans preserve `exception_granted` in the bridge.
+- Regulatory flags: deterministic from evidence categories + sensitive_data_exposure keyword signals. No AI-generated assignments.
+- Risk aging: `first_detected_at` is immutable after creation (preserved across re-scans). `last_observed_at` updated at each scan. No retroactive backdating.
+- All 25 new columns have safe defaults (`not_reviewed`, `unknown`, `not_started`, `[]`). No nullable columns without explicit audit path.
+- Audit coverage gate remains 100% — no exceptions added to `audit_exceptions.yaml`.
+- No new routes — no route inventory regeneration required for this addendum. Contract re-generated for PATCH schema changes.
+
+**Executive dashboard:** `build_summary()` extended with `governance_distribution`, `vendor_distribution`, `remediation_distribution`, `regulatory_distribution`, `risks_without_review`, `risks_without_vendor_approval`, `stale_risks`. Console panel and portal section updated to surface new metrics.
+
+**Verification bundle:** `bundle_service.py` snapshot extended to include all new addendum fields for independently-verifiable export.
+
+**Tools/CI changes:** `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` regenerated for PATCH schema extension (new mutable fields in `ExternalAiRiskReviewUpdateRequest` and `ExternalAiRiskRecordResponse`).
+
+**Tests:** `tests/test_external_ai_risk_register.py` extended from 81 to 124 tests. A-series (A1–A37) covers: governance state logic, regulatory flag assignments, all 25 addendum fields in engine output, bridge aging (first_detected_at, last_observed_at, risk_age_days), exception_granted preservation on re-scan, PATCH mutable fields, validation constants, build_summary distributions and autonomous-governance counters, verification bundle column persistence.
+
+**Validation:** `make fg-fast` PASS.
+
+**Validation:** `make fg-fast` PASS.
+
+## PR 4 — Third-Party AI Governance Workflow Engine
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new FA connector chain; no auth subsystem changes; all routes tenant-isolated; append-only decision ledger with DB-level mutation triggers)
+
+**New routes (`api/field_assessment.py`):**
+- `POST /engagements/{id}/connector-runs/ai-vendor-governance/run` — `field_assessment:write` scope. Reads PR 3 (External AI Risk Register) scan results, runs deterministic governance record generation (no LLM), persists `FaAiVendorGovernanceRecord` and `FaAiVendorGovernanceDecision` rows, creates a `FaScanResult`. H12/H13/H15 pattern.
+- `GET /engagements/{id}/ai-vendor-governance` — `field_assessment:read` scope. Returns governance records + executive summary. Filterable by `workflow_state`, `governance_readiness`.
+- `PATCH /engagements/{id}/ai-vendor-governance/{record_id}` — `field_assessment:write` scope. Updates mutable governance fields (ownership, DPA/BAA, security review, etc.). `governance_readiness` always recomputed server-side. Immutable fields (id, tenant_id, engagement_id, governance_readiness) are rejected via `extra="forbid"` on the Pydantic model.
+- `POST /engagements/{id}/ai-vendor-governance/{record_id}/transition` — `field_assessment:write` scope. Executes validated state machine transitions; creates append-only `FaAiVendorGovernanceDecision` record. Invalid transitions rejected before any DB write.
+- `GET /engagements/{id}/ai-vendor-governance/decisions` — `field_assessment:read` scope. Read-only access to append-only decision ledger.
+
+**New DB models (`api/db_models_ai_vendor_governance.py`, migration `0092_ai_vendor_governance.sql`):**
+- `fa_ai_vendor_governance_records` — one row per (tenant_id, engagement_id, tool_name); ~70 columns organized by: core identity, ownership, business context, data governance, contract governance, DPA, BAA, security review, privacy review, compliance evidence, risk governance, lifecycle, and PR cross-references. Unique constraint on (engagement_id, tenant_id, tool_name).
+- `fa_ai_vendor_governance_decisions` — append-only decision ledger. Postgres-level UPDATE/DELETE triggers (`trg_prevent_vendor_gov_decision_update`, `trg_prevent_vendor_gov_decision_delete`) enforce immutability at DB layer.
+
+**State machine (`services/connectors/ai_vendor_governance/state_machine.py`):**
+- 8 states: `discovered → needs_owner → needs_review → approved/restricted/rejected/exception_granted → retired`. Transition map enforced server-side via `validate_transition()`. `retired` is terminal (no outbound transitions). All transitions deterministic; no LLM calls.
+
+**Governance engine (`services/connectors/ai_vendor_governance/governance_engine.py`):**
+- `governance_readiness` (complete/partial/minimal/unknown) always recomputed server-side from record fields — not directly patchable.
+- 16 finding types mapped to NIST AI RMF controls (GOVERN 1.1, 1.2, 1.3, 1.4, 6.1, 6.2, MAP 1.1, MANAGE 2.2, 2.4).
+- `target_type` field supports: vendor/ai_tool/ai_agent/autonomous_system/agent_swarm/decision_engine/agi_provider (AGI governance without schema migration).
+
+**Security invariants:**
+- All 5 new routes require a valid tenant-scoped API key; tenant_id extracted from API key, never from request body.
+- PATCH route validates `record_id` belongs to caller's tenant_id before any mutation (404 on tenant mismatch).
+- `governance_readiness` is deterministic and server-side only — operators cannot set it directly.
+- `exception_granted` workflow_state is preserved across re-scans (never overwritten by bridge).
+- Append-only decision ledger enforced at DB layer via Postgres triggers — cannot be modified via API or direct UPDATE.
+- `AiVendorGovernanceUpdateRequest` uses `extra="forbid"` to reject immutable fields in PATCH body.
+- Audit coverage gate remains 100% — no exceptions added to `audit_exceptions.yaml`.
+
+**Verification bundle:** `bundle_service.py` extended with `ai_vendor_governance` and `ai_vendor_governance_decisions` components (SHA-256 hashed snapshots; tamper-evident).
+
+**Tools/CI changes:** `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256` regenerated for 5 new AI vendor governance routes.
+
+**Tests:** `tests/test_ai_vendor_governance.py` — 67 tests. W-series (W1–W18): state machine transitions + initial state determinism + TARGET_TYPES/DECISION_TYPES/WORKFLOW_STATES invariants. G-series (G1–G31): governance readiness computation, finding generation, record generation, build_summary metrics. S-series (S1–S4): tenant isolation, engagement isolation, exception_granted preservation, independent engagement records. L-series (L1–L6): bridge scan result creation, record creation, idempotency, finding creation, result fields, re-evaluation. R-series (R1–R4): scan registry version acceptance, required field validation, ScanSourceType enum. D-series (D1–D4): determinism invariants.
+
 **Validation:** `make fg-fast` PASS.

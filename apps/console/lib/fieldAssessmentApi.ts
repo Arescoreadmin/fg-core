@@ -666,6 +666,107 @@ export interface VerificationBundleManifest {
   component_summary: VerificationBundleComponentSummary[];
 }
 
+export interface GovernanceSummary {
+  total_vendors: number;
+  workflow_distribution: Record<string, number>;
+  readiness_distribution: Record<string, number>;
+  needs_owner_count: number;
+  needs_review_count: number;
+  overdue_review_count: number;
+  expiring_renewals_30d: number;
+  rejected_count: number;
+  restricted_count: number;
+  exception_count: number;
+  no_dpa_count: number;
+  no_baa_count: number;
+  no_contract_count: number;
+  no_security_review_count: number;
+}
+
+export interface GovernanceRecord {
+  id: string;
+  vendor: string;
+  tool_name: string;
+  target_type: string;
+  workflow_state: string;
+  governance_readiness: string;
+  risk_score: string;
+  business_owner: string | null;
+  technical_owner: string | null;
+  executive_sponsor: string | null;
+  department: string | null;
+  criticality: string;
+  dpa_required: boolean;
+  dpa_status: string;
+  baa_required: boolean;
+  baa_status: string;
+  contract_status: string;
+  security_review_status: string;
+  privacy_review_status: string;
+  soc2_available: boolean;
+  soc2_reviewed: boolean;
+  iso27001_available: boolean;
+  iso27001_reviewed: boolean;
+  risk_acceptance_required: boolean;
+  risk_acceptance_status: string;
+  risk_acceptance_expiration: string | null;
+  review_due_date: string | null;
+  renewal_due_date: string | null;
+  regulatory_flags: string[];
+  risk_categories: string[];
+  finding_refs: string[];
+  created_at: string;
+  updated_at: string;
+  last_reviewed_at: string | null;
+}
+
+export interface GovernanceDecision {
+  decision_id: string;
+  vendor: string;
+  tool_name: string;
+  decision: string;
+  reason: string;
+  previous_state: string | null;
+  new_state: string | null;
+  actor_name: string;
+  created_at: string;
+}
+
+export interface ExternalAiRiskRecord {
+  risk_id: string;
+  tool_name: string;
+  vendor: string;
+  risk_score: 'critical' | 'high' | 'moderate' | 'low';
+  risk_category: string;
+  risk_categories: string[];
+  risk_reason: string;
+  recommended_action: string;
+  review_status: string;
+  business_owner: string;
+  technical_owner: string;
+  risk_owner: string | null;
+  owner_type: string;
+  publisher_trust: string;
+  admin_consent: boolean;
+  sensitive_data_exposure: string[];
+  governance_state: string;
+  regulatory_flags: string[];
+  vendor_review_status: string;
+  vendor_dpa_status: string;
+  vendor_baa_status: string;
+  risk_age_days: number | null;
+  first_detected_at: string | null;
+  last_reviewed_at: string | null;
+  remediation_status: string;
+  remediation_target_date: string | null;
+  decision_refs: string[];
+  risk_acceptance_refs: string[];
+  exception_refs: string[];
+  approval_refs: string[];
+  evidence_refs: string[];
+  finding_refs: string[];
+}
+
 // ---------------------------------------------------------------------------
 // API error
 // ---------------------------------------------------------------------------
@@ -957,6 +1058,124 @@ export const fieldAssessmentApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  // AI Vendor Governance (PR 4)
+  runAiVendorGovernance(engagementId: string): Promise<{
+    scan_result_id: string;
+    records_imported: number;
+    findings_imported: number;
+    status: string;
+    summary: Record<string, unknown>;
+  }> {
+    return request(`/engagements/${engagementId}/connector-runs/ai-vendor-governance/run`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  listAiVendorGovernance(
+    engagementId: string,
+    params?: {
+      workflow_state?: string;
+      governance_readiness?: string;
+      risk_score?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<{
+    items: GovernanceRecord[];
+    total: number;
+    limit: number;
+    offset: number;
+    summary: GovernanceSummary;
+  }> {
+    const q = new URLSearchParams();
+    if (params?.workflow_state) q.set('workflow_state', params.workflow_state);
+    if (params?.governance_readiness) q.set('governance_readiness', params.governance_readiness);
+    if (params?.risk_score) q.set('risk_score', params.risk_score);
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.offset != null) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return request(`/engagements/${engagementId}/ai-vendor-governance${qs ? `?${qs}` : ''}`);
+  },
+
+  patchAiVendorGovernance(
+    engagementId: string,
+    recordId: string,
+    payload: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return request(`/engagements/${engagementId}/ai-vendor-governance/${recordId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  transitionAiVendorGovernance(
+    engagementId: string,
+    recordId: string,
+    payload: {
+      new_state: string;
+      reason: string;
+      actor_name: string;
+      actor_email?: string;
+      notes?: string;
+      exception_expiration?: string;
+    },
+  ): Promise<Record<string, unknown>> {
+    return request(
+      `/engagements/${engagementId}/ai-vendor-governance/${recordId}/transition`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+  },
+
+  listAiVendorGovernanceDecisions(
+    engagementId: string,
+    params?: { limit?: number; offset?: number },
+  ): Promise<{
+    items: GovernanceDecision[];
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
+    const q = new URLSearchParams();
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.offset != null) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return request(
+      `/engagements/${engagementId}/ai-vendor-governance/decisions${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  // External AI Risk Register (PR 3)
+  runExternalAiRiskRegister(
+    engagementId: string,
+    body: Record<string, unknown>,
+  ): Promise<{
+    scan_result_id: string;
+    risks_imported: number;
+    findings_imported: number;
+    status: string;
+    summary: Record<string, unknown>;
+  }> {
+    return request(`/engagements/${engagementId}/connector-runs/external-ai-risk-register/run`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  listExternalAiRiskRecords(
+    engagementId: string,
+    riskScore?: string,
+    category?: string,
+    status?: string,
+  ): Promise<{ items: ExternalAiRiskRecord[] }> {
+    const q = new URLSearchParams();
+    if (riskScore) q.set('risk_score', riskScore);
+    if (category) q.set('risk_category', category);
+    if (status) q.set('review_status', status);
+    const qs = q.toString();
+    return request(`/engagements/${engagementId}/external-ai-risk-records${qs ? `?${qs}` : ''}`);
   },
 
   // Audit events (read-only — append-only server-side)

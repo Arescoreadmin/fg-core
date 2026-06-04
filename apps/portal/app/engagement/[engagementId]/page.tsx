@@ -105,6 +105,7 @@ const TABS = [
   { id: 'documents',    label: 'Documents' },
   { id: 'observations', label: 'Observations' },
   { id: 'evidence',     label: 'Evidence' },
+  { id: 'ai-governance', label: 'AI Governance' },
   { id: 'history',      label: 'History' },
 ] as const;
 
@@ -870,6 +871,172 @@ function Empty({ label }: { label: string }) {
   );
 }
 
+// ─── AI Governance Tab (PR 4 — read-only portal view) ────────────────────────
+
+const GOV_STATE_BADGE: Record<string, string> = {
+  discovered:       'bg-gray-700/40 text-gray-300',
+  needs_owner:      'bg-orange-500/20 text-orange-300',
+  needs_review:     'bg-yellow-500/20 text-yellow-300',
+  approved:         'bg-green-500/20 text-green-300',
+  restricted:       'bg-blue-500/20 text-blue-300',
+  rejected:         'bg-red-500/20 text-red-300',
+  exception_granted:'bg-purple-500/20 text-purple-300',
+  retired:          'bg-gray-600/30 text-gray-400',
+};
+
+const GOV_READINESS_BADGE: Record<string, string> = {
+  complete: 'bg-green-500/20 text-green-300',
+  partial:  'bg-yellow-500/20 text-yellow-300',
+  minimal:  'bg-orange-500/20 text-orange-300',
+  unknown:  'bg-gray-700/40 text-gray-400',
+};
+
+function GovBadge({ label, cls }: { label: string; cls: string }) {
+  return (
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${cls}`}>
+      {label.replace(/_/g, ' ')}
+    </span>
+  );
+}
+
+interface GovRecord {
+  id: string;
+  vendor: string;
+  tool_name: string;
+  workflow_state: string;
+  governance_readiness: string;
+  risk_score: string;
+  business_owner: string | null;
+  technical_owner: string | null;
+  dpa_status: string;
+  baa_status: string;
+  security_review_status: string;
+  review_due_date: string | null;
+  regulatory_flags: string[];
+  risk_categories: string[];
+}
+
+interface GovDecision {
+  decision_id: string;
+  vendor: string;
+  tool_name: string;
+  decision: string;
+  previous_state: string | null;
+  new_state: string | null;
+  actor_name: string;
+  created_at: string;
+}
+
+function AiGovernancePortalTab({ engagementId }: { engagementId: string }) {
+  const [records, setRecords] = useState<Async<{ items: GovRecord[]; summary: Record<string, unknown> }>>(idle());
+  const [decisions, setDecisions] = useState<Async<{ items: GovDecision[] }>>(idle());
+  const [view, setView] = useState<'records' | 'decisions'>('records');
+
+  useEffect(() => {
+    setRecords((s) => ({ ...s, loading: true }));
+    fetch(`/api/core/field-assessment/engagements/${engagementId}/ai-vendor-governance`)
+      .then((r) => r.json())
+      .then((data) => setRecords({ data, loading: false, error: null }))
+      .catch((e) => setRecords({ data: null, loading: false, error: String(e) }));
+  }, [engagementId]);
+
+  useEffect(() => {
+    if (view !== 'decisions') return;
+    setDecisions((s) => ({ ...s, loading: true }));
+    fetch(`/api/core/field-assessment/engagements/${engagementId}/ai-vendor-governance/decisions`)
+      .then((r) => r.json())
+      .then((data) => setDecisions({ data, loading: false, error: null }))
+      .catch((e) => setDecisions({ data: null, loading: false, error: String(e) }));
+  }, [engagementId, view]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-4 border-b border-border pb-2">
+        {(['records', 'decisions'] as const).map((v) => (
+          <button
+            key={v}
+            className={`pb-1 text-sm font-medium capitalize ${view === v ? 'border-b-2 border-indigo-400 text-indigo-300' : 'text-muted hover:text-foreground'}`}
+            onClick={() => setView(v)}
+          >
+            {v === 'records' ? 'Governance Records' : 'Decision Ledger'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'records' && (
+        <>
+          {records.loading && <Loading />}
+          {records.error && <ErrorMsg msg={records.error} />}
+          {records.data?.items.length === 0 && (
+            <Empty label="No governance records. Ask your assessor to run the governance engine." />
+          )}
+          {records.data?.items.map((r) => (
+            <div key={r.id} className="rounded border border-border bg-surface p-4 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-foreground">{r.tool_name}</span>
+                <span className="text-xs text-muted">{r.vendor}</span>
+                <GovBadge label={r.workflow_state} cls={GOV_STATE_BADGE[r.workflow_state] || 'bg-gray-700/40 text-gray-300'} />
+                <GovBadge label={r.governance_readiness} cls={GOV_READINESS_BADGE[r.governance_readiness] || 'bg-gray-700/40 text-gray-400'} />
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted sm:grid-cols-3">
+                {r.business_owner && <span>Biz Owner: <span className="text-foreground">{r.business_owner}</span></span>}
+                {r.technical_owner && <span>Tech Owner: <span className="text-foreground">{r.technical_owner}</span></span>}
+                <span>DPA: <span className="text-foreground">{r.dpa_status.replace(/_/g, ' ')}</span></span>
+                <span>BAA: <span className="text-foreground">{r.baa_status.replace(/_/g, ' ')}</span></span>
+                <span>Security: <span className="text-foreground">{r.security_review_status.replace(/_/g, ' ')}</span></span>
+                {r.review_due_date && <span>Review Due: <span className="text-foreground">{r.review_due_date.slice(0, 10)}</span></span>}
+              </div>
+              {r.regulatory_flags.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {r.regulatory_flags.map((f) => (
+                    <span key={f} className="rounded bg-indigo-900/40 px-1.5 py-0.5 text-xs text-indigo-300">
+                      {f.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+
+      {view === 'decisions' && (
+        <>
+          {decisions.loading && <Loading />}
+          {decisions.error && <ErrorMsg msg={decisions.error} />}
+          {decisions.data?.items.length === 0 && <Empty label="No governance decisions recorded yet." />}
+          {(decisions.data?.items ?? []).length > 0 && (
+            <div className="overflow-hidden rounded border border-border">
+              <table className="min-w-full divide-y divide-border text-xs">
+                <thead className="bg-surface">
+                  <tr>
+                    {['Tool', 'Decision', 'State Change', 'Actor', 'Date'].map((h) => (
+                      <th key={h} className="px-3 py-2 text-left font-medium text-muted">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {decisions.data?.items.map((d) => (
+                    <tr key={d.decision_id}>
+                      <td className="px-3 py-2 font-medium text-foreground">{d.tool_name}</td>
+                      <td className="px-3 py-2 capitalize text-foreground">{d.decision.replace(/_/g, ' ')}</td>
+                      <td className="px-3 py-2 text-muted">
+                        {d.previous_state ? `${d.previous_state.replace(/_/g, ' ')} → ${(d.new_state || '').replace(/_/g, ' ')}` : (d.new_state?.replace(/_/g, ' '))}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">{d.actor_name}</td>
+                      <td className="px-3 py-2 text-muted">{d.created_at.slice(0, 10)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EngagementDetailPage() {
@@ -964,8 +1131,9 @@ export default function EngagementDetailPage() {
         {activeTab === 'scans'        && <ScansTab        engagementId={engagementId} />}
         {activeTab === 'documents'    && <DocumentsTab    engagementId={engagementId} />}
         {activeTab === 'observations' && <ObservationsTab engagementId={engagementId} />}
-        {activeTab === 'evidence'     && <EvidenceTab     engagementId={engagementId} />}
-        {activeTab === 'history'      && <HistoryTab      engagementId={engagementId} />}
+        {activeTab === 'evidence'     && <EvidenceTab          engagementId={engagementId} />}
+        {activeTab === 'ai-governance' && <AiGovernancePortalTab engagementId={engagementId} />}
+        {activeTab === 'history'      && <HistoryTab           engagementId={engagementId} />}
       </div>
     </div>
   );

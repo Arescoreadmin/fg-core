@@ -39,9 +39,9 @@
     }
   ],
   "governance": {
-    "contract_count": 446,
+    "contract_count": 451,
     "contract_only": [],
-    "runtime_count": 551,
+    "runtime_count": 556,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -149,7 +149,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "aee24d3f55de740a885dc47a935ce8affa82e43d6720097b19d08224c519934d",
+  "governance_fingerprint": "38d508970275a9987080fbc1377cd58fa8b9abe56090fe7a4405fe671126d7f6",
   "planes": [
     {
       "compat": {
@@ -469,6 +469,8 @@
       "GET /enterprise-controls/frameworks",
       "GET /field-assessment/engagements",
       "GET /field-assessment/engagements/{engagement_id}",
+      "GET /field-assessment/engagements/{engagement_id}/ai-vendor-governance",
+      "GET /field-assessment/engagements/{engagement_id}/ai-vendor-governance/decisions",
       "GET /field-assessment/engagements/{engagement_id}/artifacts/{artifact_id}",
       "GET /field-assessment/engagements/{engagement_id}/audit-events",
       "GET /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}",
@@ -561,6 +563,7 @@
       "GET /status",
       "HEAD /health",
       "PATCH /field-assessment/engagements/{engagement_id}",
+      "PATCH /field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}/remediation",
       "PATCH /field-assessment/engagements/{engagement_id}/observations/{observation_id}",
@@ -664,10 +667,12 @@
       "POST /exceptions/requests",
       "POST /exceptions/requests/{request_id}/approve",
       "POST /field-assessment/engagements",
+      "POST /field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}/transition",
       "POST /field-assessment/engagements/{engagement_id}/artifacts",
       "POST /field-assessment/engagements/{engagement_id}/baseline",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-vendor-governance/run",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/dns-email/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/entra-governance/initiate",
