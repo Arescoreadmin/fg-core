@@ -500,6 +500,57 @@
         "title": "AgentRotateResponse",
         "type": "object"
       },
+      "AiDataAccessMappingRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "operator_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Name"
+          }
+        },
+        "title": "AiDataAccessMappingRunRequest",
+        "type": "object"
+      },
+      "AiDataAccessMappingRunResponse": {
+        "properties": {
+          "findings_imported": {
+            "title": "Findings Imported",
+            "type": "integer"
+          },
+          "scan_result_id": {
+            "title": "Scan Result Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "object"
+          },
+          "tools_mapped": {
+            "title": "Tools Mapped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scan_result_id",
+          "tools_mapped",
+          "findings_imported",
+          "status",
+          "summary"
+        ],
+        "title": "AiDataAccessMappingRunResponse",
+        "type": "object"
+      },
       "AlertInstanceResponse": {
         "properties": {
           "affected_control_ids": {
@@ -15384,7 +15435,8 @@
           "entra_governance",
           "sharepoint_onedrive",
           "oauth_risk",
-          "ai_tool_discovery"
+          "ai_tool_discovery",
+          "ai_data_access_mapping"
         ],
         "title": "ScanSourceType",
         "type": "string"
@@ -34353,6 +34405,75 @@
           }
         },
         "summary": "Pin Baseline",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run": {
+      "post": {
+        "description": "Map AI tool permissions to data categories, sensitivity, owner, and governance readiness.\n\nReads the most recent AI Tool Discovery scan result for this engagement and runs the\ndeterministic mapping engine over it. No new Microsoft Graph calls are made \u2014 all\nfields are derived from evidence already collected by the AI Tool Discovery scan.\n\nH12: durable scan job created before work begins.\nH13: scan.initiated and scan.completed audit events emitted directly in this route (H13.5 compliant).\nH15: FaScanResult enters collected lifecycle state automatically on creation.",
+        "operationId": "run_ai_data_access_mapping_field_assessment_engagements__engagement_id__connector_runs_ai_data_access_mapping_run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiDataAccessMappingRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiDataAccessMappingRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Ai Data Access Mapping",
         "tags": [
           "field-assessment"
         ]

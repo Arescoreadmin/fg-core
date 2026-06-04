@@ -946,6 +946,19 @@ export const fieldAssessmentApi = {
     });
   },
 
+  runAiDataAccessMapping(engagementId: string, payload: { operator_name?: string }): Promise<{
+    scan_result_id: string;
+    tools_mapped: number;
+    findings_imported: number;
+    status: string;
+    summary: Record<string, unknown>;
+  }> {
+    return request(`/engagements/${engagementId}/connector-runs/ai-data-access-mapping/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // Audit events (read-only — append-only server-side)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/engagements/${engagementId}/audit-events`);

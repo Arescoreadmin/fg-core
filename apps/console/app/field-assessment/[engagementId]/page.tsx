@@ -19,6 +19,7 @@ import { EntraGovernanceScanPanel } from '@/components/field-assessment/EntraGov
 import { SharepointScanPanel } from '@/components/field-assessment/SharepointScanPanel';
 import { OauthRiskScanPanel } from '@/components/field-assessment/OauthRiskScanPanel';
 import { AiToolDiscoveryScanPanel } from '@/components/field-assessment/AiToolDiscoveryScanPanel';
+import { AiDataAccessMappingPanel } from '@/components/field-assessment/AiDataAccessMappingPanel';
 import { DocumentRegistrationPanel } from '@/components/field-assessment/DocumentRegistrationPanel';
 import { ObservationForm } from '@/components/field-assessment/ObservationForm';
 import { InterviewForm } from '@/components/field-assessment/InterviewForm';
@@ -706,6 +707,25 @@ export default function EngagementWorkspacePage() {
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
                     <AiToolDiscoveryScanPanel
+                      engagementId={engagementId}
+                      onSuccess={() => {
+                        fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});
+                        fieldAssessmentApi.listEvidenceLinks(engagementId).then(setEvidenceLinks).catch(() => {});
+                        loadSummary();
+                        loadExecutionState();
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border-border mb-4">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm">Run AI Data Access Mapping</CardTitle>
+                    <p className="text-xs text-muted mt-0.5">
+                      Deterministic — maps AI tool permissions to data categories, sensitivity, scope, ownership, and governance readiness. Requires AI Tool Discovery scan.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <AiDataAccessMappingPanel
                       engagementId={engagementId}
                       onSuccess={() => {
                         fieldAssessmentApi.listScans(engagementId).then(setScans).catch(() => {});

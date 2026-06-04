@@ -1382,6 +1382,12 @@
     },
     {
       "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
       "scopes": [],
       "source": "contract"
@@ -2671,7 +2677,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-03T20:26:08.603545+00:00",
+  "generated_at": "2026-06-03T23:46:19.204468+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
