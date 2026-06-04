@@ -7552,6 +7552,648 @@
         "title": "ExportState",
         "type": "string"
       },
+      "ExternalAiRiskRecordResponse": {
+        "properties": {
+          "admin_consent": {
+            "title": "Admin Consent",
+            "type": "boolean"
+          },
+          "approval_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approval Refs",
+            "type": "array"
+          },
+          "business_owner": {
+            "title": "Business Owner",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_access_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Access Summary"
+          },
+          "decision_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Node Id"
+          },
+          "decision_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Decision Refs",
+            "type": "array"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "exception_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exception Refs",
+            "type": "array"
+          },
+          "finding_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Finding Refs",
+            "type": "array"
+          },
+          "first_detected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Detected At"
+          },
+          "governance_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Node Id"
+          },
+          "governance_state": {
+            "title": "Governance State",
+            "type": "string"
+          },
+          "graph_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Node Id"
+          },
+          "last_observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Observed At"
+          },
+          "last_reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed At"
+          },
+          "owner_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Node Id"
+          },
+          "owner_type": {
+            "title": "Owner Type",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "publisher_trust": {
+            "title": "Publisher Trust",
+            "type": "string"
+          },
+          "recommended_action": {
+            "title": "Recommended Action",
+            "type": "string"
+          },
+          "regulatory_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Regulatory Flags",
+            "type": "array"
+          },
+          "remediation_completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Completed At"
+          },
+          "remediation_status": {
+            "title": "Remediation Status",
+            "type": "string"
+          },
+          "remediation_target_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Target Date"
+          },
+          "review_status": {
+            "title": "Review Status",
+            "type": "string"
+          },
+          "risk_acceptance_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risk Acceptance Refs",
+            "type": "array"
+          },
+          "risk_age_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Age Days"
+          },
+          "risk_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risk Categories",
+            "type": "array"
+          },
+          "risk_category": {
+            "title": "Risk Category",
+            "type": "string"
+          },
+          "risk_id": {
+            "title": "Risk Id",
+            "type": "string"
+          },
+          "risk_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Node Id"
+          },
+          "risk_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Owner"
+          },
+          "risk_reason": {
+            "title": "Risk Reason",
+            "type": "string"
+          },
+          "risk_score": {
+            "title": "Risk Score",
+            "type": "string"
+          },
+          "sensitive_data_exposure": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sensitive Data Exposure",
+            "type": "array"
+          },
+          "technical_owner": {
+            "title": "Technical Owner",
+            "type": "string"
+          },
+          "tool_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Id"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Count"
+          },
+          "vendor": {
+            "title": "Vendor",
+            "type": "string"
+          },
+          "vendor_baa_status": {
+            "title": "Vendor Baa Status",
+            "type": "string"
+          },
+          "vendor_dpa_status": {
+            "title": "Vendor Dpa Status",
+            "type": "string"
+          },
+          "vendor_last_reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Last Reviewed At"
+          },
+          "vendor_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Node Id"
+          },
+          "vendor_review_status": {
+            "title": "Vendor Review Status",
+            "type": "string"
+          },
+          "vendor_security_review_status": {
+            "title": "Vendor Security Review Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "risk_id",
+          "tool_id",
+          "tool_name",
+          "vendor",
+          "business_owner",
+          "technical_owner",
+          "risk_owner",
+          "owner_type",
+          "permissions",
+          "data_access_summary",
+          "sensitive_data_exposure",
+          "publisher_trust",
+          "user_count",
+          "admin_consent",
+          "risk_score",
+          "risk_reason",
+          "risk_category",
+          "risk_categories",
+          "recommended_action",
+          "review_status",
+          "governance_state",
+          "decision_refs",
+          "risk_acceptance_refs",
+          "exception_refs",
+          "approval_refs",
+          "vendor_review_status",
+          "vendor_dpa_status",
+          "vendor_baa_status",
+          "vendor_security_review_status",
+          "vendor_last_reviewed_at",
+          "regulatory_flags",
+          "risk_age_days",
+          "first_detected_at",
+          "last_observed_at",
+          "last_reviewed_at",
+          "remediation_status",
+          "remediation_target_date",
+          "remediation_completed_at",
+          "evidence_refs",
+          "finding_refs",
+          "graph_node_id",
+          "risk_node_id",
+          "owner_node_id",
+          "vendor_node_id",
+          "decision_node_id",
+          "governance_node_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ExternalAiRiskRecordResponse",
+        "type": "object"
+      },
+      "ExternalAiRiskRegisterListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalAiRiskRecordResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ExternalAiRiskRegisterListResponse",
+        "type": "object"
+      },
+      "ExternalAiRiskRegisterRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "operator_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Name"
+          }
+        },
+        "title": "ExternalAiRiskRegisterRunRequest",
+        "type": "object"
+      },
+      "ExternalAiRiskRegisterRunResponse": {
+        "properties": {
+          "findings_imported": {
+            "title": "Findings Imported",
+            "type": "integer"
+          },
+          "risks_imported": {
+            "title": "Risks Imported",
+            "type": "integer"
+          },
+          "scan_result_id": {
+            "title": "Scan Result Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "scan_result_id",
+          "risks_imported",
+          "findings_imported",
+          "status",
+          "summary"
+        ],
+        "title": "ExternalAiRiskRegisterRunResponse",
+        "type": "object"
+      },
+      "ExternalAiRiskReviewUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Refs"
+          },
+          "business_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Owner"
+          },
+          "decision_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Refs"
+          },
+          "exception_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception Refs"
+          },
+          "governance_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance State"
+          },
+          "last_reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed At"
+          },
+          "owner_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Type"
+          },
+          "remediation_completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Completed At"
+          },
+          "remediation_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Status"
+          },
+          "remediation_target_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Target Date"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Status"
+          },
+          "risk_acceptance_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Acceptance Refs"
+          },
+          "risk_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Owner"
+          },
+          "technical_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Owner"
+          }
+        },
+        "title": "ExternalAiRiskReviewUpdateRequest",
+        "type": "object"
+      },
       "FailWorkflowRequest": {
         "additionalProperties": false,
         "properties": {
@@ -15436,7 +16078,8 @@
           "sharepoint_onedrive",
           "oauth_risk",
           "ai_tool_discovery",
-          "ai_data_access_mapping"
+          "ai_data_access_mapping",
+          "external_ai_risk_register"
         ],
         "title": "ScanSourceType",
         "type": "string"
@@ -34751,6 +35394,75 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/connector-runs/external-ai-risk-register/run": {
+      "post": {
+        "description": "Generate deterministic AI risk records from PR 1 and PR 2 evidence.\n\nReads the most recent AI Tool Discovery scan (PR 1) and AI Data Access Mapping\nscan (PR 2) for this engagement and runs the deterministic risk engine over them.\nNo new Microsoft Graph calls are made.\n\nRisk records are created or updated idempotently. High/Critical risks generate\nFaNormalizedFinding entries.\n\nH12: durable scan job created before work begins.\nH13: scan.initiated and scan.completed audit events emitted directly.\nH15: FaScanResult enters collected lifecycle state automatically.",
+        "operationId": "run_external_ai_risk_register_field_assessment_engagements__engagement_id__connector_runs_external_ai_risk_register_run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalAiRiskRegisterRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalAiRiskRegisterRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run External Ai Risk Register",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import": {
       "post": {
         "operationId": "import_msgraph_connector_run_route_field_assessment_engagements__engagement_id__connector_runs_msgraph_import_post",
@@ -36378,6 +37090,191 @@
           }
         },
         "summary": "Get Engagement Execution State Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/external-ai-risk-register": {
+      "get": {
+        "description": "List AI risk records for an engagement.\n\nSupports optional filtering by risk_score, risk_category, and review_status.\nResults are ordered: critical \u2192 high \u2192 moderate \u2192 low, then alphabetical.",
+        "operationId": "list_external_ai_risk_records_field_assessment_engagements__engagement_id__external_ai_risk_register_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "risk_score",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Risk Score"
+            }
+          },
+          {
+            "in": "query",
+            "name": "risk_category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Risk Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "review_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Status"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalAiRiskRegisterListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List External Ai Risk Records",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/external-ai-risk-register/{risk_id}": {
+      "patch": {
+        "description": "Update mutable fields on an AI risk record.\n\nOnly review_status, business_owner, and technical_owner are mutable.\nRisk scoring, categories, and reason are deterministic and read-only.",
+        "operationId": "update_external_ai_risk_record_field_assessment_engagements__engagement_id__external_ai_risk_register__risk_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "risk_id",
+            "required": true,
+            "schema": {
+              "title": "Risk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalAiRiskReviewUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalAiRiskRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update External Ai Risk Record",
         "tags": [
           "field-assessment"
         ]

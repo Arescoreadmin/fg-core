@@ -959,6 +959,44 @@ export const fieldAssessmentApi = {
     });
   },
 
+  runExternalAiRiskRegister(engagementId: string, payload: { operator_name?: string }): Promise<{
+    scan_result_id: string;
+    risks_imported: number;
+    findings_imported: number;
+    status: string;
+    summary: Record<string, unknown>;
+  }> {
+    return request(`/engagements/${engagementId}/connector-runs/external-ai-risk-register/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  listExternalAiRiskRecords(
+    engagementId: string,
+    risk_score?: string,
+    risk_category?: string,
+    review_status?: string,
+  ): Promise<{ items: Record<string, unknown>[]; total: number }> {
+    const q = new URLSearchParams();
+    if (risk_score) q.set('risk_score', risk_score);
+    if (risk_category) q.set('risk_category', risk_category);
+    if (review_status) q.set('review_status', review_status);
+    const qs = q.toString() ? `?${q}` : '';
+    return request(`/engagements/${engagementId}/external-ai-risk-register${qs}`);
+  },
+
+  updateExternalAiRiskRecord(
+    engagementId: string,
+    riskId: string,
+    payload: { review_status?: string; business_owner?: string; technical_owner?: string },
+  ): Promise<Record<string, unknown>> {
+    return request(`/engagements/${engagementId}/external-ai-risk-register/${riskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // Audit events (read-only — append-only server-side)
   listAuditEvents(engagementId: string): Promise<AuditEvent[]> {
     return request(`/engagements/${engagementId}/audit-events`);

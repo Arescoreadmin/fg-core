@@ -208,6 +208,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_verification_bundle"
     )  # PR 52: verification bundle
+    importlib.import_module(
+        "api.db_models_external_ai_risk"
+    )  # PR 3: external AI risk register
 
 
 def _get_base():

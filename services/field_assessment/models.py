@@ -44,6 +44,7 @@ class ScanSourceType(str, Enum):
     OAUTH_RISK = "oauth_risk"
     AI_TOOL_DISCOVERY = "ai_tool_discovery"
     AI_DATA_ACCESS_MAPPING = "ai_data_access_mapping"
+    EXTERNAL_AI_RISK_REGISTER = "external_ai_risk_register"
 
 
 class FindingSeverity(str, Enum):

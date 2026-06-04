@@ -72,6 +72,7 @@ from api.db_models_governance_decision import (
     FaGovernanceException,
     FaRiskAcceptance,
 )
+from api.db_models_external_ai_risk import FaExternalAiRiskRecord
 from api.db_models_governance_report import GovernanceReportRecord
 from api.db_models_verification_bundle import FaVerificationBundle
 from services.canonical import utc_iso8601_z_now
@@ -387,7 +388,66 @@ class VerificationBundleService:
             sorted([c["evidence_id"] for c in chain_of_custody])
         )
 
-        # ── 10. Report (latest finalized version) ─────────────────────────────
+        # ── 10. AI Risk Register records ──────────────────────────────────────
+        ai_risk_records = (
+            db.execute(
+                select(FaExternalAiRiskRecord).where(
+                    FaExternalAiRiskRecord.engagement_id == engagement_id,
+                    FaExternalAiRiskRecord.tenant_id == tenant_id,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ai_risk_data = [
+            {
+                "id": r.id,
+                "tool_name": r.tool_name,
+                "vendor": r.vendor,
+                "risk_score": r.risk_score,
+                "risk_category": r.risk_category,
+                "risk_categories": r.risk_categories or [],
+                "review_status": r.review_status,
+                "business_owner": r.business_owner,
+                "technical_owner": r.technical_owner,
+                # Addition 1 — ownership
+                "risk_owner": r.risk_owner,
+                "owner_type": getattr(r, "owner_type", "Unknown"),
+                # Addition 2 — governance state
+                "governance_state": getattr(r, "governance_state", "unknown"),
+                # Addition 3 — decision linkage
+                "decision_refs": getattr(r, "decision_refs", None) or [],
+                "risk_acceptance_refs": getattr(r, "risk_acceptance_refs", None) or [],
+                "exception_refs": getattr(r, "exception_refs", None) or [],
+                "approval_refs": getattr(r, "approval_refs", None) or [],
+                # Addition 4 — vendor governance status
+                "vendor_review_status": getattr(
+                    r, "vendor_review_status", "not_reviewed"
+                ),
+                "vendor_dpa_status": getattr(r, "vendor_dpa_status", "unknown"),
+                "vendor_baa_status": getattr(r, "vendor_baa_status", "unknown"),
+                "vendor_last_reviewed_at": getattr(r, "vendor_last_reviewed_at", None),
+                # Addition 5 — regulatory flags
+                "regulatory_flags": getattr(r, "regulatory_flags", None) or [],
+                # Addition 6 — risk aging
+                "risk_age_days": getattr(r, "risk_age_days", None),
+                "first_detected_at": getattr(r, "first_detected_at", None),
+                "last_reviewed_at": getattr(r, "last_reviewed_at", None),
+                # Addition 7 — remediation
+                "remediation_status": getattr(r, "remediation_status", "not_started"),
+                "evidence_refs": r.evidence_refs or [],
+                "finding_refs": r.finding_refs or [],
+                "graph_node_id": r.graph_node_id,
+                # Addition 10 — graph node identifiers
+                "risk_node_id": getattr(r, "risk_node_id", None),
+                "vendor_node_id": getattr(r, "vendor_node_id", None),
+                "governance_node_id": getattr(r, "governance_node_id", None),
+            }
+            for r in ai_risk_records
+        ]
+        ai_risk_hash = _sha256_of(sorted([r["id"] for r in ai_risk_data]))
+
+        # ── 11. Report (latest finalized version) ─────────────────────────────
         report = db.execute(
             select(GovernanceReportRecord)
             .where(
@@ -419,7 +479,7 @@ class VerificationBundleService:
             report_artifact_hash = None
             report_artifact_hash_status = "not_available"
 
-        # ── 11. Tamper detection ──────────────────────────────────────────────
+        # ── 12. Tamper detection ──────────────────────────────────────────────
         tamper_issues: list[str] = []
 
         # Broken finding evidence refs
@@ -483,7 +543,7 @@ class VerificationBundleService:
             if current_hash != d.evidence_snapshot_hash:
                 tamper_issues.append(f"decision:{d.id} evidence_snapshot_hash mismatch")
 
-        # ── 12. Verification status ───────────────────────────────────────────
+        # ── 13. Verification status ───────────────────────────────────────────
         if tamper_issues:
             verification_status = "tamper_detected"
         elif not has_report:
@@ -491,7 +551,7 @@ class VerificationBundleService:
         else:
             verification_status = "verified"
 
-        # ── 13. Coverage status (H8) ──────────────────────────────────────────
+        # ── 14. Coverage status (H8) ──────────────────────────────────────────
         cov_status = _coverage_status(
             has_report=has_report,
             evidence_count=len(evidence_links),
@@ -500,7 +560,7 @@ class VerificationBundleService:
             tamper_issues=tamper_issues,
         )
 
-        # ── 14. Regulatory context (H9) ───────────────────────────────────────
+        # ── 15. Regulatory context (H9) ───────────────────────────────────────
         all_framework_mappings: list[str] = []
         for f in findings:
             for fm in f.framework_mappings or []:
@@ -521,7 +581,7 @@ class VerificationBundleService:
             "generated_for": engagement_obj.client_name if engagement_obj else None,
         }
 
-        # ── 15. Governance activity timeline (H10) ────────────────────────────
+        # ── 16. Governance activity timeline (H10) ────────────────────────────
         gov_activity: list[dict] = []
         for d in decisions:
             gov_activity.append(
@@ -578,7 +638,7 @@ class VerificationBundleService:
         gov_activity.sort(key=lambda x: str(x.get("at", "")))
         gov_activity = gov_activity[:_GOVERNANCE_ACTIVITY_LIMIT]
 
-        # ── 16. Assemble manifest ─────────────────────────────────────────────
+        # ── 17. Assemble manifest ─────────────────────────────────────────────
         component_summary = [
             {"name": "findings", "count": len(findings), "hash": findings_hash},
             {"name": "evidence", "count": len(evidence_links), "hash": evidence_hash},
@@ -604,6 +664,11 @@ class VerificationBundleService:
                 "name": "chain_of_custody",
                 "count": len(chain_of_custody),
                 "hash": chain_of_custody_hash,
+            },
+            {
+                "name": "ai_risk_register",
+                "count": len(ai_risk_records),
+                "hash": ai_risk_hash,
             },
             {
                 "name": "report",
@@ -634,6 +699,7 @@ class VerificationBundleService:
             "manifest_hash": manifest_hash,
             "chain_of_custody": chain_of_custody,
             "governance_activity": gov_activity,
+            "ai_risk_register": ai_risk_data,
         }
         bundle_hash = _sha256_of(bundle_doc_partial)
 
@@ -654,7 +720,7 @@ class VerificationBundleService:
             "signature_metadata": signature_metadata,
         }
 
-        # ── 17. Persist ───────────────────────────────────────────────────────
+        # ── 18. Persist ───────────────────────────────────────────────────────
         record = FaVerificationBundle(
             id=bundle_id,
             tenant_id=tenant_id,
