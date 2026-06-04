@@ -117,10 +117,13 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
   const storeResult = await getRateLimitStore();
 
   if (storeResult.unavailable) {
-    // Rate store unavailable — fail open (allow request, skip rate limiting).
-    // A missing Redis config should not block all legitimate traffic.
-    console.warn(`[core-proxy] rate-limit store unavailable (${storeResult.errorCode}), skipping — request_id=${requestId}`);
-    return null;
+    // Rate store unavailable in a prod-like environment — fail closed (503).
+    // In dev/test the memory fallback is used and unavailable is never true.
+    console.error(`[core-proxy] rate-limit store unavailable (${storeResult.errorCode}), returning 503 — request_id=${requestId}`);
+    return NextResponse.json(
+      { detail: 'Rate limit store unavailable', code: storeResult.errorCode, request_id: requestId },
+      { status: 503, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+    );
   }
 
   const key = buildRateLimitKey(request, routeGroup);
