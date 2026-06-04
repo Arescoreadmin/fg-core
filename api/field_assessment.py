@@ -96,6 +96,9 @@ from services.field_assessment.connectors.oauth_risk_bridge import (
 from services.field_assessment.connectors.ai_tool_discovery_bridge import (
     import_ai_tool_discovery_scan,
 )
+from services.field_assessment.connectors.ai_data_access_mapping_bridge import (
+    import_ai_data_access_mapping_scan,
+)
 from services.field_assessment.models import (
     AssessmentType,
     DocumentClassification,
@@ -129,6 +132,7 @@ from services.field_assessment.store import (
     create_scan_result,
     get_engagement,
     get_finding,
+    get_latest_scan_result_by_source_type,
     get_scan_result,
     list_audit_events,
     list_document_analyses,
@@ -914,6 +918,7 @@ _SCAN_SOURCE_LABELS: dict[str, str] = {
     "oauth_inventory": "OAuth Inventory Scan",
     "oauth_risk": "OAuth Risk Scan",
     "ai_tool_discovery": "AI Tool Discovery Scan",
+    "ai_data_access_mapping": "AI Data Access Mapping",
     "entra_governance": "Entra Governance Scan",
     "endpoint_inventory": "Endpoint Inventory Scan",
     "sharepoint_onedrive": "SharePoint & OneDrive Scan",
@@ -7463,6 +7468,7 @@ _ALL_SECTIONS: list[str] = [
     "confidence",
     "normalized_findings",
     "ai_tool_discovery",
+    "ai_data_access_mapping",
 ]
 
 
@@ -7798,6 +7804,83 @@ def _build_engagement_report_json(
             "tools": ai_tools,
             "summary": ai_summary,
             "scan_count": len(ai_scan_rows),
+        }
+
+    if "ai_data_access_mapping" in active_sections:
+        ada_scan_rows = [
+            sr for sr in scan_rows if sr.source_type == "ai_data_access_mapping"
+        ]
+        ada_mappings: list[dict[str, Any]] = []
+        ada_summary: dict[str, Any] = {
+            "tools_mapped": 0,
+            "sensitivity_distribution": {
+                "critical": 0,
+                "high": 0,
+                "moderate": 0,
+                "low": 0,
+                "unknown": 0,
+            },
+            "governance_readiness_distribution": {
+                "governed": 0,
+                "partially_governed": 0,
+                "ungoverned": 0,
+                "unknown": 0,
+            },
+            "scope_distribution": {
+                "tenant": 0,
+                "group": 0,
+                "department": 0,
+                "user": 0,
+                "unknown": 0,
+            },
+            "owner_distribution": {},
+            "data_categories_observed": [],
+        }
+        for sr in ada_scan_rows:
+            payload = sr.normalized_payload or {}
+            for m in payload.get("mappings") or []:
+                ada_mappings.append(
+                    {
+                        "tool_name": m.get("tool_name", "unknown"),
+                        "vendor": m.get("vendor", "unknown"),
+                        "data_categories": list(m.get("data_categories") or []),
+                        "sensitivity": m.get("sensitivity", "unknown"),
+                        "data_owner": m.get("data_owner", "Unknown"),
+                        "owner_type": m.get("owner_type", "Unknown"),
+                        "exposure_scope": m.get("exposure_scope", "unknown"),
+                        "review_status": m.get("review_status", "unreviewed"),
+                        "governance_readiness": m.get(
+                            "governance_readiness", "unknown"
+                        ),
+                        "admin_consent": bool(m.get("admin_consent")),
+                        "verified_publisher": bool(m.get("verified_publisher")),
+                        "confidence": m.get("confidence", "unknown"),
+                        "business_impact": m.get("business_impact", ""),
+                        "evidence_refs": list(m.get("evidence_refs") or []),
+                        "graph_node_id": m.get("graph_node_id", ""),
+                    }
+                )
+            sub = payload.get("summary") or {}
+            for key in (
+                "sensitivity_distribution",
+                "governance_readiness_distribution",
+                "scope_distribution",
+            ):
+                for k, v in (sub.get(key) or {}).items():
+                    ada_summary[key][k] = ada_summary[key].get(k, 0) + int(v or 0)
+            for k, v in (sub.get("owner_distribution") or {}).items():
+                ada_summary["owner_distribution"][k] = ada_summary[
+                    "owner_distribution"
+                ].get(k, 0) + int(v or 0)
+        ada_summary["tools_mapped"] = len(ada_mappings)
+        all_cats: set[str] = set()
+        for m in ada_mappings:
+            all_cats.update(m["data_categories"])
+        ada_summary["data_categories_observed"] = sorted(all_cats)
+        section_content["ai_data_access_mapping"] = {
+            "mappings": ada_mappings,
+            "summary": ada_summary,
+            "scan_count": len(ada_scan_rows),
         }
 
     section_hashes = _compute_section_hashes(section_content)
@@ -9384,6 +9467,202 @@ def get_artifact_route(
         retention_class=artifact.retention_class,
         storage_key=artifact.storage_key,
     )
+
+
+# ---------------------------------------------------------------------------
+# Routes — AI Data Access Mapping (PR 2)
+# ---------------------------------------------------------------------------
+
+
+class AiDataAccessMappingRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operator_name: str | None = None
+
+
+class AiDataAccessMappingRunResponse(BaseModel):
+    scan_result_id: str
+    tools_mapped: int
+    findings_imported: int
+    status: str
+    summary: dict
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run",
+    response_model=AiDataAccessMappingRunResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def run_ai_data_access_mapping(
+    engagement_id: str,
+    request: Request,
+    body: AiDataAccessMappingRunRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> AiDataAccessMappingRunResponse:
+    """Map AI tool permissions to data categories, sensitivity, owner, and governance readiness.
+
+    Reads the most recent AI Tool Discovery scan result for this engagement and runs the
+    deterministic mapping engine over it. No new Microsoft Graph calls are made — all
+    fields are derived from evidence already collected by the AI Tool Discovery scan.
+
+    H12: durable scan job created before work begins.
+    H13: scan.initiated and scan.completed audit events emitted directly in this route (H13.5 compliant).
+    H15: FaScanResult enters collected lifecycle state automatically on creation.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message),
+        )
+
+    # Source data: targeted query for the latest ai_tool_discovery scan result.
+    # Avoids false-negatives on large engagements where the source scan is beyond
+    # the first 100 generic scan result rows.
+    source_scan = get_latest_scan_result_by_source_type(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        source_type="ai_tool_discovery",
+    )
+    if source_scan is None:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "NO_AI_TOOL_DISCOVERY_SCAN",
+                "AI Tool Discovery scan must be completed before running AI Data Access Mapping.",
+            ),
+        )
+    tools: list[dict] = (source_scan.normalized_payload or {}).get("tools") or []
+
+    # H12 — durable job record
+    job = _c6_create_scan_job(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="ai_data_access_mapping",
+    )
+    # H13 — scan.initiated (direct call satisfies H13.5 AST coverage check)
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.initiated",
+        actor=actor,
+        scan_job_id=job.id,
+        scanner_type="ai_data_access_mapping",
+        payload_summary={
+            "source_scan_result_id": source_scan.id,
+            "tool_count": len(tools),
+        },
+    )
+    db.commit()
+
+    try:
+        from services.connectors.ai_data_access_mapping.mapper import map_engagement
+
+        mappings, raw_findings, summary = map_engagement(
+            tools,
+            source_scan_result_id=source_scan.id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+        )
+
+        # Use the source scan's collected_at so the payload hash is stable on reruns
+        # against the same AI Tool Discovery evidence (idempotency via evidence_hash dedup).
+        stable_ts = source_scan.collected_at or source_scan.created_at
+        scan_payload: dict = {
+            "scan_type": "ai_data_access_mapping_v1",
+            "schema_version": "1.0",
+            "tenant_id": tenant_id,
+            "engagement_id": engagement_id,
+            "source_scan_result_id": source_scan.id,
+            "scan_completed_at": stable_ts,
+            "mappings": mappings,
+            "findings": raw_findings,
+            "summary": summary,
+        }
+
+        result = import_ai_data_access_mapping_scan(
+            db=db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result=scan_payload,
+            actor=actor,
+        )
+        _auto_link_scan_evidence(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result_id=result.scan_result_id,
+            source_type="ai_data_access_mapping",
+        )
+        _c6_update_job_status(
+            db,
+            job_id=job.id,
+            status="complete",
+            scan_result_id=result.scan_result_id,
+        )
+        # H13 — scan.completed
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.completed",
+            actor=actor,
+            scan_job_id=job.id,
+            scanner_type="ai_data_access_mapping",
+            scan_result_id=result.scan_result_id,
+            payload_summary={
+                "tools_mapped": result.tools_mapped,
+                "findings_imported": result.findings_imported,
+            },
+        )
+        db.commit()
+
+        return AiDataAccessMappingRunResponse(
+            scan_result_id=result.scan_result_id,
+            tools_mapped=result.tools_mapped,
+            findings_imported=result.findings_imported,
+            status="complete",
+            summary=summary,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("ai_data_access_mapping: failed — %s", exc)
+        db.rollback()
+        try:
+            _c6_update_job_status(
+                db, job_id=job.id, status="failed", failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job.id,
+                scanner_type="ai_data_access_mapping",
+                rejection_reason=str(exc)[:500],
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=api_error(
+                "MAPPING_FAILED",
+                f"AI data access mapping failed: {str(exc)[:200]}",
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------

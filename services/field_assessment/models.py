@@ -43,6 +43,7 @@ class ScanSourceType(str, Enum):
     SHAREPOINT_ONEDRIVE = "sharepoint_onedrive"
     OAUTH_RISK = "oauth_risk"
     AI_TOOL_DISCOVERY = "ai_tool_discovery"
+    AI_DATA_ACCESS_MAPPING = "ai_data_access_mapping"
 
 
 class FindingSeverity(str, Enum):

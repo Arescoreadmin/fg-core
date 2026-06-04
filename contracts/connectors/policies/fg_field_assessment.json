@@ -9,7 +9,8 @@
     "sharepoint_onedrive",
     "dns_email",
     "web_headers",
-    "network_scan"
+    "network_scan",
+    "ai_data_access_mapping"
   ],
   "connector_scopes": {
     "microsoft_graph": [
@@ -52,7 +53,8 @@
       "Application.Read.All",
       "Directory.Read.All",
       "AuditLog.Read.All"
-    ]
+    ],
+    "ai_data_access_mapping": []
   },
   "allowed_collections": [
     "field-assessment"
@@ -87,6 +89,9 @@
     ],
     "ai_tool_discovery": [
       "tenant:*"
+    ],
+    "ai_data_access_mapping": [
+      "engagement:*"
     ]
   },
   "retention": {

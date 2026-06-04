@@ -332,6 +332,7 @@ function OverviewTab({
 
 function sourceLabel(sourceType: string) {
   if (sourceType === 'ai_tool_discovery') return 'AI Tool Discovery';
+  if (sourceType === 'ai_data_access_mapping') return 'AI Data Access Mapping';
   return sourceType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
@@ -383,6 +384,89 @@ function AiToolDetails({ detail }: { detail: ScanResultDetail }) {
   );
 }
 
+type AiDataMapping = {
+  tool_name?: string;
+  vendor?: string;
+  data_categories?: string[];
+  sensitivity?: string;
+  data_owner?: string;
+  owner_type?: string;
+  exposure_scope?: string;
+  review_status?: string;
+  governance_readiness?: string;
+  admin_consent?: boolean;
+  verified_publisher?: boolean;
+  business_impact?: string;
+  evidence_refs?: string[];
+  confidence?: string;
+};
+
+const SENSITIVITY_BADGE: Record<string, string> = {
+  critical: 'rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[11px] text-red-300',
+  high: 'rounded border border-orange-500/30 bg-orange-500/10 px-1.5 py-0.5 text-[11px] text-orange-300',
+  moderate: 'rounded border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-[11px] text-yellow-200',
+  low: 'rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300',
+  unknown: 'rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[11px] text-muted',
+};
+
+function AiDataAccessDetails({ detail }: { detail: ScanResultDetail }) {
+  const payload = detail.normalized_payload ?? {};
+  const mappings = Array.isArray(payload.mappings) ? (payload.mappings as AiDataMapping[]) : [];
+  const summary = payload.summary as Record<string, unknown> | undefined;
+  if (!mappings.length) return <p className="text-xs text-muted">No AI tool data access mappings in this scan.</p>;
+  const readinessDist = summary?.governance_readiness_distribution as Record<string, number> | undefined;
+  return (
+    <div className="space-y-3">
+      {readinessDist && (
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(readinessDist).filter(([, v]) => v > 0).map(([k, v]) => (
+            <span key={k} className="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[11px] text-muted">
+              {k.replace(/_/g, ' ')}: {v}
+            </span>
+          ))}
+        </div>
+      )}
+      {mappings.slice(0, 8).map((m, idx) => (
+        <div key={`${m.vendor}-${m.tool_name}-${idx}`} className="rounded border border-border bg-surface-2 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-foreground">{m.tool_name ?? 'Unknown AI tool'}</span>
+            <span className="text-xs text-muted">{m.vendor ?? 'Unknown vendor'}</span>
+            {m.sensitivity && (
+              <span className={SENSITIVITY_BADGE[m.sensitivity] ?? SENSITIVITY_BADGE.unknown}>
+                {m.sensitivity}
+              </span>
+            )}
+            {m.governance_readiness && (
+              <span className="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[11px] text-muted">
+                {m.governance_readiness.replace(/_/g, ' ')}
+              </span>
+            )}
+          </div>
+          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+            <div><dt className="text-muted">Data Owner</dt><dd className="text-foreground">{m.data_owner ?? 'Unknown'}</dd></div>
+            <div><dt className="text-muted">Exposure Scope</dt><dd className="text-foreground">{m.exposure_scope ?? 'unknown'}</dd></div>
+            <div><dt className="text-muted">Review Status</dt><dd className="text-foreground">{m.review_status ?? 'unreviewed'}</dd></div>
+            <div><dt className="text-muted">Admin Consent</dt><dd className="text-foreground">{m.admin_consent ? 'yes' : 'no'}</dd></div>
+            <div><dt className="text-muted">Verified Publisher</dt><dd className="text-foreground">{m.verified_publisher ? 'yes' : 'no'}</dd></div>
+            <div><dt className="text-muted">Confidence</dt><dd className="text-foreground">{m.confidence ?? 'unknown'}</dd></div>
+          </dl>
+          {m.data_categories?.length ? (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {m.data_categories.map((cat) => (
+                <span key={cat} className="rounded border border-border bg-surface px-1.5 py-0.5 text-[11px] text-muted">{cat}</span>
+              ))}
+            </div>
+          ) : null}
+          {m.business_impact ? (
+            <p className="mt-2 text-[11px] text-muted">{m.business_impact}</p>
+          ) : null}
+        </div>
+      ))}
+      {mappings.length > 8 && <p className="text-xs text-muted">Showing 8 of {mappings.length} mapped tools.</p>}
+    </div>
+  );
+}
+
 function ScansTab({ engagementId }: { engagementId: string }) {
   const [state, setState] = useState<Async<ScanResult[]>>(idle());
   const [aiDetails, setAiDetails] = useState<Record<string, ScanResultDetail>>({});
@@ -393,7 +477,11 @@ function ScansTab({ engagementId }: { engagementId: string }) {
       .listScans(engagementId)
       .then((data) => {
         setState({ data, loading: false, error: null });
-        const aiScans = data.filter((scan) => scan.source_type === 'ai_tool_discovery');
+        const aiScans = data.filter(
+          (scan) =>
+            scan.source_type === 'ai_tool_discovery' ||
+            scan.source_type === 'ai_data_access_mapping',
+        );
         Promise.all(aiScans.map((scan) => portalApi.getScan(engagementId, scan.id).catch(() => null)))
           .then((details) => {
             const next: Record<string, ScanResultDetail> = {};
@@ -439,6 +527,13 @@ function ScansTab({ engagementId }: { engagementId: string }) {
                 <tr key={`${scan.id}-ai-details`} className="bg-surface">
                   <td colSpan={5} className="px-3 py-3">
                     <AiToolDetails detail={aiDetails[scan.id]} />
+                  </td>
+                </tr>
+              )}
+              {scan.source_type === 'ai_data_access_mapping' && aiDetails[scan.id] && (
+                <tr key={`${scan.id}-ada-details`} className="bg-surface">
+                  <td colSpan={5} className="px-3 py-3">
+                    <AiDataAccessDetails detail={aiDetails[scan.id]} />
                   </td>
                 </tr>
               )}

@@ -4613,3 +4613,41 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `tests/tools/test_route_inventory_summary.py` — 3 new test cases
 - `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`, `contract_routes.json`, `plane_registry_snapshot.json` — regenerated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+
+---
+
+## PR 2 — AI Data Access Mapping connector route addition (2026-06-03)
+
+**Change:** Added new scan route `POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run` to field assessment API.
+
+**Route summary:**
+- `POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run` — triggers AI Data Access Mapping scan (synchronous; reads existing AI Tool Discovery FaScanResult, applies deterministic permission→resource→data-category mapping, stores findings, emits H13 audit events)
+
+**Security posture:** No change to auth model. Route is tenant-scoped via `require_bound_tenant(request)`. No new MS Graph scopes required — this connector is `provider: passive` and performs no external network calls. All data is derived in-DB from the existing AI Tool Discovery scan result.
+
+**Governance controls satisfied:** H12 (FaScanJob record), H13/H13.5 (direct `_c6_write_audit_event` calls for `scan.initiated`, `scan.completed`, `scan.failed`), H15 (FaScanResult auto-collected state), PR 52/52.5 (verification bundle compatible).
+
+**Artifacts regenerated:**
+- Route inventory regenerated via `make route-inventory-generate`
+- OpenAPI contracts regenerated via `make fg-contract`
+- Contract authority markers updated in `BLUEPRINT_STAGED.md` + `CONTRACT.md`
+
+**Files touched:**
+- `services/connectors/ai_data_access_mapping/` — new connector package (mapper.py + __init__.py)
+- `services/field_assessment/connectors/ai_data_access_mapping_bridge.py` — new bridge
+- `migrations/postgres/0089_ai_data_access_mapping.sql` — extends scanner_type CHECK constraint
+- `tests/test_ai_data_access_mapping.py` — 59 tests
+- `apps/console/components/field-assessment/AiDataAccessMappingPanel.tsx` — new UI panel
+- `contracts/connectors/connectors/ai_data_access_mapping.json` — passive connector contract
+- `contracts/connectors/policies/fg_field_assessment.json` — enabled_connectors updated
+- `api/field_assessment.py` — new route + models
+- `services/field_assessment/models.py`, `scan_registry.py` — enum + registry entries
+- `services/governance/report/serialization.py` — report section descriptor
+- `apps/console/lib/fieldAssessmentApi.ts` — new API method
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` — panel wired in
+- `apps/portal/app/engagement/[engagementId]/page.tsx` — scans tab + detail view
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` — contract authority refreshed
+- `ROADMAP.md` — PR 2 row added
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`, `contract_routes.json`, `plane_registry_snapshot.json` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry

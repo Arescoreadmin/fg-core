@@ -470,6 +470,14 @@ _CONNECTOR_DATA_COLLECTED: dict[str, tuple[str, str]] = {
         "signature matches, and publisher verification status. Prompt, document, "
         "email, and browsing content are never collected.",
     ),
+    "ai_data_access_mapping": (
+        "AI Data Access Mapping (derived from AI Tool Discovery)",
+        "Deterministic mapping of AI tool permissions to Microsoft 365 resources, "
+        "business data categories, sensitivity levels, exposure scope, data ownership "
+        "inference, and governance readiness. No additional data is collected from "
+        "Microsoft Graph — all fields are derived from the AI Tool Discovery scan "
+        "result already captured. No content, documents, email, or prompts are accessed.",
+    ),
     "endpoint_inventory": (
         "Endpoint Inventory (MS Graph / Intune)",
         "Azure AD device list, Intune enrollment and compliance status, "

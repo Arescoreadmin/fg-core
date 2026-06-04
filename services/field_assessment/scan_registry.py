@@ -42,6 +42,7 @@ SUPPORTED_SCHEMA_VERSIONS: dict[str, set[str]] = {
     ScanSourceType.SHAREPOINT_ONEDRIVE.value: {"1.0"},
     ScanSourceType.OAUTH_RISK.value: {"1.0"},
     ScanSourceType.AI_TOOL_DISCOVERY.value: {"1.0"},
+    ScanSourceType.AI_DATA_ACCESS_MAPPING.value: {"1.0"},
 }
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,7 @@ REQUIRED_FIELDS: dict[str, dict[str, type]] = {
     ScanSourceType.SHAREPOINT_ONEDRIVE.value: {"sites": list},
     ScanSourceType.OAUTH_RISK.value: {"grants": list},
     ScanSourceType.AI_TOOL_DISCOVERY.value: {"tools": list},
+    ScanSourceType.AI_DATA_ACCESS_MAPPING.value: {"mappings": list},
 }
 
 # ---------------------------------------------------------------------------
