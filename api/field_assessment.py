@@ -42,7 +42,7 @@ from pydantic import (
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes
+from api.auth_scopes import authz_scope, require_scopes
 from api.auth_dispatch import require_permission
 from api.actor_context import ActorContext
 from api.deps import auth_ctx_db_session
@@ -5800,7 +5800,7 @@ class RiskAcceptanceCreateBody(BaseModel):
 @router.post(
     "/engagements/{engagement_id}/risk-acceptances",
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def create_risk_acceptance_route(
     engagement_id: str,
@@ -5838,6 +5838,7 @@ def create_risk_acceptance_route(
         engagement_id=engagement_id,
         finding_id=body.finding_id,
         actor_id=actor_ctx.subject,
+        actor_subject=actor_ctx.subject,
         actor_name=actor_ctx.name or None,
         actor_email=actor_ctx.email or None,
         actor_role=actor_ctx.primary_role(),
@@ -5931,7 +5932,7 @@ class GovernanceExceptionCreateBody(BaseModel):
 @router.post(
     "/engagements/{engagement_id}/exceptions",
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def create_governance_exception_route(
     engagement_id: str,
@@ -5956,6 +5957,7 @@ def create_governance_exception_route(
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         actor_id=actor_ctx.subject,
+        actor_subject=actor_ctx.subject,
         actor_name=actor_ctx.name or None,
         actor_email=actor_ctx.email or None,
         actor_role=actor_ctx.primary_role(),
@@ -6971,7 +6973,7 @@ class ReportQaApproveBody(BaseModel):
     "/engagements/{engagement_id}/reports/{report_id}/qa-approve",
     response_model=ReportQaApproveResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:qa_approve"))],
+    dependencies=[Depends(authz_scope("governance:qa_approve"))],
 )
 def qa_approve_report_route(
     engagement_id: str,
@@ -7066,6 +7068,7 @@ def qa_approve_report_route(
         entity_type="report",
         entity_id=report_id,
         actor_id=actor_ctx.subject,
+        actor_subject=actor_ctx.subject,
         actor_name=actor_ctx.name or display_name or None,
         actor_email=actor_ctx.email or None,
         actor_role=actor_ctx.primary_role(),
@@ -9855,7 +9858,7 @@ def _bundle_to_response(b: FaVerificationBundle) -> VerificationBundleResponse:
     "/engagements/{engagement_id}/verification-bundle/generate",
     response_model=VerificationBundleResponse,
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def generate_verification_bundle_route(
     engagement_id: str,
