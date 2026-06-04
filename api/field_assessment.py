@@ -1147,6 +1147,7 @@ def create_engagement_route(
 ) -> EngagementResponse:
     tenant_id = _resolve_caller_tenant(request)
     actor = _actor_from_request(request)
+    actor = _actor_from_request(request)
     eng = create_engagement(
         db,
         tenant_id=tenant_id,
@@ -5811,7 +5812,6 @@ def create_risk_acceptance_route(
 ) -> dict:
     """Record a formal risk acceptance with owner, justification, and mandatory expiry."""
     tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -5943,7 +5943,6 @@ def create_governance_exception_route(
 ) -> dict:
     """Record a governance exception with owner, justification, and mandatory expiry."""
     tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -6965,7 +6964,9 @@ class ReportQaApproveResponse(BaseModel):
 
 
 class ReportQaApproveBody(BaseModel):
-    reviewer_name: str | None = None  # optional display override; actor identity comes from JWT
+    reviewer_name: str | None = (
+        None  # optional display override; actor identity comes from JWT
+    )
     decision_notes: str | None = None
 
 

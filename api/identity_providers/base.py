@@ -16,5 +16,4 @@ class IdentityProvider(Protocol):
     it as an authentication failure.
     """
 
-    def extract_actor(self, token: str) -> ActorContext:
-        ...
+    def extract_actor(self, token: str) -> ActorContext: ...

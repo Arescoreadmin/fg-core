@@ -63,7 +63,9 @@ def _audience() -> str:
 
 
 def _namespace() -> str:
-    return (os.getenv("FG_AUTH0_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    return (
+        (os.getenv("FG_AUTH0_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    )
 
 
 # ---------------------------------------------------------------------------

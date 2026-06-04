@@ -44,9 +44,7 @@ class FaGovernanceEvent(Base):
 
     # Event identity — versioned for schema evolution
     event_type: Mapped[str] = mapped_column(String(128), nullable=False)
-    event_version: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="v1"
-    )
+    event_version: Mapped[str] = mapped_column(String(16), nullable=False, default="v1")
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="v1"
     )
@@ -95,9 +93,7 @@ class FaGovernanceEvent(Base):
     # Delegation — schema present; UI not yet built
     delegated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     delegation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    delegation_expires_at: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    delegation_expires_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # H13 correlation
     transaction_id: Mapped[str | None] = mapped_column(

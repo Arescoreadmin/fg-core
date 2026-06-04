@@ -207,7 +207,9 @@ class ActorContext:
     name: str  # display name; empty string if unavailable
     permissions: frozenset  # resolved from roles at auth time
     roles: list[str]  # raw role names — stored in governance events
-    auth_source: str  # "oidc_auth0" | "oidc_entra" | "api_key" | "system" | "dev_bypass"
+    auth_source: (
+        str  # "oidc_auth0" | "oidc_entra" | "api_key" | "system" | "dev_bypass"
+    )
     tenant_id: Optional[str]  # from JWT claim or API key binding
 
     def has_permission(self, perm: str) -> bool:
