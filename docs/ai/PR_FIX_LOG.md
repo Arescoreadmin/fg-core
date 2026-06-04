@@ -13333,3 +13333,88 @@ preventing a future developer from adding a new mutation route without an audit 
 - `TestExceptionsRegistry` (5): valid load, expired flag, missing field → exit 2, invalid date → exit 2, missing file → exit 2, malformed YAML → exit 2
 - `TestGateBehaviour` (8): audited passes, unaudited fails, valid exception passes, expired fails, invalid config → 2, svc.emit counts, mixed counts correct, GET-only ignored
 - `TestRealCodebaseGate` (3): real repo gate passes, report written, coverage_pct == 100.0
+
+---
+
+### 2026-06-03 — PR 2 / fix: AI Data Access & Flow Mapping (11th scan type)
+
+**Branch:** `pr/2-ai-data-access-flow-mapping`
+
+**PR/context:** PR 2 — AI Data Access & Flow Mapping — passive connector enriching AI Tool Discovery scan data
+
+**Area:** Field Assessment / Connector Layer / Console UI / Portal UI / Evidence Pipeline
+
+**Summary of changes:**
+
+PR 2 adds `ai_data_access_mapping` as the 11th scan type. It is a `provider: passive` connector that reads the latest AI Tool Discovery `FaScanResult` for an engagement and applies a deterministic mapping engine to produce:
+- Permission → MS Resource → Business Data Category mapping (80+ Graph permissions)
+- Sensitivity classification (critical/high/moderate/low/unknown)
+- Exposure scope (tenant/user/unknown)
+- Data ownership inference (IT/Operations/Unknown)
+- Governance readiness state (governed/partially_governed/ungoverned/unknown)
+- 5 finding types with NIST AI RMF controls (MAP 1.1, GOVERN 1.2, GOVERN 6.2, MANAGE 2.4)
+- Graph-ready node IDs on every mapping
+
+This PR addendum (fix) resolves 6 CI/review issues:
+1. PR_FIX_LOG not updated (this entry)
+2. `apps/console/package-lock.json` out of sync — regenerated via `npm install`
+3. `fg-fast` failure — caused by missing PR_FIX_LOG entry (resolved by this entry)
+4. Passive rerun not idempotent — `scan_completed_at` now uses `source_scan.collected_at` instead of `_utc_now()`
+5. `framework_mappings` key was `control` — changed to `control_id` + `control_ref` for report compatibility
+6. Source AI Tool Discovery lookup limited to 100 rows — replaced with targeted `get_latest_scan_result_by_source_type` query
+
+**High-risk files changed:**
+
+- `api/field_assessment.py` — new route `POST /engagements/{id}/connector-runs/ai-data-access-mapping/run`; added `get_latest_scan_result_by_source_type` import; removed `_utc_now()` from deterministic payload; uses `source_scan.collected_at` for stable hash
+- `migrations/postgres/0089_ai_data_access_mapping.sql` — extends `scanner_type` CHECK constraint for new scan type
+- `services/connectors/ai_data_access_mapping/__init__.py` — new package marker
+- `services/connectors/ai_data_access_mapping/mapper.py` — core mapping engine (80+ permission mappings, 5 finding generators, deterministic classification functions)
+- `services/field_assessment/connectors/ai_data_access_mapping_bridge.py` — bridge (H12/H13/H15 wiring); `framework_mappings` now emits `control_id` + `control_ref`
+- `services/field_assessment/models.py` — `AI_DATA_ACCESS_MAPPING` enum value added
+- `services/field_assessment/scan_registry.py` — schema version + required fields entries
+- `services/field_assessment/store.py` — new `get_latest_scan_result_by_source_type` helper
+- `services/governance/report/serialization.py` — report section descriptor added
+- `tools/ci/contract_routes.json` — regenerated after new route added
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/route_inventory.json` — regenerated (new route registered)
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+
+**Security posture:**
+
+No change to authentication or authorization model. Route is tenant-scoped via `require_bound_tenant`. No new MS Graph scopes — `provider: passive` makes zero external network calls. All data is derived from evidence already collected by AI Tool Discovery.
+
+**Audit posture:**
+
+Route directly calls `_c6_write_audit_event` for `scan.initiated`, `scan.completed`, and `scan.failed` events — satisfies H13.5 AST coverage enforcement without requiring an `audit_exceptions.yaml` entry. No audit bypass of any kind. Confirmed: `python tools/ci/check_audit_coverage.py` passes at 100% coverage.
+
+**Evidence posture:**
+
+- H12: `FaScanJob` record created before scan executes
+- H13/H13.5: `_c6_write_audit_event` direct call in route body (AST-detectable)
+- H15: `FaScanResult` auto-enters `collected` lifecycle state
+- PR 52/52.5: verification bundle captures all `FaScanResult` rows automatically
+
+**Idempotency:** Reruns against the same AI Tool Discovery source produce an identical `evidence_hash` (via `source_scan.collected_at` as stable timestamp). `create_scan_result` deduplicates on `(engagement_id, tenant_id, evidence_hash)` unique constraint. `create_finding` deduplicates on `findings_hash`. Result: second run returns same IDs, creates no new rows.
+
+**Tests/gates run:**
+
+- `pytest tests/test_ai_data_access_mapping.py` — 69/69 passed (59 original + 10 new)
+- `make fg-fast` — PASS (all gates green, exit 0)
+- `bash codex_gates.sh` — ruff lint: PASS, ruff format: PASS, mypy: PASS
+- `python tools/ci/check_audit_coverage.py` — PASS (100% coverage, 0 violations)
+- `make route-inventory-audit` — PASS (route registered)
+- `cd apps/console && npm ci` — PASS (after lockfile regeneration)
+
+**Known limitations:**
+
+- `review_status` is always `"unreviewed"` at creation time; a future workflow endpoint will allow operators to mark mappings as reviewed/accepted
+- `owner_type` classification covers IT/Operations/Unknown; Security/Legal/Finance/HR/Compliance/Product ownership categories exist in the contract but require future enrichment via organizational metadata
+- `exposure_scope` distinguishes tenant vs. user but does not yet resolve group or department scope (requires MS Graph group membership data not collected by PR 1)
+- Framework mappings include `control_id` and `control_ref` (both set to the NIST control string) but do not include `confidence` — report serialization `_deser_fw` expects `confidence` for full GovernanceFinding deserialization; the field assessment framework_summary path uses `fm.get("control_id")` which does not require `confidence`
+
+**Follow-up work:**
+
+- PR 3 (planned): review_status workflow — operator can mark mappings reviewed/accepted
+- PR 4 (planned): group/department scope resolution via MS Graph group membership
+- Future: add `confidence` float to `framework_mappings` entries for full GovernanceFinding compatibility

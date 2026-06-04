@@ -118,7 +118,12 @@ def import_ai_data_access_mapping_scan(
             source_attribution=f"ai_data_access_mapping:{scan_record.id}",
             confidence_score=confidence,
             framework_mappings=[
-                {"framework": m["framework"], "control": m["control"]} for m in nist
+                {
+                    "framework": m["framework"],
+                    "control_id": m["control"],
+                    "control_ref": m["control"],
+                }
+                for m in nist
             ],
             nist_ai_rmf_mappings=nist,
             evidence_ref_ids=[scan_record.id],

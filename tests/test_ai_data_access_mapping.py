@@ -502,18 +502,24 @@ def _db():
     engine.dispose()
 
 
+_STABLE_TS = "2026-06-03T00:00:00Z"
+
+
 def _make_scan_payload(
     mappings: list[dict],
     *,
     tenant_id: str = "t1",
     engagement_id: str = "e1",
     source_scan_result_id: str = "src-001",
+    scan_completed_at: str | None = None,
 ) -> dict:
-    from services.canonical import utc_iso8601_z_now
     from services.connectors.ai_data_access_mapping.mapper import (
-        _generate_findings,
         _build_summary,
+        _generate_findings,
     )
+
+    if scan_completed_at is None:
+        scan_completed_at = _STABLE_TS
 
     findings = _generate_findings(mappings)
     summary = _build_summary(
@@ -527,7 +533,7 @@ def _make_scan_payload(
         "tenant_id": tenant_id,
         "engagement_id": engagement_id,
         "source_scan_result_id": source_scan_result_id,
-        "scan_completed_at": utc_iso8601_z_now(),
+        "scan_completed_at": scan_completed_at,
         "mappings": mappings,
         "findings": findings,
         "summary": summary,
@@ -685,3 +691,431 @@ def test_business_impact_for_low_tool() -> None:
     tool = _tool(delegated=["User.Read"])
     m, _, _ = _run_mapping([tool])
     assert "low" in m[0]["business_impact"].lower()
+
+
+# ---------------------------------------------------------------------------
+# T15: Passive rerun idempotency
+# ---------------------------------------------------------------------------
+
+
+def test_rerun_does_not_create_duplicate_scan_result(_db: Any) -> None:
+    """Second rerun against the same source evidence must not insert a new scan row."""
+    from sqlalchemy import select
+    from api.db_models_field_assessment import FaScanResult
+
+    tool = _tool(delegated=["Files.Read.All"])
+    mappings, _, _ = _run_mapping([tool], tenant_id="idem-t", engagement_id="idem-e")
+    payload = _make_scan_payload(
+        mappings,
+        tenant_id="idem-t",
+        engagement_id="idem-e",
+        scan_completed_at=_STABLE_TS,
+    )
+
+    result1 = import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="idem-t",
+        engagement_id="idem-e",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+
+    result2 = import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="idem-t",
+        engagement_id="idem-e",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+
+    assert result1.scan_result_id == result2.scan_result_id
+
+    rows = list(
+        _db.execute(
+            select(FaScanResult).where(
+                FaScanResult.engagement_id == "idem-e",
+                FaScanResult.tenant_id == "idem-t",
+                FaScanResult.source_type == "ai_data_access_mapping",
+            )
+        ).scalars()
+    )
+    assert len(rows) == 1
+
+
+def test_rerun_does_not_duplicate_findings(_db: Any) -> None:
+    """Findings are idempotent via findings_hash — reruns must not increase count."""
+    from sqlalchemy import select
+    from api.db_models_field_assessment import FaNormalizedFinding
+
+    tool = _tool(delegated=["Files.ReadWrite.All"])
+    mappings, _, _ = _run_mapping([tool], tenant_id="idem-t2", engagement_id="idem-e2")
+    payload = _make_scan_payload(
+        mappings,
+        tenant_id="idem-t2",
+        engagement_id="idem-e2",
+        scan_completed_at=_STABLE_TS,
+    )
+
+    r1 = import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="idem-t2",
+        engagement_id="idem-e2",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+    first_count = r1.findings_imported
+
+    import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="idem-t2",
+        engagement_id="idem-e2",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+
+    findings = list(
+        _db.execute(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.engagement_id == "idem-e2",
+                FaNormalizedFinding.tenant_id == "idem-t2",
+            )
+        ).scalars()
+    )
+    assert len(findings) == first_count
+
+
+def test_stable_payload_hash_on_rerun(_db: Any) -> None:
+    """Same payload must produce the same evidence_hash on every run."""
+    from sqlalchemy import select
+    from api.db_models_field_assessment import FaScanResult
+
+    tool = _tool(delegated=["Files.Read.All"])
+    mappings, _, _ = _run_mapping([tool], tenant_id="hash-t", engagement_id="hash-e")
+    payload = _make_scan_payload(
+        mappings,
+        tenant_id="hash-t",
+        engagement_id="hash-e",
+        scan_completed_at=_STABLE_TS,
+    )
+
+    import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="hash-t",
+        engagement_id="hash-e",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+
+    import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="hash-t",
+        engagement_id="hash-e",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+
+    rows = list(
+        _db.execute(
+            select(FaScanResult).where(
+                FaScanResult.engagement_id == "hash-e",
+                FaScanResult.source_type == "ai_data_access_mapping",
+            )
+        ).scalars()
+    )
+    assert len(rows) == 1
+
+
+def test_stable_source_refs_on_rerun(_db: Any) -> None:
+    """source_ref is deterministic across reruns when scan_result_id is stable."""
+    from sqlalchemy import select
+    from api.db_models_field_assessment import FaNormalizedFinding
+
+    tool = _tool(delegated=["Files.ReadWrite.All"])
+    mappings, _, _ = _run_mapping([tool], tenant_id="ref-t", engagement_id="ref-e")
+    payload = _make_scan_payload(
+        mappings, tenant_id="ref-t", engagement_id="ref-e", scan_completed_at=_STABLE_TS
+    )
+
+    r1 = import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="ref-t",
+        engagement_id="ref-e",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+    sid = r1.scan_result_id
+
+    r2 = import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="ref-t",
+        engagement_id="ref-e",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+
+    assert r1.scan_result_id == r2.scan_result_id
+
+    findings = list(
+        _db.execute(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.engagement_id == "ref-e"
+            )
+        ).scalars()
+    )
+    for f in findings:
+        assert f"ai_data_access_mapping:{sid}" in f.source_attribution
+
+
+# ---------------------------------------------------------------------------
+# T16: Framework mapping keys (control_id / control_ref)
+# ---------------------------------------------------------------------------
+
+
+def test_framework_mappings_contain_control_id(_db: Any) -> None:
+    """framework_mappings stored in DB must include control_id for report generation."""
+    from sqlalchemy import select
+    from api.db_models_field_assessment import FaNormalizedFinding
+
+    tool = _tool(delegated=["Files.ReadWrite.All"])
+    mappings, _, _ = _run_mapping([tool], tenant_id="fw-t", engagement_id="fw-e")
+    payload = _make_scan_payload(
+        mappings, tenant_id="fw-t", engagement_id="fw-e", scan_completed_at=_STABLE_TS
+    )
+    import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="fw-t",
+        engagement_id="fw-e",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+
+    findings = list(
+        _db.execute(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.engagement_id == "fw-e",
+                FaNormalizedFinding.tenant_id == "fw-t",
+            )
+        ).scalars()
+    )
+    assert findings, "expected at least one finding for Files.ReadWrite.All"
+    for finding in findings:
+        for fm in finding.framework_mappings or []:
+            assert "control_id" in fm, f"Missing control_id in {fm}"
+            assert "control_ref" in fm, f"Missing control_ref in {fm}"
+
+
+def test_framework_mappings_contain_nist_controls(_db: Any) -> None:
+    """NIST AI RMF controls MAP 1.1 / GOVERN 1.2 / GOVERN 6.2 / MANAGE 2.4 must appear."""
+    from sqlalchemy import select
+    from api.db_models_field_assessment import FaNormalizedFinding
+
+    tool = _tool(delegated=["Files.ReadWrite.All"])
+    mappings, _, _ = _run_mapping([tool], tenant_id="nist-t", engagement_id="nist-e")
+    payload = _make_scan_payload(
+        mappings,
+        tenant_id="nist-t",
+        engagement_id="nist-e",
+        scan_completed_at=_STABLE_TS,
+    )
+    import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="nist-t",
+        engagement_id="nist-e",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+
+    findings = list(
+        _db.execute(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.engagement_id == "nist-e",
+            )
+        ).scalars()
+    )
+    all_control_ids = {
+        fm["control_id"]
+        for f in findings
+        for fm in (f.framework_mappings or [])
+        if "control_id" in fm
+    }
+    assert all_control_ids, "No control_ids found in any finding"
+    expected = {"GOVERN 1.2", "GOVERN 6.2", "MANAGE 2.4"}
+    assert expected & all_control_ids, (
+        f"Expected at least one of {expected}, got {all_control_ids}"
+    )
+
+
+def test_framework_summary_includes_nist_controls(_db: Any) -> None:
+    """framework_mappings with control_id are picked up by the fa report framework_summary logic."""
+    tool = _tool(delegated=["Files.ReadWrite.All"])
+    mappings, _, _ = _run_mapping([tool], tenant_id="fs-t", engagement_id="fs-e")
+    payload = _make_scan_payload(
+        mappings, tenant_id="fs-t", engagement_id="fs-e", scan_completed_at=_STABLE_TS
+    )
+    import_ai_data_access_mapping_scan(
+        db=_db,
+        tenant_id="fs-t",
+        engagement_id="fs-e",
+        scan_result=payload,
+        actor="test",
+    )
+    _db.commit()
+
+    from sqlalchemy import select
+    from api.db_models_field_assessment import FaNormalizedFinding
+
+    findings = list(
+        _db.execute(
+            select(FaNormalizedFinding).where(
+                FaNormalizedFinding.engagement_id == "fs-e"
+            )
+        ).scalars()
+    )
+
+    fw_summary: dict[str, set[str]] = {}
+    for f in findings:
+        for fm in f.framework_mappings or []:
+            if isinstance(fm, dict):
+                fw = fm.get("framework", "")
+                ctrl = fm.get("control_id") or fm.get("control_ref") or ""
+                if fw and ctrl:
+                    fw_summary.setdefault(fw, set()).add(ctrl)
+
+    nist_controls = fw_summary.get("NIST-AI-RMF", set())
+    assert nist_controls, "NIST-AI-RMF controls missing from framework_summary"
+    assert "GOVERN 1.2" in nist_controls or "MANAGE 2.4" in nist_controls
+
+
+# ---------------------------------------------------------------------------
+# T17: Source scan lookup beyond first 100 generic rows
+# ---------------------------------------------------------------------------
+
+
+def test_source_scan_lookup_beyond_100_rows(_db: Any) -> None:
+    """get_latest_scan_result_by_source_type must find ai_tool_discovery even when
+    101 newer rows of other scan types exist ahead of it."""
+    from services.field_assessment.store import (
+        create_scan_result,
+        get_latest_scan_result_by_source_type,
+    )
+
+    tenant_id = "big-t"
+    engagement_id = "big-e"
+
+    # Create one ai_tool_discovery scan result first (older)
+    at_payload: dict = {
+        "scan_type": "ai_tool_discovery",
+        "tools": [{"tool_name": "OldTool", "application_id": "app-old"}],
+    }
+    at_scan = create_scan_result(
+        _db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        source_type="ai_tool_discovery",
+        schema_version="1.0",
+        collected_at="2026-01-01T00:00:00Z",
+        raw_payload=at_payload,
+        normalized_payload={"tools": at_payload["tools"]},
+        object_count=1,
+    )
+
+    # Create 101 newer rows of unrelated source types
+    for i in range(101):
+        create_scan_result(
+            _db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            source_type=f"other_scan_{i}",
+            schema_version="1.0",
+            collected_at=f"2026-06-0{min(i + 1, 9)}T{i:02d}:00:00Z"
+            if i < 9
+            else "2026-06-09T00:00:00Z",
+            raw_payload={"idx": i, "scan_type": f"other_{i}"},
+            normalized_payload=None,
+            object_count=0,
+        )
+    _db.commit()
+
+    found = get_latest_scan_result_by_source_type(
+        _db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        source_type="ai_tool_discovery",
+    )
+    assert found is not None, (
+        "Should find ai_tool_discovery scan despite 101 newer rows"
+    )
+    assert found.id == at_scan.id
+    assert found.source_type == "ai_tool_discovery"
+
+
+def test_source_scan_lookup_cross_tenant_isolation(_db: Any) -> None:
+    """get_latest_scan_result_by_source_type must not return a scan from another tenant."""
+    from services.field_assessment.store import (
+        create_scan_result,
+        get_latest_scan_result_by_source_type,
+    )
+
+    # Create ai_tool_discovery for tenant B
+    create_scan_result(
+        _db,
+        tenant_id="iso-tenant-B",
+        engagement_id="iso-eng",
+        source_type="ai_tool_discovery",
+        schema_version="1.0",
+        collected_at="2026-06-01T00:00:00Z",
+        raw_payload={"scan_type": "ai_tool_discovery", "tools": []},
+        normalized_payload={"tools": []},
+        object_count=0,
+    )
+    _db.commit()
+
+    # Lookup for tenant A should return None
+    found = get_latest_scan_result_by_source_type(
+        _db,
+        tenant_id="iso-tenant-A",
+        engagement_id="iso-eng",
+        source_type="ai_tool_discovery",
+    )
+    assert found is None, "Cross-tenant source scan must not be returned"
+
+
+def test_source_scan_lookup_cross_engagement_isolation(_db: Any) -> None:
+    """get_latest_scan_result_by_source_type must not return a scan from another engagement."""
+    from services.field_assessment.store import (
+        create_scan_result,
+        get_latest_scan_result_by_source_type,
+    )
+
+    # Create ai_tool_discovery for engagement X
+    create_scan_result(
+        _db,
+        tenant_id="iso-tenant",
+        engagement_id="iso-eng-X",
+        source_type="ai_tool_discovery",
+        schema_version="1.0",
+        collected_at="2026-06-01T00:00:00Z",
+        raw_payload={"scan_type": "ai_tool_discovery", "tools": [], "eng": "X"},
+        normalized_payload={"tools": []},
+        object_count=0,
+    )
+    _db.commit()
+
+    # Lookup for engagement Y should return None
+    found = get_latest_scan_result_by_source_type(
+        _db,
+        tenant_id="iso-tenant",
+        engagement_id="iso-eng-Y",
+        source_type="ai_tool_discovery",
+    )
+    assert found is None, "Cross-engagement source scan must not be returned"

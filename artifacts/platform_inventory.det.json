@@ -39,9 +39,9 @@
     }
   ],
   "governance": {
-    "contract_count": 445,
+    "contract_count": 446,
     "contract_only": [],
-    "runtime_count": 550,
+    "runtime_count": 551,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -149,7 +149,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "19cea6f1d5936fea746f2d4b7df261bff3a5e8d0ca8670ec5d7ebd8156609045",
+  "governance_fingerprint": "aee24d3f55de740a885dc47a935ce8affa82e43d6720097b19d08224c519934d",
   "planes": [
     {
       "compat": {
@@ -666,6 +666,7 @@
       "POST /field-assessment/engagements",
       "POST /field-assessment/engagements/{engagement_id}/artifacts",
       "POST /field-assessment/engagements/{engagement_id}/baseline",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/dns-email/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",

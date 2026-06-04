@@ -132,6 +132,7 @@ from services.field_assessment.store import (
     create_scan_result,
     get_engagement,
     get_finding,
+    get_latest_scan_result_by_source_type,
     get_scan_result,
     list_audit_events,
     list_document_analyses,
@@ -9520,12 +9521,16 @@ def run_ai_data_access_mapping(
             detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message),
         )
 
-    # Source data: latest ai_tool_discovery scan result for this engagement.
-    all_scans = list_scan_results(
-        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
+    # Source data: targeted query for the latest ai_tool_discovery scan result.
+    # Avoids false-negatives on large engagements where the source scan is beyond
+    # the first 100 generic scan result rows.
+    source_scan = get_latest_scan_result_by_source_type(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        source_type="ai_tool_discovery",
     )
-    ai_scan_rows = [sr for sr in all_scans if sr.source_type == "ai_tool_discovery"]
-    if not ai_scan_rows:
+    if source_scan is None:
         raise HTTPException(
             status_code=422,
             detail=api_error(
@@ -9533,8 +9538,6 @@ def run_ai_data_access_mapping(
                 "AI Tool Discovery scan must be completed before running AI Data Access Mapping.",
             ),
         )
-
-    source_scan = ai_scan_rows[0]  # list_scan_results orders newest-first
     tools: list[dict] = (source_scan.normalized_payload or {}).get("tools") or []
 
     # H12 — durable job record
@@ -9563,7 +9566,6 @@ def run_ai_data_access_mapping(
 
     try:
         from services.connectors.ai_data_access_mapping.mapper import map_engagement
-        from services.canonical import utc_iso8601_z_now as _utc_now
 
         mappings, raw_findings, summary = map_engagement(
             tools,
@@ -9572,13 +9574,16 @@ def run_ai_data_access_mapping(
             engagement_id=engagement_id,
         )
 
+        # Use the source scan's collected_at so the payload hash is stable on reruns
+        # against the same AI Tool Discovery evidence (idempotency via evidence_hash dedup).
+        stable_ts = source_scan.collected_at or source_scan.created_at
         scan_payload: dict = {
             "scan_type": "ai_data_access_mapping_v1",
             "schema_version": "1.0",
             "tenant_id": tenant_id,
             "engagement_id": engagement_id,
             "source_scan_result_id": source_scan.id,
-            "scan_completed_at": _utc_now(),
+            "scan_completed_at": stable_ts,
             "mappings": mappings,
             "findings": raw_findings,
             "summary": summary,

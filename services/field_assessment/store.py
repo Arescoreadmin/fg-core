@@ -224,6 +224,31 @@ def get_scan_result(
     return row
 
 
+def get_latest_scan_result_by_source_type(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    source_type: str,
+) -> FaScanResult | None:
+    """Return the newest scan result for a specific source_type within the engagement.
+
+    Uses a targeted index query — does not page through generic scan results — so it
+    works correctly even when other scan types outnumber the limit of list_scan_results.
+    """
+    stmt = (
+        select(FaScanResult)
+        .where(
+            FaScanResult.engagement_id == engagement_id,
+            FaScanResult.tenant_id == tenant_id,
+            FaScanResult.source_type == source_type,
+        )
+        .order_by(FaScanResult.created_at.desc(), FaScanResult.id.desc())
+        .limit(1)
+    )
+    return db.execute(stmt).scalar_one_or_none()
+
+
 def list_scan_results(
     db: Session,
     *,
