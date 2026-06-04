@@ -100,14 +100,16 @@ CREATE OR REPLACE FUNCTION fa_governance_events_immutable()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
-        RAISE EXCEPTION
-            'fa_governance_events rows are immutable (H14 governance event ledger). '
-            'Event id=%% cannot be updated.', OLD.id;
+        RAISE EXCEPTION USING MESSAGE =
+            'fa_governance_events is append-only: UPDATE forbidden (H14 governance event ledger, id='
+            || OLD.id
+            || ')';
     END IF;
     IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION
-            'fa_governance_events rows cannot be deleted (H14 governance event ledger). '
-            'Event id=%% is permanent.', OLD.id;
+        RAISE EXCEPTION USING MESSAGE =
+            'fa_governance_events is append-only: DELETE forbidden (H14 governance event ledger, id='
+            || OLD.id
+            || ')';
     END IF;
     RETURN NULL;
 END;
