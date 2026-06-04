@@ -934,7 +934,7 @@ function AiGovernancePortalTab({ engagementId }: { engagementId: string }) {
 
   useEffect(() => {
     setRecords((s) => ({ ...s, loading: true }));
-    fetch(`/api/field-assessment/engagements/${engagementId}/ai-vendor-governance`)
+    fetch(`/api/core/field-assessment/engagements/${engagementId}/ai-vendor-governance`)
       .then((r) => r.json())
       .then((data) => setRecords({ data, loading: false, error: null }))
       .catch((e) => setRecords({ data: null, loading: false, error: String(e) }));
@@ -943,7 +943,7 @@ function AiGovernancePortalTab({ engagementId }: { engagementId: string }) {
   useEffect(() => {
     if (view !== 'decisions') return;
     setDecisions((s) => ({ ...s, loading: true }));
-    fetch(`/api/field-assessment/engagements/${engagementId}/ai-vendor-governance/decisions`)
+    fetch(`/api/core/field-assessment/engagements/${engagementId}/ai-vendor-governance/decisions`)
       .then((r) => r.json())
       .then((data) => setDecisions({ data, loading: false, error: null }))
       .catch((e) => setDecisions({ data: null, loading: false, error: String(e) }));

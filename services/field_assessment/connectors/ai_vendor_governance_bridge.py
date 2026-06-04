@@ -21,6 +21,7 @@ Exception preservation:
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -108,6 +109,7 @@ def import_ai_vendor_governance(
 
     imported_findings = 0
     finding_ids: list[str] = []
+    tool_finding_map: dict[str, list[str]] = {}
     for raw in raw_findings:
         finding_type = str(raw.get("type") or "ai_vendor_governance.finding")
         nist_raw = raw.get("nist_controls") or [
@@ -139,10 +141,13 @@ def import_ai_vendor_governance(
             remediation_hint=str(raw.get("recommendation") or ""),
         )
         finding_ids.append(finding.id)
+        tool_key = str(raw.get("tool_name") or "")
+        if tool_key:
+            tool_finding_map.setdefault(tool_key, []).append(finding.id)
         imported_findings += 1
 
-    if finding_ids:
-        _backfill_finding_refs(db, governance_records, finding_ids, scan_record.id)
+    if tool_finding_map:
+        _backfill_finding_refs(db, governance_records, tool_finding_map, scan_record.id)
 
     return AiVendorGovernanceImportResult(
         engagement_id=engagement_id,
@@ -306,8 +311,13 @@ def _upsert_governance_records(
             db.flush()
 
             # Append governance_initiated decision for audit trail
+            # SHA-256 of the natural key fits in VARCHAR(64); the raw
+            # "dec:{64-char-id}:init" string would be 73 chars and overflow.
+            _dec_id = hashlib.sha256(
+                f"dec:{tenant_id}:{engagement_id}:{tool_name}:init".encode()
+            ).hexdigest()
             decision = FaAiVendorGovernanceDecision(
-                decision_id=f"dec:{rec['id']}:init",
+                decision_id=_dec_id,
                 tenant_id=tenant_id,
                 engagement_id=engagement_id,
                 governance_record_id=rec["id"],
@@ -334,10 +344,10 @@ def _upsert_governance_records(
 def _backfill_finding_refs(
     db: Session,
     governance_records: list[dict[str, Any]],
-    finding_ids: list[str],
+    tool_finding_map: dict[str, list[str]],
     scan_result_id: str,
 ) -> None:
-    """Write finding_ids back into the corresponding governance records."""
+    """Attach per-tool finding IDs back to the governance records that generated them."""
     from api.db_models_ai_vendor_governance import FaAiVendorGovernanceRecord
 
     now = utc_iso8601_z_now()
@@ -345,6 +355,9 @@ def _backfill_finding_refs(
         tool_name = str(rec.get("tool_name") or "unknown")
         tenant_id = str(rec.get("tenant_id") or "")
         engagement_id = str(rec.get("engagement_id") or "")
+        tool_findings = tool_finding_map.get(tool_name, [])
+        if not tool_findings:
+            continue
         existing = (
             db.query(FaAiVendorGovernanceRecord)
             .filter_by(
@@ -356,7 +369,7 @@ def _backfill_finding_refs(
         )
         if existing:
             existing.finding_refs = list(
-                set(list(existing.finding_refs or []) + finding_ids)
+                set(list(existing.finding_refs or []) + tool_findings)
             )
             existing.updated_at = now
     db.flush()
