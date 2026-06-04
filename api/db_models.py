@@ -3696,3 +3696,6 @@ class RiskAlertFired(Base):
     fired_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+# PR3 External AI Risk Register ORM registration for Base.metadata.create_all().
+import api.db_models_external_ai_risk  # noqa: F401

@@ -4949,23 +4949,6 @@
       ],
       "file": "api/field_assessment.py",
       "method": "POST",
-      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/external-ai-risk-register/run",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "governance:write"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "tenant"
-      ],
-      "file": "api/field_assessment.py",
-      "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
       "plane": "control",
       "plane_id": "control",
@@ -5346,40 +5329,6 @@
       "scoped": true,
       "scopes": [
         "governance:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "tenant"
-      ],
-      "file": "api/field_assessment.py",
-      "method": "GET",
-      "path": "/field-assessment/engagements/{engagement_id}/external-ai-risk-register",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "governance:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "tenant"
-      ],
-      "file": "api/field_assessment.py",
-      "method": "PATCH",
-      "path": "/field-assessment/engagements/{engagement_id}/external-ai-risk-register/{risk_id}",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "governance:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -9436,7 +9385,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-04T01:43:06.915074+00:00",
+  "generated_at": "2026-06-03T23:46:19.194109+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -39,9 +39,9 @@
     }
   ],
   "governance": {
-    "contract_count": 449,
+    "contract_count": 446,
     "contract_only": [],
-    "runtime_count": 554,
+    "runtime_count": 551,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -149,7 +149,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "0b7233352944aa403b647abec96b230bbccde0bca7ce26a3535717d667d02d39",
+  "governance_fingerprint": "aee24d3f55de740a885dc47a935ce8affa82e43d6720097b19d08224c519934d",
   "planes": [
     {
       "compat": {
@@ -482,7 +482,6 @@
       "GET /field-assessment/engagements/{engagement_id}/exceptions",
       "GET /field-assessment/engagements/{engagement_id}/exceptions/{exception_id}",
       "GET /field-assessment/engagements/{engagement_id}/execution-state",
-      "GET /field-assessment/engagements/{engagement_id}/external-ai-risk-register",
       "GET /field-assessment/engagements/{engagement_id}/findings",
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain",
@@ -562,7 +561,6 @@
       "GET /status",
       "HEAD /health",
       "PATCH /field-assessment/engagements/{engagement_id}",
-      "PATCH /field-assessment/engagements/{engagement_id}/external-ai-risk-register/{risk_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}/remediation",
       "PATCH /field-assessment/engagements/{engagement_id}/observations/{observation_id}",
@@ -673,7 +671,6 @@
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/dns-email/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/entra-governance/initiate",
-      "POST /field-assessment/engagements/{engagement_id}/connector-runs/external-ai-risk-register/run",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/network-scan/initiate",

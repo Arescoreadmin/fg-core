@@ -1,3 +1,25 @@
+from __future__ import annotations
+
+_VALID_REMEDIATION_STATUSES = {
+    "not_started",
+    "planned",
+    "in_progress",
+    "completed",
+    "risk_accepted",
+}
+
+_VALID_OWNER_TYPES = {
+    "IT",
+    "Security",
+    "Compliance",
+    "Legal",
+    "HR",
+    "Finance",
+    "Operations",
+    "Product",
+    "Unknown",
+}
+
 """Field Assessment Engagement Substrate API router.
 
 All routes are tenant-scoped. Tenant is resolved from auth context only —
@@ -11,7 +33,6 @@ Security invariants:
 - All list endpoints capped at 100 rows.
 """
 
-from __future__ import annotations
 
 import logging
 import os
@@ -98,9 +119,6 @@ from services.field_assessment.connectors.ai_tool_discovery_bridge import (
 )
 from services.field_assessment.connectors.ai_data_access_mapping_bridge import (
     import_ai_data_access_mapping_scan,
-)
-from services.field_assessment.connectors.external_ai_risk_register_bridge import (
-    import_external_ai_risk_register,
 )
 from services.field_assessment.models import (
     AssessmentType,
@@ -254,6 +272,61 @@ def _assert_engagement_accepts_evidence(eng: FaEngagement) -> None:
 # ---------------------------------------------------------------------------
 # Pydantic request models
 # ---------------------------------------------------------------------------
+
+
+
+
+
+
+_VALID_REVIEW_STATUSES = {
+    "unreviewed",
+    "under_review",
+    "accepted",
+    "mitigated",
+    "risk_accepted",
+    "closed",
+}
+
+_VALID_GOVERNANCE_STATES = {
+    "ungoverned",
+    "partially_governed",
+    "governed",
+    "exception_granted",
+    "unknown",
+}
+
+
+class ExternalAiRiskReviewUpdateRequest(BaseModel):
+    """Mutable governance/review fields for External AI Risk records.
+
+    Immutable risk scoring, source evidence, tool identity, and category fields
+    are intentionally rejected via extra='forbid'.
+    """
+
+    business_owner: str | None = None
+    technical_owner: str | None = None
+    risk_owner: str | None = None
+    owner_type: str | None = None
+
+    review_status: str | None = None
+    governance_state: str | None = None
+
+    remediation_status: str | None = None
+    remediation_target_date: str | None = None
+    remediation_completed_at: str | None = None
+
+    vendor_review_status: str | None = None
+    vendor_dpa_status: str | None = None
+    vendor_baa_status: str | None = None
+    vendor_security_review_status: str | None = None
+    vendor_last_reviewed_at: str | None = None
+
+    decision_refs: list[str] | None = None
+    risk_acceptance_refs: list[str] | None = None
+    exception_refs: list[str] | None = None
+    approval_refs: list[str] | None = None
+
+    model_config = {"extra": "forbid"}
 
 
 class CreateEngagementRequest(BaseModel):
@@ -922,7 +995,6 @@ _SCAN_SOURCE_LABELS: dict[str, str] = {
     "oauth_risk": "OAuth Risk Scan",
     "ai_tool_discovery": "AI Tool Discovery Scan",
     "ai_data_access_mapping": "AI Data Access Mapping",
-    "external_ai_risk_register": "External AI Risk Register",
     "entra_governance": "Entra Governance Scan",
     "endpoint_inventory": "Endpoint Inventory Scan",
     "sharepoint_onedrive": "SharePoint & OneDrive Scan",
@@ -7888,83 +7960,6 @@ def _build_engagement_report_json(
             "scan_count": len(ada_scan_rows),
         }
 
-    if "external_ai_risk_register" in active_sections:
-        from api.db_models_external_ai_risk import FaExternalAiRiskRecord
-
-        risk_rows = list(
-            db.query(FaExternalAiRiskRecord)
-            .filter_by(tenant_id=tenant_id, engagement_id=engagement_id)
-            .order_by(
-                FaExternalAiRiskRecord.risk_score, FaExternalAiRiskRecord.tool_name
-            )
-            .all()
-        )
-        risk_records_out: list[dict[str, Any]] = [
-            {
-                "risk_id": r.id,
-                "tool_id": r.tool_id,
-                "tool_name": r.tool_name,
-                "vendor": r.vendor,
-                "business_owner": r.business_owner,
-                "technical_owner": r.technical_owner,
-                "risk_owner": r.risk_owner,
-                "owner_type": getattr(r, "owner_type", "Unknown"),
-                "permissions": list(r.permissions or []),
-                "data_access_summary": r.data_access_summary,
-                "sensitive_data_exposure": list(r.sensitive_data_exposure or []),
-                "publisher_trust": r.publisher_trust,
-                "user_count": r.user_count,
-                "admin_consent": r.admin_consent,
-                "risk_score": r.risk_score,
-                "risk_reason": r.risk_reason,
-                "risk_category": r.risk_category,
-                "risk_categories": list(r.risk_categories or []),
-                "recommended_action": r.recommended_action,
-                "review_status": r.review_status,
-                "governance_state": getattr(r, "governance_state", "unknown"),
-                "regulatory_flags": list(getattr(r, "regulatory_flags", None) or []),
-                "vendor_review_status": getattr(
-                    r, "vendor_review_status", "not_reviewed"
-                ),
-                "vendor_dpa_status": getattr(r, "vendor_dpa_status", "unknown"),
-                "vendor_baa_status": getattr(r, "vendor_baa_status", "unknown"),
-                "risk_age_days": getattr(r, "risk_age_days", None),
-                "first_detected_at": getattr(r, "first_detected_at", None),
-                "last_reviewed_at": getattr(r, "last_reviewed_at", None),
-                "remediation_status": getattr(r, "remediation_status", "not_started"),
-                "remediation_target_date": getattr(r, "remediation_target_date", None),
-                "decision_refs": list(getattr(r, "decision_refs", None) or []),
-                "risk_acceptance_refs": list(
-                    getattr(r, "risk_acceptance_refs", None) or []
-                ),
-                "exception_refs": list(getattr(r, "exception_refs", None) or []),
-                "approval_refs": list(getattr(r, "approval_refs", None) or []),
-                "evidence_refs": list(r.evidence_refs or []),
-                "finding_refs": list(r.finding_refs or []),
-                "graph_node_id": r.graph_node_id,
-                "risk_node_id": getattr(r, "risk_node_id", None),
-                "vendor_node_id": getattr(r, "vendor_node_id", None),
-                "governance_node_id": getattr(r, "governance_node_id", None),
-                "created_at": r.created_at,
-                "updated_at": r.updated_at,
-            }
-            for r in risk_rows
-        ]
-        _score_order = {"critical": 0, "high": 1, "moderate": 2, "low": 3}
-        risk_records_out.sort(
-            key=lambda r: (_score_order.get(r["risk_score"], 4), r["tool_name"])
-        )
-        from services.connectors.external_ai_risk_register.risk_engine import (
-            build_summary as _build_risk_summary,
-        )
-
-        risk_summary: dict[str, Any] = _build_risk_summary(risk_records_out)
-        section_content["external_ai_risk_register"] = {
-            "risk_records": risk_records_out,
-            "summary": risk_summary,
-            "record_count": len(risk_records_out),
-        }
-
     section_hashes = _compute_section_hashes(section_content)
 
     report_json: dict[str, Any] = {
@@ -9745,582 +9740,6 @@ def run_ai_data_access_mapping(
                 f"AI data access mapping failed: {str(exc)[:200]}",
             ),
         )
-
-
-# ---------------------------------------------------------------------------
-# Routes — External AI Risk Register (PR 3)
-# ---------------------------------------------------------------------------
-
-
-class ExternalAiRiskRegisterRunRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    operator_name: str | None = None
-
-
-class ExternalAiRiskRecordResponse(BaseModel):
-    risk_id: str
-    tool_id: str | None
-    tool_name: str
-    vendor: str
-    business_owner: str
-    technical_owner: str
-    # Addition 1 — ownership model
-    risk_owner: str | None
-    owner_type: str
-    permissions: list[str]
-    data_access_summary: str | None
-    sensitive_data_exposure: list[str]
-    publisher_trust: str
-    user_count: int | None
-    admin_consent: bool
-    risk_score: str
-    risk_reason: str
-    risk_category: str
-    risk_categories: list[str]
-    recommended_action: str
-    review_status: str
-    # Addition 2 — governance state
-    governance_state: str
-    # Addition 3 — decision linkage
-    decision_refs: list[str]
-    risk_acceptance_refs: list[str]
-    exception_refs: list[str]
-    approval_refs: list[str]
-    # Addition 4 — vendor governance status
-    vendor_review_status: str
-    vendor_dpa_status: str
-    vendor_baa_status: str
-    vendor_security_review_status: str
-    vendor_last_reviewed_at: str | None
-    # Addition 5 — regulatory flags
-    regulatory_flags: list[str]
-    # Addition 6 — risk aging
-    risk_age_days: int | None
-    first_detected_at: str | None
-    last_observed_at: str | None
-    last_reviewed_at: str | None
-    # Addition 7 — remediation tracking
-    remediation_status: str
-    remediation_target_date: str | None
-    remediation_completed_at: str | None
-    evidence_refs: list[str]
-    finding_refs: list[str]
-    graph_node_id: str | None
-    # Addition 10 — graph node identifiers
-    risk_node_id: str | None
-    owner_node_id: str | None
-    vendor_node_id: str | None
-    decision_node_id: str | None
-    governance_node_id: str | None
-    created_at: str
-    updated_at: str
-
-
-class ExternalAiRiskRegisterRunResponse(BaseModel):
-    scan_result_id: str
-    risks_imported: int
-    findings_imported: int
-    status: str
-    summary: dict
-
-
-class ExternalAiRiskRegisterListResponse(BaseModel):
-    items: list[ExternalAiRiskRecordResponse]
-    total: int
-
-
-class ExternalAiRiskReviewUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    review_status: str | None = None
-    business_owner: str | None = None
-    technical_owner: str | None = None
-    # Addition 1 — ownership model
-    risk_owner: str | None = None
-    owner_type: str | None = None
-    # Addition 2 — governance state (for exception_granted only)
-    governance_state: str | None = None
-    # Addition 3 — decision linkage
-    decision_refs: list[str] | None = None
-    risk_acceptance_refs: list[str] | None = None
-    exception_refs: list[str] | None = None
-    approval_refs: list[str] | None = None
-    # Addition 6 — last_reviewed_at
-    last_reviewed_at: str | None = None
-    # Addition 7 — remediation tracking
-    remediation_status: str | None = None
-    remediation_target_date: str | None = None
-    remediation_completed_at: str | None = None
-
-
-_VALID_REVIEW_STATUSES: frozenset[str] = frozenset(
-    {"unreviewed", "under_review", "accepted", "mitigated", "risk_accepted", "closed"}
-)
-_VALID_GOVERNANCE_STATES: frozenset[str] = frozenset(
-    {"ungoverned", "partially_governed", "governed", "exception_granted", "unknown"}
-)
-_VALID_REMEDIATION_STATUSES: frozenset[str] = frozenset(
-    {"not_started", "planned", "in_progress", "completed", "risk_accepted"}
-)
-_VALID_OWNER_TYPES: frozenset[str] = frozenset(
-    {
-        "IT",
-        "Security",
-        "Compliance",
-        "Legal",
-        "HR",
-        "Finance",
-        "Operations",
-        "Product",
-        "Unknown",
-    }
-)
-
-
-def _risk_record_to_response(r: Any) -> ExternalAiRiskRecordResponse:
-    return ExternalAiRiskRecordResponse(
-        risk_id=r.id,
-        tool_id=r.tool_id,
-        tool_name=r.tool_name,
-        vendor=r.vendor,
-        business_owner=r.business_owner,
-        technical_owner=r.technical_owner,
-        risk_owner=r.risk_owner,
-        owner_type=getattr(r, "owner_type", "Unknown"),
-        permissions=list(r.permissions or []),
-        data_access_summary=r.data_access_summary,
-        sensitive_data_exposure=list(r.sensitive_data_exposure or []),
-        publisher_trust=r.publisher_trust,
-        user_count=r.user_count,
-        admin_consent=r.admin_consent,
-        risk_score=r.risk_score,
-        risk_reason=r.risk_reason,
-        risk_category=r.risk_category,
-        risk_categories=list(r.risk_categories or []),
-        recommended_action=r.recommended_action,
-        review_status=r.review_status,
-        governance_state=getattr(r, "governance_state", "unknown"),
-        decision_refs=list(getattr(r, "decision_refs", None) or []),
-        risk_acceptance_refs=list(getattr(r, "risk_acceptance_refs", None) or []),
-        exception_refs=list(getattr(r, "exception_refs", None) or []),
-        approval_refs=list(getattr(r, "approval_refs", None) or []),
-        vendor_review_status=getattr(r, "vendor_review_status", "not_reviewed"),
-        vendor_dpa_status=getattr(r, "vendor_dpa_status", "unknown"),
-        vendor_baa_status=getattr(r, "vendor_baa_status", "unknown"),
-        vendor_security_review_status=getattr(
-            r, "vendor_security_review_status", "unknown"
-        ),
-        vendor_last_reviewed_at=getattr(r, "vendor_last_reviewed_at", None),
-        regulatory_flags=list(getattr(r, "regulatory_flags", None) or []),
-        risk_age_days=getattr(r, "risk_age_days", None),
-        first_detected_at=getattr(r, "first_detected_at", None),
-        last_observed_at=getattr(r, "last_observed_at", None),
-        last_reviewed_at=getattr(r, "last_reviewed_at", None),
-        remediation_status=getattr(r, "remediation_status", "not_started"),
-        remediation_target_date=getattr(r, "remediation_target_date", None),
-        remediation_completed_at=getattr(r, "remediation_completed_at", None),
-        evidence_refs=list(r.evidence_refs or []),
-        finding_refs=list(r.finding_refs or []),
-        graph_node_id=r.graph_node_id,
-        risk_node_id=getattr(r, "risk_node_id", None),
-        owner_node_id=getattr(r, "owner_node_id", None),
-        vendor_node_id=getattr(r, "vendor_node_id", None),
-        decision_node_id=getattr(r, "decision_node_id", None),
-        governance_node_id=getattr(r, "governance_node_id", None),
-        created_at=r.created_at,
-        updated_at=r.updated_at,
-    )
-
-
-@router.post(
-    "/engagements/{engagement_id}/connector-runs/external-ai-risk-register/run",
-    response_model=ExternalAiRiskRegisterRunResponse,
-    status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
-)
-def run_external_ai_risk_register(
-    engagement_id: str,
-    request: Request,
-    body: ExternalAiRiskRegisterRunRequest,
-    db: Session = Depends(auth_ctx_db_session),
-) -> ExternalAiRiskRegisterRunResponse:
-    """Generate deterministic AI risk records from PR 1 and PR 2 evidence.
-
-    Reads the most recent AI Tool Discovery scan (PR 1) and AI Data Access Mapping
-    scan (PR 2) for this engagement and runs the deterministic risk engine over them.
-    No new Microsoft Graph calls are made.
-
-    Risk records are created or updated idempotently. High/Critical risks generate
-    FaNormalizedFinding entries.
-
-    H12: durable scan job created before work begins.
-    H13: scan.initiated and scan.completed audit events emitted directly.
-    H15: FaScanResult enters collected lifecycle state automatically.
-    """
-    _ = body
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
-
-    try:
-        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
-    except EngagementNotFound as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message),
-        )
-
-    pr1_scan = get_latest_scan_result_by_source_type(
-        db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        source_type="ai_tool_discovery",
-    )
-    if pr1_scan is None:
-        raise HTTPException(
-            status_code=422,
-            detail=api_error(
-                "NO_AI_TOOL_DISCOVERY_SCAN",
-                "AI Tool Discovery scan must be completed before generating the AI Risk Register.",
-            ),
-        )
-    tools: list[dict] = (pr1_scan.normalized_payload or {}).get("tools") or []
-
-    pr2_scan = get_latest_scan_result_by_source_type(
-        db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        source_type="ai_data_access_mapping",
-    )
-    mappings: list[dict] = (
-        (pr2_scan.normalized_payload or {}).get("mappings") or [] if pr2_scan else []
-    )
-
-    # H12 — durable job record
-    job = _c6_create_scan_job(
-        db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        actor=actor,
-        scanner_type="external_ai_risk_register",
-    )
-    # H13 — scan.initiated
-    _c6_write_audit_event(
-        db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        event_type="scan.initiated",
-        actor=actor,
-        scan_job_id=job.id,
-        scanner_type="external_ai_risk_register",
-        payload_summary={
-            "pr1_scan_result_id": pr1_scan.id,
-            "pr2_scan_result_id": pr2_scan.id if pr2_scan else None,
-            "tool_count": len(tools),
-        },
-    )
-    db.commit()
-
-    try:
-        from api.db_models_external_ai_risk import FaExternalAiRiskRecord
-        from services.connectors.external_ai_risk_register.risk_engine import (
-            build_summary,
-            generate_risk_records,
-        )
-
-        # Collect existing IDs for idempotent regeneration
-        existing = (
-            db.query(FaExternalAiRiskRecord.tool_name, FaExternalAiRiskRecord.id)
-            .filter_by(tenant_id=tenant_id, engagement_id=engagement_id)
-            .all()
-        )
-        existing_ids: dict[str, str] = {row.tool_name: row.id for row in existing}
-
-        risk_records, raw_findings = generate_risk_records(
-            tools=tools,
-            mappings=mappings,
-            pr1_scan_result_id=pr1_scan.id,
-            pr2_scan_result_id=pr2_scan.id if pr2_scan else None,
-            tenant_id=tenant_id,
-            engagement_id=engagement_id,
-            existing_risk_ids=existing_ids,
-        )
-        summary = build_summary(risk_records)
-
-        stable_ts = pr1_scan.collected_at or pr1_scan.created_at
-        scan_payload: dict = {
-            "scan_type": "external_ai_risk_register_v1",
-            "schema_version": "1.0",
-            "tenant_id": tenant_id,
-            "engagement_id": engagement_id,
-            "pr1_scan_result_id": pr1_scan.id,
-            "pr2_scan_result_id": pr2_scan.id if pr2_scan else None,
-            "scan_completed_at": stable_ts,
-            "risk_records": risk_records,
-            "findings": raw_findings,
-            "summary": summary,
-        }
-
-        result = import_external_ai_risk_register(
-            db=db,
-            tenant_id=tenant_id,
-            engagement_id=engagement_id,
-            scan_result=scan_payload,
-            actor=actor,
-        )
-        _auto_link_scan_evidence(
-            db,
-            tenant_id=tenant_id,
-            engagement_id=engagement_id,
-            scan_result_id=result.scan_result_id,
-            source_type="external_ai_risk_register",
-        )
-        _c6_update_job_status(
-            db,
-            job_id=job.id,
-            status="complete",
-            scan_result_id=result.scan_result_id,
-        )
-        # H13 — scan.completed
-        _c6_write_audit_event(
-            db,
-            tenant_id=tenant_id,
-            engagement_id=engagement_id,
-            event_type="scan.completed",
-            actor=actor,
-            scan_job_id=job.id,
-            scanner_type="external_ai_risk_register",
-            scan_result_id=result.scan_result_id,
-            payload_summary={
-                "risks_imported": result.risks_imported,
-                "findings_imported": result.findings_imported,
-            },
-        )
-        db.commit()
-
-        return ExternalAiRiskRegisterRunResponse(
-            scan_result_id=result.scan_result_id,
-            risks_imported=result.risks_imported,
-            findings_imported=result.findings_imported,
-            status="complete",
-            summary=summary,
-        )
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        log.error("external_ai_risk_register: failed — %s", exc)
-        db.rollback()
-        try:
-            _c6_update_job_status(
-                db, job_id=job.id, status="failed", failure_reason=str(exc)[:2000]
-            )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job.id,
-                scanner_type="external_ai_risk_register",
-                rejection_reason=str(exc)[:500],
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=api_error(
-                "RISK_REGISTER_FAILED",
-                f"External AI risk register generation failed: {str(exc)[:200]}",
-            ),
-        )
-
-
-@router.get(
-    "/engagements/{engagement_id}/external-ai-risk-register",
-    response_model=ExternalAiRiskRegisterListResponse,
-    status_code=200,
-    dependencies=[Depends(require_scopes("governance:read"))],
-)
-def list_external_ai_risk_records(
-    engagement_id: str,
-    request: Request,
-    risk_score: str | None = None,
-    risk_category: str | None = None,
-    review_status: str | None = None,
-    db: Session = Depends(auth_ctx_db_session),
-) -> ExternalAiRiskRegisterListResponse:
-    """List AI risk records for an engagement.
-
-    Supports optional filtering by risk_score, risk_category, and review_status.
-    Results are ordered: critical → high → moderate → low, then alphabetical.
-    """
-    from api.db_models_external_ai_risk import FaExternalAiRiskRecord
-
-    tenant_id = _resolve_caller_tenant(request)
-    try:
-        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
-    except EngagementNotFound as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message),
-        )
-
-    q = db.query(FaExternalAiRiskRecord).filter_by(
-        tenant_id=tenant_id, engagement_id=engagement_id
-    )
-    if risk_score:
-        q = q.filter(FaExternalAiRiskRecord.risk_score == risk_score)
-    if risk_category:
-        q = q.filter(FaExternalAiRiskRecord.risk_category == risk_category)
-    if review_status:
-        q = q.filter(FaExternalAiRiskRecord.review_status == review_status)
-
-    rows = list(q.order_by(FaExternalAiRiskRecord.tool_name).all())
-
-    _score_order = {"critical": 0, "high": 1, "moderate": 2, "low": 3}
-    rows.sort(key=lambda r: (_score_order.get(r.risk_score, 4), r.tool_name))
-
-    return ExternalAiRiskRegisterListResponse(
-        items=[_risk_record_to_response(r) for r in rows],
-        total=len(rows),
-    )
-
-
-@router.patch(
-    "/engagements/{engagement_id}/external-ai-risk-register/{risk_id}",
-    response_model=ExternalAiRiskRecordResponse,
-    status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
-)
-def update_external_ai_risk_record(
-    engagement_id: str,
-    risk_id: str,
-    request: Request,
-    body: ExternalAiRiskReviewUpdateRequest,
-    db: Session = Depends(auth_ctx_db_session),
-) -> ExternalAiRiskRecordResponse:
-    """Update mutable fields on an AI risk record.
-
-    Only review_status, business_owner, and technical_owner are mutable.
-    Risk scoring, categories, and reason are deterministic and read-only.
-    """
-    from api.db_models_external_ai_risk import FaExternalAiRiskRecord
-
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
-
-    try:
-        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
-    except EngagementNotFound as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message),
-        )
-
-    row = (
-        db.query(FaExternalAiRiskRecord)
-        .filter_by(id=risk_id, tenant_id=tenant_id, engagement_id=engagement_id)
-        .first()
-    )
-    if row is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error("RISK_RECORD_NOT_FOUND", "AI risk record not found."),
-        )
-
-    from services.canonical import utc_iso8601_z_now
-
-    if body.review_status is not None:
-        if body.review_status not in _VALID_REVIEW_STATUSES:
-            raise HTTPException(
-                status_code=422,
-                detail=api_error(
-                    "INVALID_REVIEW_STATUS",
-                    f"review_status must be one of: {sorted(_VALID_REVIEW_STATUSES)}",
-                ),
-            )
-        row.review_status = body.review_status
-    if body.business_owner is not None:
-        row.business_owner = body.business_owner
-    if body.technical_owner is not None:
-        row.technical_owner = body.technical_owner
-    # Addition 1 — ownership model
-    if body.risk_owner is not None:
-        row.risk_owner = body.risk_owner
-    if body.owner_type is not None:
-        if body.owner_type not in _VALID_OWNER_TYPES:
-            raise HTTPException(
-                status_code=422,
-                detail=api_error(
-                    "INVALID_OWNER_TYPE",
-                    f"owner_type must be one of: {sorted(_VALID_OWNER_TYPES)}",
-                ),
-            )
-        row.owner_type = body.owner_type
-    # Addition 2 — governance state (operators may set exception_granted)
-    if body.governance_state is not None:
-        if body.governance_state not in _VALID_GOVERNANCE_STATES:
-            raise HTTPException(
-                status_code=422,
-                detail=api_error(
-                    "INVALID_GOVERNANCE_STATE",
-                    f"governance_state must be one of: {sorted(_VALID_GOVERNANCE_STATES)}",
-                ),
-            )
-        row.governance_state = body.governance_state
-    # Addition 3 — decision linkage
-    if body.decision_refs is not None:
-        row.decision_refs = list(body.decision_refs)
-    if body.risk_acceptance_refs is not None:
-        row.risk_acceptance_refs = list(body.risk_acceptance_refs)
-    if body.exception_refs is not None:
-        row.exception_refs = list(body.exception_refs)
-    if body.approval_refs is not None:
-        row.approval_refs = list(body.approval_refs)
-    # Addition 6 — last_reviewed_at
-    if body.last_reviewed_at is not None:
-        row.last_reviewed_at = body.last_reviewed_at
-    elif body.review_status is not None and body.review_status != "unreviewed":
-        row.last_reviewed_at = utc_iso8601_z_now()
-    # Addition 7 — remediation tracking
-    if body.remediation_status is not None:
-        if body.remediation_status not in _VALID_REMEDIATION_STATUSES:
-            raise HTTPException(
-                status_code=422,
-                detail=api_error(
-                    "INVALID_REMEDIATION_STATUS",
-                    f"remediation_status must be one of: {sorted(_VALID_REMEDIATION_STATUSES)}",
-                ),
-            )
-        row.remediation_status = body.remediation_status
-    if body.remediation_target_date is not None:
-        row.remediation_target_date = body.remediation_target_date
-    if body.remediation_completed_at is not None:
-        row.remediation_completed_at = body.remediation_completed_at
-
-    row.updated_at = utc_iso8601_z_now()
-    db.commit()
-    db.refresh(row)
-
-    emit_engagement_audit_event(
-        db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        event_type="risk_record.updated",
-        actor=actor,
-        reason_code="RISK_RECORD_UPDATED",
-        payload={
-            "risk_id": risk_id,
-            "review_status": row.review_status,
-            "business_owner": row.business_owner,
-            "technical_owner": row.technical_owner,
-            "governance_state": row.governance_state,
-            "remediation_status": row.remediation_status,
-        },
-    )
-    db.commit()
-
-    return _risk_record_to_response(row)
 
 
 # ---------------------------------------------------------------------------

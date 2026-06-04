@@ -333,7 +333,6 @@ function OverviewTab({
 function sourceLabel(sourceType: string) {
   if (sourceType === 'ai_tool_discovery') return 'AI Tool Discovery';
   if (sourceType === 'ai_data_access_mapping') return 'AI Data Access Mapping';
-  if (sourceType === 'external_ai_risk_register') return 'AI Risk Register';
   return sourceType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
@@ -468,160 +467,6 @@ function AiDataAccessDetails({ detail }: { detail: ScanResultDetail }) {
   );
 }
 
-const RISK_SCORE_BADGE: Record<string, string> = {
-  critical: 'rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[11px] text-red-300',
-  high: 'rounded border border-orange-500/30 bg-orange-500/10 px-1.5 py-0.5 text-[11px] text-orange-300',
-  moderate: 'rounded border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-[11px] text-yellow-200',
-  low: 'rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300',
-};
-
-const PORTAL_GOV_BADGE: Record<string, string> = {
-  ungoverned: 'rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[11px] text-red-300',
-  partially_governed: 'rounded border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-[11px] text-yellow-200',
-  governed: 'rounded border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[11px] text-green-300',
-  exception_granted: 'rounded border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[11px] text-purple-300',
-};
-
-type AiRiskRecord = {
-  risk_id?: string;
-  tool_name?: string;
-  vendor?: string;
-  risk_score?: string;
-  risk_reason?: string;
-  risk_category?: string;
-  risk_categories?: string[];
-  recommended_action?: string;
-  review_status?: string;
-  governance_state?: string;
-  regulatory_flags?: string[];
-  vendor_review_status?: string;
-  vendor_dpa_status?: string;
-  sensitive_data_exposure?: string[];
-  publisher_trust?: string;
-  admin_consent?: boolean;
-  business_owner?: string;
-  technical_owner?: string;
-  risk_owner?: string | null;
-  owner_type?: string;
-  risk_age_days?: number | null;
-  remediation_status?: string;
-  decision_refs?: string[];
-  exception_refs?: string[];
-};
-
-function ExternalAiRiskDetails({ detail }: { detail: ScanResultDetail }) {
-  const payload = detail.normalized_payload ?? {};
-  const riskRecords = Array.isArray(payload.risk_records) ? (payload.risk_records as AiRiskRecord[]) : [];
-  const summary = payload.summary as Record<string, unknown> | undefined;
-  if (!riskRecords.length) return <p className="text-xs text-muted">No AI risk records in this scan.</p>;
-  const scoreDist = summary?.score_distribution as Record<string, number> | undefined;
-  const govDist = summary?.governance_distribution as Record<string, number> | undefined;
-  const regulatoryDist = summary?.regulatory_distribution as Record<string, number> | undefined;
-  return (
-    <div className="space-y-3">
-      {/* Score distribution */}
-      {scoreDist && (
-        <div className="flex flex-wrap gap-1.5">
-          {(['critical', 'high', 'moderate', 'low'] as const).filter((k) => (scoreDist[k] ?? 0) > 0).map((k) => (
-            <span key={k} className={RISK_SCORE_BADGE[k]}>
-              {scoreDist[k]} {k}
-            </span>
-          ))}
-        </div>
-      )}
-      {/* Governance distribution */}
-      {govDist && (govDist.ungoverned ?? 0) + (govDist.partially_governed ?? 0) > 0 && (
-        <div className="flex flex-wrap gap-1.5 text-xs">
-          <span className="text-muted self-center">Governance:</span>
-          {(govDist.ungoverned ?? 0) > 0 && (
-            <span className={PORTAL_GOV_BADGE.ungoverned}>{govDist.ungoverned} ungoverned</span>
-          )}
-          {(govDist.partially_governed ?? 0) > 0 && (
-            <span className={PORTAL_GOV_BADGE.partially_governed}>{govDist.partially_governed} partial</span>
-          )}
-          {(govDist.governed ?? 0) > 0 && (
-            <span className={PORTAL_GOV_BADGE.governed}>{govDist.governed} governed</span>
-          )}
-        </div>
-      )}
-      {/* Regulatory frameworks */}
-      {regulatoryDist && Object.keys(regulatoryDist).length > 0 && (
-        <div className="flex flex-wrap gap-1.5 text-xs">
-          <span className="text-muted self-center">Regulatory:</span>
-          {Object.entries(regulatoryDist).map(([flag, count]) => (
-            <span key={flag} className="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[11px] text-muted">
-              {flag} ({count})
-            </span>
-          ))}
-        </div>
-      )}
-      {/* Risk records (cap at 8 for portal) */}
-      {riskRecords.slice(0, 8).map((r, idx) => (
-        <div key={`${r.risk_id}-${idx}`} className="rounded border border-border bg-surface-2 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-foreground">{r.tool_name ?? 'Unknown'}</span>
-            <span className="text-xs text-muted">{r.vendor ?? 'Unknown vendor'}</span>
-            {r.risk_score && (
-              <span className={RISK_SCORE_BADGE[r.risk_score] ?? RISK_SCORE_BADGE.low}>
-                {r.risk_score.toUpperCase()}
-              </span>
-            )}
-            {r.governance_state && (
-              <span className={PORTAL_GOV_BADGE[r.governance_state] ?? 'rounded border border-border px-1.5 py-0.5 text-[11px] text-muted'}>
-                {r.governance_state.replace(/_/g, ' ')}
-              </span>
-            )}
-            <span className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted">
-              {(r.review_status ?? 'unreviewed').replace(/_/g, ' ')}
-            </span>
-            {r.risk_age_days != null && r.risk_age_days > 90 && (
-              <span className="rounded border border-red-500/30 bg-red-500/5 px-1.5 py-0.5 text-[11px] text-red-300">
-                {r.risk_age_days}d old
-              </span>
-            )}
-          </div>
-          {r.risk_reason && <p className="mt-2 text-[11px] text-muted">{r.risk_reason}</p>}
-          {r.recommended_action && (
-            <p className="mt-1 text-[11px] text-blue-300">{r.recommended_action}</p>
-          )}
-          <dl className="mt-2 grid gap-1 text-[11px] sm:grid-cols-3">
-            {r.business_owner && (
-              <div><dt className="text-muted">Business owner</dt><dd className="text-foreground">{r.business_owner}</dd></div>
-            )}
-            {r.technical_owner && (
-              <div><dt className="text-muted">Technical owner</dt><dd className="text-foreground">{r.technical_owner}</dd></div>
-            )}
-            {r.vendor_review_status && (
-              <div><dt className="text-muted">Vendor review</dt><dd className="text-foreground">{r.vendor_review_status.replace(/_/g, ' ')}</dd></div>
-            )}
-            {r.vendor_dpa_status && (
-              <div><dt className="text-muted">DPA</dt><dd className="text-foreground">{r.vendor_dpa_status}</dd></div>
-            )}
-            {r.remediation_status && r.remediation_status !== 'not_started' && (
-              <div><dt className="text-muted">Remediation</dt><dd className="text-foreground">{r.remediation_status.replace(/_/g, ' ')}</dd></div>
-            )}
-          </dl>
-          {(r.regulatory_flags ?? []).length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {(r.regulatory_flags ?? []).map((flag) => (
-                <span key={flag} className="rounded border border-border bg-surface px-1.5 py-0.5 text-[11px] text-muted">{flag}</span>
-              ))}
-            </div>
-          )}
-          {(r.sensitive_data_exposure ?? []).length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {(r.sensitive_data_exposure ?? []).slice(0, 5).map((cat) => (
-                <span key={cat} className="rounded border border-border bg-surface px-1.5 py-0.5 text-[11px] text-muted">{cat}</span>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-      {riskRecords.length > 8 && <p className="text-xs text-muted">Showing 8 of {riskRecords.length} risk records.</p>}
-    </div>
-  );
-}
-
 function ScansTab({ engagementId }: { engagementId: string }) {
   const [state, setState] = useState<Async<ScanResult[]>>(idle());
   const [aiDetails, setAiDetails] = useState<Record<string, ScanResultDetail>>({});
@@ -635,8 +480,7 @@ function ScansTab({ engagementId }: { engagementId: string }) {
         const aiScans = data.filter(
           (scan) =>
             scan.source_type === 'ai_tool_discovery' ||
-            scan.source_type === 'ai_data_access_mapping' ||
-            scan.source_type === 'external_ai_risk_register',
+            scan.source_type === 'ai_data_access_mapping',
         );
         Promise.all(aiScans.map((scan) => portalApi.getScan(engagementId, scan.id).catch(() => null)))
           .then((details) => {
@@ -690,13 +534,6 @@ function ScansTab({ engagementId }: { engagementId: string }) {
                 <tr key={`${scan.id}-ada-details`} className="bg-surface">
                   <td colSpan={5} className="px-3 py-3">
                     <AiDataAccessDetails detail={aiDetails[scan.id]} />
-                  </td>
-                </tr>
-              )}
-              {scan.source_type === 'external_ai_risk_register' && aiDetails[scan.id] && (
-                <tr key={`${scan.id}-risk-details`} className="bg-surface">
-                  <td colSpan={5} className="px-3 py-3">
-                    <ExternalAiRiskDetails detail={aiDetails[scan.id]} />
                   </td>
                 </tr>
               )}
