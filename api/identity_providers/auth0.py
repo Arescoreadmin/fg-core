@@ -33,7 +33,7 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
+from typing import Any, cast, Optional
 
 import jwt
 from jwt.algorithms import RSAAlgorithm
@@ -146,16 +146,16 @@ def validate_auth0_token(token: str) -> ActorContext:
         raise ValueError(f"no JWKS key found for kid={kid!r}")
 
     issuer = f"https://{domain}/"
-    decode_opts: dict = {"require": ["sub", "iat", "exp"]}
+    decode_opts: dict[str, Any] = {"require": ["sub", "iat", "exp"]}
 
     try:
         claims = jwt.decode(
             token,
-            rsa_key,
+            cast(Any, rsa_key),
             algorithms=["RS256"],
             audience=audience or None,
             issuer=issuer,
-            options=decode_opts,
+            options=cast(Any, decode_opts),
         )
     except jwt.ExpiredSignatureError as exc:
         raise ValueError("token is expired") from exc

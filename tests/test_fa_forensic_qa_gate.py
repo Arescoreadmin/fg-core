@@ -12,7 +12,8 @@ def test_qa_approve_unknown_report_fails_without_delivering_engagement(
     """QA approval must not advance delivery when the referenced report does not exist."""
     ctx = make_context(build_app)
     engagement = create_engagement(ctx.client_a)
-    response = ctx.client_a.post(
+    qa_client = getattr(ctx, "qa_client", ctx.client_a)
+    response = qa_client.post(
         f"/field-assessment/engagements/{engagement['id']}/reports/missing-report/qa-approve",
         json={"reviewer_display_name": "Forensic Reviewer"},
     )

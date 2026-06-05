@@ -945,8 +945,11 @@ def test_operator_request_bypasses_portal_guard(client: TestClient) -> None:
 
 @pytest.fixture()
 def qa_client(build_app: object) -> TestClient:
-    """Client with governance:read + governance:write + governance:qa_approve scopes."""
+    """Client with auditor role mapped to qa_reviewer permissions."""
+    from sqlalchemy import text as sa_text
+
     from api.auth_scopes import mint_key
+    from api.tenant_rbac import assign_role
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
     key = mint_key(
@@ -955,6 +958,34 @@ def qa_client(build_app: object) -> TestClient:
         "governance:qa_approve",
         tenant_id=_TENANT_ID,
     )
+
+    from api.db import get_sessionmaker
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        key_id = db.execute(
+            sa_text(
+                """
+                SELECT id
+                FROM api_keys
+                WHERE tenant_id = :tenant_id
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ),
+            {"tenant_id": _TENANT_ID},
+        ).scalar_one()
+        assign_role(
+            db,
+            tenant_id=_TENANT_ID,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name="auditor",
+        )
+    finally:
+        db.close()
+
     return TestClient(app, headers={"X-API-Key": key})
 
 

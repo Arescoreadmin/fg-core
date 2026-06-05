@@ -4,9 +4,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi.testclient import TestClient
+from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import mint_key
+from api.db import get_sessionmaker
+from api.tenant_rbac import assign_role
 from api.db import get_engine
 from services.field_assessment.store import create_finding
 
@@ -52,6 +55,7 @@ class ForensicContext:
 
 def make_context(build_app: object) -> ForensicContext:
     app = build_app(auth_enabled=True)  # type: ignore[operator]
+
     key_a = mint_key(
         "governance:read",
         "governance:write",
@@ -64,6 +68,35 @@ def make_context(build_app: object) -> ForensicContext:
         "governance:qa_approve",
         tenant_id=TENANT_B,
     )
+
+    SM = get_sessionmaker()
+
+    for tenant_id in (TENANT_A, TENANT_B):
+        db = SM()
+        try:
+            key_id = db.execute(
+                sa_text(
+                    """
+                    SELECT id
+                    FROM api_keys
+                    WHERE tenant_id = :tenant_id
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """
+                ),
+                {"tenant_id": tenant_id},
+            ).scalar_one()
+
+            assign_role(
+                db,
+                tenant_id=tenant_id,
+                actor_key_prefix="pytest",
+                target_key_id=int(key_id),
+                role_name="auditor",
+            )
+        finally:
+            db.close()
+
     return ForensicContext(
         client_a=TestClient(app, headers={"X-API-Key": key_a}),
         client_b=TestClient(app, headers={"X-API-Key": key_b}),

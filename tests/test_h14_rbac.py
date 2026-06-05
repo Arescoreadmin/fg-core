@@ -16,8 +16,6 @@ Test series:
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import MagicMock, patch
 
 from api.actor_context import (
     ActorContext,
@@ -508,7 +506,7 @@ class TestGovernanceEventSchema:
         assert len(ALL_PERMISSIONS) >= 20
 
     def test_G09_actor_context_importable(self):
-        from api.actor_context import ActorContext, ALL_PERMISSIONS, ROLE_PERMISSIONS
+        from api.actor_context import ALL_PERMISSIONS, ROLE_PERMISSIONS
 
         assert isinstance(ALL_PERMISSIONS, frozenset)
         assert len(ROLE_PERMISSIONS) >= 6
