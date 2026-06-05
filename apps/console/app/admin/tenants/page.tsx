@@ -13,6 +13,7 @@ interface TenantEntry {
 interface ProvisionResult {
   tenant_id: string;
   name: string;
+  already_existed?: boolean;
   api_key: string;
   api_key_prefix: string;
   next_steps: Record<string, string>;
@@ -100,10 +101,12 @@ function ProvisionResultModal({ result, onClose }: { result: ProvisionResult; on
       <div style={{ ...s.modal, maxWidth: 560 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <span style={{ fontSize: '1.2rem' }}>✅</span>
-          <h2 style={{ ...s.modalTitle, margin: 0 }}>Client created — save the API key now</h2>
+          <h2 style={{ ...s.modalTitle, margin: 0 }}>
+            {result.already_existed ? 'Key regenerated — update Vercel now' : 'Client created — save the API key now'}
+          </h2>
         </div>
         <p style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 4 }}>
-          This API key is shown <strong>once</strong> and cannot be recovered. Add it to your Vercel env vars, then redeploy.
+          This API key is shown <strong>once</strong> and cannot be recovered. Update <code>FG_CONSOLE_DEMO_TENANT_KEYS</code> in Vercel, then redeploy.
         </p>
 
         <label style={s.field}>
@@ -170,6 +173,7 @@ export default function ClientRosterPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
+  const [regenLoading, setRegenLoading] = useState<string | null>(null);
 
   function loadTenants() {
     setLoading(true);
@@ -185,11 +189,30 @@ export default function ClientRosterPage() {
   function handleCreated(result: ProvisionResult) {
     setShowCreate(false);
     setProvisionResult(result);
-    // Optimistically add to list so it appears immediately
     setTenants(prev => [
       ...prev,
       { tenant_id: result.tenant_id, label: result.name, is_default: false },
     ]);
+  }
+
+  async function handleRegenKey(tenant: TenantEntry) {
+    if (!confirm(`Regenerate API key for "${tenant.label}"? The old key will still work until you update Vercel.`)) return;
+    setRegenLoading(tenant.tenant_id);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/provision-tenant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: tenant.tenant_id, name: tenant.label }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setProvisionResult(data as ProvisionResult);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to regenerate key');
+    } finally {
+      setRegenLoading(null);
+    }
   }
 
   return (
@@ -211,14 +234,21 @@ export default function ClientRosterPage() {
         <p style={s.muted}>Loading tenants…</p>
       ) : (
         <div style={s.grid}>
-          {tenants.map(t => <TenantCard key={t.tenant_id} tenant={t} />)}
+          {tenants.map(t => (
+            <TenantCard
+              key={t.tenant_id}
+              tenant={t}
+              onRegenKey={regenLoading ? () => {} : handleRegenKey}
+            />
+          ))}
         </div>
       )}
+      {regenLoading && <p style={s.muted}>Regenerating key for {regenLoading}…</p>}
 
       <div style={s.hint}>
         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
           New clients appear here after you add their tenant ID to <code>FG_CONSOLE_DEMO_TENANTS</code> in Vercel and redeploy.
-          The "Create client" button provisions the tenant and generates the API key — you still need to update Vercel env vars.
+          Use <strong>Regen key</strong> on any card if the API key in Vercel is stale.
         </p>
       </div>
 
@@ -228,7 +258,7 @@ export default function ClientRosterPage() {
   );
 }
 
-function TenantCard({ tenant }: { tenant: TenantEntry }) {
+function TenantCard({ tenant, onRegenKey }: { tenant: TenantEntry; onRegenKey: (t: TenantEntry) => void }) {
   const sectorIcon = tenant.tenant_id.includes('bank') ? '🏦'
     : tenant.tenant_id.includes('health') ? '🏥'
     : tenant.tenant_id.includes('law') ? '⚖️'
@@ -257,6 +287,11 @@ function TenantCard({ tenant }: { tenant: TenantEntry }) {
         <a href={`${portalBase}/login?tenant_id=${tenant.tenant_id}`} target="_blank" rel="noopener noreferrer" style={s.externalBtn}>
           <ExternalLink size={12} style={{ marginRight: 4 }} />Portal
         </a>
+        {!tenant.is_default && (
+          <button style={s.regenBtn} onClick={() => onRegenKey(tenant)} title="Generate a new API key for this tenant">
+            Regen key
+          </button>
+        )}
       </div>
     </div>
   );
@@ -298,4 +333,5 @@ const s: Record<string, React.CSSProperties> = {
   stepRow: { display: 'flex', gap: '0.75rem', alignItems: 'flex-start', fontSize: '0.78rem' },
   envName: { fontFamily: 'monospace', fontSize: '0.72rem', fontWeight: 600, backgroundColor: '#1d4ed822', color: '#1d4ed8', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap', marginTop: 2 },
   stepDesc: { color: 'var(--muted)', flex: 1 },
+  regenBtn: { display: 'inline-flex', alignItems: 'center', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.75rem', color: 'var(--muted)' },
 };

@@ -76,7 +76,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Step 1: Create tenant record
+  // Step 1: Create tenant record (skip if already exists)
   const tenantRes = await fetch(`${CORE_API_URL}/admin/tenants`, {
     method: 'POST',
     headers: adminHeaders(),
@@ -84,16 +84,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     cache: 'no-store',
   });
 
-  if (!tenantRes.ok) {
+  const tenantAlreadyExisted = tenantRes.status === 409;
+
+  if (!tenantRes.ok && !tenantAlreadyExisted) {
     const err = await tenantRes.json().catch(() => ({}));
     const msg = err?.detail ?? `HTTP ${tenantRes.status}`;
-    if (tenantRes.status === 409) {
-      return NextResponse.json({ error: `Tenant "${tenantId}" already exists.` }, { status: 409 });
-    }
     return NextResponse.json({ error: `Failed to create tenant: ${msg}` }, { status: tenantRes.status });
   }
 
-  // Step 2: Create BFF API key scoped to the new tenant
+  // Step 2: Create BFF API key scoped to the tenant
   const keyRes = await fetch(`${CORE_API_URL}/admin/keys`, {
     method: 'POST',
     headers: adminHeaders(),
@@ -109,7 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!keyRes.ok) {
     const err = await keyRes.json().catch(() => ({}));
     return NextResponse.json(
-      { error: `Tenant created but key generation failed: ${err?.detail ?? keyRes.status}. Run the seed script manually.` },
+      { error: `${tenantAlreadyExisted ? 'Tenant already exists but' : 'Tenant created but'} key generation failed: ${err?.detail ?? keyRes.status}.` },
       { status: 500 },
     );
   }
@@ -119,6 +118,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json({
     tenant_id: tenantId,
     name,
+    already_existed: tenantAlreadyExisted,
     api_key: keyData.key,
     api_key_prefix: keyData.prefix,
     api_key_expires_at: keyData.expires_at,
