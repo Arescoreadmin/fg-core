@@ -94,6 +94,7 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
   const [inviteRole, setInviteRole] = useState<'user' | 'admin' | 'auditor'>('user');
   const [inviteResult, setInviteResult] = useState<{ invite_token: string; invite_url_hint: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
 
   async function load() {
     setLoading(true); setError(null);
@@ -105,7 +106,7 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
   useEffect(() => { load(); }, [tenantId]);
 
   async function handleInvite() {
-    setSubmitting(true); setError(null);
+    setSubmitting(true); setError(null); setEmailStatus('idle');
     try {
       const r = await coreApi<{ invite_token: string; invite_url_hint: string }>('workforce/users', tenantId, {
         method: 'POST',
@@ -113,7 +114,16 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
       });
       setInviteResult(r); setShowInvite(false); setInviteEmail(''); setInviteName('');
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Invite failed'); }
+      // Auto-send invite email
+      setEmailStatus('sending');
+      const label = tenantId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const res = await fetch('/api/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'console_invite', to: inviteEmail, name: inviteName, invite_url_hint: r.invite_url_hint, tenant_label: label }),
+      });
+      setEmailStatus(res.ok ? 'sent' : 'failed');
+    } catch (e) { setError(e instanceof Error ? e.message : 'Invite failed'); setEmailStatus('failed'); }
     finally { setSubmitting(false); }
   }
 
@@ -136,7 +146,7 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
       {error && <div style={s.errorBanner}>{error}</div>}
       {inviteResult && (
         <div style={s.successBanner}>
-          <strong>Invite created — share this link (expires in 72 h):</strong>
+          <strong>Invite created{emailStatus === 'sent' ? ' — email sent ✓' : emailStatus === 'failed' ? ' — email failed (copy link below)' : emailStatus === 'sending' ? ' — sending email…' : ''}.</strong>
           <code style={s.code}>{typeof window !== 'undefined' ? window.location.origin : ''}{inviteResult.invite_url_hint}</code>
         </div>
       )}
@@ -207,8 +217,11 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
   const [engagementId, setEngagementId] = useState('');
   const [portalRole, setPortalRole] = useState('general');
   const [ttlDays, setTtlDays] = useState(365);
-  const [created, setCreated] = useState<{ raw_secret: string; portal_login_url: string; portal_role: string } | null>(null);
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [recipientName, setRecipientName] = useState('');
+  const [created, setCreated] = useState<{ raw_secret: string; portal_login_url: string; portal_role: string; expires_at?: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [grantEmailStatus, setGrantEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
 
   async function load() {
     setLoading(true); setError(null);
@@ -220,15 +233,36 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
   useEffect(() => { load(); }, [tenantId]);
 
   async function handleCreate() {
-    setSubmitting(true); setError(null);
+    setSubmitting(true); setError(null); setGrantEmailStatus('idle');
     try {
-      const r = await coreApi<{ raw_secret: string; portal_login_url: string; portal_role: string }>('portal/grants', tenantId, {
+      const r = await coreApi<{ raw_secret: string; portal_login_url: string; portal_role: string; expires_at?: string }>('portal/grants', tenantId, {
         method: 'POST',
         body: JSON.stringify({ client_id: clientId, engagement_id: engagementId, portal_role: portalRole, ttl_days: ttlDays }),
       });
       setCreated(r); setShowCreate(false); setClientId(''); setEngagementId('');
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to create'); }
+      // Auto-send portal credentials if recipient email provided
+      if (recipientEmail) {
+        setGrantEmailStatus('sending');
+        const label = tenantId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const res = await fetch('/api/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'portal_grant',
+            to: recipientEmail,
+            name: recipientName || recipientEmail,
+            portal_login_url: r.portal_login_url,
+            raw_secret: r.raw_secret,
+            portal_role: r.portal_role,
+            tenant_label: label,
+            expires_at: r.expires_at,
+          }),
+        });
+        setGrantEmailStatus(res.ok ? 'sent' : 'failed');
+      }
+      setRecipientEmail(''); setRecipientName('');
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to create'); setGrantEmailStatus('failed'); }
     finally { setSubmitting(false); }
   }
 
@@ -254,11 +288,13 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
 
       {created && (
         <div style={s.successBanner}>
-          <strong>Grant created — copy this password now. Not shown again.</strong>
+          <strong>
+            Grant created{grantEmailStatus === 'sent' ? ' — credentials emailed ✓' : grantEmailStatus === 'failed' ? ' — email failed, share credentials below' : grantEmailStatus === 'sending' ? ' — sending email…' : ' — copy credentials below'}.
+          </strong>
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Portal access password</span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Portal access password (not shown again)</span>
             <code style={s.code}>{created.raw_secret}</code>
-            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Login URL (send to client)</span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Login URL</span>
             <code style={s.code}>{portalOrigin}{created.portal_login_url}</code>
             <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>View type: <span style={roleBadge(created.portal_role)}>{created.portal_role}</span></span>
           </div>
@@ -286,9 +322,13 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
               </select>
             </label>
             <label style={s.field}>Access duration (days)<input style={s.input} type="number" min={1} max={730} value={ttlDays} onChange={e => setTtlDays(Number(e.target.value))} /></label>
+            <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '0.25rem 0' }} />
+            <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: 0 }}>Send credentials by email (optional)</p>
+            <label style={s.field}>Recipient email<input style={s.input} type="email" value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)} placeholder="client@company.com" /></label>
+            <label style={s.field}>Recipient name<input style={s.input} value={recipientName} onChange={e => setRecipientName(e.target.value)} placeholder="Jane Smith" /></label>
             <div style={s.modalActions}>
               <button style={s.secondaryBtn} onClick={() => setShowCreate(false)} disabled={submitting}>Cancel</button>
-              <button style={s.primaryBtn} onClick={handleCreate} disabled={submitting || !clientId || !engagementId}>{submitting ? 'Creating…' : 'Create grant'}</button>
+              <button style={s.primaryBtn} onClick={handleCreate} disabled={submitting || !clientId || !engagementId}>{submitting ? 'Creating…' : recipientEmail ? 'Create & email' : 'Create grant'}</button>
             </div>
           </div>
         </div>
