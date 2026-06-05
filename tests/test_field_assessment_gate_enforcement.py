@@ -23,7 +23,10 @@ _TENANT = "tenant-gate-enforce"
 
 @pytest.fixture()
 def client(build_app):
+    from sqlalchemy import text as sa_text
+
     from api.auth_scopes import mint_key
+    from api.tenant_rbac import assign_role
 
     app = build_app(auth_enabled=True)
     key = mint_key(
@@ -32,6 +35,34 @@ def client(build_app):
         "governance:qa_approve",
         tenant_id=_TENANT,
     )
+
+    from api.db import get_sessionmaker
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        key_id = db.execute(
+            sa_text(
+                """
+                SELECT id
+                FROM api_keys
+                WHERE tenant_id = :tenant_id
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ),
+            {"tenant_id": _TENANT},
+        ).scalar_one()
+        assign_role(
+            db,
+            tenant_id=_TENANT,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name="auditor",
+        )
+    finally:
+        db.close()
+
     return TestClient(app, headers={"X-API-Key": key})
 
 

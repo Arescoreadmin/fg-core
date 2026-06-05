@@ -53,6 +53,9 @@ class FaGovernanceDecision(Base):
 
     # Actor attribution
     actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_subject: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )  # Auth0 sub / key prefix — non-repudiation anchor (H14)
     actor_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
     actor_email: Mapped[str | None] = mapped_column(String(512), nullable=True)
     actor_role: Mapped[str | None] = mapped_column(String(255), nullable=True)

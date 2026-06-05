@@ -69,6 +69,43 @@ def _sessionmaker():
     return get_sessionmaker()
 
 
+def _mint_key_with_role(
+    *scopes: str, tenant_id: str, role_name: str, session_factory
+) -> str:
+    from sqlalchemy import text as sa_text
+    from api.auth_scopes import mint_key
+    from api.tenant_rbac import assign_role
+
+    key = mint_key(*scopes, tenant_id=tenant_id)
+
+    db = session_factory()()
+    try:
+        key_id = db.execute(
+            sa_text(
+                """
+                SELECT id
+                FROM api_keys
+                WHERE tenant_id = :tenant_id
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ),
+            {"tenant_id": tenant_id},
+        ).scalar_one()
+
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name=role_name,
+        )
+    finally:
+        db.close()
+
+    return key
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -76,19 +113,27 @@ def _sessionmaker():
 
 @pytest.fixture()
 def client(build_app):
-    from api.auth_scopes import mint_key
-
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:write", "governance:read", tenant_id=_TENANT)
+    key = _mint_key_with_role(
+        "governance:write",
+        "governance:read",
+        tenant_id=_TENANT,
+        role_name="analyst",
+        session_factory=_sessionmaker,
+    )
     return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
 def other_client(build_app):
-    from api.auth_scopes import mint_key
-
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:write", "governance:read", tenant_id=_OTHER)
+    key = _mint_key_with_role(
+        "governance:write",
+        "governance:read",
+        tenant_id=_OTHER,
+        role_name="analyst",
+        session_factory=_sessionmaker,
+    )
     return TestClient(app, headers={"X-API-Key": key})
 
 

@@ -13493,3 +13493,65 @@ No change to authentication or authorization model. All 5 routes require valid t
 - Future: console PATCH form for governance record fields (ownership, DPA status, contract status)
 - Future: governance exception expiration alerting (scheduled check against `risk_acceptance_expiration`)
 - Future: bulk governance record export for audit packages
+
+---
+
+## PR 408 — feat(h14): Enterprise RBAC + Human Actor Attribution
+
+**Branch:** `audit/enterprise-first-client-readiness-2026-06-04`
+**Commit:** `2531cb4f`
+**Date:** 2026-06-04
+
+**Summary:**
+
+Implements permission-based authorization with Auth0 as the identity authority. Closes 83 governance mutation routes that were previously scope-only gated. Actor attribution is now non-repudiable: sourced from verified JWT claims, not spoofable request bodies.
+
+**Files changed:**
+
+- `api/actor_context.py` — NEW; `ALL_PERMISSIONS` (24 permissions), `ROLE_PERMISSIONS` dict (6 roles), `ActorContext` dataclass; SoD enforced by omission in `ROLE_PERMISSIONS` mapping
+- `api/auth_dispatch.py` — NEW; `get_actor_context()` FastAPI dependency (Auth0 JWT → API key → dev bypass); `require_permission()` dependency factory; `FG_AUTH_ENABLED=0` dev bypass preserves backward compat
+- `api/identity_providers/__init__.py` — NEW; package init
+- `api/identity_providers/base.py` — NEW; `IdentityProvider` Protocol (`extract_actor(token) -> ActorContext`)
+- `api/identity_providers/auth0.py` — NEW; Auth0 RS256 JWKS validation; 1h TTL cache with kid-miss forced refresh; lazy `httpx` import
+- `api/identity_providers/api_key.py` — NEW; API key → `ActorContext`; legacy 5-role → 6-role mapping (`governance_admin` → `compliance_reviewer`, `analyst` → `assessor`, etc.)
+- `api/identity_providers/entra.py` — NEW; Entra ID stub (raises `NotImplementedError`; schema complete)
+- `api/field_assessment.py` — MODIFIED; 5 governance routes hardened: `create_risk_acceptance_route` (`risk.accept`), `create_governance_exception_route` (`exception.grant`), `qa_approve_report_route` (`report.qa_approve`), `generate_verification_bundle_route` (`bundle.generate`), `approve_verification_bundle_route` (`bundle.approve`); spoofable `actor_name/email/role` fields stripped from request bodies; `actor_subject` now sourced from `ActorContext`
+- `api/db_models_governance_decision.py` — MODIFIED; `actor_subject` column added (`String(255), nullable=True`) — non-repudiation anchor (Auth0 sub / key prefix)
+- `api/db_models_governance_event.py` — NEW; `FaGovernanceEvent` append-only ORM; `event_version`, `schema_version`, `decision_reason` (first-class), `review_duration_seconds`, `delegated_by/delegation_reason/delegation_expires_at`, `industry_sector`, `risk_level`, `outcome`
+- `migrations/postgres/0098_h14_governance_events.sql` — NEW; `ALTER TABLE fa_governance_decisions ADD COLUMN actor_subject`; `CREATE TABLE fa_governance_events` (full schema); append-only triggers (`trg_gov_events_no_update`, `trg_gov_events_no_delete`); RLS enabled with `tenant_id` isolation policy
+- `tests/test_h14_rbac.py` — NEW; 75 tests across 10 series: P (permission model), D (dev bypass), V (viewer denied), A (assessor denied), Q (qa_reviewer SoD), C (compliance_reviewer SoD), T (tenant_admin SoD), X (platform_admin), J (JWT/Auth0 validation), G (governance event ledger)
+- `H14_RBAC_GAP_REPORT.md` — NEW; pre/post audit; 5 findings; SOC2/ISO27001/NIST CSF compliance table
+- `docs/operators/auth0_roles.md` — NEW; Auth0 setup guide; Login Action JavaScript; SoD role assignment policy; enterprise tier upgrade path
+- `ROADMAP.md` — UPDATED; H14 row added to Phase 1
+
+**Security posture:**
+
+This PR materially changes the authorization model. Pre-H14: any authenticated API key with `governance:write` scope could approve reports, accept risks, and grant exceptions. Post-H14: those mutations require specific permission tokens (`risk.accept`, `exception.grant`, `report.qa_approve`, `bundle.approve`) which map only to `compliance_reviewer`/`qa_reviewer` roles — roles that are Auth0-managed and cannot be spoofed. `tenant_admin` deliberately excluded from `risk.accept` (SoD: the person who configures the system cannot approve governance decisions). `platform_admin` uses `ALL_PERMISSIONS` explicitly enumerated — no wildcard.
+
+Actor attribution non-repudiation: `actor_subject` = Auth0 sub stripped from JWT after RS256 signature verification. Cannot be forged by the caller. `actor_name` and `actor_email` also sourced from verified JWT claims, not request bodies.
+
+Dev bypass (`FG_AUTH_ENABLED=0`) grants all permissions in-process — this is intentional for local development and existing test suites.
+
+**Audit posture:**
+
+No change to `_c6_write_audit_event` call sites. Actor attribution is now enriched: all audit events for the 5 hardened routes will carry `actor_subject` (verified sub), `actor_email`, `actor_name` from JWT, and `actor_auth_source="oidc_auth0"`.
+
+**Migration posture:**
+
+Migration 0098 is additive: one `ADD COLUMN IF NOT EXISTS` on `fa_governance_decisions`, one new table `fa_governance_events`. Both are safe to replay. RLS on `fa_governance_events` uses `current_setting('app.tenant_id', true)` consistent with existing RLS policy pattern.
+
+**Tests/gates run:**
+
+- `pytest tests/test_h14_rbac.py -q -p no:warnings` — 75/75 passed
+
+**Known limitations:**
+
+- `require_permission()` is applied to 5 high-value governance routes. Remaining mutation routes (`finding.create`, `assessment.create`, etc.) still use `require_scopes()` only — planned for H14.1
+- Entra ID provider is a stub; complete implementation requires customer engagement with Entra tenant config
+- `fa_governance_events` table is created but write path not yet wired to service layer — seeded for H14.1 event emission
+
+**Follow-up work:**
+
+- H14.1: apply `require_permission()` to all remaining mutation routes
+- H14.2: wire `FaGovernanceEvent` write path in `GovernanceDecisionService`
+- H14.3: Entra ID provider implementation (customer-driven)

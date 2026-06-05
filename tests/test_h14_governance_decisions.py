@@ -164,6 +164,43 @@ def _make_report(SM, *, tenant_id: str, engagement_id: str) -> str:
     return rid
 
 
+def _mint_key_with_role(
+    *scopes: str, tenant_id: str, role_name: str, session_factory
+) -> str:
+    from sqlalchemy import text as sa_text
+    from api.auth_scopes import mint_key
+    from api.tenant_rbac import assign_role
+
+    key = mint_key(*scopes, tenant_id=tenant_id)
+
+    db = session_factory()()
+    try:
+        key_id = db.execute(
+            sa_text(
+                """
+                SELECT id
+                FROM api_keys
+                WHERE tenant_id = :tenant_id
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ),
+            {"tenant_id": tenant_id},
+        ).scalar_one()
+
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name=role_name,
+        )
+    finally:
+        db.close()
+
+    return key
+
+
 # ---------------------------------------------------------------------------
 # Fixtures — function-scoped to match conftest.build_app
 # ---------------------------------------------------------------------------
@@ -171,24 +208,40 @@ def _make_report(SM, *, tenant_id: str, engagement_id: str) -> str:
 
 @pytest.fixture()
 def client(build_app):
-    from api.auth_scopes import mint_key
-
     app = build_app(auth_enabled=True)
-    key = mint_key(
+    key = _mint_key_with_role(
         "governance:write",
         "governance:read",
-        "governance:qa_approve",
         tenant_id=_TENANT,
+        role_name="governance_admin",
+        session_factory=_sessionmaker,
+    )
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+@pytest.fixture()
+def qa_client(build_app):
+    app = build_app(auth_enabled=True)
+    key = _mint_key_with_role(
+        "governance:write",
+        "governance:read",
+        tenant_id=_TENANT,
+        role_name="auditor",
+        session_factory=_sessionmaker,
     )
     return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
 def other_client(build_app):
-    from api.auth_scopes import mint_key
-
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:write", "governance:read", tenant_id=_OTHER_TENANT)
+    key = _mint_key_with_role(
+        "governance:write",
+        "governance:read",
+        tenant_id=_OTHER_TENANT,
+        role_name="governance_admin",
+        session_factory=_sessionmaker,
+    )
     return TestClient(app, headers={"X-API-Key": key})
 
 
@@ -412,14 +465,14 @@ def test_g7_exception_service_has_no_update_method() -> None:
 
 
 def test_g8_qa_approve_creates_report_approved_decision_with_attribution(
-    client: TestClient, SM, eng_id
+    qa_client: TestClient, SM, eng_id
 ) -> None:
     """G8: qa_approve route creates a report_approved governance decision with actor attribution."""
     from api.db_models_governance_decision import FaGovernanceDecision
 
     report_id = _make_report(SM, tenant_id=_TENANT, engagement_id=eng_id)
 
-    resp = client.post(
+    resp = qa_client.post(
         f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
         json={
             "reviewer_name": "Auditor One",
@@ -443,9 +496,11 @@ def test_g8_qa_approve_creates_report_approved_decision_with_attribution(
         )
         assert len(decisions) == 1
         d = decisions[0]
-        # G9: actor attribution
-        assert d.actor_email == "auditor@example.com"
-        assert d.actor_role == "Senior Auditor"
+        # G9: actor attribution comes from ActorContext, not spoofable request body.
+        assert d.actor_auth_source == "api_key"
+        assert d.actor_id == "fgk"
+        assert d.actor_email is None
+        assert d.actor_role == "qa_reviewer"
         assert d.entity_type == "report"
         assert d.entity_id == report_id  # G33 covered here
         assert d.transaction_id is not None
