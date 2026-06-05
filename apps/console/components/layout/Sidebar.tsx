@@ -18,6 +18,7 @@ import {
   MessageSquare,
   Settings,
   Users,
+  Building2,
   LogOut,
   X,
 } from 'lucide-react';
@@ -79,6 +80,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Workforce',
     items: [
       { label: 'Workforce Intel', href: '/dashboard/workforce',     icon: Users },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { label: 'Clients',         href: '/admin/tenants',           icon: Building2 },
     ],
   },
   {

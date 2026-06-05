@@ -1,526 +1,124 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Building2, ExternalLink, Users, ShieldCheck } from 'lucide-react';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ConsoleUser {
-  user_id: string;
-  email: string;
-  display_name: string;
-  role: 'user' | 'admin' | 'auditor';
-  active: boolean;
-  invite_pending: boolean;
-  last_active_at: string | null;
-  created_at: string;
+interface TenantEntry {
+  tenant_id: string;
+  label: string;
+  is_default: boolean;
 }
 
-interface PortalGrant {
-  grant_id: string;
-  client_id: string;
-  engagement_id: string;
-  portal_role: string;
-  status: 'active' | 'revoked' | 'expired';
-  created_by: string;
-  created_at: string;
-  expires_at: string;
-  last_used_at: string | null;
-  rotation_counter: number;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmt(value: string | null | undefined): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  return isNaN(d.getTime()) ? value : d.toLocaleString();
-}
-
-function fmtDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  return isNaN(d.getTime()) ? value : d.toLocaleDateString();
-}
-
-function roleBadge(role: string): React.CSSProperties {
-  const map: Record<string, string> = {
-    admin: '#1d4ed8',
-    auditor: '#7c3aed',
-    executive: '#0891b2',
-    remediation: '#b45309',
-    technical: '#374151',
-    compliance: '#065f46',
-    general: '#374151',
-  };
-  return {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: '9999px',
-    fontSize: '0.7rem',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    backgroundColor: (map[role] ?? '#374151') + '22',
-    color: map[role] ?? '#374151',
-    border: `1px solid ${(map[role] ?? '#374151')}44`,
-  };
-}
-
-function statusDot(status: string) {
-  const color = status === 'active' ? '#22c55e' : status === 'revoked' ? '#ef4444' : '#f59e0b';
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: color, display: 'inline-block' }} />
-      {status}
-    </span>
-  );
-}
-
-// ─── API calls ────────────────────────────────────────────────────────────────
-
-async function coreApi<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/core/${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.detail ?? `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
-
-// ─── Console Users tab ────────────────────────────────────────────────────────
-
-function ConsoleUsersTab() {
-  const [users, setUsers] = useState<ConsoleUser[]>([]);
+export default function ClientRosterPage() {
+  const [tenants, setTenants] = useState<TenantEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
-  const [inviteRole, setInviteRole] = useState<'user' | 'admin' | 'auditor'>('user');
-  const [inviteResult, setInviteResult] = useState<{ invite_token: string; invite_url_hint: string } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
-  async function loadUsers() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await coreApi<{ items: ConsoleUser[] }>('workforce/users');
-      setUsers(data.items ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load users');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { loadUsers(); }, []);
-
-  async function handleInvite() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const result = await coreApi<{ invite_token: string; invite_url_hint: string }>('workforce/users', {
-        method: 'POST',
-        body: JSON.stringify({ email: inviteEmail, display_name: inviteName, role: inviteRole }),
-      });
-      setInviteResult(result);
-      setInviteEmail('');
-      setInviteName('');
-      setInviteRole('user');
-      await loadUsers();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Invite failed');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleDeactivate(userId: string) {
-    setError(null);
-    try {
-      await coreApi(`workforce/users/${userId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ active: false }),
-      });
-      await loadUsers();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to deactivate user');
-    }
-  }
-
-  async function handleReactivate(userId: string) {
-    setError(null);
-    try {
-      await coreApi(`workforce/users/${userId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ active: true }),
-      });
-      await loadUsers();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to reactivate user');
-    }
-  }
-
-  return (
-    <div>
-      <div style={s.sectionHeader}>
-        <div>
-          <p style={s.sectionTitle}>Console users</p>
-          <p style={s.sectionDesc}>Users with access to the FrostGate console. Roles: <strong>admin</strong> (full access), <strong>auditor</strong> (read-only audit), <strong>user</strong> (standard).</p>
-        </div>
-        <button style={s.primaryBtn} onClick={() => { setShowInvite(true); setInviteResult(null); }}>
-          Invite user
-        </button>
-      </div>
-
-      {error && <div style={s.errorBanner}>{error}</div>}
-
-      {inviteResult && (
-        <div style={s.successBanner}>
-          <strong>Invite created.</strong> Share this token with the user — it expires in 72 hours.
-          <code style={s.code}>{window.location.origin}{inviteResult.invite_url_hint}</code>
-        </div>
-      )}
-
-      {showInvite && (
-        <div style={s.modalBackdrop}>
-          <div style={s.modal}>
-            <h2 style={s.modalTitle}>Invite console user</h2>
-            <label style={s.field}>
-              Email
-              <input style={s.input} type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="user@client.com" />
-            </label>
-            <label style={s.field}>
-              Display name
-              <input style={s.input} value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Jane Smith" />
-            </label>
-            <label style={s.field}>
-              Console role
-              <select style={s.input} value={inviteRole} onChange={e => setInviteRole(e.target.value as 'user' | 'admin' | 'auditor')}>
-                <option value="user">User — standard access</option>
-                <option value="admin">Admin — full tenant access</option>
-                <option value="auditor">Auditor — read-only, audit logs</option>
-              </select>
-            </label>
-            <div style={s.modalActions}>
-              <button style={s.secondaryBtn} onClick={() => setShowInvite(false)} disabled={submitting}>Cancel</button>
-              <button style={s.primaryBtn} onClick={handleInvite} disabled={submitting || !inviteEmail || !inviteName}>
-                {submitting ? 'Sending…' : 'Send invite'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={s.tableWrap}>
-        {loading ? (
-          <p style={s.muted}>Loading users…</p>
-        ) : (
-          <table style={s.table}>
-            <thead>
-              <tr>
-                {['Email', 'Name', 'Role', 'Status', 'Last active', 'Joined', 'Actions'].map(h => (
-                  <th key={h} style={s.th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {users.length === 0 ? (
-                <tr><td style={s.td} colSpan={7}>No console users yet.</td></tr>
-              ) : users.map(u => (
-                <tr key={u.user_id}>
-                  <td style={s.td}>{u.email}</td>
-                  <td style={s.td}>{u.display_name || '—'}</td>
-                  <td style={s.td}><span style={roleBadge(u.role)}>{u.role}</span></td>
-                  <td style={s.td}>
-                    {u.invite_pending ? (
-                      <span style={{ color: '#f59e0b', fontSize: '0.8rem' }}>Invite pending</span>
-                    ) : u.active ? (
-                      <span style={{ color: '#22c55e', fontSize: '0.8rem' }}>Active</span>
-                    ) : (
-                      <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>Inactive</span>
-                    )}
-                  </td>
-                  <td style={s.td}>{fmt(u.last_active_at)}</td>
-                  <td style={s.td}>{fmtDate(u.created_at)}</td>
-                  <td style={s.td}>
-                    {u.active ? (
-                      <button style={s.dangerBtn} onClick={() => handleDeactivate(u.user_id)}>Deactivate</button>
-                    ) : (
-                      <button style={s.secondaryBtn} onClick={() => handleReactivate(u.user_id)}>Reactivate</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Portal Access tab ────────────────────────────────────────────────────────
-
-const PORTAL_ROLES = [
-  { value: 'executive', label: 'Executive', desc: 'Risk posture, KPIs, no technical detail' },
-  { value: 'remediation', label: 'Remediation', desc: 'Findings list, remediation steps and status' },
-  { value: 'technical', label: 'Technical', desc: 'Full detail including evidence and controls' },
-  { value: 'compliance', label: 'Compliance', desc: 'Framework mapping and compliance posture' },
-  { value: 'general', label: 'General', desc: 'Default full-access portal view' },
-];
-
-function PortalAccessTab() {
-  const [grants, setGrants] = useState<PortalGrant[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [clientId, setClientId] = useState('');
-  const [engagementId, setEngagementId] = useState('');
-  const [portalRole, setPortalRole] = useState('general');
-  const [ttlDays, setTtlDays] = useState(365);
-  const [createdGrant, setCreatedGrant] = useState<{ raw_secret: string; portal_login_url: string; portal_role: string } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function loadGrants() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await coreApi<{ items: PortalGrant[] }>('portal/grants');
-      setGrants(data.items ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load grants');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { loadGrants(); }, []);
-
-  async function handleCreate() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const result = await coreApi<{ raw_secret: string; portal_login_url: string; portal_role: string; grant_id: string }>('portal/grants', {
-        method: 'POST',
-        body: JSON.stringify({ client_id: clientId, engagement_id: engagementId, portal_role: portalRole, ttl_days: ttlDays }),
-      });
-      setCreatedGrant(result);
-      setClientId('');
-      setEngagementId('');
-      setPortalRole('general');
-      setShowCreate(false);
-      await loadGrants();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create grant');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleRevoke(grantId: string) {
-    setError(null);
-    try {
-      await coreApi(`portal/grants/${grantId}`, { method: 'DELETE' });
-      await loadGrants();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to revoke grant');
-    }
-  }
-
-  return (
-    <div>
-      <div style={s.sectionHeader}>
-        <div>
-          <p style={s.sectionTitle}>Portal access grants</p>
-          <p style={s.sectionDesc}>
-            Each grant is a password-protected link for a specific client and engagement.
-            Choose a view type to control what the client sees when they log in.
-          </p>
-        </div>
-        <button style={s.primaryBtn} onClick={() => { setShowCreate(true); setCreatedGrant(null); }}>
-          Create grant
-        </button>
-      </div>
-
-      {error && <div style={s.errorBanner}>{error}</div>}
-
-      {createdGrant && (
-        <div style={s.successBanner}>
-          <strong>Grant created — copy this password now. It will not be shown again.</strong>
-          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Portal access password</div>
-            <code style={s.code}>{createdGrant.raw_secret}</code>
-            <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Login URL (send to client)</div>
-            <code style={s.code}>{window.location.origin.replace('console.', 'app.')}{createdGrant.portal_login_url}</code>
-            <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-              View type: <span style={roleBadge(createdGrant.portal_role)}>{createdGrant.portal_role}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Portal view type explainer */}
-      <div style={s.viewTypeGrid}>
-        {PORTAL_ROLES.map(r => (
-          <div key={r.value} style={s.viewTypeCard}>
-            <span style={roleBadge(r.value)}>{r.label}</span>
-            <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: 'var(--muted)' }}>{r.desc}</p>
-          </div>
-        ))}
-      </div>
-
-      {showCreate && (
-        <div style={s.modalBackdrop}>
-          <div style={s.modal}>
-            <h2 style={s.modalTitle}>Create portal grant</h2>
-            <label style={s.field}>
-              Client ID
-              <input style={s.input} value={clientId} onChange={e => setClientId(e.target.value)} placeholder="acme-corp" />
-            </label>
-            <label style={s.field}>
-              Engagement ID
-              <input style={s.input} value={engagementId} onChange={e => setEngagementId(e.target.value)} placeholder="demo-bank-assessment-2026" />
-            </label>
-            <label style={s.field}>
-              Portal view type
-              <select style={s.input} value={portalRole} onChange={e => setPortalRole(e.target.value)}>
-                {PORTAL_ROLES.map(r => (
-                  <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>
-                ))}
-              </select>
-            </label>
-            <label style={s.field}>
-              Access duration (days)
-              <input style={s.input} type="number" min={1} max={730} value={ttlDays} onChange={e => setTtlDays(Number(e.target.value))} />
-            </label>
-            <div style={s.modalActions}>
-              <button style={s.secondaryBtn} onClick={() => setShowCreate(false)} disabled={submitting}>Cancel</button>
-              <button style={s.primaryBtn} onClick={handleCreate} disabled={submitting || !clientId || !engagementId}>
-                {submitting ? 'Creating…' : 'Create grant'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={s.tableWrap}>
-        {loading ? (
-          <p style={s.muted}>Loading grants…</p>
-        ) : (
-          <table style={s.table}>
-            <thead>
-              <tr>
-                {['Client', 'Engagement', 'View', 'Status', 'Created by', 'Expires', 'Last used', 'Actions'].map(h => (
-                  <th key={h} style={s.th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {grants.length === 0 ? (
-                <tr><td style={s.td} colSpan={8}>No portal grants yet.</td></tr>
-              ) : grants.map(g => (
-                <tr key={g.grant_id} style={{ opacity: g.status !== 'active' ? 0.5 : 1 }}>
-                  <td style={s.td}>{g.client_id}</td>
-                  <td style={{ ...s.td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{g.engagement_id}</td>
-                  <td style={s.td}><span style={roleBadge(g.portal_role)}>{g.portal_role}</span></td>
-                  <td style={s.td}>{statusDot(g.status)}</td>
-                  <td style={s.td}>{g.created_by}</td>
-                  <td style={s.td}>{fmtDate(g.expires_at)}</td>
-                  <td style={s.td}>{fmt(g.last_used_at)}</td>
-                  <td style={s.td}>
-                    {g.status === 'active' && (
-                      <button style={s.dangerBtn} onClick={() => handleRevoke(g.grant_id)}>Revoke</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-type Tab = 'users' | 'portal';
-
-export default function TenantAdminPage() {
-  const [tab, setTab] = useState<Tab>('users');
+  useEffect(() => {
+    fetch('/api/tenants')
+      .then(r => r.json())
+      .then(d => setTenants(d.tenants ?? []))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <main style={s.main}>
-      <div style={s.pageHeader}>
+      <div style={s.header}>
         <div>
-          <h1 style={s.pageTitle}>Tenant admin</h1>
-          <p style={s.pageSubtitle}>Manage console users and portal access grants for this tenant.</p>
+          <h1 style={s.title}>Clients</h1>
+          <p style={s.subtitle}>All tenants accessible from this console. Select a client to manage their users and portal access.</p>
         </div>
       </div>
 
-      <div style={s.tabs}>
-        {(['users', 'portal'] as const).map(t => (
-          <button
-            key={t}
-            style={{ ...s.tab, ...(tab === t ? s.tabActive : {}) }}
-            onClick={() => setTab(t)}
-          >
-            {t === 'users' ? 'Console users' : 'Portal access'}
-          </button>
-        ))}
-      </div>
+      {error && <div style={s.errorBanner}>{error}</div>}
 
-      <div style={s.card}>
-        {tab === 'users' ? <ConsoleUsersTab /> : <PortalAccessTab />}
+      {loading ? (
+        <p style={s.muted}>Loading tenants…</p>
+      ) : (
+        <div style={s.grid}>
+          {tenants.map(t => (
+            <TenantCard key={t.tenant_id} tenant={t} />
+          ))}
+        </div>
+      )}
+
+      <div style={s.hint}>
+        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+          To add a new demo tenant, update <code>FG_CONSOLE_DEMO_TENANTS</code> in Vercel and redeploy.
+          Real client tenants are provisioned via the seed script or the onboarding flow.
+        </p>
       </div>
     </main>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+function TenantCard({ tenant }: { tenant: TenantEntry }) {
+  const sectorIcon = tenant.tenant_id.includes('bank') ? '🏦'
+    : tenant.tenant_id.includes('health') ? '🏥'
+    : tenant.tenant_id.includes('law') ? '⚖️'
+    : '🏢';
+
+  const consoleUrl = `/field-assessment?tenant_id=${tenant.tenant_id}`;
+  const portalUrl = `/login?tenant_id=${tenant.tenant_id}`;
+
+  return (
+    <div style={s.card}>
+      <div style={s.cardTop}>
+        <span style={s.icon}>{sectorIcon}</span>
+        <div style={{ flex: 1 }}>
+          <div style={s.cardTitle}>{tenant.label}</div>
+          <code style={s.cardId}>{tenant.tenant_id}</code>
+        </div>
+        {tenant.is_default && (
+          <span style={s.defaultBadge}>default</span>
+        )}
+      </div>
+
+      <div style={s.cardActions}>
+        <Link href={`/admin/tenants/${tenant.tenant_id}`} style={s.manageBtn}>
+          <Users size={13} style={{ marginRight: 4 }} />
+          Manage users
+        </Link>
+
+        <a href={consoleUrl} style={s.viewBtn} title="View this tenant's field assessments">
+          <ShieldCheck size={13} style={{ marginRight: 4 }} />
+          Assessments
+        </a>
+
+        <a
+          href={`${typeof window !== 'undefined' ? window.location.origin.replace('console.', 'app.') : ''}${portalUrl}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={s.externalBtn}
+          title="Open portal login for this tenant"
+        >
+          <ExternalLink size={12} style={{ marginRight: 4 }} />
+          Portal
+        </a>
+      </div>
+    </div>
+  );
+}
 
 const s: Record<string, React.CSSProperties> = {
-  main: { minHeight: '100vh', padding: '2rem', maxWidth: '1200px', margin: '0 auto' },
-  pageHeader: { marginBottom: '1.5rem' },
-  pageTitle: { fontSize: '1.5rem', fontWeight: 600, marginBottom: '0.25rem' },
-  pageSubtitle: { fontSize: '0.875rem', color: 'var(--muted)' },
-  tabs: { display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: 0 },
-  tab: {
-    padding: '0.5rem 1rem',
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
-    fontSize: '0.875rem',
-    color: 'var(--muted)',
-    borderBottom: '2px solid transparent',
-    marginBottom: '-1px',
-  },
-  tabActive: { color: 'var(--foreground)', borderBottom: '2px solid #2563eb', fontWeight: 500 },
-  card: { border: '1px solid var(--border)', borderRadius: '8px', padding: '1.5rem', backgroundColor: 'var(--surface, var(--background))' },
-  sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' },
-  sectionTitle: { fontWeight: 600, marginBottom: '0.25rem' },
-  sectionDesc: { fontSize: '0.8rem', color: 'var(--muted)', maxWidth: '540px' },
-  tableWrap: { overflowX: 'auto', marginTop: '1rem' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  th: { textAlign: 'left', padding: '0.6rem 0.75rem', borderBottom: '1px solid var(--border)', fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' },
-  td: { padding: '0.65rem 0.75rem', borderBottom: '1px solid var(--border)', fontSize: '0.875rem' },
+  main: { minHeight: '100vh', padding: '2rem', maxWidth: '1100px', margin: '0 auto' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.75rem' },
+  title: { fontSize: '1.5rem', fontWeight: 600, marginBottom: '0.25rem' },
+  subtitle: { fontSize: '0.875rem', color: 'var(--muted)', maxWidth: '520px' },
   muted: { color: 'var(--muted)', fontSize: '0.875rem' },
   errorBanner: { padding: '0.75rem 1rem', borderRadius: '6px', backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444', marginBottom: '1rem', fontSize: '0.875rem' },
-  successBanner: { padding: '1rem', borderRadius: '6px', backgroundColor: 'rgba(34,197,94,0.08)', marginBottom: '1rem', fontSize: '0.875rem' },
-  code: { display: 'block', marginTop: '6px', padding: '0.5rem 0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.8rem', overflowX: 'auto', wordBreak: 'break-all' },
-  primaryBtn: { padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', backgroundColor: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap' },
-  secondaryBtn: { padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.875rem' },
-  dangerBtn: { padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444', background: 'transparent', cursor: 'pointer', fontSize: '0.875rem' },
-  modalBackdrop: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 50 },
-  modal: { background: 'var(--background, #fff)', borderRadius: '12px', padding: '1.5rem', width: '100%', maxWidth: '460px', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)' },
-  modalTitle: { fontSize: '1.1rem', fontWeight: 600 },
-  field: { display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--muted)' },
-  input: { padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.875rem', background: 'var(--background)', color: 'var(--foreground)' },
-  modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' },
-  viewTypeGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' },
-  viewTypeCard: { padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', backgroundColor: 'var(--surface-2, var(--background))' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem', marginBottom: '2rem' },
+  card: { border: '1px solid var(--border)', borderRadius: '10px', padding: '1.25rem', backgroundColor: 'var(--surface, var(--background))', display: 'flex', flexDirection: 'column', gap: '1rem' },
+  cardTop: { display: 'flex', alignItems: 'flex-start', gap: '0.75rem' },
+  icon: { fontSize: '1.5rem', lineHeight: 1, marginTop: 2 },
+  cardTitle: { fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem' },
+  cardId: { fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'monospace' },
+  defaultBadge: { fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', padding: '2px 7px', borderRadius: '9999px', backgroundColor: '#2563eb22', color: '#2563eb', border: '1px solid #2563eb44', whiteSpace: 'nowrap' },
+  cardActions: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap' },
+  manageBtn: { display: 'inline-flex', alignItems: 'center', padding: '0.4rem 0.75rem', borderRadius: '6px', border: 'none', backgroundColor: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'none', fontWeight: 500 },
+  viewBtn: { display: 'inline-flex', alignItems: 'center', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'none', color: 'var(--foreground)' },
+  externalBtn: { display: 'inline-flex', alignItems: 'center', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'none', color: 'var(--muted)' },
+  hint: { padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', backgroundColor: 'var(--surface-2, var(--background))' },
 };
