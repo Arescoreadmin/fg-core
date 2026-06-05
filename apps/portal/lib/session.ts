@@ -29,18 +29,23 @@ export async function createSessionToken(): Promise<string> {
 
 // ─── Grant session (C7: carries opaque backend session_id) ────────────────────
 
-export async function createGrantSession(sessionId: string): Promise<string> {
+export interface GrantSession {
+  sessionId: string;
+  tenantId: string | null;
+}
+
+export async function createGrantSession(sessionId: string, tenantId?: string | null): Promise<string> {
   const key = await getKey();
   if (!key) throw new Error('PORTAL_SESSION_SECRET not configured');
   const exp = Date.now() + SESSION_TTL_MS;
-  const payload = JSON.stringify({ ok: true, exp, sessionId });
+  const payload = JSON.stringify({ ok: true, exp, sessionId, tenantId: tenantId ?? null });
   const payloadB64 = btoa(unescape(encodeURIComponent(payload)));
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadB64));
   const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
   return `${payloadB64}.${sigB64}`;
 }
 
-export async function getGrantSessionId(token: string | undefined): Promise<string | null> {
+export async function getGrantSession(token: string | undefined): Promise<GrantSession | null> {
   if (!token) return null;
   const key = await getKey();
   if (!key) return null;
@@ -56,10 +61,18 @@ export async function getGrantSessionId(token: string | undefined): Promise<stri
     if (payloadRaw.startsWith('ok:')) return null;
     const parsed = JSON.parse(decodeURIComponent(escape(payloadRaw)));
     if (!parsed.ok || Date.now() > (parsed.exp ?? 0)) return null;
-    return (parsed.sessionId as string) ?? null;
+    const sessionId = (parsed.sessionId as string) ?? '';
+    if (!sessionId) return null;
+    const tenantId = typeof parsed.tenantId === 'string' && parsed.tenantId ? parsed.tenantId : null;
+    return { sessionId, tenantId };
   } catch {
     return null;
   }
+}
+
+export async function getGrantSessionId(token: string | undefined): Promise<string | null> {
+  const session = await getGrantSession(token);
+  return session?.sessionId ?? null;
 }
 
 // ─── User-identity session (invite token login) ───────────────────────────────

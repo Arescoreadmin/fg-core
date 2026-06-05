@@ -7,6 +7,41 @@ const _loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const LOGIN_RL_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_RL_MAX = 5;
 
+function demoTenantAllowlist(): string[] {
+  return (process.env.FG_PORTAL_DEMO_TENANTS || process.env.PORTAL_DEMO_TENANTS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => /^[a-zA-Z0-9_-]{1,128}$/.test(value));
+}
+
+function resolveLoginTenant(requestedTenantId: string | undefined, defaultTenantId: string): string | null {
+  const requested = (requestedTenantId || '').trim();
+  if (!requested || requested === defaultTenantId) return defaultTenantId;
+  return demoTenantAllowlist().includes(requested) ? requested : null;
+}
+
+function parseDemoTenantKeys(raw: string | undefined): Record<string, string> {
+  if (!raw) return {};
+  const allowlist = demoTenantAllowlist();
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([tenant, key]) => [tenant.trim(), typeof key === 'string' ? key.trim() : ''])
+        .filter(([tenant, key]) => allowlist.includes(tenant) && key.length > 0),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function resolveCoreApiKey(tenantId: string, defaultTenantId: string, defaultKey: string): string | null {
+  if (tenantId === defaultTenantId) return defaultKey;
+  const keyMap = parseDemoTenantKeys(process.env.FG_PORTAL_DEMO_TENANT_KEYS || process.env.FG_DEMO_TENANT_API_KEYS);
+  return keyMap[tenantId] || null;
+}
+
 function checkLoginRateLimit(ip: string): boolean {
   const now = Date.now();
   const entry = _loginAttempts.get(ip);
@@ -47,7 +82,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { password?: string };
+  let body: { password?: string; tenant_id?: string };
   try {
     body = await req.json();
   } catch {
@@ -59,6 +94,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Access secret is required.' }, { status: 401 });
   }
 
+  const tenantId = resolveLoginTenant(body.tenant_id, coreTenantId);
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Portal tenant is not available.' }, { status: 403 });
+  }
+  const tenantApiKey = resolveCoreApiKey(tenantId, coreTenantId, coreApiKey);
+  if (!tenantApiKey) {
+    return NextResponse.json({ error: 'Portal tenant is not configured.' }, { status: 503 });
+  }
+
   // Exchange secret for a server-side session via POST /portal/authenticate.
   // The backend validates against Argon2id hashes — no plaintext stored.
   let sessionId: string;
@@ -66,8 +110,8 @@ export async function POST(req: NextRequest) {
     const resp = await fetch(`${coreApiUrl}/portal/authenticate`, {
       method: 'POST',
       headers: {
-        'X-API-Key': coreApiKey,
-        'X-Tenant-ID': coreTenantId,
+        'X-API-Key': tenantApiKey,
+        'X-Tenant-ID': tenantId,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ secret }),
@@ -95,7 +139,7 @@ export async function POST(req: NextRequest) {
 
   clearLoginAttempts(clientIp);
   // Store the opaque backend session_id in a signed HMAC cookie.
-  const token = await createGrantSession(sessionId);
+  const token = await createGrantSession(sessionId, tenantId);
   const res = NextResponse.json({ ok: true });
   res.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,

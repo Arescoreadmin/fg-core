@@ -55,7 +55,11 @@ function isDevOrTestEnv(env) {
  */
 async function simulateBuildRateLimitStore({ env, redisReachable = true } = {}) {
   const devOrTest = isDevOrTestEnv(env);
-  const redisUrl = env.BFF_REDIS_URL || undefined;
+  const rawRedisUrl = env.BFF_REDIS_URL || env.REDIS_URL || undefined;
+  const redisUrlIsRest = rawRedisUrl ? /^https?:\/\//i.test(rawRedisUrl.trim()) : false;
+  const redisUrl = rawRedisUrl && !redisUrlIsRest ? rawRedisUrl : undefined;
+  const upstashRestUrl = env.BFF_UPSTASH_REDIS_REST_URL || env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL || (redisUrlIsRest ? rawRedisUrl : undefined);
+  const upstashRestToken = env.BFF_UPSTASH_REDIS_REST_TOKEN || env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN || undefined;
   const backend = (env.BFF_RATE_LIMIT_BACKEND || '').trim().toLowerCase();
 
   // Explicit memory backend in prod-like env → config required
@@ -64,6 +68,33 @@ async function simulateBuildRateLimitStore({ env, redisReachable = true } = {}) 
   }
   if (backend === 'memory' && devOrTest) {
     return { store: { type: 'memory' }, unavailable: false };
+  }
+
+  const resolvedBackend = backend === 'upstash-rest' || backend === 'rest' || backend === 'upstash'
+    ? 'upstash-rest'
+    : backend === 'redis'
+      ? 'redis'
+      : upstashRestUrl || upstashRestToken
+        ? 'upstash-rest'
+        : redisUrl
+          ? 'redis'
+          : 'memory';
+
+  if (resolvedBackend === 'memory') {
+    if (devOrTest) return { store: { type: 'memory' }, unavailable: false };
+    return { store: null, unavailable: true, errorCode: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED', required: true };
+  }
+
+  if (resolvedBackend === 'upstash-rest') {
+    if (isBffRedisUrlMissingOrPlaceholder(upstashRestUrl) || isBffRedisUrlMissingOrPlaceholder(upstashRestToken)) {
+      if (devOrTest) return { store: { type: 'memory' }, unavailable: false };
+      return { store: null, unavailable: true, errorCode: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED', required: true };
+    }
+    if (!redisReachable) {
+      if (devOrTest) return { store: { type: 'memory' }, unavailable: false };
+      return { store: null, unavailable: true, errorCode: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE', required: true };
+    }
+    return { store: { type: 'upstash-rest' }, unavailable: false };
   }
 
   // Redis backend (auto or explicit)
@@ -135,6 +166,27 @@ test('change_me_bff_redis_url_is_rejected', async () => {
 });
 
 // ─── Test 5: memory_fallback_allowed_in_test ──────────────────────────────────
+
+test('redis_url_alias_is_accepted_in_prod', async () => {
+  const result = await simulateBuildRateLimitStore({
+    env: { NODE_ENV: 'production', FG_ENV: 'prod', REDIS_URL: 'redis://redis.example.com:6379/0' },
+  });
+  assert.equal(result.unavailable, false);
+  assert.equal(result.store?.type, 'redis');
+});
+
+test('upstash_rest_env_is_accepted_in_prod', async () => {
+  const result = await simulateBuildRateLimitStore({
+    env: {
+      NODE_ENV: 'production',
+      FG_ENV: 'prod',
+      UPSTASH_REDIS_REST_URL: 'https://example.upstash.io',
+      UPSTASH_REDIS_REST_TOKEN: 'token-123',
+    },
+  });
+  assert.equal(result.unavailable, false);
+  assert.equal(result.store?.type, 'upstash-rest');
+});
 
 test('memory_fallback_allowed_in_test', async () => {
   // No BFF_REDIS_URL in test env → memory fallback allowed
@@ -294,6 +346,7 @@ test('prod_enforcement_error_codes_defined_in_source', () => {
 
   // Both error codes must be defined
   assert.match(rateLimitSrc, /BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED/);
+  assert.match(rateLimitSrc, /UPSTASH_REDIS_REST_URL/);
   assert.match(rateLimitSrc, /BFF_RATE_LIMIT_REDIS_UNAVAILABLE/);
 
   // The placeholder detection function must be exported

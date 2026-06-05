@@ -8,8 +8,14 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next') ?? '/';
+  const initialTenant = params.get('tenant_id') ?? '';
+  const demoTenants = (process.env.NEXT_PUBLIC_PORTAL_DEMO_TENANTS ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   const [password, setPassword] = useState('');
+  const [tenantId, setTenantId] = useState(initialTenant);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -23,7 +29,7 @@ function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, tenant_id: tenantId || undefined }),
       });
       if (res.ok) {
         setStoredEngagementId(''); // clear stale engagement from previous session
@@ -61,6 +67,28 @@ function LoginForm() {
           disabled={loading}
         />
       </div>
+
+      {demoTenants.length > 0 && (
+        <div className="space-y-1.5">
+          <label htmlFor="tenant_id" className="block text-xs font-medium text-muted">
+            Demo tenant
+          </label>
+          <select
+            id="tenant_id"
+            value={tenantId}
+            onChange={(e) => setTenantId(e.target.value)}
+            className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+            disabled={loading}
+          >
+            <option value="">Default portal</option>
+            {demoTenants.map((tenant) => (
+              <option key={tenant} value={tenant}>
+                {tenant.replace(/-/g, ' ')}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {error && (
         <p role="alert" className="text-xs text-red-400">

@@ -67,9 +67,17 @@ test('tenant query override is disabled by default and gated to development flag
   assert.match(proxy, /if \(ALLOW_TENANT_QUERY_OVERRIDE && queryTenant\) return queryTenant/);
 });
 
+test('demo tenant selection is server allowlisted and key mapped', () => {
+  const proxy = read('app/api/core/[...path]/route.ts');
+  assert.match(proxy, /FG_CONSOLE_DEMO_TENANTS/);
+  assert.match(proxy, /FG_CONSOLE_DEMO_TENANT_KEYS/);
+  assert.match(proxy, /DEMO_TENANT_ALLOWLIST\.includes\(queryTenant\)/);
+  assert.match(proxy, /DEMO_TENANT_API_KEYS\[tenantId\]/);
+});
+
 test('proxy never forwards browser cookies or authorization headers', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
-  assert.match(proxy, /headers\.set\('X-API-Key', CORE_API_KEY\)/);
+  assert.match(proxy, /headers\.set\('X-API-Key', coreAuth\.apiKey\)/);
   assert.doesNotMatch(proxy, /cookie/i);
   assert.doesNotMatch(proxy, /authorization/i);
   assert.match(proxy, /Cache-Control': 'no-store'/);

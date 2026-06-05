@@ -1,11 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { COOKIE_NAME, getSessionUser, getGrantSessionId } from '@/lib/session';
+import { COOKIE_NAME, getSessionUser, getGrantSession } from '@/lib/session';
 import { getRedisClient } from '@/lib/redis';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.CORE_API_KEY;
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const DEMO_TENANT_ALLOWLIST = (process.env.FG_PORTAL_DEMO_TENANTS || process.env.PORTAL_DEMO_TENANTS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter((value) => /^[a-zA-Z0-9_-]{1,128}$/.test(value));
+
+function resolvePortalTenant(sessionTenantId: string | null): string | null {
+  if (sessionTenantId && DEMO_TENANT_ALLOWLIST.includes(sessionTenantId)) return sessionTenantId;
+  return CORE_TENANT_ID || null;
+}
+
+function parseDemoTenantKeys(raw: string | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([tenant, key]) => [tenant.trim(), typeof key === 'string' ? key.trim() : ''])
+        .filter(([tenant, key]) => DEMO_TENANT_ALLOWLIST.includes(tenant) && key.length > 0),
+    );
+  } catch {
+    return {};
+  }
+}
+
+const DEMO_TENANT_API_KEYS = parseDemoTenantKeys(
+  process.env.FG_PORTAL_DEMO_TENANT_KEYS || process.env.FG_DEMO_TENANT_API_KEYS,
+);
+
+function resolveCoreApiKey(tenantId: string): string | null {
+  if (tenantId === CORE_TENANT_ID) return CORE_API_KEY || null;
+  return DEMO_TENANT_API_KEYS[tenantId] || null;
+}
 
 const _rlBuckets = new Map<string, { count: number; resetAt: number }>();
 const RL_WINDOW_MS = Math.max(1000, parseInt(process.env.PORTAL_RL_WINDOW_MS || '60000', 10) || 60000);
@@ -118,14 +151,18 @@ async function proxyToCore(
   requestId: string,
 ): Promise<NextResponse> {
   if (!CORE_API_KEY) return jsonError('CORE_API_KEY is not configured', 500, requestId);
-  if (!CORE_TENANT_ID) return jsonError('CORE_TENANT_ID is not configured', 500, requestId);
   if (!isPortalPathAllowed(path, request.method)) {
     return jsonError('Route/method is not permitted by portal policy', 403, requestId);
   }
 
   const sessionToken = request.cookies.get(COOKIE_NAME)?.value;
   const sessionUser = await getSessionUser(sessionToken);
-  const sessionId = await getGrantSessionId(sessionToken);
+  const grantSession = await getGrantSession(sessionToken);
+  const sessionId = grantSession?.sessionId ?? null;
+  const tenantId = resolvePortalTenant(grantSession?.tenantId ?? null);
+  if (!tenantId) return jsonError('CORE_TENANT_ID is not configured', 500, requestId);
+  const coreApiKey = resolveCoreApiKey(tenantId);
+  if (!coreApiKey) return jsonError('Tenant API key is not configured', 500, requestId);
 
   const target = buildCoreUrl(path, request);
   try {
@@ -138,8 +175,8 @@ async function proxyToCore(
   }
 
   const headers = new Headers();
-  headers.set('X-API-Key', CORE_API_KEY);
-  headers.set('X-Tenant-ID', CORE_TENANT_ID);
+  headers.set('X-API-Key', coreApiKey);
+  headers.set('X-Tenant-ID', tenantId);
   headers.set('X-Request-ID', requestId);
   headers.set('X-Portal-Source', 'client-portal');
 

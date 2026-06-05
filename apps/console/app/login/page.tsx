@@ -18,7 +18,7 @@ function LoginForm() {
           <p className="text-sm text-muted">Operator access only</p>
         </div>
         <button
-          onClick={() => signIn('auth0', { callbackUrl })}
+          onClick={() => signIn('auth0', { callbackUrl }, { prompt: 'login' })}
           className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
         >
           Sign in with Auth0

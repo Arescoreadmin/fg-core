@@ -103,19 +103,24 @@ class PortalGrantService:
         engagement_id: str,
         created_by: str,
         ttl_days: int = _GRANT_TTL_DAYS,
+        portal_role: str = "general",
     ) -> GrantCreated:
         """Create a portal grant. Returns (grant, raw_secret). Raw secret is shown once."""
         raw_secret = secrets.token_urlsafe(32)
         grant_hash = _PH.hash(raw_secret)
         now = datetime.now(timezone.utc)
         expires = now + timedelta(days=ttl_days)
+        # Encode view type in grant_type so the portal can route to the right layout.
+        # "general" maps to the legacy "client_portal" value for backwards compat.
+        _role = (portal_role or "general").lower().strip()
+        _grant_type = "client_portal" if _role == "general" else f"client_portal.{_role}"
 
         grant = PortalGrant(
             id=secrets.token_hex(16),
             tenant_id=tenant_id,
             client_id=client_id,
             engagement_id=engagement_id,
-            grant_type="client_portal",
+            grant_type=_grant_type,
             grant_hash=grant_hash,
             created_by=created_by,
             created_at=now.isoformat(),

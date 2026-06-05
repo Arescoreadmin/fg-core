@@ -199,6 +199,8 @@ tools/ci/topology.sha256
 *.swp
 .vercel
 .env*
+!.env.example
+!**/.env.example
 
 # Local Vercel linkage
 .vercel/

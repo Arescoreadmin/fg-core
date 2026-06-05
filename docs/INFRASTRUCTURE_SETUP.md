@@ -152,9 +152,9 @@ export default auth(function middleware(req) {
 The console never calls the backend API directly from the browser. Every API call goes through the BFF (Backend For Frontend) proxy which runs server-side on Vercel and:
 
 1. Validates the requested path against an allowlist (`PROXY_RULES`)
-2. Injects `X-API-Key: <CORE_API_KEY>` (the governance key for the `default` tenant)
-3. Injects `X-Tenant-ID: <CORE_TENANT_ID>` (currently `default`)
-4. Enforces rate limiting (in-memory store in dev; Redis in prod)
+2. Injects `X-API-Key: <CORE_API_KEY>` for the default tenant, or an allowlisted demo tenant key from `FG_CONSOLE_DEMO_TENANT_KEYS` / `FG_DEMO_TENANT_API_KEYS`
+3. Injects `X-Tenant-ID: <CORE_TENANT_ID>` by default, or a tenant ID from `FG_CONSOLE_DEMO_TENANTS` when explicitly selected
+4. Enforces rate limiting (in-memory store in dev; Redis protocol or Upstash REST in prod)
 5. Forwards the request to `CORE_API_URL` (Railway backend)
 
 This means the API key never touches the browser — it lives only in Vercel environment variables, server-side.
@@ -165,7 +165,9 @@ This means the API key never touches the browser — it lives only in Vercel env
 |----------|-------|-------------|
 | `CORE_API_URL` | `https://api-production-6d47.up.railway.app` | Backend base URL |
 | `CORE_API_KEY` | `<governance key>` | API key injected into every backend request |
-| `CORE_TENANT_ID` | `default` | Tenant context injected into every backend request |
+| `CORE_TENANT_ID` | `default` | Default tenant context injected into backend requests |
+| `FG_CONSOLE_DEMO_TENANTS` | optional | Comma-separated allowlist for demo tenant query selection |
+| `FG_CONSOLE_DEMO_TENANT_KEYS` or `FG_DEMO_TENANT_API_KEYS` | optional | JSON map of allowlisted demo tenant IDs to tenant-bound API keys |
 | `AUTH0_CLIENT_ID` | `JPIiVXP8fKKSYblWegdN7BrnzwboWVUS` | Auth0 application client ID |
 | `AUTH0_CLIENT_SECRET` | `<secret>` | Auth0 application client secret |
 | `AUTH0_ISSUER_BASE_URL` | `https://dev-22nn3c7muqjk4tgu.us.auth0.com` | Auth0 domain |
@@ -268,7 +270,7 @@ Rate limiting counters (BFF proxy), session cache, and explanation cache (findin
 Added as a Railway add-on to the same project. Railway injects `REDIS_URL` automatically; this is mapped to `FG_REDIS_URL` in the API service.
 
 ### Note on current state
-The console BFF uses an in-memory rate limit store in development mode and falls back to Redis in production. The Python backend uses Redis for rate limiting and caching when `FG_REDIS_URL` is set.
+The console BFF uses an in-memory rate limit store in development mode. In production-like Vercel environments it requires either Redis protocol config (`BFF_REDIS_URL` or `REDIS_URL`) or Upstash/Vercel KV REST config (`UPSTASH_REDIS_REST_URL` plus `UPSTASH_REDIS_REST_TOKEN`, or `KV_REST_API_URL` plus `KV_REST_API_TOKEN`). The Python backend uses Redis for rate limiting and caching when `FG_REDIS_URL` is set.
 
 ---
 
@@ -426,15 +428,35 @@ The Anthropic API is called from the Railway backend. The Vercel frontend never 
 |----------|----------|-------------|
 | `CORE_API_URL` | Yes | Railway backend URL |
 | `CORE_API_KEY` | Yes | API key injected into every backend request |
-| `CORE_TENANT_ID` | Yes | Tenant ID injected into every backend request |
+| `CORE_TENANT_ID` | Yes | Default tenant ID injected into backend requests |
+| `FG_CONSOLE_DEMO_TENANTS` | No | Comma-separated allowlist for console demo tenant selection |
+| `FG_CONSOLE_DEMO_TENANT_KEYS` or `FG_DEMO_TENANT_API_KEYS` | No | JSON map of demo tenant IDs to tenant-bound API keys |
 | `AUTH0_CLIENT_ID` | Yes | Auth0 application client ID |
 | `AUTH0_CLIENT_SECRET` | Yes | Auth0 application client secret |
 | `AUTH0_ISSUER_BASE_URL` | Yes | Auth0 tenant URL (e.g. `https://dev-22nn3c7muqjk4tgu.us.auth0.com`) |
 | `AUTH_SECRET` | Yes | Session signing key — generate: `openssl rand -base64 32` |
+| `AUTH_SESSION_MAX_AGE_SECONDS` | No | Local console session lifetime, default 28800 seconds / 8 hours |
+| `AUTH_SESSION_UPDATE_AGE_SECONDS` | No | Session refresh cadence, default 900 seconds / 15 minutes |
 | `NEXTAUTH_URL` | Yes | Must be `https://console.frostgate.ai` in production |
-| `REDIS_URL` | Prod only | Upstash or Railway Redis URL for BFF rate limiting |
-| `BFF_RATE_LIMIT_WINDOW_SEC` | No | Rate limit window (default: 60) |
+| `BFF_REDIS_URL` or `REDIS_URL` | Prod only* | Redis protocol URL for BFF rate limiting |
+| `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | Prod only* | Upstash REST rate-limit store for Vercel/serverless |
+| `KV_REST_API_URL` + `KV_REST_API_TOKEN` | Prod only* | Vercel KV/Upstash REST alias for rate limiting |
+| `BFF_RATE_LIMIT_WINDOW_S` | No | Rate limit window (default: 60) |
 | `BFF_RATE_LIMIT_MAX_REQUESTS` | No | Max requests per window (default: 100) |
+
+*One production rate-limit store is required: Redis protocol, Upstash REST, or Vercel KV REST.
+
+### Vercel (`apps/portal/`) — demo tenant variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CORE_API_URL` | Yes | Railway backend URL |
+| `CORE_API_KEY` | Yes | Default portal API key |
+| `CORE_TENANT_ID` | Yes | Default portal tenant |
+| `PORTAL_SESSION_SECRET` | Yes | HMAC secret for signed portal session cookies |
+| `FG_PORTAL_DEMO_TENANTS` | No | Comma-separated allowlist for portal demo tenant selection |
+| `FG_PORTAL_DEMO_TENANT_KEYS` or `FG_DEMO_TENANT_API_KEYS` | No | JSON map of demo tenant IDs to tenant-bound API keys |
+| `NEXT_PUBLIC_PORTAL_DEMO_TENANTS` | No | Public tenant ID list rendered in the login selector; contains no secrets |
 
 ### Railway API service — full list
 

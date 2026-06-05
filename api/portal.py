@@ -213,3 +213,169 @@ def portal_revoke_session(
     portal_grant_svc.revoke_session(db, session_id=session_id, tenant_id=tenant_id)
     db.commit()
     return RevokeSessionResponse(ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Grant management — operator-facing (requires governance:write)
+# ---------------------------------------------------------------------------
+
+_VALID_PORTAL_ROLES = frozenset(
+    {"general", "executive", "remediation", "technical", "compliance"}
+)
+
+
+class GrantItem(BaseModel):
+    grant_id: str
+    client_id: str
+    engagement_id: str
+    portal_role: str
+    status: str
+    created_by: str
+    created_at: str
+    expires_at: str
+    last_used_at: str | None
+    rotation_counter: int
+
+
+class ListGrantsResponse(BaseModel):
+    items: list[GrantItem]
+    total: int
+
+
+@portal_router.get(
+    "/grants",
+    response_model=ListGrantsResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def list_portal_grants(
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ListGrantsResponse:
+    """List all portal grants for the authenticated tenant."""
+    tenant_id = _resolve_tenant(request)
+    grants = (
+        db.execute(
+            select(PortalGrant)
+            .where(PortalGrant.tenant_id == tenant_id)
+            .order_by(PortalGrant.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    items = [
+        GrantItem(
+            grant_id=g.id,
+            client_id=g.client_id,
+            engagement_id=g.engagement_id,
+            portal_role=_grant_type_to_role(g.grant_type),
+            status=g.status,
+            created_by=g.created_by,
+            created_at=g.created_at,
+            expires_at=g.expires_at,
+            last_used_at=g.last_used_at,
+            rotation_counter=g.rotation_counter,
+        )
+        for g in grants
+    ]
+    return ListGrantsResponse(items=items, total=len(items))
+
+
+class CreateGrantRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    client_id: str
+    engagement_id: str
+    portal_role: str = "general"
+    ttl_days: int = 365
+
+
+class CreateGrantResponse(BaseModel):
+    grant_id: str
+    client_id: str
+    engagement_id: str
+    portal_role: str
+    raw_secret: str
+    expires_at: str
+    portal_login_url: str
+
+
+@portal_router.post(
+    "/grants",
+    response_model=CreateGrantResponse,
+    status_code=201,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def create_portal_grant(
+    body: CreateGrantRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> CreateGrantResponse:
+    """Create a portal access grant. Returns the raw secret once — store it immediately."""
+    tenant_id = _resolve_tenant(request)
+    actor = getattr(getattr(request.state, "auth", None), "key_name", None) or "console"
+
+    role = body.portal_role.lower().strip()
+    if role not in _VALID_PORTAL_ROLES:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "INVALID_PORTAL_ROLE",
+                f"portal_role must be one of: {', '.join(sorted(_VALID_PORTAL_ROLES))}",
+            ),
+        )
+
+    result = portal_grant_svc.create_grant(
+        db,
+        tenant_id=tenant_id,
+        client_id=body.client_id,
+        engagement_id=body.engagement_id,
+        created_by=actor,
+        ttl_days=body.ttl_days,
+        portal_role=role,
+    )
+    db.commit()
+
+    login_url = f"/login?tenant_id={tenant_id}"
+    return CreateGrantResponse(
+        grant_id=result.grant.id,
+        client_id=result.grant.client_id,
+        engagement_id=result.grant.engagement_id,
+        portal_role=_grant_type_to_role(result.grant.grant_type),
+        raw_secret=result.raw_secret,
+        expires_at=result.grant.expires_at,
+        portal_login_url=login_url,
+    )
+
+
+class RevokeGrantResponse(BaseModel):
+    ok: bool
+
+
+@portal_router.delete(
+    "/grants/{grant_id}",
+    response_model=RevokeGrantResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def revoke_portal_grant(
+    grant_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> RevokeGrantResponse:
+    """Revoke a portal grant, immediately invalidating all active sessions for it."""
+    tenant_id = _resolve_tenant(request)
+    actor = getattr(getattr(request.state, "auth", None), "key_name", None) or "console"
+    found = portal_grant_svc.revoke_grant(
+        db, grant_id=grant_id, tenant_id=tenant_id, revoked_by=actor
+    )
+    if not found:
+        raise HTTPException(status_code=404, detail=api_error("GRANT_NOT_FOUND", "Grant not found"))
+    db.commit()
+    return RevokeGrantResponse(ok=True)
+
+
+def _grant_type_to_role(grant_type: str) -> str:
+    prefix = "client_portal."
+    if grant_type and grant_type.startswith(prefix):
+        return grant_type[len(prefix):]
+    return "general"

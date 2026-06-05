@@ -3,6 +3,7 @@
  *
  * Architecture:
  *   - RedisRateLimitStore: production — uses ioredis INCR+EXPIRE atomic pattern
+ *   - UpstashRestRateLimitStore: production — uses Upstash/Vercel KV REST envs
  *   - MemoryRateLimitStore: dev/test only — in-process sliding window
  *   - getRateLimitStore(): factory — server-side only, never called in browser
  *
@@ -15,8 +16,8 @@
  *   - prod-like: returns { unavailable: true, errorCode } — caller must return 503
  *
  * Prod-like enforcement (NODE_ENV=production or FG_ENV=prod/staging/production):
- *   - Missing/blank/CHANGE_ME BFF_REDIS_URL → errorCode: BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED
- *   - Valid URL but Redis unreachable → errorCode: BFF_RATE_LIMIT_REDIS_UNAVAILABLE
+ *   - Missing/blank/CHANGE_ME Redis/Upstash config → errorCode: BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED
+ *   - Valid config but Redis/Upstash unreachable → errorCode: BFF_RATE_LIMIT_REDIS_UNAVAILABLE
  *   - Memory fallback is NEVER allowed in prod-like environments
  *
  * Key format: fg:bff:rl:{route_group}:{tenant_id}:{user_id_or_session}
@@ -53,26 +54,42 @@ export type BffRateLimitErrorCode =
 export function getBffRateLimitConfig(): {
   windowSec: number;
   maxRequests: number;
-  backend: 'redis' | 'memory';
+  backend: 'redis' | 'upstash-rest' | 'memory';
   redisUrl: string | undefined;
+  upstashRestUrl: string | undefined;
+  upstashRestToken: string | undefined;
 } {
   const windowSec = Math.max(1, parseInt(process.env.BFF_RATE_LIMIT_WINDOW_S || '60', 10) || 60);
   const maxRequests = Math.max(1, parseInt(process.env.BFF_RATE_LIMIT_MAX_REQUESTS || '100', 10) || 100);
   const backend = (process.env.BFF_RATE_LIMIT_BACKEND || '').trim().toLowerCase();
-  const redisUrl = process.env.BFF_REDIS_URL || undefined;
+  const rawRedisUrl = process.env.BFF_REDIS_URL || process.env.REDIS_URL || undefined;
+  const redisUrlIsRest = rawRedisUrl ? /^https?:\/\//i.test(rawRedisUrl.trim()) : false;
+  const redisUrl = rawRedisUrl && !redisUrlIsRest ? rawRedisUrl : undefined;
+  const upstashRestUrl =
+    process.env.BFF_UPSTASH_REDIS_REST_URL ||
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    (redisUrlIsRest ? rawRedisUrl : undefined);
+  const upstashRestToken =
+    process.env.BFF_UPSTASH_REDIS_REST_TOKEN ||
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    undefined;
 
-  // Explicit backend override, otherwise auto-detect by presence of BFF_REDIS_URL
-  let resolvedBackend: 'redis' | 'memory';
+  // Explicit backend override, otherwise auto-detect by configured transport.
+  let resolvedBackend: 'redis' | 'upstash-rest' | 'memory';
   if (backend === 'memory') {
     resolvedBackend = 'memory';
+  } else if (backend === 'upstash-rest' || backend === 'rest' || backend === 'upstash') {
+    resolvedBackend = 'upstash-rest';
   } else if (backend === 'redis') {
     resolvedBackend = 'redis';
   } else {
-    // Auto: use redis if URL is set
-    resolvedBackend = redisUrl ? 'redis' : 'memory';
+    // Auto: prefer REST when Upstash/Vercel KV REST envs are present; otherwise Redis protocol.
+    resolvedBackend = upstashRestUrl || upstashRestToken ? 'upstash-rest' : redisUrl ? 'redis' : 'memory';
   }
 
-  return { windowSec, maxRequests, backend: resolvedBackend, redisUrl };
+  return { windowSec, maxRequests, backend: resolvedBackend, redisUrl, upstashRestUrl, upstashRestToken };
 }
 
 /** Returns true for NODE_ENV=development|test or FG_ENV=dev|development|local|test */
@@ -92,6 +109,13 @@ export function isBffRedisUrlMissingOrPlaceholder(redisUrl: string | undefined):
   if (!redisUrl || !redisUrl.trim()) return true;
   if (redisUrl.trim().toUpperCase().startsWith('CHANGE_ME')) return true;
   return false;
+}
+
+export function isBffUpstashRestConfigMissingOrPlaceholder(
+  restUrl: string | undefined,
+  restToken: string | undefined,
+): boolean {
+  return isBffRedisUrlMissingOrPlaceholder(restUrl) || isBffRedisUrlMissingOrPlaceholder(restToken);
 }
 
 // ─── Memory Store (dev/test only) ────────────────────────────────────────────
@@ -168,6 +192,59 @@ export class RedisRateLimitStore implements RateLimitStore {
   }
 }
 
+// ─── Upstash REST Store (Vercel/Upstash serverless) ─────────────────────────
+
+export class UpstashRestRateLimitStore implements RateLimitStore {
+  private readonly baseUrl: string;
+  private readonly token: string;
+
+  constructor(baseUrl: string, token: string) {
+    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.token = token;
+  }
+
+  private async command(command: string, args: string[] = []): Promise<unknown> {
+    const encoded = args.map((arg) => encodeURIComponent(arg));
+    const url = `${this.baseUrl}/${command.toLowerCase()}${encoded.length ? `/${encoded.join('/')}` : ''}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      throw new Error(`Upstash REST ${command} failed with HTTP ${response.status}`);
+    }
+    const payload = (await response.json()) as { result?: unknown; error?: string };
+    if (payload.error) {
+      throw new Error(`Upstash REST ${command} failed`);
+    }
+    return payload.result;
+  }
+
+  async ping(): Promise<void> {
+    await this.command('PING');
+  }
+
+  async increment(key: string, windowSec: number, maxRequests: number): Promise<RateLimitResult> {
+    const result = await this.command('INCR', [key]);
+    const count = Number(result);
+    if (!Number.isFinite(count)) {
+      throw new Error('Upstash REST INCR returned a non-numeric count');
+    }
+    if (count === 1) {
+      await this.command('EXPIRE', [key, String(windowSec)]);
+    }
+    return {
+      count,
+      allowed: count <= maxRequests,
+      windowSec,
+      available: true,
+    };
+  }
+}
+
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 /**
@@ -188,7 +265,7 @@ export async function buildRateLimitStore(): Promise<
   | { store: RateLimitStore; unavailable: false }
   | { store: null; unavailable: true; errorCode: BffRateLimitErrorCode; required: true }
 > {
-  const { backend, redisUrl } = getBffRateLimitConfig();
+  const { backend, redisUrl, upstashRestUrl, upstashRestToken } = getBffRateLimitConfig();
   const devOrTest = isDevOrTestEnv();
 
   if (backend === 'memory') {
@@ -202,6 +279,36 @@ export async function buildRateLimitStore(): Promise<
       };
     }
     return { store: new MemoryRateLimitStore(), unavailable: false };
+  }
+
+  if (backend === 'upstash-rest') {
+    if (isBffUpstashRestConfigMissingOrPlaceholder(upstashRestUrl, upstashRestToken)) {
+      if (devOrTest) {
+        return { store: new MemoryRateLimitStore(), unavailable: false };
+      }
+      return {
+        store: null,
+        unavailable: true,
+        errorCode: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED',
+        required: true,
+      };
+    }
+
+    try {
+      const store = new UpstashRestRateLimitStore(upstashRestUrl!, upstashRestToken!);
+      await store.ping();
+      return { store, unavailable: false };
+    } catch {
+      if (devOrTest) {
+        return { store: new MemoryRateLimitStore(), unavailable: false };
+      }
+      return {
+        store: null,
+        unavailable: true,
+        errorCode: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE',
+        required: true,
+      };
+    }
   }
 
   // Redis backend
@@ -281,6 +388,19 @@ export async function getRateLimitHealth(): Promise<{
   const isProd = !isDevOrTestEnv();
 
   if (isProd) {
+    if (config.backend === 'upstash-rest') {
+      if (isBffUpstashRestConfigMissingOrPlaceholder(config.upstashRestUrl, config.upstashRestToken)) {
+        return { backend: 'upstash-rest', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED' };
+      }
+      try {
+        const probe = new UpstashRestRateLimitStore(config.upstashRestUrl!, config.upstashRestToken!);
+        await probe.ping();
+        return { backend: 'upstash-rest', ready: true, required: true, reason: null };
+      } catch {
+        return { backend: 'upstash-rest', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE' };
+      }
+    }
+
     if (isBffRedisUrlMissingOrPlaceholder(config.redisUrl)) {
       return { backend: 'redis', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED' };
     }

@@ -6,6 +6,29 @@ const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ALLOW_TENANT_QUERY_OVERRIDE = NODE_ENV === 'development' && process.env.FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE === '1';
+const DEMO_TENANT_ALLOWLIST = (process.env.FG_CONSOLE_DEMO_TENANTS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter((value) => /^[a-zA-Z0-9_-]{1,128}$/.test(value));
+
+function parseDemoTenantKeys(raw: string | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([tenant, key]) => [tenant.trim(), typeof key === 'string' ? key.trim() : ''])
+        .filter(([tenant, key]) => DEMO_TENANT_ALLOWLIST.includes(tenant) && key.length > 0),
+    );
+  } catch {
+    return {};
+  }
+}
+
+const DEMO_TENANT_API_KEYS = parseDemoTenantKeys(
+  process.env.FG_CONSOLE_DEMO_TENANT_KEYS || process.env.FG_DEMO_TENANT_API_KEYS,
+);
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'health/live', methods: new Set(['GET', 'HEAD']) },
@@ -67,6 +90,10 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'governance/graph', methods: new Set(['GET', 'POST', 'HEAD']) },
   // Governance assets — read-only blast-radius surface (PR 20)
   { prefix: 'governance/assets', methods: new Set(['GET', 'HEAD']) },
+  // Workforce user management — admin:write gated; console admin panel
+  { prefix: 'workforce/users', methods: new Set(['GET', 'POST', 'PATCH', 'HEAD']) },
+  // Portal grant management — governance:write gated; console admin panel
+  { prefix: 'portal/grants', methods: new Set(['GET', 'POST', 'DELETE', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {
@@ -97,7 +124,7 @@ function jsonError(message: string, status: number, requestId: string) {
  * Keys contain no secrets — only stable identity tokens already in headers.
  */
 function buildRateLimitKey(request: NextRequest, routeGroup: string): string {
-  const tenantId = CORE_TENANT_ID || 'default';
+  const tenantId = resolveTenant(request) || 'default';
   // x-frostgate-user is set by the session layer upstream (server-side only).
   // Fall back to IP — never trust body-provided user identity.
   const userOrSession =
@@ -138,7 +165,16 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
 function resolveTenant(request: NextRequest): string | null {
   const queryTenant = new URL(request.url).searchParams.get('tenant_id');
   if (ALLOW_TENANT_QUERY_OVERRIDE && queryTenant) return queryTenant;
+  if (queryTenant && DEMO_TENANT_ALLOWLIST.includes(queryTenant)) return queryTenant;
   return CORE_TENANT_ID || null;
+}
+
+function resolveCoreAuth(request: NextRequest): { tenantId: string | null; apiKey: string | null } {
+  const tenantId = resolveTenant(request);
+  if (tenantId && tenantId !== CORE_TENANT_ID && DEMO_TENANT_ALLOWLIST.includes(tenantId)) {
+    return { tenantId, apiKey: DEMO_TENANT_API_KEYS[tenantId] || null };
+  }
+  return { tenantId, apiKey: CORE_API_KEY || null };
 }
 
 function buildCoreUrl(path: string[], request: NextRequest): string {
@@ -182,16 +218,17 @@ function isPrivateHost(hostname: string): boolean {
 }
 
 async function proxyToCore(request: NextRequest, path: string[], requestId: string): Promise<NextResponse> {
-  if (!CORE_API_KEY) return jsonError('CORE_API_KEY is not configured', 500, requestId);
+  const coreAuth = resolveCoreAuth(request);
+  if (!coreAuth.apiKey) return jsonError('Tenant API key is not configured', 500, requestId);
 
   if (!isProxyPathAllowed(path, request.method)) {
     return jsonError('Route/method is not allowed by proxy policy', 403, requestId);
   }
 
   const headers = new Headers();
-  headers.set('X-API-Key', CORE_API_KEY);
+  headers.set('X-API-Key', coreAuth.apiKey);
   headers.set('X-Request-ID', requestId);
-  const tenant = resolveTenant(request);
+  const tenant = coreAuth.tenantId;
   if (tenant) headers.set('X-Tenant-ID', tenant);
 
   const contentType = request.headers.get('content-type');
