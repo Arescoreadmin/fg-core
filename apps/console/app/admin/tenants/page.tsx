@@ -14,9 +14,10 @@ interface ProvisionResult {
   tenant_id: string;
   name: string;
   already_existed?: boolean;
-  api_key: string;
+  registry_live?: boolean;
+  registry_error?: string | null;
+  api_key: string | null;
   api_key_prefix: string;
-  next_steps: Record<string, string>;
 }
 
 // ─── Create Client Modal ──────────────────────────────────────────────────────
@@ -94,71 +95,61 @@ function ProvisionResultModal({ result, onClose }: { result: ProvisionResult; on
     navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   }
 
-  const keyMap = JSON.stringify({ [result.tenant_id]: result.api_key });
+  const isLive = result.registry_live;
 
   return (
     <div style={s.backdrop}>
-      <div style={{ ...s.modal, maxWidth: 560 }}>
+      <div style={{ ...s.modal, maxWidth: 520 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: '1.2rem' }}>✅</span>
+          <span style={{ fontSize: '1.4rem' }}>{isLive ? '✅' : '⚠️'}</span>
           <h2 style={{ ...s.modalTitle, margin: 0 }}>
-            {result.already_existed ? 'Key regenerated — update Vercel now' : 'Client created — save the API key now'}
+            {isLive
+              ? result.already_existed ? 'Key regenerated — client is live' : 'Client created — live immediately'
+              : result.already_existed ? 'Key regenerated — manual step required' : 'Client created — manual step required'}
           </h2>
         </div>
-        <p style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 4 }}>
-          This API key is shown <strong>once</strong> and cannot be recovered. Update <code>FG_CONSOLE_DEMO_TENANT_KEYS</code> in Vercel, then redeploy.
-        </p>
 
-        <label style={s.field}>
-          Tenant ID
-          <code style={s.code}>{result.tenant_id}</code>
-        </label>
-
-        <label style={s.field}>
-          API key (copy this now)
-          <div style={{ position: 'relative' }}>
-            <code style={{ ...s.code, paddingRight: '4.5rem' }}>{result.api_key}</code>
-            <button style={s.copyBtn} onClick={() => copy(result.api_key)}>{copied ? 'Copied!' : 'Copy'}</button>
-          </div>
-        </label>
-
-        <div style={s.stepsBox}>
-          <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: '0.8rem' }}>Add these to Vercel and redeploy:</p>
-
-          <div style={s.stepRow}>
-            <span style={s.envName}>FG_CONSOLE_DEMO_TENANTS</span>
-            <span style={s.stepDesc}>append <code>{result.tenant_id}</code> (comma-separated)</span>
-          </div>
-          <div style={s.stepRow}>
-            <span style={s.envName}>FG_CONSOLE_DEMO_TENANT_KEYS</span>
-            <div style={{ flex: 1 }}>
-              <span style={s.stepDesc}>merge this into the existing JSON:</span>
-              <div style={{ position: 'relative' }}>
-                <code style={{ ...s.code, fontSize: '0.72rem' }}>{keyMap}</code>
-                <button style={s.copyBtn} onClick={() => copy(keyMap)}>Copy</button>
+        {isLive ? (
+          <p style={{ fontSize: '0.875rem', color: 'var(--muted)', marginTop: 4, lineHeight: 1.6 }}>
+            <strong>{result.name}</strong> is now active in your console. No further steps needed.
+            To give clients portal access, go to <strong>Manage users → Portal Access</strong>.
+          </p>
+        ) : (
+          <>
+            <p style={{ fontSize: '0.875rem', color: 'var(--muted)', marginTop: 4, lineHeight: 1.6 }}>
+              {result.registry_error
+                ? `Registry write failed: ${result.registry_error}`
+                : 'Edge Config is not configured — copy the API key below and add it to Vercel manually.'}
+            </p>
+            {result.api_key && (
+              <label style={s.field}>
+                API key <span style={{ fontWeight: 400 }}>(shown once — save it now)</span>
+                <div style={{ position: 'relative' }}>
+                  <code style={{ ...s.code, paddingRight: '4.5rem' }}>{result.api_key}</code>
+                  <button style={s.copyBtn} onClick={() => copy(result.api_key!)}>{copied ? 'Copied!' : 'Copy'}</button>
+                </div>
+              </label>
+            )}
+            <div style={s.stepsBox}>
+              <p style={{ margin: '0 0 6px', fontWeight: 600, fontSize: '0.8rem' }}>
+                To complete setup, add to Vercel Edge Config (or env vars) and redeploy:
+              </p>
+              <div style={s.stepRow}>
+                <span style={s.envName}>EDGE_CONFIG</span>
+                <span style={s.stepDesc}>Connect an Edge Config store to this project in Vercel dashboard</span>
+              </div>
+              <div style={s.stepRow}>
+                <span style={s.envName}>VERCEL_API_TOKEN</span>
+                <span style={s.stepDesc}>A Vercel API token — then "Regen key" to auto-register</span>
               </div>
             </div>
-          </div>
-          <div style={s.stepRow}>
-            <span style={s.envName}>FG_PORTAL_DEMO_TENANTS</span>
-            <span style={s.stepDesc}>same as above — append to portal Vercel project</span>
-          </div>
-          <div style={s.stepRow}>
-            <span style={s.envName}>FG_PORTAL_DEMO_TENANT_KEYS</span>
-            <span style={s.stepDesc}>merge same JSON into portal Vercel project</span>
-          </div>
-        </div>
-
-        <div style={{ ...s.stepsBox, marginTop: 8 }}>
-          <p style={{ margin: '0 0 6px', fontWeight: 600, fontSize: '0.8rem' }}>After redeploying:</p>
-          <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)', lineHeight: 1.6 }}>
-            Run <code>python tools/seed/demo_tenants.py</code> to populate assessment data, or use the
-            Field Assessments page to create a new engagement manually.
-          </p>
-        </div>
+          </>
+        )}
 
         <div style={s.modalActions}>
-          <button style={s.primaryBtn} onClick={onClose}>Done</button>
+          <button style={s.primaryBtn} onClick={onClose}>
+            {isLive ? 'Go to client' : 'Done'}
+          </button>
         </div>
       </div>
     </div>
@@ -247,8 +238,8 @@ export default function ClientRosterPage() {
 
       <div style={s.hint}>
         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
-          New clients appear here after you add their tenant ID to <code>FG_CONSOLE_DEMO_TENANTS</code> in Vercel and redeploy.
-          Use <strong>Regen key</strong> on any card if the API key in Vercel is stale.
+          Click <strong>Create client</strong> to provision a new tenant — it registers immediately with no Vercel redeployment required.
+          Use <strong>Regen key</strong> on any card to rotate a compromised or stale API key.
         </p>
       </div>
 

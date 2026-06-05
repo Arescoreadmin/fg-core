@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { upsertTenantInRegistry, isRegistryConfigured } from '@/lib/tenant-registry';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY ?? '';
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID ?? '';
 
-// Token resolution matches require_internal_admin_gateway in api/admin.py
 function internalToken(): string {
   return (
     process.env.FG_ADMIN_GATEWAY_TOKEN ||
@@ -43,7 +43,6 @@ function adminHeaders(): HeadersInit {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Must be logged in to the console
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -51,7 +50,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (!internalToken()) {
     return NextResponse.json(
-      { error: 'Tenant provisioning is not configured on this deployment. Set FG_ADMIN_GATEWAY_TOKEN in Vercel.' },
+      { error: 'Tenant provisioning is not configured. Set FG_ADMIN_GATEWAY_TOKEN in Vercel.' },
       { status: 503 },
     );
   }
@@ -76,7 +75,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Step 1: Create tenant record (skip if already exists)
+  // Step 1: Create tenant record (skip 409 — tenant already exists, just regenerate key)
   const tenantRes = await fetch(`${CORE_API_URL}/admin/tenants`, {
     method: 'POST',
     headers: adminHeaders(),
@@ -88,8 +87,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (!tenantRes.ok && !tenantAlreadyExisted) {
     const err = await tenantRes.json().catch(() => ({}));
-    const msg = err?.detail ?? `HTTP ${tenantRes.status}`;
-    return NextResponse.json({ error: `Failed to create tenant: ${msg}` }, { status: tenantRes.status });
+    return NextResponse.json(
+      { error: `Failed to create tenant: ${err?.detail ?? `HTTP ${tenantRes.status}`}` },
+      { status: tenantRes.status },
+    );
   }
 
   // Step 2: Create BFF API key scoped to the tenant
@@ -108,25 +109,40 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!keyRes.ok) {
     const err = await keyRes.json().catch(() => ({}));
     return NextResponse.json(
-      { error: `${tenantAlreadyExisted ? 'Tenant already exists but' : 'Tenant created but'} key generation failed: ${err?.detail ?? keyRes.status}.` },
+      { error: `Key generation failed: ${err?.detail ?? keyRes.status}` },
       { status: 500 },
     );
   }
 
   const keyData = await keyRes.json();
+  const rawKey: string = keyData.key;
+
+  // Step 3: Write to Edge Config registry so client is live immediately
+  let registryLive = false;
+  let registryError: string | null = null;
+
+  if (isRegistryConfigured()) {
+    try {
+      await upsertTenantInRegistry(tenantId, {
+        label: name,
+        api_key: rawKey,
+        created_at: new Date().toISOString(),
+      });
+      registryLive = true;
+    } catch (e) {
+      registryError = e instanceof Error ? e.message : 'Unknown error writing to registry';
+    }
+  }
 
   return NextResponse.json({
     tenant_id: tenantId,
     name,
     already_existed: tenantAlreadyExisted,
-    api_key: keyData.key,
+    registry_live: registryLive,
+    registry_error: registryError,
+    // Only expose the raw key if registry write failed — otherwise it's already stored
+    api_key: registryLive ? null : rawKey,
     api_key_prefix: keyData.prefix,
     api_key_expires_at: keyData.expires_at,
-    next_steps: {
-      vercel_env_FG_CONSOLE_DEMO_TENANTS: `Add "${tenantId}" to FG_CONSOLE_DEMO_TENANTS in Vercel (comma-separated)`,
-      vercel_env_FG_CONSOLE_DEMO_TENANT_KEYS: `Add "${tenantId}":"<api_key>" to FG_CONSOLE_DEMO_TENANT_KEYS JSON in Vercel`,
-      vercel_env_FG_PORTAL_DEMO_TENANTS: `Add "${tenantId}" to FG_PORTAL_DEMO_TENANTS in portal Vercel project`,
-      vercel_env_FG_PORTAL_DEMO_TENANT_KEYS: `Add "${tenantId}":"<api_key>" to FG_PORTAL_DEMO_TENANT_KEYS in portal Vercel project`,
-    },
   });
 }

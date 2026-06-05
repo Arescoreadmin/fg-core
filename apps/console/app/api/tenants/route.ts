@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTenantRegistry } from '@/lib/tenant-registry';
 
 export interface TenantEntry {
   tenant_id: string;
@@ -8,21 +9,13 @@ export interface TenantEntry {
 
 export async function GET(): Promise<NextResponse> {
   const defaultId = process.env.CORE_TENANT_ID || 'default';
-  const demoRaw = process.env.FG_CONSOLE_DEMO_TENANTS || '';
-  const demoIds = demoRaw
-    .split(',')
-    .map((v) => v.trim())
-    .filter((v) => /^[a-zA-Z0-9_-]{1,128}$/.test(v));
+  const registry = await getTenantRegistry();
 
   const tenants: TenantEntry[] = [
     { tenant_id: defaultId, label: 'Default (operator)', is_default: true },
-    ...demoIds
-      .filter((id) => id !== defaultId)
-      .map((id) => ({
-        tenant_id: id,
-        label: id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-        is_default: false,
-      })),
+    ...Object.entries(registry)
+      .filter(([id]) => id !== defaultId)
+      .map(([id, rec]) => ({ tenant_id: id, label: rec.label, is_default: false })),
   ];
 
   return NextResponse.json({ tenants });

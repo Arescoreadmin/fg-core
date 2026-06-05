@@ -1,34 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
+import { getTenantApiKey } from '@/lib/tenant-registry';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ALLOW_TENANT_QUERY_OVERRIDE = NODE_ENV === 'development' && process.env.FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE === '1';
-const DEMO_TENANT_ALLOWLIST = (process.env.FG_CONSOLE_DEMO_TENANTS || '')
-  .split(',')
-  .map((value) => value.trim())
-  .filter((value) => /^[a-zA-Z0-9_-]{1,128}$/.test(value));
-
-function parseDemoTenantKeys(raw: string | undefined): Record<string, string> {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    return Object.fromEntries(
-      Object.entries(parsed)
-        .map(([tenant, key]) => [tenant.trim(), typeof key === 'string' ? key.trim() : ''])
-        .filter(([tenant, key]) => DEMO_TENANT_ALLOWLIST.includes(tenant) && key.length > 0),
-    );
-  } catch {
-    return {};
-  }
-}
-
-const DEMO_TENANT_API_KEYS = parseDemoTenantKeys(
-  process.env.FG_CONSOLE_DEMO_TENANT_KEYS || process.env.FG_DEMO_TENANT_API_KEYS,
-);
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'health/live', methods: new Set(['GET', 'HEAD']) },
@@ -165,16 +143,17 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
 function resolveTenant(request: NextRequest): string | null {
   const queryTenant = new URL(request.url).searchParams.get('tenant_id');
   if (ALLOW_TENANT_QUERY_OVERRIDE && queryTenant) return queryTenant;
-  if (queryTenant && DEMO_TENANT_ALLOWLIST.includes(queryTenant)) return queryTenant;
+  if (queryTenant && /^[a-zA-Z0-9_-]{1,128}$/.test(queryTenant)) return queryTenant;
   return CORE_TENANT_ID || null;
 }
 
-function resolveCoreAuth(request: NextRequest): { tenantId: string | null; apiKey: string | null } {
+async function resolveCoreAuth(request: NextRequest): Promise<{ tenantId: string | null; apiKey: string | null }> {
   const tenantId = resolveTenant(request);
-  if (tenantId && tenantId !== CORE_TENANT_ID && DEMO_TENANT_ALLOWLIST.includes(tenantId)) {
-    return { tenantId, apiKey: DEMO_TENANT_API_KEYS[tenantId] || null };
+  if (!tenantId || tenantId === CORE_TENANT_ID) {
+    return { tenantId, apiKey: CORE_API_KEY || null };
   }
-  return { tenantId, apiKey: CORE_API_KEY || null };
+  const key = await getTenantApiKey(tenantId);
+  return { tenantId, apiKey: key };
 }
 
 function buildCoreUrl(path: string[], request: NextRequest): string {
@@ -218,7 +197,7 @@ function isPrivateHost(hostname: string): boolean {
 }
 
 async function proxyToCore(request: NextRequest, path: string[], requestId: string): Promise<NextResponse> {
-  const coreAuth = resolveCoreAuth(request);
+  const coreAuth = await resolveCoreAuth(request);
   if (!coreAuth.apiKey) return jsonError('Tenant API key is not configured', 500, requestId);
 
   if (!isProxyPathAllowed(path, request.method)) {
