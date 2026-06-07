@@ -395,6 +395,40 @@ def test_insert_key_row_no_raw_secret_in_params() -> None:
     assert raw_secret not in all_calls_str
 
 
+def test_insert_key_row_serializes_hash_params_for_jsonb() -> None:
+    """Postgres receives canonical JSON text and casts it to JSONB."""
+    mock_conn = MagicMock()
+    mock_ctx = MagicMock()
+    mock_ctx.__enter__ = MagicMock(return_value=mock_conn)
+    mock_ctx.__exit__ = MagicMock(return_value=False)
+
+    mock_engine = MagicMock()
+    mock_engine.begin.return_value = mock_ctx
+
+    with patch.dict(os.environ, {"FG_DB_BACKEND": "postgres"}, clear=False):
+        with patch("api.auth_scopes.store._pg_engine", return_value=mock_engine):
+            from api.auth_scopes.store import insert_key_row
+
+            insert_key_row(
+                {
+                    "prefix": "fgk",
+                    "key_hash": "hashed",
+                    "key_lookup": "lookup",
+                    "hash_alg": "argon2id",
+                    "hash_params": {"time_cost": 2, "memory_cost": 65536},
+                    "scopes_csv": "admin:write",
+                    "enabled": True,
+                    "tenant_id": "tenant-1",
+                }
+            )
+
+    insert_call = mock_conn.execute.call_args_list[-1]
+    sql = str(insert_call.args[0])
+    params = insert_call.args[1]
+    assert "CAST(:hash_params AS JSONB)" in sql
+    assert params["hash_params"] == "{\"memory_cost\":65536,\"time_cost\":2}"
+
+
 # ---------------------------------------------------------------------------
 # 11. Null tenant_id hint returns (None, None) — no DB query attempted
 # ---------------------------------------------------------------------------

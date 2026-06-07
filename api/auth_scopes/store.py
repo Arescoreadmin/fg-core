@@ -230,6 +230,11 @@ def insert_key_row(row: dict) -> None:
     key_lookup = row.get("key_lookup")
     hash_alg = row.get("hash_alg", "argon2id")
     hash_params = _to_pg_hash_params(row.get("hash_params"))
+    hash_params_json = (
+        json.dumps(hash_params, separators=(",", ":"), sort_keys=True)
+        if hash_params is not None
+        else None
+    )
     scopes_csv = row.get("scopes_csv", "")
     enabled_raw = row.get("enabled", 1)
     enabled = (
@@ -253,7 +258,7 @@ def insert_key_row(row: dict) -> None:
                    scopes_csv, enabled, tenant_id, created_at, expires_at,
                    version, use_count)
                 VALUES
-                  (:name, :prefix, :key_hash, :key_lookup, :hash_alg, :hash_params,
+                  (:name, :prefix, :key_hash, :key_lookup, :hash_alg, CAST(:hash_params AS JSONB),
                    :scopes_csv, :enabled, :tenant_id, :created_at, :expires_at,
                    :version, :use_count)
                 """
@@ -264,7 +269,7 @@ def insert_key_row(row: dict) -> None:
                 "key_hash": key_hash,
                 "key_lookup": key_lookup,
                 "hash_alg": hash_alg,
-                "hash_params": hash_params,
+                "hash_params": hash_params_json,
                 "scopes_csv": scopes_csv,
                 "enabled": enabled,
                 "tenant_id": tenant_id,
