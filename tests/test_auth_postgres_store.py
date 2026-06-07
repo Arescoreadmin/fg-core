@@ -429,6 +429,34 @@ def test_insert_key_row_serializes_hash_params_for_jsonb() -> None:
     assert params["hash_params"] == "{\"memory_cost\":65536,\"time_cost\":2}"
 
 
+def test_postgres_minted_key_name_respects_schema_limit() -> None:
+    """Generated descriptive names fit api_keys.name VARCHAR(128)."""
+    scopes_csv = ",".join(f"scope:{index}" for index in range(40))
+
+    with patch("api.auth_scopes.store.insert_key_row") as insert_key_row:
+        from api.auth_scopes.mapping import _mint_key_postgres
+
+        _mint_key_postgres(
+            scopes=scopes_csv.split(","),
+            prefix="fgk",
+            token="token",
+            secret="secret",
+            key_hash="hashed",
+            hash_alg="argon2id",
+            hash_params={"time_cost": 2},
+            key_lookup="lookup",
+            scopes_csv=scopes_csv,
+            tenant_id="tenant-1",
+            now_i=1700000000,
+            exp_i=1700086400,
+        )
+
+    row = insert_key_row.call_args.args[0]
+    assert len(row["name"]) == 128
+    assert row["name"].startswith("minted:")
+    assert row["scopes_csv"] == scopes_csv
+
+
 # ---------------------------------------------------------------------------
 # 11. Null tenant_id hint returns (None, None) — no DB query attempted
 # ---------------------------------------------------------------------------

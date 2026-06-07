@@ -216,7 +216,7 @@ def _mint_key_postgres(
 
     insert_key_row(
         {
-            "name": "minted:" + (scopes_csv or "none"),
+            "name": ("minted:" + (scopes_csv or "none"))[:128],
             "prefix": prefix,
             "key_hash": key_hash,
             "key_lookup": key_lookup,
