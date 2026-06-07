@@ -3,8 +3,6 @@ import { auth } from '@/auth';
 import { upsertTenantInRegistry, isRegistryConfigured } from '@/lib/tenant-registry';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
-const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY ?? '';
-const CORE_TENANT_ID = process.env.CORE_TENANT_ID ?? '';
 
 function internalToken(): string {
   return (
@@ -29,16 +27,18 @@ const PROVISION_SCOPES = [
   'keys:read',
   'keys:write',
   'admin:read',
+  'admin:write',
 ];
 
 const ONE_YEAR_SECONDS = 365 * 24 * 60 * 60;
 
 function adminHeaders(): HeadersInit {
+  const token = internalToken();
   return {
     'Content-Type': 'application/json',
-    'X-API-Key': CORE_API_KEY,
-    'X-Tenant-ID': CORE_TENANT_ID,
-    'X-FG-Internal-Token': internalToken(),
+    'X-API-Key': token,
+    'X-FG-Internal-Token': token,
+    'X-Admin-Gateway-Internal': 'true',
   };
 }
 
@@ -54,10 +54,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 503 },
     );
   }
-  if (!CORE_API_KEY || !CORE_TENANT_ID) {
-    return NextResponse.json({ error: 'Core API not configured.' }, { status: 503 });
-  }
-
   let body: { tenant_id?: string; name?: string };
   try {
     body = await req.json();
