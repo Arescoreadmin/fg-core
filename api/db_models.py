@@ -203,7 +203,7 @@ class AgentDeviceRegistry(Base):
         String(16), nullable=False, default="active", index=True
     )
     suspicious: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0")
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
@@ -240,7 +240,7 @@ class AgentDeviceKey(Base):
     )
     hmac_secret_enc: Mapped[Any] = mapped_column(Text, nullable=False)
     enabled: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("1")
+        Boolean, nullable=False, default=True, server_default=text("true")
     )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
@@ -391,10 +391,10 @@ class AgentUpdateRollout(Base):
     canary_error_budget: Mapped[Any] = mapped_column(Integer, nullable=False, default=5)
     canary_error_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
     paused: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0")
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     kill_switch: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0")
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
@@ -437,7 +437,7 @@ class AgentPolicyBundle(Base):
     )
     signature: Mapped[Any] = mapped_column(Text, nullable=False)
     revoked: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0")
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
@@ -1830,7 +1830,10 @@ class AssessmentSchema(Base):
     questions: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
     is_current: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[Any] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
     )
 
 
@@ -1874,6 +1877,11 @@ class PromptVersion(Base):
     """AI prompt templates for report generation. Seeded by migration 0033."""
 
     __tablename__ = "prompt_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "prompt_key", "version", name="uq_prompt_versions_key_version"
+        ),
+    )
 
     id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
     prompt_key: Mapped[Any] = mapped_column(Text, nullable=False)
@@ -1882,7 +1890,10 @@ class PromptVersion(Base):
     user_prompt_template: Mapped[Any] = mapped_column(Text, nullable=False)
     is_active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[Any] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
     )
 
 
@@ -2873,7 +2884,9 @@ class OpsRetentionPolicyRecord(Base):
         DateTime(timezone=True), nullable=True
     )
     archived_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
-    legal_hold: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    legal_hold: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     legal_hold_reason: Mapped[Any] = mapped_column(Text, nullable=True)
     legal_hold_set_by: Mapped[Any] = mapped_column(Text, nullable=True)
     legal_hold_set_at: Mapped[Any] = mapped_column(
@@ -3522,8 +3535,30 @@ class TenantUser(Base):
     __tablename__ = "tenant_users"
     __table_args__ = (
         UniqueConstraint("tenant_id", "email", name="uq_tenant_users_tenant_email"),
+        Index(
+            "uq_tenant_users_bound_identity",
+            "identity_provider",
+            "identity_issuer",
+            "identity_subject",
+            unique=True,
+            postgresql_where=text(
+                "identity_binding_status='bound' AND identity_subject IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "identity_binding_status='bound' AND identity_subject IS NOT NULL"
+            ),
+        ),
         Index("ix_tenant_users_tenant_id", "tenant_id"),
         Index("ix_tenant_users_invite_token", "invite_token"),
+        Index("ix_tenant_users_identity_subject", "tenant_id", "identity_subject"),
+        CheckConstraint(
+            "identity_binding_status IN ('unbound','pending','bound','disabled','failed')",
+            name="chk_tenant_users_identity_binding_status",
+        ),
+        CheckConstraint(
+            "identity_type IN ('human','service','agent','system')",
+            name="chk_tenant_users_identity_type",
+        ),
     )
 
     id: Mapped[Any] = mapped_column(
@@ -3541,6 +3576,43 @@ class TenantUser(Base):
         Boolean, nullable=False, default=True, server_default=text("true")
     )
     last_active_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    identity_type: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="human", server_default=text("'human'")
+    )
+    identity_provider: Mapped[Any] = mapped_column(String(64), nullable=True)
+    identity_provider_record_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    identity_policy_config_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    identity_connection_id: Mapped[Any] = mapped_column(String(256), nullable=True)
+    identity_subject: Mapped[Any] = mapped_column(String(512), nullable=True)
+    identity_issuer: Mapped[Any] = mapped_column(String(512), nullable=True)
+    identity_email: Mapped[Any] = mapped_column(String(256), nullable=True)
+    identity_email_verified: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("'false'")
+    )
+    identity_bound_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    identity_binding_status: Mapped[Any] = mapped_column(
+        String(32),
+        nullable=False,
+        default="unbound",
+        server_default=text("'unbound'"),
+    )
+    identity_trust_level: Mapped[Any] = mapped_column(String(32), nullable=True)
+    identity_verification_level: Mapped[Any] = mapped_column(String(32), nullable=True)
+    identity_risk_state: Mapped[Any] = mapped_column(String(32), nullable=True)
+    identity_approved_by_user_id: Mapped[Any] = mapped_column(
+        String(128), nullable=True
+    )
+    identity_approved_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    identity_revoked_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_identity_login_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

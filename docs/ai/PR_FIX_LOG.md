@@ -13555,3 +13555,21 @@ Migration 0098 is additive: one `ADD COLUMN IF NOT EXISTS` on `fa_governance_dec
 - H14.1: apply `require_permission()` to all remaining mutation routes
 - H14.2: wire `FaGovernanceEvent` write path in `GovernanceDecisionService`
 - H14.3: Entra ID provider implementation (customer-driven)
+
+---
+
+## PR 1 — Tenant Identity Schema + Identity Policy Foundation
+
+**Branch:** `feat/tenant-identity-policy-foundation`
+
+**Summary:**
+
+Adds provider-neutral tenant identity configuration, maturity/capability readiness, normalized provider and domain governance records, identity-safe invitation lifecycle records, membership OIDC subject binding and non-human identity readiness fields, role-assignment lineage records, hash-linked append-only identity audit events, deterministic policy helpers, and safe demo/pending-invite migration behavior. Invite links remain non-authoritative and cannot satisfy the activation policy.
+
+**Security posture:**
+
+No Auth0 API calls, session issuance, console UI, or callback handling. No identity secrets or raw invite tokens are stored in the new tables or audit events. Unknown/unready tenant identity policies fail closed. Bound provider/issuer/subject tuples are globally unique through a bound-only partial index, without reserving pending/unbound subjects. Provider/domain child records prevent future federation dead-ends without implementing federation in this PR.
+
+**Migration posture:**
+
+Migration `0099` is additive and replay-safe. Existing memberships remain active but unbound; existing pending invites remain pending; only repository-evidenced demo tenants receive explicit managed/ready policies. Data backfill and canonical hash-linked audit writes occur before RLS is forced, and the resulting migration-to-runtime chain is verified by PostgreSQL regression coverage.

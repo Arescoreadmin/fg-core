@@ -113,7 +113,9 @@ class PortalGrantService:
         # Encode view type in grant_type so the portal can route to the right layout.
         # "general" maps to the legacy "client_portal" value for backwards compat.
         _role = (portal_role or "general").lower().strip()
-        _grant_type = "client_portal" if _role == "general" else f"client_portal.{_role}"
+        _grant_type = (
+            "client_portal" if _role == "general" else f"client_portal.{_role}"
+        )
 
         grant = PortalGrant(
             id=secrets.token_hex(16),

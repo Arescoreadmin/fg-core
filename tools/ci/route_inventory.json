@@ -7901,6 +7901,57 @@
     },
     {
       "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal.py",
+      "method": "GET",
+      "path": "/portal/grants",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal.py",
+      "method": "POST",
+      "path": "/portal/grants",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal.py",
+      "method": "DELETE",
+      "path": "/portal/grants/{grant_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
         "auth"
       ],
       "file": "api/portal.py",
@@ -9470,7 +9521,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-04T13:43:49.052168+00:00",
+  "generated_at": "2026-06-08T15:01:57.927350+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

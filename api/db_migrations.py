@@ -116,6 +116,7 @@ def assert_append_only_triggers(engine: Engine) -> None:
         "audit_exam_sessions",
         "compliance_requirement_updates",
         "fa_engagement_audit_events",
+        "tenant_identity_audit_events",
     }
     with engine.begin() as conn:
         rows = conn.exec_driver_sql(
@@ -184,6 +185,13 @@ def assert_tenant_rls(engine: Engine) -> None:
         "fa_questionnaires",
         "fa_questionnaire_responses",
         "governance_promotions",
+        "tenant_users",
+        "tenant_identity_configs",
+        "tenant_identity_providers",
+        "tenant_identity_domains",
+        "tenant_identity_role_assignments",
+        "tenant_invitations",
+        "tenant_identity_audit_events",
     }
     with engine.begin() as conn:
         rows = conn.execute(

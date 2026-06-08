@@ -2444,6 +2444,24 @@
     },
     {
       "method": "GET",
+      "path": "/portal/grants",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/grants",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/portal/grants/{grant_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/portal/me",
       "scopes": [],
       "source": "contract"
@@ -2707,7 +2725,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-04T13:43:49.063477+00:00",
+  "generated_at": "2026-06-08T15:01:57.937889+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

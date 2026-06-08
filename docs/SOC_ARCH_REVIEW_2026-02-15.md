@@ -1505,3 +1505,28 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 **Tests:** `tests/test_ai_vendor_governance.py` — 67 tests. W-series (W1–W18): state machine transitions + initial state determinism + TARGET_TYPES/DECISION_TYPES/WORKFLOW_STATES invariants. G-series (G1–G31): governance readiness computation, finding generation, record generation, build_summary metrics. S-series (S1–S4): tenant isolation, engagement isolation, exception_granted preservation, independent engagement records. L-series (L1–L6): bridge scan result creation, record creation, idempotency, finding creation, result fields, re-evaluation. R-series (R1–R4): scan registry version acceptance, required field validation, ScanSourceType enum. D-series (D1–D4): determinism invariants.
 
 **Validation:** `make fg-fast` PASS.
+
+
+## 2026-06-08 — SOC-HIGH-002 — PR 1 identity foundation and portal grant route governance sync
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (contract and route inventory regeneration)
+
+### Files reviewed
+
+- `api/portal.py` — operator-facing portal grant routes now require a key-bound tenant and emit transaction-bound platform audit events for create/revoke mutations.
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` — synchronized the pre-existing `GET/POST/DELETE /portal/grants` runtime routes into the authoritative contract.
+- `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — regenerated governance snapshots for those routes.
+
+### Security review
+
+- No public or auth-exempt route was added. All three routes retain `governance:write` scope enforcement.
+- Grant reads and mutations fail closed unless `require_bound_tenant()` confirms a key-bound tenant; database queries remain tenant-filtered.
+- Create and revoke mutations write atomic platform audit events before commit while retaining portal-specific audit records.
+- Identity foundation changes add no provider secrets, raw invite tokens, session issuance, or direct invitation activation.
+
+### Validation evidence
+
+- `python -m pytest tests -q`: 7074 passed, 37 skipped.
+- PostgreSQL migration replay: 1 passed.
+- Focused identity, portal, audit, plane registry, and ops regression suite: 180 passed.
+- `make route-inventory-generate` completed; `make fg-fast` rerun after this review sync.
