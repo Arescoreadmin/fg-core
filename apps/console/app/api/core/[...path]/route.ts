@@ -71,6 +71,9 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'workforce/users', methods: new Set(['GET', 'POST', 'PATCH', 'HEAD']) },
   // Portal grant management — governance:write gated; console admin panel
   { prefix: 'portal/grants', methods: new Set(['GET', 'POST', 'DELETE', 'HEAD']) },
+  // Identity Governance Control Plane — identity:read/write gated; console admin panel (PR4)
+  { prefix: 'admin/identity/tenants', methods: new Set(['GET', 'POST', 'PUT', 'HEAD']) },
+  { prefix: 'admin/identity/invitations', methods: new Set(['GET', 'POST', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { IdentityGovernancePanel } from '@/components/identity';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -363,7 +364,7 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'users' | 'portal';
+type Tab = 'users' | 'portal' | 'identity';
 
 export default function TenantDetailPage() {
   const { tenantId } = useParams<{ tenantId: string }>();
@@ -382,15 +383,17 @@ export default function TenantDetailPage() {
       </div>
 
       <div style={s.tabs}>
-        {(['users', 'portal'] as const).map(t => (
+        {(['users', 'portal', 'identity'] as const).map(t => (
           <button key={t} style={{ ...s.tab, ...(tab === t ? s.tabActive : {}) }} onClick={() => setTab(t)}>
-            {t === 'users' ? 'Console users' : 'Portal access'}
+            {t === 'users' ? 'Console users' : t === 'portal' ? 'Portal access' : 'Identity governance'}
           </button>
         ))}
       </div>
 
       <div style={s.card}>
-        {tab === 'users' ? <ConsoleUsersTab tenantId={tenantId} /> : <PortalAccessTab tenantId={tenantId} />}
+        {tab === 'users' && <ConsoleUsersTab tenantId={tenantId} />}
+        {tab === 'portal' && <PortalAccessTab tenantId={tenantId} />}
+        {tab === 'identity' && <IdentityGovernancePanel tenantId={tenantId} />}
       </div>
     </main>
   );
