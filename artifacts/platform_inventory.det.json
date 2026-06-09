@@ -6,38 +6,7 @@
     "contracts/artifacts/evidence_runs_response.schema.json",
     "contracts/artifacts/plane_registry_response.schema.json"
   ],
-  "gaps": [
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "agent",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "connector",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "data",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "rbac",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "workforce",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    }
-  ],
+  "gaps": [],
   "governance": {
     "contract_count": 454,
     "contract_only": [],

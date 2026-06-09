@@ -27,6 +27,20 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.identity_session.issued",
         "tenant.identity_session.rejected",
         "tenant.identity_session.logout",
+        # Auth0 adapter provisioning events (PR 3)
+        "auth0.organization.create_requested",
+        "auth0.organization.created",
+        "auth0.organization.associated",
+        "auth0.connection.attach_requested",
+        "auth0.connection.attached",
+        "auth0.provisioning_failed",
+        "auth0.invitation_auth_started",
+        "auth0.callback_received",
+        "auth0.callback_rejected",
+        "auth0.identity_validated",
+        "auth0.identity_bound",
+        "auth0.session_issued",
+        "auth0.session_rejected",
     }
 )
 INVITATION_TRANSITIONS = {

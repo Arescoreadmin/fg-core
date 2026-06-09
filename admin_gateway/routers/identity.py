@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 from typing import Any, NoReturn
 
@@ -15,7 +16,11 @@ from admin_gateway.db.identity_session import (
     set_tenant_context,
 )
 from admin_gateway.identity.audit import emit_identity_audit_event
-from admin_gateway.identity.models import TenantIdentityProvider, TenantInvitation
+from admin_gateway.identity.models import (
+    TenantIdentityAuthState,
+    TenantIdentityProvider,
+    TenantInvitation,
+)
 from admin_gateway.identity.policy import (
     IdentityPolicyError,
     require_identity_configured,
@@ -29,6 +34,7 @@ from admin_gateway.identity.invitation_flow import (
     start_invitation_auth,
     validate_callback,
 )
+from admin_gateway.identity.auth0_adapter import Auth0Adapter, Auth0AdapterError
 from admin_gateway.identity.provider_adapter import (
     ProviderAdapter,
     ProviderAdapterError,
@@ -44,7 +50,10 @@ router = APIRouter(prefix="/identity", tags=["identity-enforcement"])
 
 
 def get_provider_adapter() -> ProviderAdapter:
-    return ProviderNeutralRedirectAdapter()
+    try:
+        return Auth0Adapter()
+    except Auth0AdapterError:
+        return ProviderNeutralRedirectAdapter()
 
 
 class StartAuthBody(BaseModel):
@@ -59,11 +68,12 @@ class CallbackBody(BaseModel):
     model_config = {"extra": "forbid"}
 
     state: str = Field(min_length=16, max_length=512)
-    provider: str
-    issuer: str
-    subject: str
-    email: str
-    email_verified: bool
+    code: str | None = None
+    provider: str = ""
+    issuer: str = ""
+    subject: str = ""
+    email: str = ""
+    email_verified: bool = False
     connection_id: str | None = None
     organization_id: str | None = None
     identity_type: str
@@ -213,7 +223,22 @@ def callback(
 ) -> dict[str, Any]:
     try:
         tenant_id = _tenant_from_invite(db, invitation_id)
-        identity = adapter.validate_callback(body.model_dump(exclude={"state"}))
+        state_digest = hashlib.sha256(body.state.encode()).hexdigest()
+        auth_state_row = (
+            db.query(TenantIdentityAuthState)
+            .filter(
+                TenantIdentityAuthState.tenant_id == tenant_id,
+                TenantIdentityAuthState.invitation_id == invitation_id,
+                TenantIdentityAuthState.state_digest == state_digest,
+            )
+            .one_or_none()
+        )
+        payload = body.model_dump(exclude={"state"})
+        if auth_state_row is not None:
+            payload["server_requested_connection_id"] = (
+                auth_state_row.requested_connection_id
+            )
+        identity = adapter.validate_callback(payload)
         state = validate_callback(
             db,
             tenant_id=tenant_id,

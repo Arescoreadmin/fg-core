@@ -42,13 +42,10 @@ The tenant_identity_auth_states table stores only SHA-256 state digests and vali
 
 The Console Core BFF removes incoming tenant_id and reinjects only server-authoritative CORE_TENANT_ID. URL query parameters cannot override tenant authority. Full Console adoption of Admin Gateway governed session context remains a later UI/BFF migration; existing machine/internal API-key flows are unchanged.
 
-## PR 3 Planning
+## Auth0 Adapter (PR 3)
 
-PR 3 should extend the governed identity foundation with:
+PR 3 added Auth0 as a provider behind the provider-neutral adapter seam. See `docs/architecture/auth0_adapter.md` for the complete Auth0 adapter specification.
 
-- SCIM provisioning and deprovisioning
-- JIT provisioning governed by explicit tenant policy
-- Enterprise IdP onboarding
-- Organization lifecycle automation
+The Auth0 adapter implements the ProviderAdapter protocol without replacing the provider-neutral architecture. Auth0 authenticates; Admin Gateway authorizes. Provisioning failures leave tenant identity configs and memberships in pending/not-ready states — they do not partially activate.
 
-These capabilities must preserve Admin Gateway as the only tenant-session authority and must not make provider assertions, provisioning events, or organization membership sufficient to issue tenant access without governed membership binding.
+Future provider adapters (Keycloak, Okta) follow the same seam. SCIM provisioning, JIT provisioning governed by explicit tenant policy, and full enterprise IdP onboarding lifecycle automation remain future work.

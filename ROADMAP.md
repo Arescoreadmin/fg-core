@@ -162,7 +162,9 @@ Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
 
 | PR | Item | Status | Deliverable |
 |---|---|---|---|
-| PR 1 | Tenant Identity Schema + Identity Policy Foundation | in review | Explicit tenant identity policy, safe invitation lifecycle, membership subject binding, append-only identity audit events, and demo migration foundation |
+| PR 1 | Tenant Identity Schema + Identity Policy Foundation | ✅ merged (#409) | Explicit tenant identity policy, safe invitation lifecycle, membership subject binding, append-only identity audit events, and demo migration foundation |
+| PR 2 | Provider-Neutral Admin Gateway Identity Enforcement | ✅ merged (#410) | Invitation start-auth, callback validation, identity binding, tenant-governed session issuance, replay protection, audit chain, Console BFF tenant_id override removed |
+| PR 3 | Auth0 Adapter For Provider-Neutral Admin Gateway | in review | Auth0 org/connection provisioning, org-aware SSO login, managed signup/login, JWKS-backed token verification, claim normalization, fail-closed provisioning, 13 Auth0 audit event types |
 
 ## How to add a PR to this roadmap
 

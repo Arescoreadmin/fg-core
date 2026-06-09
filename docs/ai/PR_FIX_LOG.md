@@ -13586,3 +13586,31 @@ Validation includes focused gateway identity enforcement, tenant isolation, repl
 ## 2026-06-09 - PR 2 Docker Admin Gateway identity runtime boundary fix
 
 Removed all Admin Gateway identity runtime imports from the Core-only `api` package. Added Admin Gateway-local synchronous identity database/RLS session helpers, minimal shared-schema identity mappings, provider-neutral policy reads, and hash-chain-compatible audit/invitation transition writes. The Docker image continues to exclude the Core `api` package and now starts successfully with identity routes enabled. Added a blocked-Core-import regression test and validated the built image contains no `/app/api`, imports the identity router, starts Uvicorn, and returns HTTP 200 from `/health`. Identity enforcement, callback replay protection, RLS tenant context, and governed-session authority remain unchanged.
+
+## 2026-06-09 - PR 3 Auth0 Adapter For Provider-Neutral Admin Gateway
+
+Added Auth0 as a provider adapter behind the PR 2 provider-neutral identity enforcement seam. Auth0 authenticates; Admin Gateway authorizes; Admin Gateway alone issues tenant sessions.
+
+**Files added:**
+- `admin_gateway/identity/auth0_config.py` — Auth0 configuration from env vars only; secrets never stored in DB or audit
+- `admin_gateway/identity/auth0_models.py` — safe provisioning data types (no tokens/secrets)
+- `admin_gateway/identity/auth0_management.py` — Management API v2 client with in-memory token, idempotent org/connection operations
+- `admin_gateway/identity/auth0_adapter.py` — ProviderAdapter implementation: org-aware SSO URL, managed signup URL, JWKS-backed token verification, claim normalization
+- `admin_gateway/tests/test_auth0_adapter.py` — unit tests: URL building, claim normalization, provisioning operations, config validation, secret-safety
+- `tests/test_admin_gateway_auth0_identity_flow.py` — integration tests: all required rejection cases, provisioning failure pending, session authority invariants
+- `docs/architecture/auth0_adapter.md` — Auth0 adapter architecture reference
+
+**Files modified:**
+- `admin_gateway/identity/audit.py` — added 13 Auth0-specific audit event types to the vocabulary
+- `docs/architecture/admin_gateway_identity_enforcement.md` — updated PR 3 planning section to reflect delivered state
+
+**Security invariants enforced:**
+- Auth0 may authenticate; Admin Gateway decides tenant session
+- Invite token alone cannot activate membership
+- tenant_id query parameters are ignored/rejected
+- Organization ID enforced from verified token claims (not raw callback body)
+- email_verified=True enforced before any claim accepted
+- Provisioning failure leaves membership pending and identity config not ready
+- Management tokens, client secrets, and raw tokens never logged or stored
+- Audit payloads exclude all token/secret fields
+- PR 1 RLS and PR 2 replay/state protection unchanged

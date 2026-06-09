@@ -249,6 +249,17 @@
       "CallbackBody": {
         "additionalProperties": false,
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "connection_id": {
             "anyOf": [
               {
@@ -272,10 +283,12 @@
             "title": "Correlation Id"
           },
           "email": {
+            "default": "",
             "title": "Email",
             "type": "string"
           },
           "email_verified": {
+            "default": false,
             "title": "Email Verified",
             "type": "boolean"
           },
@@ -284,6 +297,7 @@
             "type": "string"
           },
           "issuer": {
+            "default": "",
             "title": "Issuer",
             "type": "string"
           },
@@ -299,6 +313,7 @@
             "title": "Organization Id"
           },
           "provider": {
+            "default": "",
             "title": "Provider",
             "type": "string"
           },
@@ -309,17 +324,13 @@
             "type": "string"
           },
           "subject": {
+            "default": "",
             "title": "Subject",
             "type": "string"
           }
         },
         "required": [
           "state",
-          "provider",
-          "issuer",
-          "subject",
-          "email",
-          "email_verified",
           "identity_type"
         ],
         "title": "CallbackBody",

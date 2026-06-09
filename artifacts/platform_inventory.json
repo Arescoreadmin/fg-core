@@ -6,42 +6,11 @@
     "contracts/artifacts/evidence_runs_response.schema.json",
     "contracts/artifacts/plane_registry_response.schema.json"
   ],
-  "gaps": [
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "agent",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "connector",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "data",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "rbac",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": "plane id not referenced in SOC gate artifact",
-      "plane": "workforce",
-      "suggested_fix": "Add SOC gate mapping entry for plane.",
-      "type": "missing_soc_gate_reference"
-    }
-  ],
+  "gaps": [],
   "governance": {
-    "contract_count": 445,
+    "contract_count": 454,
     "contract_only": [],
-    "runtime_count": 550,
+    "runtime_count": 559,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -149,7 +118,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "19cea6f1d5936fea746f2d4b7df261bff3a5e8d0ca8670ec5d7ebd8156609045",
+  "governance_fingerprint": "c144c48b28ab322fc0dc8a5ccd46d825c5142e0110732df92c70379780237231",
   "planes": [
     {
       "compat": {
@@ -362,6 +331,7 @@
       "DELETE /field-assessment/engagements/{engagement_id}/observations/{observation_id}",
       "DELETE /field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}",
       "DELETE /governance/assets/{asset_id}/owners/{ownership_id}",
+      "DELETE /portal/grants/{grant_id}",
       "DELETE /portal/sessions/{session_id}",
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -469,6 +439,8 @@
       "GET /enterprise-controls/frameworks",
       "GET /field-assessment/engagements",
       "GET /field-assessment/engagements/{engagement_id}",
+      "GET /field-assessment/engagements/{engagement_id}/ai-vendor-governance",
+      "GET /field-assessment/engagements/{engagement_id}/ai-vendor-governance/decisions",
       "GET /field-assessment/engagements/{engagement_id}/artifacts/{artifact_id}",
       "GET /field-assessment/engagements/{engagement_id}/audit-events",
       "GET /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}",
@@ -550,6 +522,7 @@
       "GET /health/ready",
       "GET /metrics",
       "GET /planes",
+      "GET /portal/grants",
       "GET /portal/me",
       "GET /rag/corpora",
       "GET /rag/corpora/{corpus_id}",
@@ -561,6 +534,7 @@
       "GET /status",
       "HEAD /health",
       "PATCH /field-assessment/engagements/{engagement_id}",
+      "PATCH /field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}/remediation",
       "PATCH /field-assessment/engagements/{engagement_id}/observations/{observation_id}",
@@ -664,9 +638,12 @@
       "POST /exceptions/requests",
       "POST /exceptions/requests/{request_id}/approve",
       "POST /field-assessment/engagements",
+      "POST /field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}/transition",
       "POST /field-assessment/engagements/{engagement_id}/artifacts",
       "POST /field-assessment/engagements/{engagement_id}/baseline",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/ai-vendor-governance/run",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/dns-email/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/entra-governance/initiate",
@@ -714,6 +691,7 @@
       "POST /governance/workflows/{workflow_id}/evidence",
       "POST /internal/connectors/{connector_id}/ingest",
       "POST /portal/authenticate",
+      "POST /portal/grants",
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",
       "PUT /admin/agent/version-floor",
