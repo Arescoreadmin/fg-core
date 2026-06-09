@@ -20,6 +20,19 @@ CREATE TABLE IF NOT EXISTS fa_quarantined_scans (
 CREATE INDEX IF NOT EXISTS ix_fa_quarantined_engagement_tenant
     ON fa_quarantined_scans (engagement_id, tenant_id);
 
+-- 0093 may already have created fa_quarantined_scans without the newer
+-- ORM-required quarantine columns. CREATE TABLE IF NOT EXISTS will not backfill
+-- missing columns, so repair the table explicitly before creating indexes.
+ALTER TABLE fa_quarantined_scans
+    ADD COLUMN IF NOT EXISTS quarantine_reason VARCHAR(64);
+
+UPDATE fa_quarantined_scans
+SET quarantine_reason = 'SCAN_QUARANTINED'
+WHERE quarantine_reason IS NULL;
+
+ALTER TABLE fa_quarantined_scans
+    ALTER COLUMN quarantine_reason SET NOT NULL;
+
 CREATE INDEX IF NOT EXISTS ix_fa_quarantined_tenant_reason
     ON fa_quarantined_scans (tenant_id, quarantine_reason);
 

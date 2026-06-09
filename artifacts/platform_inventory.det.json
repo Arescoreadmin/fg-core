@@ -39,9 +39,9 @@
     }
   ],
   "governance": {
-    "contract_count": 451,
+    "contract_count": 454,
     "contract_only": [],
-    "runtime_count": 556,
+    "runtime_count": 559,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -149,7 +149,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "38d508970275a9987080fbc1377cd58fa8b9abe56090fe7a4405fe671126d7f6",
+  "governance_fingerprint": "c144c48b28ab322fc0dc8a5ccd46d825c5142e0110732df92c70379780237231",
   "planes": [
     {
       "compat": {
@@ -362,6 +362,7 @@
       "DELETE /field-assessment/engagements/{engagement_id}/observations/{observation_id}",
       "DELETE /field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}",
       "DELETE /governance/assets/{asset_id}/owners/{ownership_id}",
+      "DELETE /portal/grants/{grant_id}",
       "DELETE /portal/sessions/{session_id}",
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -552,6 +553,7 @@
       "GET /health/ready",
       "GET /metrics",
       "GET /planes",
+      "GET /portal/grants",
       "GET /portal/me",
       "GET /rag/corpora",
       "GET /rag/corpora/{corpus_id}",
@@ -720,6 +722,7 @@
       "POST /governance/workflows/{workflow_id}/evidence",
       "POST /internal/connectors/{connector_id}/ingest",
       "POST /portal/authenticate",
+      "POST /portal/grants",
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",
       "PUT /admin/agent/version-floor",

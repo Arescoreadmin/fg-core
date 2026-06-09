@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -148,17 +148,32 @@ def _source_payload(source: str, tenant: DemoTenant) -> dict[str, Any]:
             "users": [
                 {"id": "u-exec", "department": "Executive", "mfa_registered": True},
                 {"id": "u-ops", "department": "Operations", "mfa_registered": True},
-                {"id": "u-vendor", "department": "Vendor Access", "mfa_registered": False},
+                {
+                    "id": "u-vendor",
+                    "department": "Vendor Access",
+                    "mfa_registered": False,
+                },
             ],
             "directory_roles": ["Global Reader", "Security Reader"],
-            "conditional_access_policies": ["Require MFA for admins", "Block legacy auth"],
+            "conditional_access_policies": [
+                "Require MFA for admins",
+                "Block legacy auth",
+            ],
         }
     if source == "oauth_inventory":
         return {
             **base,
             "apps": [
-                {"app_id": "crm-ai-assistant", "publisher_verified": True, "high_privilege_scopes": []},
-                {"app_id": "meeting-summary-tool", "publisher_verified": False, "high_privilege_scopes": ["Files.Read.All"]},
+                {
+                    "app_id": "crm-ai-assistant",
+                    "publisher_verified": True,
+                    "high_privilege_scopes": [],
+                },
+                {
+                    "app_id": "meeting-summary-tool",
+                    "publisher_verified": False,
+                    "high_privilege_scopes": ["Files.Read.All"],
+                },
             ],
         }
     if source == "endpoint_inventory":
@@ -167,7 +182,11 @@ def _source_payload(source: str, tenant: DemoTenant) -> dict[str, Any]:
             "endpoints": [
                 {"device_id": "lap-001", "managed": True, "edr_status": "healthy"},
                 {"device_id": "lap-002", "managed": True, "edr_status": "healthy"},
-                {"device_id": "contractor-01", "managed": False, "edr_status": "unknown"},
+                {
+                    "device_id": "contractor-01",
+                    "managed": False,
+                    "edr_status": "unknown",
+                },
             ],
         }
     if source == "network_scan":
@@ -185,7 +204,9 @@ def _required_doc_title(doc_class: str, tenant: DemoTenant) -> str:
     return f"{tenant.client_name} {doc_class.replace('_', ' ').title()}"
 
 
-def _doc_findings(doc_class: str, tenant: DemoTenant) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _doc_findings(
+    doc_class: str, tenant: DemoTenant
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     findings = [
         {
             "summary": f"{doc_class} is present for the {tenant.sector} demo assessment.",
@@ -203,10 +224,14 @@ def _doc_findings(doc_class: str, tenant: DemoTenant) -> tuple[list[dict[str, An
     return findings, gaps
 
 
-def _create_or_update_document(db: Session, tenant: DemoTenant, engagement_id: str, doc_class: str):
+def _create_or_update_document(
+    db: Session, tenant: DemoTenant, engagement_id: str, doc_class: str
+):
     existing = [
         d
-        for d in list_document_analyses(db, engagement_id=engagement_id, tenant_id=tenant.tenant_id, limit=100)
+        for d in list_document_analyses(
+            db, engagement_id=engagement_id, tenant_id=tenant.tenant_id, limit=100
+        )
         if d.document_classification == doc_class
     ]
     analysis_findings, gaps = _doc_findings(doc_class, tenant)
@@ -228,7 +253,9 @@ def _create_or_update_document(db: Session, tenant: DemoTenant, engagement_id: s
         engagement_id=engagement_id,
         document_name=_required_doc_title(doc_class, tenant),
         document_classification=doc_class,
-        document_hash=_sha256_json({"tenant": tenant.tenant_id, "doc_class": doc_class}),
+        document_hash=_sha256_json(
+            {"tenant": tenant.tenant_id, "doc_class": doc_class}
+        ),
         version_label="demo-current",
         approved_by="FrostGate Demo Governance Lead",
         approval_date=_now_iso(),
@@ -252,7 +279,9 @@ def _create_or_update_observation(
 ):
     existing = [
         row
-        for row in list_observations(db, engagement_id=engagement_id, tenant_id=tenant.tenant_id, limit=100)
+        for row in list_observations(
+            db, engagement_id=engagement_id, tenant_id=tenant.tenant_id, limit=100
+        )
         if row.title == title and row.observation_type == observation_type
     ]
     evidence = {
@@ -286,7 +315,16 @@ def _create_or_update_observation(
     )
 
 
-def _link(db: Session, *, tenant_id: str, engagement_id: str, source_type: str, source_id: str, evidence_type: str, evidence_id: str) -> None:
+def _link(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    source_type: str,
+    source_id: str,
+    evidence_type: str,
+    evidence_id: str,
+) -> None:
     try:
         create_evidence_link(
             db,
@@ -365,13 +403,24 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
             normalized_payload={
                 "demo_seed": True,
                 "summary": f"{source} demo evidence for {tenant.client_name}",
-                "risk_signals": ["review_required"] if source == "oauth_inventory" else [],
+                "risk_signals": ["review_required"]
+                if source == "oauth_inventory"
+                else [],
             },
-            object_count=len(payload.get("users") or payload.get("apps") or payload.get("endpoints") or payload.get("hosts") or []),
+            object_count=len(
+                payload.get("users")
+                or payload.get("apps")
+                or payload.get("endpoints")
+                or payload.get("hosts")
+                or []
+            ),
         )
         scans[source] = scan
 
-    docs = {doc_class: _create_or_update_document(db, tenant, eng.id, doc_class) for doc_class in playbook.required_document_classes}
+    docs = {
+        doc_class: _create_or_update_document(db, tenant, eng.id, doc_class)
+        for doc_class in playbook.required_document_classes
+    }
 
     observations = []
     for role in playbook.required_interview_roles:
@@ -413,7 +462,9 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
     _AIGO = "ai_governance"
     _FFIEC = "ffiec_cat"
 
-    _FINDING_SPECS: dict[str, list[tuple[str, str, str, str, str, list[dict[str, str]], str]]] = {
+    _FINDING_SPECS: dict[
+        str, list[tuple[str, str, str, str, str, list[dict[str, str]], str]]
+    ] = {
         "demo-bank": [
             (
                 "bank.ai.unclassified_data_use",
@@ -423,7 +474,10 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 "without a data-classification policy or approved exception. FFIEC CAT Baseline requires controls "
                 "over data leaving the institution's boundary.",
                 "GOVERN-1.1",
-                [{"framework": _SOC2, "control_id": "CC6.7"}, {"framework": _FFIEC, "control_id": "IS.B.1"}],
+                [
+                    {"framework": _SOC2, "control_id": "CC6.7"},
+                    {"framework": _FFIEC, "control_id": "IS.B.1"},
+                ],
                 "Establish a data-classification policy covering NPI and PII before AI tool use; block unapproved "
                 "third-party AI uploads via DLP rule and conditional access policy.",
             ),
@@ -434,7 +488,10 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 "OAuth inventory found an AI meeting-summary tool (meeting-summary-tool) with Files.Read.All scope "
                 "and no executed vendor agreement documenting data retention, deletion, and breach notification.",
                 "GOVERN-4.1",
-                [{"framework": _SOC2, "control_id": "CC9.2"}, {"framework": _FFIEC, "control_id": "VM.B.1"}],
+                [
+                    {"framework": _SOC2, "control_id": "CC9.2"},
+                    {"framework": _FFIEC, "control_id": "VM.B.1"},
+                ],
                 "Execute a vendor data processing agreement covering AI output retention, deletion SLA, and "
                 "breach notification within 72 hours before the tool is permitted to access production data.",
             ),
@@ -445,7 +502,10 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 "Microsoft Graph shows a user in the Vendor Access department with mfa_registered=false. FFIEC CAT "
                 "Baseline requires MFA for privileged and remote access; SOC 2 CC6.1 requires logical access controls.",
                 "GOVERN-2.1",
-                [{"framework": _SOC2, "control_id": "CC6.1"}, {"framework": _FFIEC, "control_id": "AM.B.2"}],
+                [
+                    {"framework": _SOC2, "control_id": "CC6.1"},
+                    {"framework": _FFIEC, "control_id": "AM.B.2"},
+                ],
                 "Enforce MFA for all vendor accounts via Conditional Access policy and confirm registration within "
                 "7 days. Flag non-compliant accounts for offboarding until resolved.",
             ),
@@ -479,7 +539,10 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 "Training records document 84% completion for the current cycle. FFIEC CAT Baseline and SOC 2 CC2.2 "
                 "require documented awareness training for all personnel with system access.",
                 "MAP-4.1",
-                [{"framework": _SOC2, "control_id": "CC2.2"}, {"framework": _FFIEC, "control_id": "TS.B.1"}],
+                [
+                    {"framework": _SOC2, "control_id": "CC2.2"},
+                    {"framework": _FFIEC, "control_id": "TS.B.1"},
+                ],
                 "Identify non-compliant users, escalate to their managers, and complete training within 30 days. "
                 "Add automated reminders at 60- and 30-day marks in the LMS.",
             ),
@@ -502,7 +565,10 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 "Policy documents are present and current, but the document register lacks an owner signature and "
                 "confirmed next-review date. SOC 2 CC5.3 and FFIEC require evidenced policy maintenance.",
                 "GOVERN-6.1",
-                [{"framework": _SOC2, "control_id": "CC5.3"}, {"framework": _FFIEC, "control_id": "IS.B.2"}],
+                [
+                    {"framework": _SOC2, "control_id": "CC5.3"},
+                    {"framework": _FFIEC, "control_id": "IS.B.2"},
+                ],
                 "Add owner sign-off field and next-review date to the policy register. Set a calendar reminder "
                 "90 days before the next review cycle.",
             ),
@@ -516,7 +582,10 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 "in the document register. HIPAA §164.308(b)(1) requires a BAA with any business associate who "
                 "creates, receives, maintains, or transmits PHI on the covered entity's behalf.",
                 "GOVERN-1.1",
-                [{"framework": _HIPAA, "control_id": "§164.308(b)(1)"}, {"framework": _HIPAA, "control_id": "§164.314(a)(1)"}],
+                [
+                    {"framework": _HIPAA, "control_id": "§164.308(b)(1)"},
+                    {"framework": _HIPAA, "control_id": "§164.314(a)(1)"},
+                ],
                 "Immediately restrict PHI input to the transcription tool. Obtain an executed BAA from the vendor "
                 "or disable the tool until a compliant agreement is in place.",
             ),
@@ -540,7 +609,10 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 "that has access to EHR-linked SharePoint. HIPAA §164.312(a)(2)(i) requires unique user IDs and "
                 "device access controls for workstations that access PHI.",
                 "GOVERN-2.1",
-                [{"framework": _HIPAA, "control_id": "§164.312(a)(2)(i)"}, {"framework": _HIPAA, "control_id": "§164.310(c)"}],
+                [
+                    {"framework": _HIPAA, "control_id": "§164.312(a)(2)(i)"},
+                    {"framework": _HIPAA, "control_id": "§164.310(c)"},
+                ],
                 "Enroll the contractor device in MDM or revoke its access to PHI-adjacent SharePoint sites. "
                 "Establish a policy requiring managed devices for all PHI access within 14 days.",
             ),
@@ -615,7 +687,10 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 "competence measures to prevent inadvertent disclosure of client confidences. NIST AI RMF "
                 "GOVERN-1.1 requires organizational policies governing AI use with sensitive data.",
                 "GOVERN-1.1",
-                [{"framework": _AIGO, "control_id": "GOVERN-1.1"}, {"framework": "aba_ethics", "control_id": "ABA_FO_512_2023"}],
+                [
+                    {"framework": _AIGO, "control_id": "GOVERN-1.1"},
+                    {"framework": "aba_ethics", "control_id": "ABA_FO_512_2023"},
+                ],
                 "Immediately prohibit uploading client matter data to public LLMs without an executed data "
                 "processing agreement and client consent. Deploy firm-managed Copilot with data-residency controls. "
                 "Issue emergency ethics advisory to all attorneys within 5 business days.",
@@ -629,7 +704,10 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 "identified in draft work product. NIST AI RMF MAP-5.1 requires operator controls on AI output "
                 "accuracy before use in consequential decisions.",
                 "MAP-5.1",
-                [{"framework": _AIGO, "control_id": "GOVERN-4.1"}, {"framework": "aba_ethics", "control_id": "ABA_Model_Rule_5.1"}],
+                [
+                    {"framework": _AIGO, "control_id": "GOVERN-4.1"},
+                    {"framework": "aba_ethics", "control_id": "ABA_Model_Rule_5.1"},
+                ],
                 "Establish a mandatory human-in-the-loop review policy requiring supervising attorney sign-off "
                 "on all AI-generated research before use in filings. Create a citation verification checklist "
                 "and add AI source disclosure to document metadata.",
@@ -720,7 +798,15 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
 
     finding_specs_raw = _FINDING_SPECS.get(tenant.tenant_id, [])
     findings = []
-    for ftype, severity, title, desc, nist_control, fw_maps, remediation in finding_specs_raw:
+    for (
+        ftype,
+        severity,
+        title,
+        desc,
+        nist_control,
+        fw_maps,
+        remediation,
+    ) in finding_specs_raw:
         finding = create_finding(
             db,
             tenant_id=tenant.tenant_id,
@@ -738,9 +824,33 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
             remediation_hint=remediation,
         )
         findings.append(finding)
-        _link(db, tenant_id=tenant.tenant_id, engagement_id=eng.id, source_type="normalized_finding", source_id=finding.id, evidence_type="scan_result", evidence_id=primary_scan.id)
-        _link(db, tenant_id=tenant.tenant_id, engagement_id=eng.id, source_type="normalized_finding", source_id=finding.id, evidence_type="document_analysis", evidence_id=primary_doc.id)
-        _link(db, tenant_id=tenant.tenant_id, engagement_id=eng.id, source_type="normalized_finding", source_id=finding.id, evidence_type="field_observation", evidence_id=primary_obs.id)
+        _link(
+            db,
+            tenant_id=tenant.tenant_id,
+            engagement_id=eng.id,
+            source_type="normalized_finding",
+            source_id=finding.id,
+            evidence_type="scan_result",
+            evidence_id=primary_scan.id,
+        )
+        _link(
+            db,
+            tenant_id=tenant.tenant_id,
+            engagement_id=eng.id,
+            source_type="normalized_finding",
+            source_id=finding.id,
+            evidence_type="document_analysis",
+            evidence_id=primary_doc.id,
+        )
+        _link(
+            db,
+            tenant_id=tenant.tenant_id,
+            engagement_id=eng.id,
+            source_type="normalized_finding",
+            source_id=finding.id,
+            evidence_type="field_observation",
+            evidence_id=primary_obs.id,
+        )
 
     q, _created = get_or_create_questionnaire(
         db,
@@ -749,7 +859,9 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
         assessor_id="demo_seed",
     )
     if q.status == "draft":
-        for idx, response in enumerate(list_responses(db, questionnaire_id=q.id, tenant_id=tenant.tenant_id)):
+        for idx, response in enumerate(
+            list_responses(db, questionnaire_id=q.id, tenant_id=tenant.tenant_id)
+        ):
             if idx % 7 == 0:
                 status = "partial"
             elif idx % 11 == 0:
@@ -770,7 +882,13 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
                 confidence_score=0.86,
                 assessor_id="demo_seed",
             )
-        submit_questionnaire(db, questionnaire_id=q.id, tenant_id=tenant.tenant_id, engagement_id=eng.id, actor="demo_seed")
+        submit_questionnaire(
+            db,
+            questionnaire_id=q.id,
+            tenant_id=tenant.tenant_id,
+            engagement_id=eng.id,
+            actor="demo_seed",
+        )
 
     report = _upsert_report(db, tenant, eng.id, findings)
     now = _now_iso()
@@ -792,12 +910,16 @@ def _seed_assessment(db: Session, tenant: DemoTenant) -> tuple[str, str]:
     return eng.id, report.id
 
 
-def _upsert_report(db: Session, tenant: DemoTenant, engagement_id: str, findings: list[Any]) -> GovernanceReportRecord:
+def _upsert_report(
+    db: Session, tenant: DemoTenant, engagement_id: str, findings: list[Any]
+) -> GovernanceReportRecord:
     import json as _json
 
     report_id = f"{tenant.tenant_id}-report-v1"
     generated_at = _now_iso()
-    concerns = [f.title for f in findings if f.severity in {"medium", "high", "critical"}]
+    concerns = [
+        f.title for f in findings if f.severity in {"medium", "high", "critical"}
+    ]
     report_json = {
         "report_id": report_id,
         "assessment_id": engagement_id,
@@ -829,7 +951,9 @@ def _upsert_report(db: Session, tenant: DemoTenant, engagement_id: str, findings
             for f in findings
         ],
     }
-    canonical = _json.dumps(report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = _json.dumps(
+        report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
     manifest_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     section_hashes = {
         "executive_summary": _sha256_json(report_json["executive_summary"]),
@@ -888,16 +1012,22 @@ def _upsert_report(db: Session, tenant: DemoTenant, engagement_id: str, findings
     return record
 
 
-def _create_portal_grant(db: Session, tenant: DemoTenant, engagement_id: str) -> tuple[str, str, str]:
+def _create_portal_grant(
+    db: Session, tenant: DemoTenant, engagement_id: str
+) -> tuple[str, str, str]:
     now_iso = _now_iso()
-    active = db.execute(
-        select(PortalGrant).where(
-            PortalGrant.tenant_id == tenant.tenant_id,
-            PortalGrant.engagement_id == engagement_id,
-            PortalGrant.status == "active",
-            PortalGrant.revoked_at.is_(None),
+    active = (
+        db.execute(
+            select(PortalGrant).where(
+                PortalGrant.tenant_id == tenant.tenant_id,
+                PortalGrant.engagement_id == engagement_id,
+                PortalGrant.status == "active",
+                PortalGrant.revoked_at.is_(None),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for grant in active:
         grant.status = "revoked"
         grant.revoked_at = now_iso
@@ -947,7 +1077,9 @@ def _table_has_column(table_name: str, column_name: str) -> bool:
     with engine.begin() as conn:
         if conn.dialect.name == "postgresql":
             row = conn.execute(
-                text("SELECT 1 FROM information_schema.columns WHERE table_name = :table AND column_name = :column"),
+                text(
+                    "SELECT 1 FROM information_schema.columns WHERE table_name = :table AND column_name = :column"
+                ),
                 {"table": table_name, "column": column_name},
             ).first()
             return row is not None
@@ -955,7 +1087,9 @@ def _table_has_column(table_name: str, column_name: str) -> bool:
         return any(row[1] == column_name for row in rows)
 
 
-def _create_demo_api_key(tenant: DemoTenant, *, force_rotate: bool = False) -> tuple[str | None, str]:
+def _create_demo_api_key(
+    tenant: DemoTenant, *, force_rotate: bool = False
+) -> tuple[str | None, str]:
     """Return (raw_key, status) where status is 'created', 'rotated', or 'unchanged'.
 
     When status is 'unchanged' raw_key is None — the plaintext was never stored
@@ -969,9 +1103,14 @@ def _create_demo_api_key(tenant: DemoTenant, *, force_rotate: bool = False) -> t
         # Check for an already-enabled key; if found, skip rotation entirely.
         if engine.dialect.name == "postgresql":
             with engine.begin() as conn:
-                conn.execute(text("SELECT set_config('app.tenant_id', :tenant_id, true)"), {"tenant_id": tenant.tenant_id})
+                conn.execute(
+                    text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+                    {"tenant_id": tenant.tenant_id},
+                )
                 row = conn.execute(
-                    text("SELECT 1 FROM api_keys WHERE tenant_id = :tid AND name = :name AND enabled = true LIMIT 1"),
+                    text(
+                        "SELECT 1 FROM api_keys WHERE tenant_id = :tid AND name = :name AND enabled = true LIMIT 1"
+                    ),
                     {"tid": tenant.tenant_id, "name": name},
                 ).first()
             if row is not None:
@@ -995,7 +1134,12 @@ def _create_demo_api_key(tenant: DemoTenant, *, force_rotate: bool = False) -> t
     secret = secrets.token_urlsafe(32)
     token = _b64url(
         json.dumps(
-            {"scopes": list(DEMO_SCOPES), "tenant_id": tenant.tenant_id, "iat": now_i, "exp": exp_i},
+            {
+                "scopes": list(DEMO_SCOPES),
+                "tenant_id": tenant.tenant_id,
+                "iat": now_i,
+                "exp": exp_i,
+            },
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8")
@@ -1006,13 +1150,21 @@ def _create_demo_api_key(tenant: DemoTenant, *, force_rotate: bool = False) -> t
 
     if engine.dialect.name == "postgresql":
         with engine.begin() as conn:
-            conn.execute(text("SELECT set_config('app.tenant_id', :tenant_id, true)"), {"tenant_id": tenant.tenant_id})
             conn.execute(
-                text("UPDATE api_keys SET enabled = false WHERE tenant_id = :tenant_id AND name = :name"),
+                text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+                {"tenant_id": tenant.tenant_id},
+            )
+            conn.execute(
+                text(
+                    "UPDATE api_keys SET enabled = false WHERE tenant_id = :tenant_id AND name = :name"
+                ),
                 {"tenant_id": tenant.tenant_id, "name": name},
             )
         with engine.begin() as conn:
-            conn.execute(text("SELECT set_config('app.tenant_id', :tenant_id, true)"), {"tenant_id": tenant.tenant_id})
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+                {"tenant_id": tenant.tenant_id},
+            )
             conn.execute(
                 text(
                     """
@@ -1032,7 +1184,9 @@ def _create_demo_api_key(tenant: DemoTenant, *, force_rotate: bool = False) -> t
                     "key_hash": key_hash,
                     "key_lookup": key_lookup,
                     "hash_alg": hash_alg,
-                    "hash_params": json.dumps(hash_params, sort_keys=True, separators=(",", ":")),
+                    "hash_params": json.dumps(
+                        hash_params, sort_keys=True, separators=(",", ":")
+                    ),
                     "scopes_csv": ",".join(DEMO_SCOPES),
                     "enabled": True,
                     "tenant_id": tenant.tenant_id,
@@ -1044,9 +1198,14 @@ def _create_demo_api_key(tenant: DemoTenant, *, force_rotate: bool = False) -> t
             )
         if _table_has_column("api_keys", "role"):
             with engine.begin() as conn:
-                conn.execute(text("SELECT set_config('app.tenant_id', :tenant_id, true)"), {"tenant_id": tenant.tenant_id})
                 conn.execute(
-                    text("UPDATE api_keys SET role = 'tenant_admin' WHERE tenant_id = :tenant_id AND key_lookup = :key_lookup"),
+                    text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+                    {"tenant_id": tenant.tenant_id},
+                )
+                conn.execute(
+                    text(
+                        "UPDATE api_keys SET role = 'tenant_admin' WHERE tenant_id = :tenant_id AND key_lookup = :key_lookup"
+                    ),
                     {"tenant_id": tenant.tenant_id, "key_lookup": key_lookup},
                 )
         return raw_key, "rotated" if is_rotate else "created"
@@ -1054,11 +1213,18 @@ def _create_demo_api_key(tenant: DemoTenant, *, force_rotate: bool = False) -> t
     SessionLocal = get_sessionmaker()
     with SessionLocal() as db:
         set_tenant_context(db, tenant.tenant_id)
-        rows = db.execute(
-            select(ApiKey).where(ApiKey.tenant_id == tenant.tenant_id, ApiKey.name == name)
-        ).scalars().all()
-        for row in rows:
-            row.enabled = False
+        rows = cast(
+            list[ApiKey],
+            db.execute(
+                select(ApiKey).where(
+                    ApiKey.tenant_id == tenant.tenant_id, ApiKey.name == name
+                )
+            )
+            .scalars()
+            .all(),
+        )
+        for api_key in rows:
+            api_key.enabled = False
         db.add(
             ApiKey(
                 name=name,
@@ -1084,7 +1250,12 @@ def seed(*, dry_run: bool, rotate_keys: bool = False) -> dict[str, Any]:
         return {
             "dry_run": True,
             "tenants": [tenant.__dict__ for tenant in DEMO_TENANTS],
-            "would_create": ["tenant API keys", "delivered engagements", "reports", "portal grants"],
+            "would_create": [
+                "tenant API keys",
+                "delivered engagements",
+                "reports",
+                "portal grants",
+            ],
         }
 
     reset_engine_cache()
@@ -1107,7 +1278,9 @@ def seed(*, dry_run: bool, rotate_keys: bool = False) -> dict[str, Any]:
             set_tenant_context(db, tenant.tenant_id)
             engagement_id, report_id = _seed_assessment(db, tenant)
             _ensure_tenant_user(db, tenant)
-            grant_id, portal_secret, portal_expires_at = _create_portal_grant(db, tenant, engagement_id)
+            grant_id, portal_secret, portal_expires_at = _create_portal_grant(
+                db, tenant, engagement_id
+            )
             db.commit()
         output["tenants"].append(
             {
@@ -1145,8 +1318,14 @@ def seed(*, dry_run: bool, rotate_keys: bool = False) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed FrostGate demo tenants")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--rotate-keys", action="store_true", help="Force-rotate API keys even if an active key exists")
-    parser.add_argument("--output", default="", help="Optional path for credentials JSON")
+    parser.add_argument(
+        "--rotate-keys",
+        action="store_true",
+        help="Force-rotate API keys even if an active key exists",
+    )
+    parser.add_argument(
+        "--output", default="", help="Optional path for credentials JSON"
+    )
     args = parser.parse_args()
     result = seed(dry_run=args.dry_run, rotate_keys=args.rotate_keys)
     rendered = json.dumps(result, indent=2, sort_keys=True)

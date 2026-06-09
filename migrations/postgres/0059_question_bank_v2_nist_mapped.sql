@@ -17,7 +17,7 @@
 UPDATE assessment_schemas SET is_current = FALSE WHERE schema_version = 'v2025.1-base';
 
 -- ─── Question bank v2 ─────────────────────────────────────────────────────────
-INSERT INTO assessment_schemas (schema_version, profile_type, is_current, questions)
+INSERT INTO assessment_schemas (schema_version, profile_type, is_current, questions, created_at)
 VALUES (
   'v2025.2-nist-mapped',
   'base',
@@ -468,7 +468,8 @@ VALUES (
       "weight": 1.1,
       "nist_control_id": "GOVERN 3.2"
     }
-  ]'::jsonb
+  ]'::jsonb,
+  now()
 )
 ON CONFLICT (schema_version) DO UPDATE SET
   is_current = TRUE,

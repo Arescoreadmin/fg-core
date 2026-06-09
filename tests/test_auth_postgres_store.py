@@ -426,7 +426,7 @@ def test_insert_key_row_serializes_hash_params_for_jsonb() -> None:
     sql = str(insert_call.args[0])
     params = insert_call.args[1]
     assert "CAST(:hash_params AS JSONB)" in sql
-    assert params["hash_params"] == "{\"memory_cost\":65536,\"time_cost\":2}"
+    assert params["hash_params"] == '{"memory_cost":65536,"time_cost":2}'
 
 
 def test_postgres_minted_key_name_respects_schema_limit() -> None:

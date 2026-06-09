@@ -158,6 +158,12 @@ Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
 
 ---
 
+### Active Identity Foundation PRs
+
+| PR | Item | Status | Deliverable |
+|---|---|---|---|
+| PR 1 | Tenant Identity Schema + Identity Policy Foundation | in review | Explicit tenant identity policy, safe invitation lifecycle, membership subject binding, append-only identity audit events, and demo migration foundation |
+
 ## How to add a PR to this roadmap
 
 When a PR merges:

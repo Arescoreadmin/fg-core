@@ -15,10 +15,11 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes
+from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db_models_portal import PortalGrant, PortalGrantSession
 from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
+from services.field_assessment.audit import audit_atomicity_svc
 from services.portal_grant_service import portal_grant_svc
 
 log = logging.getLogger("frostgate.api.portal")
@@ -253,7 +254,7 @@ def list_portal_grants(
     db: Session = Depends(auth_ctx_db_session),
 ) -> ListGrantsResponse:
     """List all portal grants for the authenticated tenant."""
-    tenant_id = _resolve_tenant(request)
+    tenant_id = require_bound_tenant(request)
     grants = (
         db.execute(
             select(PortalGrant)
@@ -311,7 +312,7 @@ def create_portal_grant(
     db: Session = Depends(auth_ctx_db_session),
 ) -> CreateGrantResponse:
     """Create a portal access grant. Returns the raw secret once — store it immediately."""
-    tenant_id = _resolve_tenant(request)
+    tenant_id = require_bound_tenant(request)
     actor = getattr(getattr(request.state, "auth", None), "key_name", None) or "console"
 
     role = body.portal_role.lower().strip()
@@ -332,6 +333,22 @@ def create_portal_grant(
         created_by=actor,
         ttl_days=body.ttl_days,
         portal_role=role,
+    )
+    audit_atomicity_svc.emit(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=body.engagement_id,
+        event_type="portal_grant.created",
+        actor=actor,
+        actor_type="human_operator",
+        reason_code="PORTAL_GRANT_CREATED",
+        entity_type="portal_grant",
+        entity_id=result.grant.id,
+        payload={
+            "grant_id": result.grant.id,
+            "client_id": body.client_id,
+            "portal_role": role,
+        },
     )
     db.commit()
 
@@ -363,13 +380,33 @@ def revoke_portal_grant(
     db: Session = Depends(auth_ctx_db_session),
 ) -> RevokeGrantResponse:
     """Revoke a portal grant, immediately invalidating all active sessions for it."""
-    tenant_id = _resolve_tenant(request)
+    tenant_id = require_bound_tenant(request)
     actor = getattr(getattr(request.state, "auth", None), "key_name", None) or "console"
     found = portal_grant_svc.revoke_grant(
         db, grant_id=grant_id, tenant_id=tenant_id, revoked_by=actor
     )
     if not found:
-        raise HTTPException(status_code=404, detail=api_error("GRANT_NOT_FOUND", "Grant not found"))
+        raise HTTPException(
+            status_code=404, detail=api_error("GRANT_NOT_FOUND", "Grant not found")
+        )
+    grant = db.execute(
+        select(PortalGrant).where(
+            PortalGrant.id == grant_id,
+            PortalGrant.tenant_id == tenant_id,
+        )
+    ).scalar_one()
+    audit_atomicity_svc.emit(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=grant.engagement_id,
+        event_type="portal_grant.revoked",
+        actor=actor,
+        actor_type="human_operator",
+        reason_code="PORTAL_GRANT_REVOKED",
+        entity_type="portal_grant",
+        entity_id=grant_id,
+        payload={"grant_id": grant_id, "client_id": grant.client_id},
+    )
     db.commit()
     return RevokeGrantResponse(ok=True)
 
@@ -377,5 +414,5 @@ def revoke_portal_grant(
 def _grant_type_to_role(grant_type: str) -> str:
     prefix = "client_portal."
     if grant_type and grant_type.startswith(prefix):
-        return grant_type[len(prefix):]
+        return grant_type[len(prefix) :]
     return "general"
