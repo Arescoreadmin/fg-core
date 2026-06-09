@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from api.db_models import TenantUser
+from typing import cast
+
+from admin_gateway.identity.models import TenantUser
 from admin_gateway.auth.session import Session, SessionManager
 from admin_gateway.identity.identity_context import TenantSessionContext
 
@@ -42,9 +44,9 @@ def build_tenant_session_context(membership: TenantUser) -> TenantSessionContext
         membership_id=membership.id,
         user_id=membership.id,
         email=membership.identity_email or membership.email,
-        identity_provider=membership.identity_provider,
-        identity_issuer=membership.identity_issuer,
-        identity_subject=membership.identity_subject,
+        identity_provider=cast(str, membership.identity_provider),
+        identity_issuer=cast(str, membership.identity_issuer),
+        identity_subject=cast(str, membership.identity_subject),
         identity_type=membership.identity_type,
         role=membership.role,
         scopes=scopes,

@@ -10,10 +10,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
-from api.db import get_sessionmaker, set_tenant_context
-from api.db_models_identity import TenantIdentityProvider, TenantInvitation
-from api.identity.store import emit_identity_audit_event
-from api.identity.tenant_identity_policy import (
+from admin_gateway.db.identity_session import (
+    get_identity_sessionmaker,
+    set_tenant_context,
+)
+from admin_gateway.identity.audit import emit_identity_audit_event
+from admin_gateway.identity.models import TenantIdentityProvider, TenantInvitation
+from admin_gateway.identity.policy import (
     IdentityPolicyError,
     require_identity_configured,
 )
@@ -76,7 +79,7 @@ class BindBody(BaseModel):
 def _db_for_tenant(
     x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
 ) -> Iterator[DBSession]:
-    db = get_sessionmaker()()
+    db = get_identity_sessionmaker()()
     set_tenant_context(db, x_tenant_id)
     db.info["tenant_id"] = x_tenant_id
     try:
@@ -94,7 +97,7 @@ def _session_db(session: Session = Depends(get_current_session)) -> Iterator[DBS
                 "message": "Tenant session required",
             },
         )
-    db = get_sessionmaker()()
+    db = get_identity_sessionmaker()()
     set_tenant_context(db, session.tenant_id)
     try:
         yield db

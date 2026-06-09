@@ -10,10 +10,16 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.db_models import TenantUser
-from api.db_models_identity import TenantIdentityAuthState, TenantInvitation
-from api.identity.store import TenantIdentityStore, emit_identity_audit_event
-from api.identity.tenant_identity_policy import (
+from admin_gateway.identity.audit import (
+    emit_identity_audit_event,
+    transition_invitation,
+)
+from admin_gateway.identity.models import (
+    TenantIdentityAuthState,
+    TenantInvitation,
+    TenantUser,
+)
+from admin_gateway.identity.policy import (
     IdentityPolicyError,
     is_email_domain_allowed,
     require_identity_configured,
@@ -197,9 +203,7 @@ def start_invitation_auth(
         )
         raise IdentityFlowError(provider_error, 403)
     if invitation.status == "pending":
-        TenantIdentityStore().transition_invitation(
-            db, invitation, to_status="auth_started"
-        )
+        transition_invitation(db, invitation, to_status="auth_started")
     elif invitation.status != "auth_started":
         raise IdentityFlowError("INVITE_STATE_INVALID", 409)
     raw_state = secrets.token_urlsafe(32)
@@ -372,7 +376,7 @@ def validate_callback(
         )
         raise IdentityFlowError("IDENTITY_TYPE_NOT_ALLOWED", 403)
     if invitation.status == "auth_started":
-        TenantIdentityStore().transition_invitation(
+        transition_invitation(
             db,
             invitation,
             to_status="accepted_identity_pending_binding",
@@ -505,7 +509,7 @@ def bind_identity(
         db.rollback()
         raise IdentityFlowError("IDENTITY_ALREADY_BOUND", 409) from exc
     if invitation.status == "accepted_identity_pending_binding":
-        TenantIdentityStore().transition_invitation(
+        transition_invitation(
             db, invitation, to_status="bound", actor_user_id=membership.id
         )
     auth_state.status = "bound"
