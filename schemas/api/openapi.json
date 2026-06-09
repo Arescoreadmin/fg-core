@@ -4307,6 +4307,82 @@
         "title": "ConfidenceImpactResponse",
         "type": "object"
       },
+      "ConfigUpsertBody": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_email_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Email Domains",
+            "type": "array"
+          },
+          "auth0_connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth0 Connection Id"
+          },
+          "auth0_organization_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth0 Organization Id"
+          },
+          "capability_flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Capability Flags",
+            "type": "object"
+          },
+          "identity_mode": {
+            "title": "Identity Mode",
+            "type": "string"
+          },
+          "maturity_level": {
+            "default": "level_0",
+            "title": "Maturity Level",
+            "type": "string"
+          },
+          "oidc_issuer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oidc Issuer"
+          },
+          "provider": {
+            "default": "auth0",
+            "title": "Provider",
+            "type": "string"
+          },
+          "sso_enforced": {
+            "default": false,
+            "title": "Sso Enforced",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "identity_mode"
+        ],
+        "title": "ConfigUpsertBody",
+        "type": "object"
+      },
       "ConfigWriteRequest": {
         "properties": {
           "config_payload": {
@@ -11104,6 +11180,65 @@
           "source_backup_id"
         ],
         "title": "InitiateRestoreRequest",
+        "type": "object"
+      },
+      "InviteCreateBody": {
+        "additionalProperties": false,
+        "properties": {
+          "configured_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configured By User Id"
+          },
+          "email": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Email",
+            "type": "string"
+          },
+          "identity_type": {
+            "default": "human",
+            "title": "Identity Type",
+            "type": "string"
+          },
+          "required_connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Connection Id"
+          },
+          "required_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Provider"
+          },
+          "role": {
+            "default": "user",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "InviteCreateBody",
         "type": "object"
       },
       "InviteUserPayload": {

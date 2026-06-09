@@ -67,7 +67,9 @@ def test_upsert_config_updates_existing(build_app) -> None:
         headers=headers,
     )
     payload2 = {"identity_mode": "sso", "provider": "auth0", "sso_enforced": True}
-    r = c.put(f"/admin/identity/tenants/{tenant}/config", json=payload2, headers=headers)
+    r = c.put(
+        f"/admin/identity/tenants/{tenant}/config", json=payload2, headers=headers
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["identity_mode"] == "sso"
@@ -83,12 +85,20 @@ def test_upsert_config_syncs_providers_on_update(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0", "auth0_organization_id": "org-old"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "auth0_organization_id": "org-old",
+        },
         headers=headers,
     )
     r = c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0", "auth0_organization_id": "org-new"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "auth0_organization_id": "org-new",
+        },
         headers=headers,
     )
     assert r.status_code == 200
@@ -173,7 +183,9 @@ def test_list_invitations_empty(build_app) -> None:
     app = build_app(auth_enabled=True, api_key="")
     key = mint_key("admin:read", tenant_id=tenant, ttl_seconds=3600)
     c = TestClient(app)
-    r = c.get(f"/admin/identity/tenants/{tenant}/invitations", headers={"x-api-key": key})
+    r = c.get(
+        f"/admin/identity/tenants/{tenant}/invitations", headers={"x-api-key": key}
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["invitations"] == []
@@ -243,7 +255,9 @@ def test_invitation_identity_type_persisted(build_app) -> None:
         assert r.json()["identity_type"] == itype
 
     # Verify list also returns identity_type
-    listed = c.get(f"/admin/identity/tenants/{tenant}/invitations", headers=headers).json()
+    listed = c.get(
+        f"/admin/identity/tenants/{tenant}/invitations", headers=headers
+    ).json()
     found_types = {i["identity_type"] for i in listed["invitations"]}
     assert {"service", "agent", "workload"}.issubset(found_types)
 
@@ -325,7 +339,6 @@ def test_resend_invitation_from_pending(build_app) -> None:
 
 def test_resend_refreshes_expires_at(build_app) -> None:
     """FIX 4: resend must update expires_at so the invitation is not dead on arrival."""
-    from datetime import timezone as tz
     import datetime as dt
 
     tenant = "tenant-resend-expiry"
@@ -350,7 +363,9 @@ def test_resend_refreshes_expires_at(build_app) -> None:
     assert r.status_code == 200
 
     # Fetch invitation list to verify expires_at was updated
-    listed = c.get(f"/admin/identity/tenants/{tenant}/invitations", headers=headers).json()
+    listed = c.get(
+        f"/admin/identity/tenants/{tenant}/invitations", headers=headers
+    ).json()
     inv_data = next(i for i in listed["invitations"] if i["id"] == inv_id)
     # expires_at should be non-null (refreshed)
     assert inv_data["expires_at"] is not None
@@ -368,7 +383,9 @@ def test_governance_score_no_config(build_app) -> None:
     app = build_app(auth_enabled=True, api_key="")
     key = mint_key("admin:read", tenant_id=tenant, ttl_seconds=3600)
     c = TestClient(app)
-    r = c.get(f"/admin/identity/tenants/{tenant}/governance-score", headers={"x-api-key": key})
+    r = c.get(
+        f"/admin/identity/tenants/{tenant}/governance-score", headers={"x-api-key": key}
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["score"] == 0
@@ -429,7 +446,9 @@ def test_audit_summary_empty(build_app) -> None:
     app = build_app(auth_enabled=True, api_key="")
     key = mint_key("admin:read", tenant_id=tenant, ttl_seconds=3600)
     c = TestClient(app)
-    r = c.get(f"/admin/identity/tenants/{tenant}/audit-summary", headers={"x-api-key": key})
+    r = c.get(
+        f"/admin/identity/tenants/{tenant}/audit-summary", headers={"x-api-key": key}
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["total_events"] == 0
@@ -483,7 +502,10 @@ def test_readiness_history_empty(build_app) -> None:
     app = build_app(auth_enabled=True, api_key="")
     key = mint_key("admin:read", tenant_id=tenant, ttl_seconds=3600)
     c = TestClient(app)
-    r = c.get(f"/admin/identity/tenants/{tenant}/readiness-history", headers={"x-api-key": key})
+    r = c.get(
+        f"/admin/identity/tenants/{tenant}/readiness-history",
+        headers={"x-api-key": key},
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["transitions"] == []
@@ -550,8 +572,12 @@ def test_routes_require_auth(build_app) -> None:
 def test_tenant_a_cannot_read_tenant_b_config(build_app) -> None:
     """Key bound to tenant-A must not access tenant-B paths."""
     app = build_app(auth_enabled=True, api_key="")
-    key_a = mint_key("admin:read", "admin:write", tenant_id="iso-tenant-a", ttl_seconds=3600)
-    key_b = mint_key("admin:read", "admin:write", tenant_id="iso-tenant-b", ttl_seconds=3600)
+    key_a = mint_key(
+        "admin:read", "admin:write", tenant_id="iso-tenant-a", ttl_seconds=3600
+    )
+    key_b = mint_key(
+        "admin:read", "admin:write", tenant_id="iso-tenant-b", ttl_seconds=3600
+    )
     c = TestClient(app)
 
     # Set up tenant-B with config
@@ -562,7 +588,9 @@ def test_tenant_a_cannot_read_tenant_b_config(build_app) -> None:
     )
 
     # Tenant-A key tries to read tenant-B's config → must be rejected
-    r = c.get("/admin/identity/tenants/iso-tenant-b/config", headers={"x-api-key": key_a})
+    r = c.get(
+        "/admin/identity/tenants/iso-tenant-b/config", headers={"x-api-key": key_a}
+    )
     assert r.status_code in {400, 403}
 
 
@@ -582,7 +610,9 @@ def test_tenant_a_cannot_list_tenant_b_invitations(build_app) -> None:
     app = build_app(auth_enabled=True, api_key="")
     key_a = mint_key("admin:read", tenant_id="iso-inv-a", ttl_seconds=3600)
     c = TestClient(app)
-    r = c.get("/admin/identity/tenants/iso-inv-b/invitations", headers={"x-api-key": key_a})
+    r = c.get(
+        "/admin/identity/tenants/iso-inv-b/invitations", headers={"x-api-key": key_a}
+    )
     assert r.status_code in {400, 403}
 
 
@@ -601,7 +631,9 @@ def test_tenant_a_cannot_create_invitation_for_tenant_b(build_app) -> None:
 def test_tenant_a_cannot_revoke_tenant_b_invitation(build_app) -> None:
     """BLOCKER 1: after lookup, bind_tenant_id enforces caller matches invitation tenant."""
     app = build_app(auth_enabled=True, api_key="")
-    key_b = mint_key("admin:read", "admin:write", tenant_id="iso-rev-b", ttl_seconds=3600)
+    key_b = mint_key(
+        "admin:read", "admin:write", tenant_id="iso-rev-b", ttl_seconds=3600
+    )
     key_a = mint_key("admin:write", tenant_id="iso-rev-a", ttl_seconds=3600)
     c = TestClient(app)
 
@@ -619,13 +651,17 @@ def test_tenant_a_cannot_revoke_tenant_b_invitation(build_app) -> None:
     inv_id = inv_r.json()["id"]
 
     # Tenant-A key tries to revoke tenant-B's invitation → must be rejected
-    r = c.post(f"/admin/identity/invitations/{inv_id}/revoke", headers={"x-api-key": key_a})
+    r = c.post(
+        f"/admin/identity/invitations/{inv_id}/revoke", headers={"x-api-key": key_a}
+    )
     assert r.status_code in {400, 403}
 
 
 def test_tenant_a_cannot_resend_tenant_b_invitation(build_app) -> None:
     app = build_app(auth_enabled=True, api_key="")
-    key_b = mint_key("admin:read", "admin:write", tenant_id="iso-res-b", ttl_seconds=3600)
+    key_b = mint_key(
+        "admin:read", "admin:write", tenant_id="iso-res-b", ttl_seconds=3600
+    )
     key_a = mint_key("admin:write", tenant_id="iso-res-a", ttl_seconds=3600)
     c = TestClient(app)
 
@@ -641,7 +677,9 @@ def test_tenant_a_cannot_resend_tenant_b_invitation(build_app) -> None:
     )
     inv_id = inv_r.json()["id"]
 
-    r = c.post(f"/admin/identity/invitations/{inv_id}/resend", headers={"x-api-key": key_a})
+    r = c.post(
+        f"/admin/identity/invitations/{inv_id}/resend", headers={"x-api-key": key_a}
+    )
     assert r.status_code in {400, 403}
 
 

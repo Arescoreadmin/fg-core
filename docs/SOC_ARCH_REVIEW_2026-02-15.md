@@ -1530,3 +1530,47 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 - PostgreSQL migration replay: 1 passed.
 - Focused identity, portal, audit, plane registry, and ops regression suite: 180 passed.
 - `make route-inventory-generate` completed; `make fg-fast` rerun after this review sync.
+
+## 2026-06-09 — SOC-HIGH-002 — PR4 Identity Governance Control Plane
+
+**Reviewer:** Jason / Codex
+**Classification:** SOC-HIGH-002 (route inventory and topology regeneration)
+
+### Change Summary
+
+Identity Governance Control Plane introduced new tenant identity governance
+routes:
+
+- /admin/identity/tenants/{tenant_id}/config
+- /admin/identity/tenants/{tenant_id}/readiness
+- /admin/identity/tenants/{tenant_id}/invitations
+- /admin/identity/tenants/{tenant_id}/audit-summary
+- /admin/identity/tenants/{tenant_id}/governance-score
+- /admin/identity/tenants/{tenant_id}/drift
+- /admin/identity/tenants/{tenant_id}/timeline
+- /admin/identity/tenants/{tenant_id}/risk
+- /admin/identity/tenants/{tenant_id}/readiness-history
+
+### Files reviewed
+
+- tools/ci/plane_registry_snapshot.json
+- tools/ci/route_inventory.json
+- tools/ci/route_inventory_summary.json
+- tools/ci/topology.sha256
+
+### Security Review
+
+- Routes remain tenant-scoped.
+- Admin Gateway remains authoritative for tenant session issuance.
+- No direct invite-token authentication introduced.
+- No tenant_id query parameter trust introduced.
+- Route inventory regenerated and topology updated.
+- No wildcard authorization expansion.
+- No bypass of identity governance controls.
+
+### Validation
+
+- make route-inventory-generate
+- make fg-contract
+- make soc-review-sync
+- make fg-fast
