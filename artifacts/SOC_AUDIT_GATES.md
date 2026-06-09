@@ -41,6 +41,17 @@
 
 - EG-ART-001: artifact policy gate (`check_artifact_policy.py`) must pass.
 - EG-INV-001: platform inventory gate (`make platform-inventory`) must produce deterministic outputs.
+## Plane SOC Coverage Index
+
+Mapping of each registered plane to its SOC gate evidence. Each entry names the
+CI gate script(s) that provide deterministic verification for that plane.
+
+- **agent**: `tenant_binding_required` enforced on all non-bootstrap agent routes; certificate enrollment (`/agent/cert/enroll`) validated by `check_agent_phase2_rls`; scoped API key issuance enforced; maps to `EG-IAM-001`.
+- **connector**: tenant connector data RLS enforced by `check_connectors_rls`; network egress validated by `check_network_egress_policy`; webhook HMAC integrity required; maps to `EG-ART-001`.
+- **data**: tenant data isolation via Row-Level Security on all data-plane tables; cross-tenant access blocked by `check_db_dependency`; maps to `EG-CP-001`.
+- **rbac**: route scope enforcement validated by `check_route_scopes`; role-permission boundaries enforced per tenant; maps to `EG-IAM-001`.
+- **workforce**: identity federation and membership binding enforced by Admin Gateway identity plane; group-role mapping available via `EG-IAM-001`; identity binding state machine prevents unauthorized activation.
+
 ## Governance Update – 8 Plane Registry Completion
 Date: 2026-02-25
 Change ID: 1bf735ede0eb785e0bbc236dc9d7ef7e176a0be0

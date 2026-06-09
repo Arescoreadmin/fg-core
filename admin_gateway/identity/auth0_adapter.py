@@ -21,6 +21,8 @@ import logging
 from typing import Any, Optional
 from urllib.parse import urlencode
 
+import httpx
+
 
 from admin_gateway.identity.auth0_config import (
     Auth0Config,
@@ -105,19 +107,43 @@ class Auth0Adapter:
             adapter="auth0",
         )
 
+    def _exchange_code(self, code: str) -> dict[str, Any]:
+        """Exchange an authorization code for tokens via POST /oauth/token."""
+        payload = {
+            "grant_type": "authorization_code",
+            "client_id": self._config.client_id,
+            "client_secret": self._config.client_secret,
+            "code": code,
+            "redirect_uri": self._config.callback_url,
+        }
+        resp = httpx.post(self._config.token_url, json=payload, timeout=10.0)
+        if resp.status_code != 200:
+            log.warning("auth0.code_exchange_failed status=%d", resp.status_code)
+            raise Auth0AdapterError("CODE_EXCHANGE_FAILED")
+        return resp.json()
+
     def validate_callback(
         self, callback_payload: dict[str, Any]
     ) -> AuthenticatedIdentity:
         """Validate an Auth0 callback payload and return a verified identity.
 
-        The caller (invitation_flow.validate_callback) owns state-digest
+        Accepts either an authorization code (response_type=code flow) or a
+        direct id_token (test/internal flows). The caller owns state-digest
         verification. This method validates the ID token signature/claims and
         normalizes them into an AuthenticatedIdentity. It fails closed on any
         claim that does not meet policy.
         """
         id_token = callback_payload.get("id_token")
-        if not id_token:
+        code = callback_payload.get("code")
+
+        if not id_token and not code:
             raise Auth0AdapterError("MISSING_ID_TOKEN")
+
+        if not id_token:
+            token_response = self._exchange_code(code)  # type: ignore[arg-type]
+            id_token = token_response.get("id_token")
+            if not id_token:
+                raise Auth0AdapterError("MISSING_ID_TOKEN")
 
         claims = self._verify_id_token(id_token)
         return self._claims_to_authenticated_identity(claims, callback_payload)
@@ -437,10 +463,12 @@ class Auth0Adapter:
         # org_id comes from the verified token claim, not the raw callback body
         org_id: Optional[str] = claims.get("org_id") or None
 
-        # connection is carried in the callback_payload code exchange result
-        # — it is advisory only and confirmed against tenant policy by the
-        # invitation_flow layer.
-        connection_id: Optional[str] = callback_payload.get("connection") or None
+        # connection_id is injected server-side by the router from auth_state
+        # (key: server_requested_connection_id). Never trust the caller-controlled
+        # "connection" field — it is stripped before reaching this method.
+        connection_id: Optional[str] = (
+            callback_payload.get("server_requested_connection_id") or None
+        )
 
         return AuthenticatedIdentity(
             provider=PROVIDER_NAME,

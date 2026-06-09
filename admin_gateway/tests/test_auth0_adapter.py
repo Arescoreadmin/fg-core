@@ -280,13 +280,24 @@ def _adapter_with_token_mock(claims: dict[str, Any]) -> Auth0Adapter:
 
 def test_validate_callback_returns_authenticated_identity():
     adapter = _adapter_with_token_mock(_make_valid_claims())
-    identity = adapter.validate_callback({"id_token": "tok", "connection": "conn-1"})
+    identity = adapter.validate_callback(
+        {"id_token": "tok", "server_requested_connection_id": "conn-1"}
+    )
     assert identity.provider == PROVIDER_NAME
     assert identity.email == "user@example.com"
     assert identity.email_verified is True
     assert identity.subject == "auth0|valid"
     assert identity.organization_id == "org-1"
     assert identity.connection_id == "conn-1"
+
+
+def test_validate_callback_ignores_caller_controlled_connection_field():
+    """Caller-submitted 'connection' field must be ignored; only server-injected value used."""
+    adapter = _adapter_with_token_mock(_make_valid_claims())
+    identity = adapter.validate_callback(
+        {"id_token": "tok", "connection": "conn-ATTACKER"}
+    )
+    assert identity.connection_id is None
 
 
 def test_validate_callback_rejects_unverified_email():
@@ -319,6 +330,25 @@ def test_validate_callback_rejects_missing_id_token():
     adapter = _make_adapter()
     with pytest.raises(Auth0AdapterError, match="MISSING_ID_TOKEN"):
         adapter.validate_callback({})
+
+
+def test_validate_callback_exchanges_code_when_no_id_token():
+    """When payload has 'code' but no 'id_token', adapter must exchange the code."""
+    from unittest.mock import patch
+
+    adapter = _adapter_with_token_mock(_make_valid_claims())
+    fake_token_resp = MagicMock()
+    fake_token_resp.status_code = 200
+    fake_token_resp.json.return_value = {
+        "id_token": "tok-from-exchange",
+        "access_token": "at",
+    }
+    with patch(
+        "admin_gateway.identity.auth0_adapter.httpx.post", return_value=fake_token_resp
+    ):
+        identity = adapter.validate_callback({"code": "auth-code-xyz"})
+    assert identity.provider == PROVIDER_NAME
+    assert identity.email == "user@example.com"
 
 
 def test_validate_callback_org_id_comes_from_claims_not_payload():
@@ -479,6 +509,23 @@ def test_provision_retry_is_idempotent_via_associate():
     assert result.status == "success"
     mgmt.create_organization.assert_not_called()
     mgmt.associate_organization.assert_called_once_with("org-1")
+
+
+def test_create_organization_rejects_name_owned_by_different_tenant():
+    """Org name collision with a different tenant must return ORG_PROVISION_FAILED via adapter."""
+    mgmt = MagicMock(spec=Auth0ManagementClient)
+    mgmt.create_organization.side_effect = Auth0ManagementError(
+        "ORG_OWNED_BY_DIFFERENT_TENANT", 409
+    )
+    adapter = _make_adapter(mgmt)
+    result = adapter.provision_tenant_identity(
+        tenant_id="tenant-mine",
+        org_name="acme",
+        display_name="Acme",
+        connection_id="conn-1",
+    )
+    assert result.status == "failed"
+    assert "ORG_OWNED_BY_DIFFERENT_TENANT" in (result.error_code or "")
 
 
 # ------------------------------------------------------------------

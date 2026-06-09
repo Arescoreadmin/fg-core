@@ -172,6 +172,9 @@ class Auth0ManagementClient:
         """Create an Auth0 org or return the existing one with the same name."""
         existing = self.get_organization_by_name(name)
         if existing:
+            existing_meta_tenant = (existing.get("metadata") or {}).get("fg_tenant_id")
+            if existing_meta_tenant != tenant_id:
+                raise Auth0ManagementError("ORG_OWNED_BY_DIFFERENT_TENANT", 409)
             log.info("auth0.org.already_exists name=%s id=%s", name, existing["id"])
             return Auth0OrgResult(
                 organization_id=existing["id"],
