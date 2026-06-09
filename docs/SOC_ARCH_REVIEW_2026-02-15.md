@@ -1601,3 +1601,33 @@ resilient to GitHub Actions shallow-clone race conditions.
 - make soc-review-sync
 - bash codex_gates.sh
 - make fg-fast
+
+## 2026-06-09 — SOC-HIGH-002 — PR4 Identity Governance plane registry/topology sync
+
+**Reviewer:** Jason / Codex  
+**Classification:** SOC-HIGH-002 (tools/ci plane registry and topology regeneration)
+
+### Change Summary
+
+Regenerated PR4 Identity Governance Control Plane route/topology artifacts after adding
+tenant identity governance routes and Console identity governance surfaces.
+
+### Critical-path files reviewed
+
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+
+### Security Assessment
+
+- No new wildcard route policy was introduced.
+- No tenant isolation control was weakened.
+- No Admin Gateway session authority was changed.
+- No Console-side session issuance was introduced.
+- Identity Governance routes remain tenant-scoped and governed by server-side authorization.
+- Topology and plane registry updates reflect deterministic inventory regeneration only.
+
+### Validation
+
+- `make route-inventory-generate`
+- `make soc-review-sync`
+- `make fg-fast`
