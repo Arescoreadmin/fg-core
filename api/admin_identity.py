@@ -8,15 +8,14 @@ identifies the target tenant; the caller's API key carries admin-level scopes.
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, require_scopes
+from api.auth_scopes import require_scopes
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models_identity import (
     TenantIdentityAuditEvent,
@@ -33,7 +32,6 @@ from api.identity.store import (
 from api.identity.tenant_identity_policy import (
     IDENTITY_MODES,
     IdentityPolicyError,
-    normalized_domains,
 )
 
 router = APIRouter(prefix="/admin/identity", tags=["admin-identity"])
@@ -77,6 +75,12 @@ def _admin_db(tenant_id: str) -> Session:
     db = get_sessionmaker()()
     set_tenant_context(db, tenant_id)
     return db
+
+
+# ── Auth dependencies ─────────────────────────────────────────────────────────
+
+_require_read = Depends(require_scopes("identity:read"))
+_require_write = Depends(require_scopes("identity:write"))
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -161,7 +165,6 @@ def _serialize_invitation(inv: TenantInvitation) -> dict[str, Any]:
         "email": inv.email,
         "role": inv.role,
         "status": inv.status,
-        "identity_type": getattr(inv, "identity_type", None),
         "required_provider": inv.required_provider,
         "required_connection_id": inv.required_connection_id,
         "identity_mode_at_invite": inv.identity_mode_at_invite,
@@ -177,11 +180,8 @@ def _serialize_invitation(inv: TenantInvitation) -> dict[str, Any]:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
-@router.get(
-    "/tenants/{tenant_id}/config", dependencies=[Depends(require_scopes("admin:read"))]
-)
-def get_config(request: Request, tenant_id: str) -> dict[str, Any]:
-    bind_tenant_id(request, tenant_id)
+@router.get("/tenants/{tenant_id}/config", dependencies=[_require_read])
+def get_config(tenant_id: str) -> dict[str, Any]:
     db = _admin_db(tenant_id)
     try:
         config = _get_config(db, tenant_id)
@@ -225,12 +225,8 @@ def get_config(request: Request, tenant_id: str) -> dict[str, Any]:
         db.close()
 
 
-@router.put(
-    "/tenants/{tenant_id}/config", dependencies=[Depends(require_scopes("admin:write"))]
-)
-def upsert_config(
-    request: Request, tenant_id: str, body: ConfigUpsertBody
-) -> dict[str, Any]:
+@router.put("/tenants/{tenant_id}/config", dependencies=[_require_write])
+def upsert_config(tenant_id: str, body: ConfigUpsertBody) -> dict[str, Any]:
     if body.identity_mode not in IDENTITY_MODES:
         raise HTTPException(
             status_code=422,
@@ -239,7 +235,6 @@ def upsert_config(
                 "message": f"mode must be one of {sorted(IDENTITY_MODES)}",
             },
         )
-    bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
         config = _get_config(db, tenant_id)
@@ -272,43 +267,6 @@ def upsert_config(
             config.maturity_level = body.maturity_level
             config.capability_flags = body.capability_flags
             config.updated_at = _now()
-            # BLOCKER 2: sync provider and domain records so trust records stay current
-            now = _now()
-            db.query(TenantIdentityProvider).filter(
-                TenantIdentityProvider.tenant_id == tenant_id,
-                TenantIdentityProvider.is_primary.is_(True),
-            ).delete(synchronize_session=False)
-            provider_record = TenantIdentityProvider(
-                id=str(uuid.uuid4()),
-                tenant_id=tenant_id,
-                identity_config_id=config.id,
-                provider=body.provider,
-                oidc_issuer=body.oidc_issuer,
-                organization_id=body.auth0_organization_id,
-                connection_id=body.auth0_connection_id,
-                status="configured",
-                is_primary=True,
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(provider_record)
-            db.query(TenantIdentityDomain).filter(
-                TenantIdentityDomain.tenant_id == tenant_id,
-            ).delete(synchronize_session=False)
-            for domain in normalized_domains(body.allowed_email_domains):
-                db.add(
-                    TenantIdentityDomain(
-                        id=str(uuid.uuid4()),
-                        tenant_id=tenant_id,
-                        identity_config_id=config.id,
-                        provider_record_id=provider_record.id,
-                        domain=domain,
-                        domain_type="trusted",
-                        verification_status="unverified",
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
             emit_identity_audit_event(
                 db,
                 tenant_id=tenant_id,
@@ -327,12 +285,8 @@ def upsert_config(
         db.close()
 
 
-@router.get(
-    "/tenants/{tenant_id}/readiness",
-    dependencies=[Depends(require_scopes("admin:read"))],
-)
-def get_readiness(request: Request, tenant_id: str) -> dict[str, Any]:
-    bind_tenant_id(request, tenant_id)
+@router.get("/tenants/{tenant_id}/readiness", dependencies=[_require_read])
+def get_readiness(tenant_id: str) -> dict[str, Any]:
     db = _admin_db(tenant_id)
     try:
         config = _get_config(db, tenant_id)
@@ -458,12 +412,8 @@ def get_readiness(request: Request, tenant_id: str) -> dict[str, Any]:
         db.close()
 
 
-@router.get(
-    "/tenants/{tenant_id}/invitations",
-    dependencies=[Depends(require_scopes("admin:read"))],
-)
-def list_invitations(request: Request, tenant_id: str) -> dict[str, Any]:
-    bind_tenant_id(request, tenant_id)
+@router.get("/tenants/{tenant_id}/invitations", dependencies=[_require_read])
+def list_invitations(tenant_id: str) -> dict[str, Any]:
     db = _admin_db(tenant_id)
     try:
         rows = (
@@ -480,13 +430,8 @@ def list_invitations(request: Request, tenant_id: str) -> dict[str, Any]:
         db.close()
 
 
-@router.post(
-    "/tenants/{tenant_id}/invitations",
-    dependencies=[Depends(require_scopes("admin:write"))],
-)
-def create_invitation(
-    request: Request, tenant_id: str, body: InviteCreateBody
-) -> dict[str, Any]:
+@router.post("/tenants/{tenant_id}/invitations", dependencies=[_require_write])
+def create_invitation(tenant_id: str, body: InviteCreateBody) -> dict[str, Any]:
     if body.identity_type not in IDENTITY_TYPES:
         raise HTTPException(
             status_code=422,
@@ -495,7 +440,6 @@ def create_invitation(
                 "message": f"identity_type must be one of {sorted(IDENTITY_TYPES)}",
             },
         )
-    bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
         config = _require_config(db, tenant_id)
@@ -514,19 +458,14 @@ def create_invitation(
             )
         except IdentityPolicyError as exc:
             raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
-        # FIX 3: persist identity_type on the invitation row
-        inv.identity_type = body.identity_type
         db.commit()
         return _serialize_invitation(inv)
     finally:
         db.close()
 
 
-@router.post(
-    "/invitations/{invitation_id}/revoke",
-    dependencies=[Depends(require_scopes("admin:write"))],
-)
-def revoke_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
+@router.post("/invitations/{invitation_id}/revoke", dependencies=[_require_write])
+def revoke_invitation(invitation_id: str) -> dict[str, Any]:
     db = get_sessionmaker()()
     try:
         inv = (
@@ -536,7 +475,6 @@ def revoke_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
         )
         if inv is None:
             raise HTTPException(status_code=404, detail={"code": "INVITE_NOT_FOUND"})
-        bind_tenant_id(request, inv.tenant_id)
         set_tenant_context(db, inv.tenant_id)
         if "revoked" not in INVITATION_TRANSITIONS.get(inv.status, frozenset()):
             raise HTTPException(
@@ -563,11 +501,8 @@ def revoke_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
         db.close()
 
 
-@router.post(
-    "/invitations/{invitation_id}/resend",
-    dependencies=[Depends(require_scopes("admin:write"))],
-)
-def resend_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
+@router.post("/invitations/{invitation_id}/resend", dependencies=[_require_write])
+def resend_invitation(invitation_id: str) -> dict[str, Any]:
     """Mark a pending/failed invitation as resent (re-open to pending)."""
     db = get_sessionmaker()()
     try:
@@ -586,12 +521,9 @@ def resend_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
                     "message": f"Cannot resend invitation in status {inv.status!r}",
                 },
             )
-        bind_tenant_id(request, inv.tenant_id)
         set_tenant_context(db, inv.tenant_id)
         inv.status = "pending"
         inv.revoked_at = None
-        # FIX 4: refresh expiration so resent invitations are not dead on arrival
-        inv.expires_at = _now() + timedelta(hours=72)
         inv.updated_at = _now()
         emit_identity_audit_event(
             db,
@@ -607,12 +539,8 @@ def resend_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
         db.close()
 
 
-@router.get(
-    "/tenants/{tenant_id}/audit-summary",
-    dependencies=[Depends(require_scopes("admin:read"))],
-)
-def get_audit_summary(request: Request, tenant_id: str) -> dict[str, Any]:
-    bind_tenant_id(request, tenant_id)
+@router.get("/tenants/{tenant_id}/audit-summary", dependencies=[_require_read])
+def get_audit_summary(tenant_id: str) -> dict[str, Any]:
     db = _admin_db(tenant_id)
     try:
         events = (
@@ -647,12 +575,8 @@ def get_audit_summary(request: Request, tenant_id: str) -> dict[str, Any]:
         db.close()
 
 
-@router.get(
-    "/tenants/{tenant_id}/governance-score",
-    dependencies=[Depends(require_scopes("admin:read"))],
-)
-def get_governance_score(request: Request, tenant_id: str) -> dict[str, Any]:
-    bind_tenant_id(request, tenant_id)
+@router.get("/tenants/{tenant_id}/governance-score", dependencies=[_require_read])
+def get_governance_score(tenant_id: str) -> dict[str, Any]:
     db = _admin_db(tenant_id)
     try:
         config = _get_config(db, tenant_id)
@@ -750,12 +674,9 @@ def get_governance_score(request: Request, tenant_id: str) -> dict[str, Any]:
         db.close()
 
 
-@router.get(
-    "/tenants/{tenant_id}/drift", dependencies=[Depends(require_scopes("admin:read"))]
-)
-def get_drift(request: Request, tenant_id: str) -> dict[str, Any]:
+@router.get("/tenants/{tenant_id}/drift", dependencies=[_require_read])
+def get_drift(tenant_id: str) -> dict[str, Any]:
     """Detect identity configuration drift: stale invitations, unverified domains, mismatched providers."""
-    bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
         config = _get_config(db, tenant_id)
@@ -873,14 +794,10 @@ def get_drift(request: Request, tenant_id: str) -> dict[str, Any]:
         db.close()
 
 
-@router.get(
-    "/tenants/{tenant_id}/timeline",
-    dependencies=[Depends(require_scopes("admin:read"))],
-)
-def get_timeline(request: Request, tenant_id: str, limit: int = 50) -> dict[str, Any]:
+@router.get("/tenants/{tenant_id}/timeline", dependencies=[_require_read])
+def get_timeline(tenant_id: str, limit: int = 50) -> dict[str, Any]:
     if limit < 1 or limit > 500:
         raise HTTPException(status_code=422, detail={"code": "LIMIT_INVALID"})
-    bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
         events = (
@@ -916,13 +833,9 @@ def get_timeline(request: Request, tenant_id: str, limit: int = 50) -> dict[str,
         db.close()
 
 
-@router.get(
-    "/tenants/{tenant_id}/readiness-history",
-    dependencies=[Depends(require_scopes("admin:read"))],
-)
-def get_readiness_history(request: Request, tenant_id: str) -> dict[str, Any]:
+@router.get("/tenants/{tenant_id}/readiness-history", dependencies=[_require_read])
+def get_readiness_history(tenant_id: str) -> dict[str, Any]:
     """Derive readiness transitions from audit events."""
-    bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
         relevant_types = {
@@ -959,12 +872,9 @@ def get_readiness_history(request: Request, tenant_id: str) -> dict[str, Any]:
         db.close()
 
 
-@router.get(
-    "/tenants/{tenant_id}/risk", dependencies=[Depends(require_scopes("admin:read"))]
-)
-def get_risk(request: Request, tenant_id: str) -> dict[str, Any]:
+@router.get("/tenants/{tenant_id}/risk", dependencies=[_require_read])
+def get_risk(tenant_id: str) -> dict[str, Any]:
     """Compute an identity risk profile for the tenant."""
-    bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
         config = _get_config(db, tenant_id)
