@@ -192,6 +192,7 @@ def assert_tenant_rls(engine: Engine) -> None:
         "tenant_identity_role_assignments",
         "tenant_invitations",
         "tenant_identity_audit_events",
+        "tenant_identity_auth_states",
     }
     with engine.begin() as conn:
         rows = conn.execute(

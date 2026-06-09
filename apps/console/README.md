@@ -6,12 +6,10 @@
 cd console
 export CORE_API_URL="http://localhost:8000"
 export CORE_API_KEY="<server-only-core-api-key>"
-# optional default tenant; can be overridden with ?tenant_id=...
+# server-authoritative tenant for the Console BFF
 export CORE_TENANT_ID="tenant-demo"
 # optional for server-side alignment artifact fetches
 export CONSOLE_BASE_URL="http://localhost:3000"
-# optional: enable tenant_id query override only in development demo sessions
-export FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE="0"
 npm install
 npm run dev
 ```

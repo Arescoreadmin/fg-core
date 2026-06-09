@@ -70,3 +70,8 @@ Migration `0099` forces RLS on the new identity governance tables and on `tenant
 ## Governance Graph Readiness
 
 Identity records use stable string identifiers and tenant-scoped references so future systems can correlate identity lineage with assessment, evidence, AI-system, agent, decision, and control lineage. This PR intentionally does not build the graph. It stores the stable anchors needed to construct one later without changing the identity schema.
+
+
+## PR 2 Runtime Enforcement
+
+The policy foundation is enforced at runtime by Admin Gateway as documented in admin_gateway_identity_enforcement.md. Policy records resolve allowed providers, issuers, connections, organizations, and domains before callback binding. Human invitation flows reject service, agent, and system identities. Provider + issuer + subject remains identity authority; email is only invitation verification input. Admin Gateway alone issues tenant-governed human sessions after an active membership reaches bound status.

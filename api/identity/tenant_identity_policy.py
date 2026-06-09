@@ -210,7 +210,7 @@ def is_provider_allowed_for_tenant(
             record.status in {"configured", "ready"}
             and record.provider == provider
             and (record.oidc_issuer is None or record.oidc_issuer == issuer)
-            and (record.connection_id is None or record.connection_id == connection_id)
+            and record.connection_id == connection_id
             for record in policy.providers
         )
     return (
@@ -229,7 +229,7 @@ def is_connection_allowed_for_tenant(
     if policy.providers:
         return any(
             record.status in {"configured", "ready"}
-            and (record.connection_id is None or record.connection_id == connection_id)
+            and record.connection_id == connection_id
             for record in policy.providers
         )
     if policy.identity_mode == "managed" and not policy.sso_enforced:

@@ -30,6 +30,14 @@ CSRF_EXEMPT_PATHS = {
 }
 
 
+def _is_csrf_exempt_path(path: str) -> bool:
+    if path in CSRF_EXEMPT_PATHS:
+        return True
+    return path.startswith("/identity/invitations/") and path.endswith(
+        ("/start-auth", "/callback", "/bind")
+    )
+
+
 class CSRFProtection:
     """CSRF protection using double-submit cookie pattern.
 
@@ -120,7 +128,7 @@ class CSRFProtection:
             return
 
         # Skip exempt paths
-        if request.url.path in CSRF_EXEMPT_PATHS:
+        if _is_csrf_exempt_path(request.url.path):
             return
 
         cookie_token, header_token = self.get_token_from_request(request)
@@ -201,6 +209,6 @@ def requires_csrf_protection(method: str, path: str) -> bool:
     """
     if method.upper() not in STATE_CHANGING_METHODS:
         return False
-    if path in CSRF_EXEMPT_PATHS:
+    if _is_csrf_exempt_path(path):
         return False
     return True

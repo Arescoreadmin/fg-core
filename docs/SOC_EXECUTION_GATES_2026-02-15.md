@@ -4651,3 +4651,10 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 - `ROADMAP.md` — PR 2 row added
 - `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`, `contract_routes.json`, `plane_registry_snapshot.json` — regenerated
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+
+## 2026-06-09 - Provider-Neutral Admin Gateway Identity Enforcement
+
+SOC review outcome: approved design for validation. Admin Gateway auth/session/tenant/CSRF paths changed to make governed Admin Gateway sessions the only human tenant-session authority. Generic OIDC tenant and scope claims are stripped, raw provider tokens are removed from sessions, non-governed sessions fail tenant authorization closed, and invitation callback JSON cannot self-assert a verified identity. The default provider adapter fails callback validation closed.
+
+The new short-lived auth-state table stores only state digests and validated metadata, uses expiry and replay constraints, and is covered by forced tenant RLS. Identity transition events use the append-only PR 1 hash chain and safe payload allowlist. Console tenant query override behavior was removed. Focused security regressions cover wrong tenant, email, provider, issuer, connection, organization, non-human identity type, replay, unbound session, audit secret exclusion, and server-authoritative Console tenant resolution.

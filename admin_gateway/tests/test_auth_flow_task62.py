@@ -3,7 +3,7 @@
 Proves all DoD requirements at the HTTP endpoint layer:
 
 1. Valid Keycloak-issued token accepted on POST /auth/token-exchange → 200 + session cookie
-2. Session cookie issued by token exchange accepted on protected endpoints → 200
+2. Authentication-only token exchange session rejected by tenant protected endpoints → 403
 3. Request without Bearer token to /auth/token-exchange → 401
 4. Token exchange with invalid/tampered token → 401
 5. Token exchange with wrong issuer → 401
@@ -197,8 +197,10 @@ def test_token_exchange_valid_token_returns_200_and_cookie(oidc_client):
     assert "fg_admin_session" in resp.cookies
 
 
-def test_session_from_token_exchange_reaches_protected_endpoint(oidc_client):
-    """Session cookie from token exchange allows access to a protected endpoint."""
+def test_session_from_token_exchange_cannot_reach_tenant_protected_endpoint(
+    oidc_client,
+):
+    """Generic OIDC token exchange authenticates but grants no tenant authority."""
     claims = _valid_claims(fg_scopes=["console:admin"])
 
     with _patch_verify(claims):
@@ -211,12 +213,10 @@ def test_session_from_token_exchange_reaches_protected_endpoint(oidc_client):
     session_cookie = exchange_resp.cookies.get("fg_admin_session")
     assert session_cookie is not None, "No session cookie in token-exchange response"
 
-    # Use session cookie on a scope-protected endpoint
-    resp = oidc_client.get(
-        "/api/v1/tenants",
-        cookies={"fg_admin_session": session_cookie},
-    )
-    assert resp.status_code == 200, resp.text
+    # Token-derived scopes and tenant claims cannot authorize tenant routes.
+    oidc_client.cookies.set("fg_admin_session", session_cookie)
+    resp = oidc_client.get("/api/v1/tenants")
+    assert resp.status_code == 403, resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -353,10 +353,8 @@ def test_insufficient_scope_returns_403_on_scope_guarded_endpoint(oidc_client):
     assert session_cookie is not None
 
     # /api/v1/tenants requires console:admin
-    resp = oidc_client.get(
-        "/api/v1/tenants",
-        cookies={"fg_admin_session": session_cookie},
-    )
+    oidc_client.cookies.set("fg_admin_session", session_cookie)
+    resp = oidc_client.get("/api/v1/tenants")
     assert resp.status_code == 403
 
 
@@ -384,11 +382,8 @@ def test_wrong_tenant_returns_403_on_tenant_guarded_endpoint(oidc_client):
     assert session_cookie is not None
 
     # Attempt to access tenant-beta resources (not in allowed_tenants)
-    resp = oidc_client.get(
-        "/api/v1/keys",
-        params={"tenant_id": "tenant-beta"},
-        cookies={"fg_admin_session": session_cookie},
-    )
+    oidc_client.cookies.set("fg_admin_session", session_cookie)
+    resp = oidc_client.get("/api/v1/keys", params={"tenant_id": "tenant-beta"})
     assert resp.status_code == 403
 
 
