@@ -180,7 +180,7 @@ jobs:
   fg-security:
     name: fg-security
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
 

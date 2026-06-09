@@ -1631,3 +1631,32 @@ tenant identity governance routes and Console identity governance surfaces.
 - `make route-inventory-generate`
 - `make soc-review-sync`
 - `make fg-fast`
+
+## 2026-06-09 — SOC-HIGH-002 — PR4 fg-security CI timeout budget alignment
+
+**Reviewer:** Jason / Codex
+**Classification:** SOC-HIGH-002 (CI workflow and required testing budget update)
+
+### Change Summary
+
+Adjusted the `fg-security` testing-module timeout and runtime budget after PR4 Identity Governance Control Plane expanded the regression surface and CI observed a lane timeout despite security checks passing locally.
+
+### Critical-path files reviewed
+
+- `.github/workflows/testing-module.yml`
+- `tools/testing/policy/runtime_budgets.yaml`
+
+### Security Assessment
+
+- No security gate was disabled.
+- No security test was skipped.
+- No SOC invariant was weakened.
+- `fg-security` remains required.
+- Change only gives the lane enough runtime budget to complete deterministic security regression tests.
+
+### Validation
+
+- `make fg-security`
+- `make soc-review-sync`
+- `make fg-fast`
+- `bash codex_gates.sh`
