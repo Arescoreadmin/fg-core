@@ -44,6 +44,12 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.membership.role_revoked",
         "tenant.identity_provider.configured",
         "tenant.identity_domain.configured",
+        "tenant.invite.callback_received",
+        "tenant.invite.callback_rejected",
+        "tenant.invite.binding_rejected",
+        "tenant.identity_session.issued",
+        "tenant.identity_session.rejected",
+        "tenant.identity_session.logout",
     }
 )
 INVITATION_TRANSITIONS = {
@@ -194,6 +200,9 @@ def emit_identity_audit_event(
         "verification_status",
         "provider_status",
         "maturity_level",
+        "issuer",
+        "organization_id",
+        "session_status",
     }
     safe_details = {k: v for k, v in (details or {}).items() if k in safe_keys}
     created_at = _now()

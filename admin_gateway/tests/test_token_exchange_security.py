@@ -243,7 +243,7 @@ async def test_verify_access_token_symmetric_key_rejected():
         # HS256 token with kid matching the RSA entry — algorithm confusion attack
         hs256_token = jwt.encode(
             _valid_claims(),
-            "symmetric-secret",
+            "symmetric-secret-at-least-32-bytes-long",
             algorithm="HS256",
             headers={"kid": "k1", "alg": "HS256"},
         )

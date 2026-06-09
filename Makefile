@@ -1273,8 +1273,7 @@ pg-reset-frostgate:
 	@bash tools/dev/reset_postgres_db.sh frostgate
 
 test-pg-migrations-replay: pg-reset-frostgate venv _require-pytest-venv
-	@FG_DB_URL=$${FG_DB_URL:-postgresql+psycopg://fg_user:fg_password@127.0.0.1:5432/frostgate} \
-	$(PYTEST) -q tests/test_migrations_postgres_replay.py::test_postgres_migrations_replay_safe
+	@if [ -n "$${FG_DB_URL:-}" ]; then DB_URL="$$FG_DB_URL"; else PG_HOST=$$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $$(docker compose ps -q postgres)); DB_URL="postgresql+psycopg://fg_user:local-dev-app-password@$${PG_HOST}:5432/frostgate"; fi; FG_DB_URL="$$DB_URL" $(PYTEST) -q tests/test_migrations_postgres_replay.py::test_postgres_migrations_replay_safe
 
 route-inventory-update:
 	@$(MAKE) -s route-inventory-generate

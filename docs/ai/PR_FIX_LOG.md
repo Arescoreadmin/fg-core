@@ -13573,3 +13573,12 @@ No Auth0 API calls, session issuance, console UI, or callback handling. No ident
 **Migration posture:**
 
 Migration `0099` is additive and replay-safe. Existing memberships remain active but unbound; existing pending invites remain pending; only repository-evidenced demo tenants receive explicit managed/ready policies. Data backfill and canonical hash-linked audit writes occur before RLS is forced, and the resulting migration-to-runtime chain is verified by PostgreSQL regression coverage.
+
+
+## 2026-06-09 - PR 2 Provider-Neutral Admin Gateway Identity Enforcement
+
+Implemented Admin Gateway invitation start, verified callback validation, provider + issuer + subject membership binding, and tenant-governed session issuance on top of the PR 1 identity governance schema. Generic OIDC sessions no longer receive tenant authority or token-derived scopes, provider tokens are no longer stored in gateway sessions, and the Console Core BFF no longer accepts tenant selection from URL query parameters.
+
+Added digest-only tenant_identity_auth_states with expiry, replay constraints, forced RLS, and no token/secret fields. Added provider-neutral adapter contracts that provide deterministic start metadata and fail callback verification closed until a verified adapter is configured. Added hash-chain-compatible callback, binding, session issue/rejection, and logout events. Human invitation flows reject service, agent, and system identities.
+
+Validation includes focused gateway identity enforcement, tenant isolation, replay, callback mismatch, session authority, audit safety, Console BFF override, PR 1 policy, and affected legacy gateway suites. Full repository gates are recorded in the PR summary after execution.

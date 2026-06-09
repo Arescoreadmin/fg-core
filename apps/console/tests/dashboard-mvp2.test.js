@@ -60,19 +60,33 @@ test('proxy has strict route allowlist and blocks wildcard patterns', () => {
   assert.doesNotMatch(proxy, /prefix:\s*'\*'/);
 });
 
-test('tenant query override is disabled by default and gated to development flag', () => {
+test('tenant query parameter cannot override server tenant authority', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
-  assert.match(proxy, /FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE/);
-  assert.match(proxy, /NODE_ENV === 'development'/);
-  assert.match(proxy, /if \(ALLOW_TENANT_QUERY_OVERRIDE && queryTenant\) return queryTenant/);
+  assert.doesNotMatch(proxy, /FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE/);
+  assert.doesNotMatch(proxy, /searchParams\.get\('tenant_id'\)/);
+  assert.match(proxy, /return CORE_TENANT_ID \|\| null/);
 });
 
-test('demo tenant selection is server allowlisted and key mapped', () => {
+test('demo tenant selection cannot bypass server tenant authority', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
-  assert.match(proxy, /FG_CONSOLE_DEMO_TENANTS/);
-  assert.match(proxy, /FG_CONSOLE_DEMO_TENANT_KEYS/);
-  assert.match(proxy, /DEMO_TENANT_ALLOWLIST\.includes\(queryTenant\)/);
-  assert.match(proxy, /DEMO_TENANT_API_KEYS\[tenantId\]/);
+  assert.doesNotMatch(proxy, /FG_CONSOLE_DEMO_TENANTS/);
+  assert.doesNotMatch(proxy, /DEMO_TENANT_ALLOWLIST/);
+  assert.match(proxy, /query\.delete\('tenant_id'\)/);
+});
+
+
+
+test('tenant authority cannot be overridden through JSON request body', () => {
+  const proxy = read('app/api/core/[...path]/route.ts');
+  assert.match(proxy, /tenant_id: _ignoredTenantId/);
+  assert.match(proxy, /JSON\.stringify\(safePayload\)/);
+});
+
+test('rate limit and API key tenant authority are server resolved', () => {
+  const proxy = read('app/api/core/[...path]/route.ts');
+  assert.match(proxy, /const tenantId = resolveTenant\(request\)/);
+  assert.match(proxy, /const key = await getTenantApiKey\(tenantId\)/);
+  assert.doesNotMatch(proxy, /searchParams\.get\('tenant_id'\)/);
 });
 
 test('proxy never forwards browser cookies or authorization headers', () => {

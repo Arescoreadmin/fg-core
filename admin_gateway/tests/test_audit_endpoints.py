@@ -3,10 +3,12 @@
 from fastapi.testclient import TestClient
 
 
-def test_audit_requires_tenant_filter(client: TestClient) -> None:
+def test_audit_uses_governed_dev_tenant_when_filter_is_absent(
+    client: TestClient,
+) -> None:
     response = client.get("/admin/audit/search")
-    assert response.status_code == 400
-    assert response.json()["detail"] == "tenant_id is required"
+    assert response.status_code == 200
+    assert response.json()["items"][0]["tenant_id"] == "tenant-dev"
 
 
 def test_audit_search_allows_tenant(client: TestClient) -> None:

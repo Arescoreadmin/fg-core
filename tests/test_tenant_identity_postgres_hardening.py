@@ -31,7 +31,8 @@ def test_identity_tables_enforce_wrong_tenant_rls() -> None:
             conn.exec_driver_sql(
                 f"GRANT SELECT ON tenant_identity_configs, tenant_identity_providers, "
                 f"tenant_identity_domains, tenant_identity_role_assignments, "
-                f'tenant_invitations, tenant_identity_audit_events, tenant_users TO "{role}"'
+                f"tenant_invitations, tenant_identity_audit_events, "
+                f'tenant_identity_auth_states, tenant_users TO "{role}"'
             )
         with engine.connect() as conn:
             conn.exec_driver_sql(f'SET ROLE "{role}"')
@@ -94,3 +95,69 @@ def test_migrated_identity_audit_events_verify_end_to_end() -> None:
         )
         db.commit()
         assert verify_identity_audit_chain(db, "demo-bank")
+
+
+def test_identity_auth_state_forced_rls_constraints_and_expiry_index() -> None:
+    engine = create_engine(os.environ["FG_DB_URL"], future=True)
+    role = _role_name()
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO tenant_identity_auth_states(id,tenant_id,invitation_id,state_digest,correlation_id,expires_at) VALUES ('rls-state-bank','demo-bank','invite-bank',repeat('a',64),'corr-bank',NOW()+INTERVAL '5 minutes'),('rls-state-health','demo-healthcare','invite-health',repeat('b',64),'corr-health',NOW()+INTERVAL '5 minutes') ON CONFLICT DO NOTHING"
+                )
+            )
+            flags = conn.execute(
+                text(
+                    "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='tenant_identity_auth_states'"
+                )
+            ).one()
+            assert flags == (True, True)
+            constraints = {
+                row[0]
+                for row in conn.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint WHERE conrelid='tenant_identity_auth_states'::regclass"
+                    )
+                )
+            }
+            assert {
+                "uq_tenant_identity_auth_state_digest",
+                "uq_tenant_identity_auth_state_correlation",
+            }.issubset(constraints)
+            indexes = {
+                row[0]
+                for row in conn.execute(
+                    text(
+                        "SELECT indexname FROM pg_indexes WHERE tablename='tenant_identity_auth_states'"
+                    )
+                )
+            }
+            assert "ix_tenant_identity_auth_state_tenant_expiry" in indexes
+            conn.exec_driver_sql(f'CREATE ROLE "{role}" NOSUPERUSER NOBYPASSRLS')
+            conn.exec_driver_sql(
+                f'GRANT SELECT ON tenant_identity_auth_states TO "{role}"'
+            )
+        with engine.connect() as conn:
+            conn.exec_driver_sql(f'SET ROLE "{role}"')
+            conn.execute(text("SELECT set_config('app.tenant_id', 'demo-bank', false)"))
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM tenant_identity_auth_states WHERE tenant_id='demo-bank'"
+                    )
+                ).scalar_one()
+                == 1
+            )
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM tenant_identity_auth_states WHERE tenant_id='demo-healthcare'"
+                    )
+                ).scalar_one()
+                == 0
+            )
+    finally:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(f'DROP OWNED BY "{role}"')
+            conn.exec_driver_sql(f'DROP ROLE IF EXISTS "{role}"')

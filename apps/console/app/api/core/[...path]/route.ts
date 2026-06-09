@@ -6,7 +6,6 @@ const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').repla
 const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const ALLOW_TENANT_QUERY_OVERRIDE = NODE_ENV === 'development' && process.env.FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE === '1';
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'health/live', methods: new Set(['GET', 'HEAD']) },
@@ -140,10 +139,8 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
   return null;
 }
 
-function resolveTenant(request: NextRequest): string | null {
-  const queryTenant = new URL(request.url).searchParams.get('tenant_id');
-  if (ALLOW_TENANT_QUERY_OVERRIDE && queryTenant) return queryTenant;
-  if (queryTenant && /^[a-zA-Z0-9_-]{1,128}$/.test(queryTenant)) return queryTenant;
+function resolveTenant(_request: NextRequest): string | null {
+  // Human-facing BFF requests cannot select tenant authority through the URL.
   return CORE_TENANT_ID || null;
 }
 
@@ -224,6 +221,14 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
       init.body = request.body;
       // duplex is required for streaming request bodies in some Node.js environments
       (init as Record<string, unknown>)['duplex'] = 'half';
+    } else if (contentType?.toLowerCase().includes('application/json')) {
+      const payload = await request.json();
+      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        const { tenant_id: _ignoredTenantId, ...safePayload } = payload as Record<string, unknown>;
+        init.body = JSON.stringify(safePayload);
+      } else {
+        init.body = JSON.stringify(payload);
+      }
     } else {
       init.body = await request.text();
     }

@@ -311,3 +311,60 @@ class TenantIdentityAuditEvent(Base):
         default=utcnow,
         server_default=func.now(),
     )
+
+
+class TenantIdentityAuthState(Base):
+    """Short-lived Admin Gateway correlation state; never stores provider tokens."""
+
+    __tablename__ = "tenant_identity_auth_states"
+    __table_args__ = (
+        UniqueConstraint("state_digest", name="uq_tenant_identity_auth_state_digest"),
+        UniqueConstraint(
+            "tenant_id",
+            "correlation_id",
+            name="uq_tenant_identity_auth_state_correlation",
+        ),
+        Index("ix_tenant_identity_auth_state_tenant_expiry", "tenant_id", "expires_at"),
+        Index("ix_tenant_identity_auth_state_invitation", "tenant_id", "invitation_id"),
+        CheckConstraint(
+            "status IN ('started','validated','bound','rejected','expired')",
+            name="chk_tenant_identity_auth_state_status",
+        ),
+    )
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    invitation_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    membership_id: Mapped[Any] = mapped_column(String(128), nullable=True, index=True)
+    state_digest: Mapped[Any] = mapped_column(String(64), nullable=False)
+    correlation_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    requested_provider: Mapped[Any] = mapped_column(String(64), nullable=True)
+    requested_connection_id: Mapped[Any] = mapped_column(String(256), nullable=True)
+    return_url: Mapped[Any] = mapped_column(String(1024), nullable=True)
+    status: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="started", server_default=text("'started'")
+    )
+    validated_provider: Mapped[Any] = mapped_column(String(64), nullable=True)
+    validated_issuer: Mapped[Any] = mapped_column(String(512), nullable=True)
+    validated_subject: Mapped[Any] = mapped_column(String(512), nullable=True)
+    validated_email: Mapped[Any] = mapped_column(String(256), nullable=True)
+    validated_email_verified: Mapped[Any] = mapped_column(Boolean, nullable=True)
+    validated_connection_id: Mapped[Any] = mapped_column(String(256), nullable=True)
+    validated_organization_id: Mapped[Any] = mapped_column(String(256), nullable=True)
+    validated_identity_type: Mapped[Any] = mapped_column(String(32), nullable=True)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    validated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    consumed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )

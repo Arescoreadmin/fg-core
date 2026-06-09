@@ -56,6 +56,7 @@ def test_csrf_protects_state_changes(app_no_bypass, csrf_headers, session_cookie
         scopes={"product:write"},
         claims={"allowed_tenants": ["tenant-a"]},
         tenant_id="tenant-a",
+        tenant_governed=True,
     )
 
     with TestClient(app_no_bypass) as client:
@@ -81,6 +82,7 @@ def test_rbac_enforced(app_no_bypass, csrf_headers, session_cookie):
         scopes={"product:read"},
         claims={"allowed_tenants": ["tenant-a"]},
         tenant_id="tenant-a",
+        tenant_governed=True,
     )
 
     with TestClient(app_no_bypass) as client:
@@ -104,6 +106,7 @@ def test_tenant_scope_enforced(app_no_bypass, csrf_headers, session_cookie):
         scopes={"product:write"},
         claims={"allowed_tenants": ["tenant-a"]},
         tenant_id="tenant-a",
+        tenant_governed=True,
     )
 
     with TestClient(app_no_bypass) as client:

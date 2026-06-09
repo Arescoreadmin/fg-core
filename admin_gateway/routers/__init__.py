@@ -3,6 +3,13 @@
 from admin_gateway.routers.admin import router as admin_router
 from admin_gateway.routers.auth import router as auth_router
 from admin_gateway.routers.core_proxy import router as core_proxy_router
+from admin_gateway.routers.identity import router as identity_router
 from admin_gateway.routers.products import router as products_router
 
-__all__ = ["admin_router", "auth_router", "core_proxy_router", "products_router"]
+__all__ = [
+    "admin_router",
+    "auth_router",
+    "core_proxy_router",
+    "identity_router",
+    "products_router",
+]

@@ -475,6 +475,7 @@ class TestProductsRBAC:
                 scopes={"keys:read"},
                 tenant_id="tenant-dev",
                 claims={"allowed_tenants": ["tenant-dev"]},
+                tenant_governed=True,
             )
 
         with TestClient(app_no_bypass) as client:
@@ -498,6 +499,7 @@ class TestProductsRBAC:
                 scopes={"product:read"},
                 tenant_id="tenant-dev",
                 claims={"allowed_tenants": ["tenant-dev"]},
+                tenant_governed=True,
             )
 
         with TestClient(app_no_bypass) as client:
@@ -522,6 +524,7 @@ class TestProductsRBAC:
                 scopes={"product:write"},
                 tenant_id="tenant-dev",
                 claims={"allowed_tenants": ["tenant-dev"]},
+                tenant_governed=True,
             )
 
         def _reader():
@@ -530,6 +533,7 @@ class TestProductsRBAC:
                 scopes={"product:read"},
                 tenant_id="tenant-dev",
                 claims={"allowed_tenants": ["tenant-dev"]},
+                tenant_governed=True,
             )
 
         with TestClient(app_no_bypass) as client:
