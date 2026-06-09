@@ -31,6 +31,20 @@ def _run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _git_msg(result: subprocess.CompletedProcess[str]) -> str:
+    return result.stderr.strip() or result.stdout.strip()
+
+
+def _is_transient_shallow_error(message: str) -> bool:
+    normalized = message.lower()
+    return (
+        "shallow file has changed since we read it" in normalized
+        or "could not read from shallow file" in normalized
+        or "shallow file" in normalized
+        and "changed" in normalized
+    )
+
+
 def _repo_is_shallow() -> bool:
     probe = _run_git(["rev-parse", "--is-shallow-repository"])
     return probe.returncode == 0 and probe.stdout.strip().lower() == "true"
@@ -41,14 +55,11 @@ def _has_merge_base(base_ref: str) -> bool:
     return mb.returncode == 0
 
 
-def _ensure_merge_base(base_ref: str) -> str | None:
+def _ensure_merge_base_once(base_ref: str) -> str | None:
     # Initial base fetch from CI base ref.
     initial_fetch = _run_git(["fetch", "origin", base_ref, "--depth=200"])
     if initial_fetch.returncode != 0:
-        return (
-            f"git fetch failed for origin/{base_ref}: "
-            f"{initial_fetch.stderr.strip() or initial_fetch.stdout.strip()}"
-        )
+        return f"git fetch failed for origin/{base_ref}: {_git_msg(initial_fetch)}"
 
     if _has_merge_base(base_ref):
         return None
@@ -60,7 +71,7 @@ def _ensure_merge_base(base_ref: str) -> str | None:
             if deepen.returncode != 0:
                 return (
                     "failed to deepen git history while searching for merge base: "
-                    f"{deepen.stderr.strip() or deepen.stdout.strip()}"
+                    f"{_git_msg(deepen)}"
                 )
             if _has_merge_base(base_ref):
                 return None
@@ -68,8 +79,37 @@ def _ensure_merge_base(base_ref: str) -> str | None:
         unshallow = _run_git(["fetch", "--unshallow", "origin"])
         if unshallow.returncode == 0 and _has_merge_base(base_ref):
             return None
+        if unshallow.returncode != 0:
+            return (
+                "failed to unshallow git history while searching for merge base: "
+                f"{_git_msg(unshallow)}"
+            )
 
     return f"no merge base between origin/{base_ref} and HEAD"
+
+
+def _ensure_merge_base(base_ref: str) -> str | None:
+    err = _ensure_merge_base_once(base_ref)
+    if not err:
+        return None
+
+    if not _is_transient_shallow_error(err):
+        return err
+
+    # GitHub Actions shallow metadata can race with deepen operations:
+    # "fatal: shallow file has changed since we read it".
+    # Retry once after explicitly fetching the base ref. Do not skip the gate.
+    retry_fetch = _run_git(["fetch", "origin", base_ref, "--depth=5000", "--force"])
+    if retry_fetch.returncode != 0:
+        return (
+            f"{err}; retry fetch failed for origin/{base_ref}: {_git_msg(retry_fetch)}"
+        )
+
+    retry_err = _ensure_merge_base_once(base_ref)
+    if retry_err:
+        return f"{err}; retry failed: {retry_err}"
+
+    return None
 
 
 def _changed_files_ci(base_ref: str) -> tuple[list[str], str | None]:

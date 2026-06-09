@@ -10,7 +10,7 @@
   "governance": {
     "contract_count": 454,
     "contract_only": [],
-    "runtime_count": 559,
+    "runtime_count": 572,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -21,6 +21,15 @@
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
       "GET /admin/devices",
+      "GET /admin/identity/tenants/{tenant_id}/audit-summary",
+      "GET /admin/identity/tenants/{tenant_id}/config",
+      "GET /admin/identity/tenants/{tenant_id}/drift",
+      "GET /admin/identity/tenants/{tenant_id}/governance-score",
+      "GET /admin/identity/tenants/{tenant_id}/invitations",
+      "GET /admin/identity/tenants/{tenant_id}/readiness",
+      "GET /admin/identity/tenants/{tenant_id}/readiness-history",
+      "GET /admin/identity/tenants/{tenant_id}/risk",
+      "GET /admin/identity/tenants/{tenant_id}/timeline",
       "GET /admin/keys",
       "GET /admin/keys/needing-rotation",
       "GET /admin/keys/{key_prefix}/rotation-status",
@@ -94,6 +103,9 @@
       "POST /admin/connectors/{connector_id}/revoke",
       "POST /admin/devices/{device_id}/disable",
       "POST /admin/devices/{device_id}/enable",
+      "POST /admin/identity/invitations/{invitation_id}/resend",
+      "POST /admin/identity/invitations/{invitation_id}/revoke",
+      "POST /admin/identity/tenants/{tenant_id}/invitations",
       "POST /admin/keys",
       "POST /admin/keys/{key_prefix}/revoke",
       "POST /admin/keys/{key_prefix}/rotate",
@@ -108,6 +120,7 @@
       "POST /ui/devices/{device_id}/disable",
       "POST /ui/devices/{device_id}/enable",
       "PUT /admin/agent/version-floor",
+      "PUT /admin/identity/tenants/{tenant_id}/config",
       "PUT /admin/tenants/{tenant_id}/quota",
       "PUT /admin/tenants/{tenant_id}/tier"
     ],
@@ -118,7 +131,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "c144c48b28ab322fc0dc8a5ccd46d825c5142e0110732df92c70379780237231",
+  "governance_fingerprint": "ebfc66a5cc476a67f23ebcef7d1eb3f29b35a0e86ac65d5c89e1cc1ea72b1d15",
   "planes": [
     {
       "compat": {
@@ -342,6 +355,15 @@
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
       "GET /admin/devices",
+      "GET /admin/identity/tenants/{tenant_id}/audit-summary",
+      "GET /admin/identity/tenants/{tenant_id}/config",
+      "GET /admin/identity/tenants/{tenant_id}/drift",
+      "GET /admin/identity/tenants/{tenant_id}/governance-score",
+      "GET /admin/identity/tenants/{tenant_id}/invitations",
+      "GET /admin/identity/tenants/{tenant_id}/readiness",
+      "GET /admin/identity/tenants/{tenant_id}/readiness-history",
+      "GET /admin/identity/tenants/{tenant_id}/risk",
+      "GET /admin/identity/tenants/{tenant_id}/timeline",
       "GET /admin/keys",
       "GET /admin/keys/needing-rotation",
       "GET /admin/keys/{key_prefix}/rotation-status",
@@ -558,6 +580,9 @@
       "POST /admin/connectors/{connector_id}/revoke",
       "POST /admin/devices/{device_id}/disable",
       "POST /admin/devices/{device_id}/enable",
+      "POST /admin/identity/invitations/{invitation_id}/resend",
+      "POST /admin/identity/invitations/{invitation_id}/revoke",
+      "POST /admin/identity/tenants/{tenant_id}/invitations",
       "POST /admin/keys",
       "POST /admin/keys/{key_prefix}/revoke",
       "POST /admin/keys/{key_prefix}/rotate",
@@ -695,6 +720,7 @@
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",
       "PUT /admin/agent/version-floor",
+      "PUT /admin/identity/tenants/{tenant_id}/config",
       "PUT /admin/tenants/{tenant_id}/quota",
       "PUT /admin/tenants/{tenant_id}/tier",
       "PUT /rag/retrieval-policy"

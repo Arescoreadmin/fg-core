@@ -246,6 +246,7 @@ class TenantInvitation(Base):
         String(64), nullable=False, default="pending", server_default=text("'pending'")
     )
     identity_mode_at_invite: Mapped[Any] = mapped_column(String(32), nullable=True)
+    identity_type: Mapped[Any] = mapped_column(String(32), nullable=True)
     required_provider: Mapped[Any] = mapped_column(String(64), nullable=True)
     identity_policy_config_id: Mapped[Any] = mapped_column(String(128), nullable=True)
     required_provider_record_id: Mapped[Any] = mapped_column(String(128), nullable=True)

@@ -1530,3 +1530,104 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 - PostgreSQL migration replay: 1 passed.
 - Focused identity, portal, audit, plane registry, and ops regression suite: 180 passed.
 - `make route-inventory-generate` completed; `make fg-fast` rerun after this review sync.
+
+## 2026-06-09 — SOC-HIGH-002 — PR4 Identity Governance Control Plane
+
+**Reviewer:** Jason / Codex
+**Classification:** SOC-HIGH-002 (route inventory and topology regeneration)
+
+### Change Summary
+
+Identity Governance Control Plane introduced new tenant identity governance
+routes:
+
+- /admin/identity/tenants/{tenant_id}/config
+- /admin/identity/tenants/{tenant_id}/readiness
+- /admin/identity/tenants/{tenant_id}/invitations
+- /admin/identity/tenants/{tenant_id}/audit-summary
+- /admin/identity/tenants/{tenant_id}/governance-score
+- /admin/identity/tenants/{tenant_id}/drift
+- /admin/identity/tenants/{tenant_id}/timeline
+- /admin/identity/tenants/{tenant_id}/risk
+- /admin/identity/tenants/{tenant_id}/readiness-history
+
+### Files reviewed
+
+- tools/ci/plane_registry_snapshot.json
+- tools/ci/route_inventory.json
+- tools/ci/route_inventory_summary.json
+- tools/ci/topology.sha256
+
+### Security Review
+
+- Routes remain tenant-scoped.
+- Admin Gateway remains authoritative for tenant session issuance.
+- No direct invite-token authentication introduced.
+- No tenant_id query parameter trust introduced.
+- Route inventory regenerated and topology updated.
+- No wildcard authorization expansion.
+- No bypass of identity governance controls.
+
+### Validation
+
+- make route-inventory-generate
+- make fg-contract
+- make soc-review-sync
+- make fg-fast
+
+## 2026-06-09 — SOC-HIGH-002 — CI Governance Hardening
+
+### Change Summary
+
+Updated tools/ci/check_soc_review_sync.py to make merge-base detection
+resilient to GitHub Actions shallow-clone race conditions.
+
+### Security Assessment
+
+- No authorization logic changed.
+- No tenant isolation logic changed.
+- No authentication logic changed.
+- No governance controls removed.
+- SOC review enforcement remains mandatory.
+- Change only affects CI merge-base discovery and retry behavior.
+
+### Files Reviewed
+
+- tools/ci/check_soc_review_sync.py
+- artifacts/platform_inventory.det.json
+
+### Validation
+
+- make soc-review-sync
+- bash codex_gates.sh
+- make fg-fast
+
+## 2026-06-09 — SOC-HIGH-002 — PR4 Identity Governance plane registry/topology sync
+
+**Reviewer:** Jason / Codex  
+**Classification:** SOC-HIGH-002 (tools/ci plane registry and topology regeneration)
+
+### Change Summary
+
+Regenerated PR4 Identity Governance Control Plane route/topology artifacts after adding
+tenant identity governance routes and Console identity governance surfaces.
+
+### Critical-path files reviewed
+
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+
+### Security Assessment
+
+- No new wildcard route policy was introduced.
+- No tenant isolation control was weakened.
+- No Admin Gateway session authority was changed.
+- No Console-side session issuance was introduced.
+- Identity Governance routes remain tenant-scoped and governed by server-side authorization.
+- Topology and plane registry updates reflect deterministic inventory regeneration only.
+
+### Validation
+
+- `make route-inventory-generate`
+- `make soc-review-sync`
+- `make fg-fast`

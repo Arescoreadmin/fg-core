@@ -1,0 +1,1 @@
+export { IdentityGovernancePanel } from './IdentityGovernancePanel';
