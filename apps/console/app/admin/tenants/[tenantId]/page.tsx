@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -96,14 +96,14 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try { setUsers((await coreApi<{ items: ConsoleUser[] }>('workforce/users', tenantId)).items ?? []); }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
     finally { setLoading(false); }
-  }
+  }, [tenantId]);
 
-  useEffect(() => { load(); }, [tenantId]);
+  useEffect(() => { void load(); }, [load]);
 
   async function handleInvite() {
     setSubmitting(true); setError(null); setEmailStatus('idle');
@@ -223,14 +223,14 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [grantEmailStatus, setGrantEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try { setGrants((await coreApi<{ items: PortalGrant[] }>('portal/grants', tenantId)).items ?? []); }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
     finally { setLoading(false); }
-  }
+  }, [tenantId]);
 
-  useEffect(() => { load(); }, [tenantId]);
+  useEffect(() => { void load(); }, [load]);
 
   async function handleCreate() {
     setSubmitting(true); setError(null); setGrantEmailStatus('idle');
