@@ -13614,3 +13614,28 @@ Added Auth0 as a provider adapter behind the PR 2 provider-neutral identity enfo
 - Management tokens, client secrets, and raw tokens never logged or stored
 - Audit payloads exclude all token/secret fields
 - PR 1 RLS and PR 2 replay/state protection unchanged
+
+## 2026-06-09 - PR4 Addendum: Merge Blocker Remediation (admin_identity.py)
+
+Four findings from the PR4 review remediated. No functionality removed, no trust assumptions introduced, Admin Gateway session authority unchanged.
+
+**BLOCKER 1 — Tenant Authority Bypass**: `api/admin_identity.py` used path `tenant_id` directly to call `_admin_db(tenant_id)` and `set_tenant_context` without first verifying the caller is authorized for that tenant. All 13 routes now call `bind_tenant_id(request, tenant_id)` at the top of the handler body. For revoke/resend routes (no path tenant_id), `bind_tenant_id(request, inv.tenant_id)` is called after the invitation lookup. Module-level `_require_read`/`_require_write` constants (Name nodes, not detected by the AST scanner as scoped) replaced with inline `Depends(require_scopes("admin:read"))` / `Depends(require_scopes("admin:write"))` in each decorator. Scope names changed from `identity:*` to `admin:*` to comply with the control plane scope prefix policy.
+
+**BLOCKER 2 — Provider/Domain Drift**: The update branch of `upsert_config` only updated `TenantIdentityConfig` fields, leaving `TenantIdentityProvider` and `TenantIdentityDomain` records stale. On update, the handler now deletes all primary provider records and all domain records for the tenant, then recreates them from the request body in the same transaction before `db.commit()`.
+
+**FIX 3 — Identity Type Not Persisted**: `identity_type` in `InviteCreateBody` was validated but never stored. Added `identity_type: Mapped[Any] = mapped_column(String(32), nullable=True)` to `TenantInvitation` in `api/db_models_identity.py`. After `_store.create_invitation` returns, `inv.identity_type = body.identity_type` is set before commit. `_serialize_invitation` now returns `identity_type`.
+
+**FIX 4 — Expired Invite Resend Does Not Refresh Expiration**: `resend_invitation` set `inv.status = "pending"` but left `inv.expires_at` unchanged. Added `inv.expires_at = _now() + timedelta(hours=72)` alongside the status reset.
+
+**Tests**: `tests/test_admin_identity_routes.py` migrated from global FG_API_KEY bypass to `mint_key("admin:read", "admin:write", tenant_id=...)` tenant-scoped keys (FG_API_KEY set to "" in fixtures). Added 11 new tests: BLOCKER 2 provider sync verification, FIX 3 identity_type round-trip, FIX 4 expires_at refresh assertion, and 8 wrong-tenant 400/403 isolation tests covering all cross-tenant access vectors.
+
+**Files modified:**
+- `api/admin_identity.py` — BLOCKER 1 (bind_tenant_id + inline scopes), BLOCKER 2 (provider/domain sync), FIX 3 (identity_type set), FIX 4 (expires_at refresh)
+- `api/db_models_identity.py` — FIX 3 (identity_type column on TenantInvitation)
+- `tests/test_admin_identity_routes.py` — migrated to mint_key fixtures, added isolation + fix-specific tests
+
+**Security invariants preserved:**
+- Admin Gateway remains the only authority for tenant session issuance
+- Tenant-bound key cannot access a different tenant's resources (400/403 enforced by bind_tenant_id)
+- Admin internal token (admin_internal_token reason) may supply any tenant_id via path
+- No data leakage: wrong-tenant requests fail before any DB mutation
