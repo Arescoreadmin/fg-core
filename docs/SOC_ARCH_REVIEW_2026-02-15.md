@@ -1574,3 +1574,30 @@ routes:
 - make fg-contract
 - make soc-review-sync
 - make fg-fast
+
+## 2026-06-09 — SOC-HIGH-002 — CI Governance Hardening
+
+### Change Summary
+
+Updated tools/ci/check_soc_review_sync.py to make merge-base detection
+resilient to GitHub Actions shallow-clone race conditions.
+
+### Security Assessment
+
+- No authorization logic changed.
+- No tenant isolation logic changed.
+- No authentication logic changed.
+- No governance controls removed.
+- SOC review enforcement remains mandatory.
+- Change only affects CI merge-base discovery and retry behavior.
+
+### Files Reviewed
+
+- tools/ci/check_soc_review_sync.py
+- artifacts/platform_inventory.det.json
+
+### Validation
+
+- make soc-review-sync
+- bash codex_gates.sh
+- make fg-fast
