@@ -89,6 +89,7 @@ from api.connectors_msgraph_report import router as connectors_msgraph_report_ro
 from api.field_assessment import router as field_assessment_router
 from api.portal import portal_router
 from api.reports_engine import router as reports_engine_router
+from api.signing import router as signing_router
 from api.stripe_webhooks import router as stripe_webhooks_router
 from api.tenant_rbac_router import router as tenant_rbac_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
@@ -646,6 +647,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
+    app.include_router(signing_router)
     app.include_router(governance_report_router)
     app.include_router(governance_timeline_router)
     app.include_router(governance_assets_router)
@@ -1071,6 +1073,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
+    app.include_router(signing_router)
     app.include_router(governance_report_router)
     app.include_router(governance_timeline_router)
     app.include_router(governance_assets_router)

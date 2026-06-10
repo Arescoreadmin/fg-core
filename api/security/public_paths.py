@@ -31,6 +31,9 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     # Single-use invite-token exchange: no prior auth exists; token IS the credential.
     # Tenant binding is enforced via tenant_db_required + DB lookup on the token itself.
     "/workforce/users/accept-invite",
+    # Public key endpoint — external auditors need this to verify report signatures
+    # without possessing the private key.
+    "/signing/public-key",
 )
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (

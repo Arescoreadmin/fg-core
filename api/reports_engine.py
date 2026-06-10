@@ -58,6 +58,7 @@ from api.report_exports import (
     EXPORT_AUDIT_REPLAY_REQUESTED,
     EXPORT_AUDIT_REVIEWER_ASSIGNED,
     EXPORT_AUDIT_SUPERSEDED,
+    ExportUnavailableError,
     ExportValidationError,
     build_hashed_manifest,
     emit_export_event,
@@ -851,8 +852,12 @@ def export_report_artifact(
             media_type="text/html; charset=utf-8",
             headers={"X-FrostGate-Manifest-Hash": digest},
         )
+    try:
+        pdf_bytes = render_pdf_export(manifest, digest)
+    except ExportUnavailableError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
     return Response(
-        content=render_pdf_export(manifest, digest),
+        content=pdf_bytes,
         media_type="application/pdf",
         headers={"X-FrostGate-Manifest-Hash": digest},
     )

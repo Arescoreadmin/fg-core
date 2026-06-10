@@ -8384,13 +8384,27 @@ def export_engagement_report_route(
             ),
         )
 
+    from services.governance.report.signing import get_public_key_hex as _gpkh
+    import hashlib as _hl
+
+    export_headers: dict[str, str] = {
+        "Content-Disposition": f'attachment; filename="report-{engagement_id}-v{version}.pdf"',
+        "X-Manifest-Hash": record.manifest_hash,
+    }
+    if record.signature:
+        export_headers["X-Report-Signature"] = record.signature
+        try:
+            _pub_hex = _gpkh()
+            export_headers["X-Report-Public-Key-Id"] = _hl.sha256(
+                bytes.fromhex(_pub_hex)
+            ).hexdigest()[:16]
+        except Exception:
+            pass
+
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="report-{engagement_id}-v{version}.pdf"',
-            "X-Manifest-Hash": record.manifest_hash,
-        },
+        headers=export_headers,
     )
 
 

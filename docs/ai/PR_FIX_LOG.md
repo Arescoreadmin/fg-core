@@ -13868,3 +13868,34 @@ All 14 dimension calls in `get_governance_score` now pass structured `evidence` 
 - State machine is entirely server-side; UI sends decisions to the backend which validates all transitions
 - Ledger is append-only — no update or delete route exists; `previous_action_id` forms an immutable chain
 - `actor_*` attribution comes from the request body only (no server-side identity injection yet); consistent with existing approval routes
+
+---
+
+### 2026-06-10 — PR 414: PKI-style report signing + real PDF export (PR-SIGN-1 + PR-SIGN-2)
+
+**Branch:** `feat/pr-sign-1-2-pki-signing`
+
+**Area:** Governance Report Signing / PDF Export / Public Key Infrastructure
+
+**Summary of changes:**
+
+1. **`services/governance/report/signing.py`** — Added `FG_REPORT_SIGNING_PUBLIC_KEY` env var and `get_public_key_hex()` function. Verification-only deployments (external auditors, client portals) can now set only the public key and verify signatures independently, without ever possessing the private key. Updated `verify_report()` to call `get_public_key_hex()` instead of deriving the public key from the private key — breaking the circular dependency that made independent verification impossible.
+
+2. **`api/report_exports.py`** — Replaced fake `render_pdf_export()` (which produced JSON wrapped in a `%PDF-1.4` header) with a real reportlab implementation. Produces a multi-section PDF: cover page, executive summary, findings table, framework mappings, remediations, evidence appendix, and verification section, with page footers showing the manifest hash. Added `ExportUnavailableError` for when reportlab is not installed.
+
+3. **`api/reports_engine.py`** — Imported `ExportUnavailableError` and wrapped the `render_pdf_export()` call to return HTTP 501 when reportlab is not installed.
+
+4. **`api/field_assessment.py`** — PDF export response now includes `X-Report-Signature` (the Ed25519 signature) and `X-Report-Public-Key-Id` (16-char SHA-256 prefix of the public key bytes) headers when a signature is present, enabling downstream clients to verify report authenticity.
+
+5. **`api/signing.py`** (new) — `GET /signing/public-key` endpoint returning the server's Ed25519 public key, key ID, algorithm, and verification instructions. Returns 503 if neither signing key env var is configured.
+
+6. **`api/main.py`** — Registered `signing_router` in both `build_app()` and `build_contract_app()`.
+
+7. **`api/security/public_paths.py`** — Added `/signing/public-key` to `PUBLIC_PATHS_EXACT` so external auditors can retrieve the public key without authentication.
+
+8. **`BLUEPRINT_STAGED.md`** — Contract authority marker refreshed to `1d41468fa8047cd2a1a7e42af108774bf6e8711d8b109c9619e272819a396781` (new `/signing/public-key` route added to OpenAPI spec).
+
+9. **`tests/test_report_signing_pki.py`** (new) — 17 tests: `get_public_key_hex()` with private/public-only env, `verify_report()` without private key, `GET /signing/public-key` response shape and 503, real PDF bytes from `render_pdf_export()`, `ExportUnavailableError` on missing reportlab.
+
+**Why:**
+The previous `render_pdf_export()` produced a fraudulent PDF (JSON with a `%PDF-1.4` prefix) — any auditor opening it would see raw JSON. The `verify_report()` function required the private key to verify signatures, making independent verification by external parties structurally impossible. These two gaps together meant the report package could not be trusted as audit evidence.

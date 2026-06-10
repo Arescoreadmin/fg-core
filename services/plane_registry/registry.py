@@ -52,6 +52,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/dev",
             "/rag",
             "/metrics",
+            "/signing",
         ),
         allowed_dependency_categories=("auth", "tenant", "db", "rate", "breakglass"),
         required_make_targets=("control-plane-check", "plane-registry-spot"),
@@ -96,6 +97,14 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "Prometheus scrape endpoint. Internal infrastructure only — "
                 "no auth, no tenant data, no customer PII. "
                 "Must not be exposed on the public customer-facing ingress.",
+            ),
+            ex(
+                "GET",
+                "/signing/public-key",
+                "public",
+                "Public Ed25519 report signing key endpoint. Required for external "
+                "auditor/client verification of signed reports. Returns no tenant data, "
+                "no customer data, no secrets, and no private key material.",
             ),
         ),
         global_routes=(

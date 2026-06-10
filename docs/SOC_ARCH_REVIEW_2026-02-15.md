@@ -1728,3 +1728,120 @@ detection, SOC docs present/absent, local diff path, shallow race scenario.
 - `make fg-fast`
 - `make fg-security`
 - `pytest tests/test_soc_review_sync.py` — 19 passed
+
+## 2026-06-10 — SOC-HIGH-002 — PR414 public_paths: add /signing/public-key
+
+**Reviewer:** Jason  
+**Classification:** SOC-HIGH-002 (api/security/public_paths.py modification)
+
+### Change Summary
+
+Added `/signing/public-key` to `PUBLIC_PATHS_EXACT` in `api/security/public_paths.py`.
+This endpoint returns the server's Ed25519 public key so external auditors and
+verification-only deployments can independently verify report signatures without
+possessing the private key.
+
+### Critical-path files reviewed
+
+- `api/security/public_paths.py`
+- `api/signing.py` (new endpoint — no auth, read-only key material exposure)
+
+### Security Assessment
+
+- The endpoint returns only the **public key** — no private key material is ever
+  accessible or derivable from this route.
+- Marking it public is intentional and correct: a public key by definition must be
+  distributable without restriction. Requiring authentication would defeat the purpose
+  of allowing independent signature verification.
+- No tenant isolation control is affected — the route is stateless and tenant-agnostic.
+- No session authority or Admin Gateway configuration was changed.
+- The underlying `get_public_key_hex()` function raises `ReportSigningKeyError` (→ HTTP 503)
+  if neither `FG_REPORT_SIGNING_KEY` nor `FG_REPORT_SIGNING_PUBLIC_KEY` is configured,
+  so unconfigured deployments fail closed rather than silently returning empty data.
+
+### Validation
+
+- `make route-inventory-update`
+- `make soc-review-sync`
+- `make fg-fast`
+- `pytest tests/test_report_signing_pki.py` — 17 passed
+
+## 2026-06-10 — SOC-HIGH-002 — PR414 CI baseline: fetch-depth + mainline diff guard
+
+**Reviewer:** Jason  
+**Classification:** SOC-HIGH-002 (`.github/workflows/ci.yml` + `tools/ci/check_pr_base_is_mainline.py`)
+
+### Change Summary
+
+Two targeted changes to fix `pr-base-mainline-check` failing in CI with
+`fatal: origin/main...HEAD: no merge base`:
+
+1. **`.github/workflows/ci.yml`** — Guard job checkout changed from
+   `fetch-depth: 1` to `fetch-depth: 0`. With a shallow clone (depth=1), git
+   cannot walk back to find the merge base between the PR branch and origin/main,
+   causing the three-dot diff to fail. Full history is required only in the Guard
+   job because it is the only job that runs `pr-base-mainline-check`.
+
+2. **`tools/ci/check_pr_base_is_mainline.py`** — Changed `git fetch origin
+   {base_ref} --depth=1` to `git fetch origin {base_ref} --prune`. The
+   `--depth=1` fetch of origin/main left git with only the remote tip (no
+   ancestry), compounding the shallow-clone problem. Using `--prune` fetches
+   the full ref without depth restriction so git can resolve the merge base.
+
+### Critical-path files reviewed
+
+- `.github/workflows/ci.yml` — only the Guard job's `fetch-depth` was changed;
+  all other jobs remain at `fetch-depth: 1`
+- `tools/ci/check_pr_base_is_mainline.py` — single-line change in the fetch call
+
+### Security Assessment
+
+- No guard was weakened: `pr-base-mainline-check` remains strict (still fails on
+  missing base ref in CI, still fails on re-added SOC docs, still fails on
+  non-zero diff exit)
+- No `continue-on-error`, `|| true`, or skip was introduced
+- `fetch-depth: 0` gives the Guard runner full repo history — this does not
+  grant any additional permissions or expose any secrets; it only affects what
+  git history is available locally during the run
+- The `--prune` flag only removes stale remote-tracking references; it does not
+  change what is fetched or skip any refs
+
+### Validation
+
+- `GITHUB_BASE_REF=main .venv/bin/python tools/ci/check_pr_base_is_mainline.py` → OK
+- `GITHUB_BASE_REF=main .venv/bin/python tools/ci/check_soc_review_sync.py` → OK
+- `PYTHONPATH=. .venv/bin/python tools/ci/check_route_inventory.py` → OK
+- `pytest tests/test_report_signing_pki.py` — 17 passed
+
+## 2026-06-10 — SOC-HIGH-002 — PR414 signing public key plane registry and inventory sync
+
+**Classification:** SOC-HIGH-002
+
+**Files changed:**
+- `services/plane_registry/registry.py`
+- `tools/ci/route_inventory.json`
+- `tools/ci/route_inventory_summary.json`
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+
+**Reason:**
+PR414 adds `GET /signing/public-key` as the public verification endpoint for report signing. The endpoint exposes only public Ed25519 verification metadata and no tenant data, customer data, secrets, private key material, or report contents.
+
+**Security review:**
+The `/signing` prefix is classified under the `control` plane so the route is governed by the plane registry. The exact route `GET /signing/public-key` is registered as a public control-plane exception because external auditors and clients must be able to retrieve the public key without tenant authentication in order to independently verify signed report exports.
+
+**Invariants preserved:**
+- No private signing key material is exposed.
+- No tenant data is exposed.
+- No customer data is exposed.
+- No report content is exposed.
+- No route guard was weakened.
+- Public access is limited to the exact public key endpoint.
+- Report signing remains server-side only.
+- Route inventory, plane registry snapshot, and topology hash were regenerated after classification.
+
+**Validation:**
+- `make control-plane-check`: passed
+- `make fg-contract`: passed
+- `make route-inventory-generate`: completed
+- `make fg-fast`: reached SOC review sync and correctly required this SOC entry

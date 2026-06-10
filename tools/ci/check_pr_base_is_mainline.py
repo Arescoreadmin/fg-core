@@ -46,7 +46,7 @@ def main() -> int:
         print("pr-base-mainline: skipped (no base ref)")
         return 0
 
-    fetch = _run_git(["fetch", "origin", base_ref, "--depth=1"])
+    fetch = _run_git(["fetch", "origin", base_ref, "--prune"])
     if fetch.returncode != 0:
         print("pr-base-mainline: FAILED")
         print(
