@@ -9690,9 +9690,7 @@
       "tenant_bound": true
     },
     {
-      "dependency_categories": [
-        "tenant"
-      ],
+      "dependency_categories": [],
       "file": "api/workforce.py",
       "method": "POST",
       "path": "/workforce/users/accept-invite",
@@ -9701,7 +9699,7 @@
       "scoped": false,
       "scopes": [],
       "source": "runtime-ast",
-      "tenant_bound": true
+      "tenant_bound": false
     },
     {
       "dependency_categories": [
@@ -9755,7 +9753,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-09T18:53:44.045744+00:00",
+  "generated_at": "2026-06-10T00:41:48.219784+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

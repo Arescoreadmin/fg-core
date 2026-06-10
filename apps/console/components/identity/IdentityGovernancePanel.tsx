@@ -14,6 +14,8 @@ import {
   getIdentityTimeline,
   getReadinessHistory,
   getIdentityRisk,
+  getIdentityTypeGovernance,
+  getSessionProvenance,
   upsertIdentityConfig,
   type IdentityConfig,
   type IdentityReadiness,
@@ -24,6 +26,8 @@ import {
   type ReadinessHistory,
   type IdentityRisk,
   type AuditSummary,
+  type IdentityTypeGovernance,
+  type ProvenanceResult,
 } from '@/lib/identityApi';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -297,6 +301,17 @@ function DriftPanel({ tenantId }: { tenantId: string }) {
               </div>
               <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{item.detail}</div>
               {item.error_code && <div style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.2rem' }}>Error: {item.error_code}</div>}
+              {item.recommended_action && (
+                <div style={{ fontSize: '0.75rem', marginTop: '0.35rem', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <span style={{ color: '#2563eb', fontWeight: 600 }}>→</span>
+                  <span style={{ color: 'var(--foreground)' }}>{item.recommended_action}</span>
+                  {item.remediation_risk && (
+                    <span style={{ fontSize: '0.7rem', color: severityColor(item.remediation_risk), fontWeight: 600, textTransform: 'uppercase' }}>
+                      {item.remediation_risk} risk
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             {item.count !== undefined && (
               <span style={{ fontWeight: 700, fontSize: '1.1rem', color: severityColor(item.severity) }}>{item.count}</span>
@@ -402,13 +417,14 @@ function TimelinePanel({ tenantId }: { tenantId: string }) {
           <span style={{ ...s.dot, backgroundColor: typeColor(ev.event_type) }} />
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
-              <span style={{ fontWeight: 500, fontSize: '0.82rem' }}>{ev.event_type}</span>
+              <span style={{ fontWeight: 500, fontSize: '0.82rem' }}>{ev.label || ev.event_type}</span>
               <span style={{ fontSize: '0.72rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmt(ev.created_at)}</span>
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.15rem' }}>
               {ev.affected_email && <span>{ev.affected_email} · </span>}
               {ev.identity_type && <span>{ev.identity_type} · </span>}
               {ev.reason_code && <span style={{ color: '#dc2626' }}>{ev.reason_code}</span>}
+              <span style={{ opacity: 0.5 }}>{ev.event_type}</span>
             </div>
           </div>
         </div>
@@ -707,6 +723,166 @@ function AuditPanel({ tenantId }: { tenantId: string }) {
   );
 }
 
+// ── Identity Type Governance panel ────────────────────────────────────────────
+
+function IdentityTypesPanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<IdentityTypeGovernance | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getIdentityTypeGovernance(tenantId).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+  if (!data) return null;
+
+  const allTypes = Object.keys(data.distribution).filter(t => data.distribution[t] > 0 || t !== 'unknown');
+
+  return (
+    <div>
+      <div style={s.scoreRow}>
+        {allTypes.map(t => (
+          <div key={t} style={s.scoreCard}>
+            <div style={s.scoreLabel}>{t}</div>
+            <div style={s.scoreValue}>{data.distribution[t] ?? 0}</div>
+          </div>
+        ))}
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Total</div>
+          <div style={s.scoreValue}>{data.total}</div>
+        </div>
+      </div>
+      {Object.keys(data.risk_by_type).length > 0 && (
+        <div style={{ marginTop: '1.5rem' }}>
+          <div style={s.sectionTitle}>Risk by identity type</div>
+          <table style={s.table}>
+            <thead>
+              <tr>
+                {['Type', 'Total', 'Bound', 'Failed', 'Bind rate', 'Risk'].map(h => <th key={h} style={s.th}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(data.risk_by_type).map(([itype, r]) => (
+                <tr key={itype}>
+                  <td style={s.td}><strong>{itype}</strong></td>
+                  <td style={s.td}>{r.total}</td>
+                  <td style={{ ...s.td, color: '#16a34a' }}>{r.bound}</td>
+                  <td style={{ ...s.td, color: r.failed > 0 ? '#dc2626' : undefined }}>{r.failed}</td>
+                  <td style={s.td}>{r.bind_rate}%</td>
+                  <td style={s.td}><span style={statusBadgeStyle(r.risk_band)}>{r.risk_band}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Session Provenance panel ───────────────────────────────────────────────────
+
+function ProvenancePanel({ tenantId }: { tenantId: string }) {
+  const [email, setEmail] = useState('');
+  const [data, setData] = useState<ProvenanceResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const lookup = () => {
+    if (!email.trim()) return;
+    setLoading(true); setError(null); setData(null);
+    getSessionProvenance(tenantId, { email: email.trim() }).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  };
+
+  return (
+    <div>
+      <div style={{ ...s.btnRow, marginBottom: '1.25rem' }}>
+        <input
+          style={{ ...s.input, flex: 1 }}
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && lookup()}
+          placeholder="user@company.com"
+        />
+        <button style={s.btn} onClick={lookup} disabled={loading || !email.trim()}>
+          {loading ? 'Looking up…' : 'Look up'}
+        </button>
+      </div>
+      {error && <div style={s.errorBanner}>{error}</div>}
+      {data && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={s.kvGrid}>
+            {[
+              ['Email', data.identity.email],
+              ['Identity type', data.identity.identity_type],
+              ['Binding status', data.identity.binding_status],
+              ['Role', data.identity.role],
+              ['Provider', data.provider],
+              ['Bound at', fmt(data.binding_event_at)],
+              ['Session authority', data.session_authority],
+            ].map(([label, value]) => (
+              <div key={label as string} style={s.kvCard}>
+                <div style={s.kvLabel}>{label}</div>
+                <div style={s.kvValue}>{value ?? '—'}</div>
+              </div>
+            ))}
+          </div>
+          {data.invitation_chain.length > 0 && (
+            <div>
+              <div style={s.sectionTitle}>Invitation chain</div>
+              <table style={s.table}>
+                <thead>
+                  <tr>{['Status', 'Type', 'Provider', 'Created', 'Bound'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {data.invitation_chain.map(inv => (
+                    <tr key={inv.id}>
+                      <td style={s.td}><span style={statusBadgeStyle(inv.status)}>{inv.status}</span></td>
+                      <td style={s.td}>{inv.identity_type ?? '—'}</td>
+                      <td style={s.td}>{inv.required_provider ?? '—'}</td>
+                      <td style={s.td}>{fmtShort(inv.created_at)}</td>
+                      <td style={s.td}>{fmtShort(inv.bound_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {data.audit_chain.length > 0 && (
+            <div>
+              <div style={s.sectionTitle}>Audit chain</div>
+              {data.audit_chain.map((ev, i) => (
+                <div key={i} style={s.timelineItem}>
+                  <span style={{ ...s.dot, backgroundColor: ev.reason_code ? '#dc2626' : '#2563eb' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+                      <span style={{ fontWeight: 500, fontSize: '0.82rem' }}>{ev.label}</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmt(ev.created_at)}</span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.1rem' }}>
+                      {ev.provider && <span>{ev.provider} · </span>}
+                      {ev.reason_code && <span style={{ color: '#dc2626' }}>{ev.reason_code}</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Top scorecard summary ─────────────────────────────────────────────────────
 
 function SummaryRow({ tenantId }: { tenantId: string }) {
@@ -754,7 +930,7 @@ function SummaryRow({ tenantId }: { tenantId: string }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-type InnerTab = 'scorecard' | 'readiness' | 'invitations' | 'drift' | 'risk' | 'timeline' | 'config' | 'audit';
+type InnerTab = 'scorecard' | 'readiness' | 'invitations' | 'drift' | 'risk' | 'timeline' | 'identity-types' | 'provenance' | 'config' | 'audit';
 
 const INNER_TABS: Array<{ id: InnerTab; label: string }> = [
   { id: 'scorecard', label: 'Scorecard' },
@@ -763,6 +939,8 @@ const INNER_TABS: Array<{ id: InnerTab; label: string }> = [
   { id: 'drift', label: 'Drift' },
   { id: 'risk', label: 'Risk' },
   { id: 'timeline', label: 'Timeline' },
+  { id: 'identity-types', label: 'Identity Types' },
+  { id: 'provenance', label: 'Provenance' },
   { id: 'config', label: 'Config' },
   { id: 'audit', label: 'Audit' },
 ];
@@ -800,6 +978,8 @@ export function IdentityGovernancePanel({ tenantId }: { tenantId: string }) {
         {tab === 'drift' && <DriftPanel tenantId={tenantId} />}
         {tab === 'risk' && <RiskPanel tenantId={tenantId} />}
         {tab === 'timeline' && <TimelinePanel tenantId={tenantId} />}
+        {tab === 'identity-types' && <IdentityTypesPanel tenantId={tenantId} />}
+        {tab === 'provenance' && <ProvenancePanel tenantId={tenantId} />}
         {tab === 'config' && <ConfigPanel tenantId={tenantId} />}
         {tab === 'audit' && <AuditPanel tenantId={tenantId} />}
       </div>

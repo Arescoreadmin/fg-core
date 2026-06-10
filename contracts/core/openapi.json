@@ -19652,19 +19652,6 @@
         "title": "WorkflowResponse",
         "type": "object"
       },
-      "_AcceptInviteBody": {
-        "properties": {
-          "invite_token": {
-            "title": "Invite Token",
-            "type": "string"
-          }
-        },
-        "required": [
-          "invite_token"
-        ],
-        "title": "_AcceptInviteBody",
-        "type": "object"
-      },
       "_BacktestPayload": {
         "properties": {
           "case_sensitive": {
@@ -51040,36 +51027,8 @@
     },
     "/workforce/users/accept-invite": {
       "post": {
-        "description": "Validate an invite token and return user identity for session creation.\nCalled by the portal BFF, not exposed directly to clients.",
+        "description": "Removed in PR5. Identity onboarding uses the governed invitation flow.",
         "operationId": "accept_invite_workforce_users_accept_invite_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_AcceptInviteBody"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -51081,16 +51040,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "Accept Invite",

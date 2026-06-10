@@ -6,6 +6,44 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-09 — PR 5: Legacy Removal + Governed Identity Cutover
+
+**Branch:** `feat/identity-legacy-removal-pr5`
+
+**Area:** Identity Governance / Workforce API / Console BFF / Database
+
+**Summary of changes:**
+
+1. **`api/identity/store.py`** — Added 7 new audit event types to `IDENTITY_AUDIT_EVENTS`: `tenant.invite.legacy_endpoint_used`, `tenant.invite.legacy_removed`, `tenant.invite.legacy_rejected`, `tenant.identity_config.invitation_blocked`, `tenant.identity_session.denied.not_bound`, `tenant.identity_session.denied.no_tenant`, `tenant.identity_session.denied.non_governed`.
+
+2. **`api/workforce.py`** — Three breaking changes:
+   - `accept_invite` replaced with 410 tombstone (`LEGACY_INVITE_ENDPOINT_REMOVED`); no body parsing, no info disclosure.
+   - `invite_user` now fails closed (422 `IDENTITY_CONFIGURATION_REQUIRED`) if no identity config; creates governance `TenantInvitation` via `_store.create_invitation()`; returns `invitation_id`/`invitation_url` with no `invite_token`/`invite_url_hint`/`invite_expires_at`; user row inserted without `invite_token`.
+   - `list_users` returns `identity_binding_status` column instead of `invite_pending` boolean.
+
+3. **`migrations/postgres/0101_identity_legacy_removal.sql`** — Replay-safe migration: adds `legacy_invite_disabled_at TIMESTAMPTZ` and `legacy_invite_disabled_reason TEXT` to `tenant_users`; clears `invite_token`/`invite_expires_at` for any rows that still have them; uses `COALESCE` for idempotency.
+
+4. **`apps/console/app/api/core/[...path]/route.ts`** — Explicit 410 gate for `POST workforce/users/accept-invite` before the proxy dispatch.
+
+5. **`apps/console/lib/workforceApi.ts`** — `InviteResult` interface: removed `invite_token`, `invite_expires_at`, `invite_url_hint`; added `invitation_id`, `invitation_url`. `TenantUser` interface: replaced `invite_pending: boolean` with `identity_binding_status: string`.
+
+6. **`apps/console/app/admin/tenants/[tenantId]/page.tsx`** — Updated `ConsoleUser` interface, invite call, email send, and status display to use `invitation_url` and `identity_binding_status`.
+
+7. **`apps/console/app/dashboard/workforce/page.tsx`** — Updated `InviteModal` callback signature, `inviteResult` state type, and invite link display to use governance URL.
+
+8. **`apps/console/app/api/email/route.ts`** — Changed `invite_url_hint` → `invitation_url` in console_invite email handler.
+
+9. **`api/admin_identity.py`** — Added `text` import; 4 new drift types in `get_drift`: `LEGACY_INVITE_PRESENT`, `UNBOUND_ACTIVE_USER`, `UNKNOWN_IDENTITY_TYPE` (raw SQL queries on `tenant_users`); same factors added to `get_risk` (15-20 pts HIGH); timezone-safe comparison for `expires_at` in SQLite environments.
+
+10. **Tests:**
+    - `tests/test_identity_legacy_removal.py` (new, 17 tests): tombstone behavior, token elimination, fail-closed invite, identity_binding_status in list_users.
+    - `tests/test_identity_next_login_binding.py` (new, 4 tests): pending invitation state, unbound user binding status, non-human identity type, drift detection.
+
+**Why:**
+Raw invite tokens in `tenant_users` bypass the identity governance chain. All user onboarding must go through the governed invitation flow (TenantInvitation + admin gateway callback + identity binding) so that every user session is tenant-governed, auditable, and bound to a verified identity.
+
+---
+
 ### 2026-05-27 — PR 25: MS Graph Scan Trigger UI + Azure AD Operator Guide
 
 **Branch:** `pr-25-scan-trigger-ui`

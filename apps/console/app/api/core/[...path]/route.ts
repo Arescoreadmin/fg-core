@@ -295,6 +295,16 @@ async function getAlignmentArtifact(requestId: string): Promise<NextResponse> {
   }
 }
 
+function isLegacyAcceptInvite(path: string[], method: string): boolean {
+  return (
+    method === 'POST' &&
+    path.length === 3 &&
+    path[0] === 'workforce' &&
+    path[1] === 'users' &&
+    path[2] === 'accept-invite'
+  );
+}
+
 async function handle(request: NextRequest, { params }: { params: { path: string[] } }) {
   const requestId = getRequestId(request);
   const path = params.path || [];
@@ -305,6 +315,19 @@ async function handle(request: NextRequest, { params }: { params: { path: string
 
   if (!path.length) return jsonError('Missing path', 400, requestId);
   if (isAlignmentArtifact(path) && request.method === 'GET') return getAlignmentArtifact(requestId);
+
+  // Explicit 410 tombstone: legacy raw-token accept-invite endpoint removed in PR5
+  if (isLegacyAcceptInvite(path, request.method)) {
+    return NextResponse.json(
+      {
+        detail: 'This endpoint has been removed. Use the governed identity invitation flow.',
+        code: 'LEGACY_INVITE_ENDPOINT_REMOVED',
+        request_id: requestId,
+      },
+      { status: 410, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+    );
+  }
+
   return proxyToCore(request, path, requestId);
 }
 

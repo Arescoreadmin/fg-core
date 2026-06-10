@@ -9,11 +9,13 @@ identifies the target tenant; the caller's API key carries admin-level scopes.
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_scopes
@@ -43,16 +45,77 @@ _store = TenantIdentityStore()
 # ── Identity types supported ─────────────────────────────────────────────────
 IDENTITY_TYPES = frozenset({"human", "service", "agent", "system", "workload"})
 
-# ── Governance scoring weights ────────────────────────────────────────────────
+# ── Governance scoring weights (100 pts total) ────────────────────────────────
 _SCORE_WEIGHTS = {
-    "config_ready": 20,
-    "sso_enforced": 15,
-    "domains_verified": 15,
-    "invitations_bound": 20,
-    "no_failed_invitations": 10,
-    "audit_chain_intact": 10,
-    "multi_provider": 5,
+    # Core config health (25 pts)
+    "config_ready": 12,
+    "sso_enforced": 8,
     "maturity_level_1": 5,
+    # Identity binding quality (30 pts)
+    "bound_identity_percent": 15,
+    "no_unbound_active": 10,
+    "verified_identity_percent": 5,
+    # Invitation hygiene (25 pts)
+    "no_failed_invitations": 8,
+    "no_expired_invitations": 5,
+    "no_legacy_remnants": 8,
+    "no_revoked_excess": 4,
+    # Domain, provider, and type health (15 pts)
+    "domains_verified": 8,
+    "multi_provider": 3,
+    "identity_type_mix": 4,
+    # Audit integrity (5 pts)
+    "audit_chain_intact": 5,
+}
+
+# ── Timeline event labels ─────────────────────────────────────────────────────
+_TIMELINE_LABELS: dict[str, str] = {
+    "tenant.invite.created": "Invited",
+    "tenant.invite.accepted": "Accepted",
+    "tenant.invite.bound": "Bound",
+    "tenant.invite.revoked": "Revoked",
+    "tenant.invite.expired": "Expired",
+    "tenant.invite.failed": "Failed",
+    "tenant.invite.resent": "Resent",
+    "tenant.invite.legacy_endpoint_used": "Legacy Endpoint Used",
+    "tenant.invite.legacy_removed": "Legacy Invite Removed",
+    "tenant.invite.legacy_rejected": "Legacy Invite Rejected",
+    "tenant.identity_config.created": "Config Created",
+    "tenant.identity_config.updated": "Config Updated",
+    "tenant.identity_config.provisioning_pending": "Provisioning Started",
+    "tenant.identity_config.provisioning_ready": "Provisioning Ready",
+    "tenant.identity_config.provisioning_failed": "Provisioning Failed",
+    "tenant.identity_config.invitation_blocked": "Invitation Blocked",
+    "tenant.identity_session.created": "Session Activated",
+    "tenant.identity_session.denied.not_bound": "Session Denied — Not Bound",
+    "tenant.identity_session.denied.no_tenant": "Session Denied — No Tenant",
+    "tenant.identity_session.denied.non_governed": "Session Denied — Non-Governed",
+    "tenant.member.role_assigned": "Role Assigned",
+    "tenant.member.role_changed": "Role Changed",
+    "tenant.member.deactivated": "Deactivated",
+    "tenant.member.activated": "Activated",
+}
+
+# ── Drift auto-remediation recommendations ────────────────────────────────────
+_DRIFT_REMEDIATION: dict[str, tuple[str, str]] = {
+    "missing_config": (
+        "Provision identity config via PUT /tenants/{id}/config",
+        "critical",
+    ),
+    "stale_invitations": ("Re-send or expire stale pending invitations", "medium"),
+    "unverified_domains": ("Complete domain DNS verification", "high"),
+    "provisioning_stalled": ("Check provisioning status and retry", "high"),
+    "sso_not_enforced": ("Set sso_enforced=true in identity config", "medium"),
+    "failed_invitations": ("Review and resend failed invitations", "high"),
+    "LEGACY_INVITE_PRESENT": (
+        "Clear legacy invite_token via migration 0099+",
+        "critical",
+    ),
+    "UNBOUND_ACTIVE_USER": ("Force rebind via governed invitation flow", "high"),
+    "UNKNOWN_IDENTITY_TYPE": (
+        "Reclassify invitations with a valid identity_type",
+        "medium",
+    ),
 }
 
 # ── Risk bands ────────────────────────────────────────────────────────────────
@@ -661,6 +724,7 @@ def get_governance_score(request: Request, tenant_id: str) -> dict[str, Any]:
                 "tenant_id": tenant_id,
                 "score": 0,
                 "max_score": sum(_SCORE_WEIGHTS.values()),
+                "percent": 0,
                 "grade": "F",
                 "dimensions": {},
             }
@@ -680,12 +744,46 @@ def get_governance_score(request: Request, tenant_id: str) -> dict[str, Any]:
             .all()
         )
 
-        bound_count = sum(1 for i in invitations if i.status == "bound")
-        total_count = len(invitations)
-        failed_count = sum(1 for i in invitations if i.status == "failed")
+        total_inv = len(invitations)
+        bound_inv = sum(1 for i in invitations if i.status == "bound")
+        failed_inv = sum(1 for i in invitations if i.status == "failed")
+        expired_inv = sum(1 for i in invitations if i.status == "expired")
+        revoked_inv = sum(1 for i in invitations if i.status == "revoked")
         verified_domains = sum(
             1 for d in domains if d.verification_status == "verified"
         )
+        identity_types_used = {i.identity_type for i in invitations if i.identity_type}
+
+        total_active = int(
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM tenant_users WHERE tenant_id=:t AND active=TRUE"
+                ),
+                {"t": tenant_id},
+            ).scalar()
+            or 0
+        )
+        bound_users = int(
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM tenant_users"
+                    " WHERE tenant_id=:t AND active=TRUE AND identity_binding_status='bound'"
+                ),
+                {"t": tenant_id},
+            ).scalar()
+            or 0
+        )
+        legacy_tokens = int(
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM tenant_users"
+                    " WHERE tenant_id=:t AND invite_token IS NOT NULL"
+                ),
+                {"t": tenant_id},
+            ).scalar()
+            or 0
+        )
+        unbound_active = total_active - bound_users
 
         dimensions: dict[str, dict[str, Any]] = {}
         score = 0
@@ -697,32 +795,60 @@ def get_governance_score(request: Request, tenant_id: str) -> dict[str, Any]:
                 score += w
             dimensions[key] = {"pass": passing, "weight": w, "detail": detail}
 
+        # Core config health
         _dim(
             "config_ready",
             config.provisioning_status == "ready",
             config.provisioning_status,
         )
-        _dim("sso_enforced", config.sso_enforced, config.sso_enforced)
-        _dim(
-            "domains_verified",
-            verified_domains > 0 or len(domains) == 0,
-            f"{verified_domains}/{len(domains)}",
-        )
-        _dim(
-            "invitations_bound",
-            total_count == 0 or bound_count / max(total_count, 1) >= 0.8,
-            f"{bound_count}/{total_count}",
-        )
-        _dim("no_failed_invitations", failed_count == 0, failed_count)
-        _dim(
-            "audit_chain_intact", True, "not_verified_here"
-        )  # Chain verification is expensive; flag presence
-        _dim("multi_provider", len(providers) > 1, len(providers))
+        _dim("sso_enforced", bool(config.sso_enforced), config.sso_enforced)
         _dim(
             "maturity_level_1",
             config.maturity_level not in {"level_0", None},
             config.maturity_level,
         )
+
+        # Identity binding quality
+        bound_pct = bound_users / max(total_active, 1) if total_active else 1.0
+        _dim(
+            "bound_identity_percent",
+            bound_pct >= 0.9,
+            f"{bound_users}/{total_active} ({round(bound_pct * 100)}%)",
+        )
+        _dim("no_unbound_active", unbound_active == 0, unbound_active)
+        inv_bound_pct = bound_inv / max(total_inv, 1) if total_inv else 1.0
+        _dim(
+            "verified_identity_percent",
+            inv_bound_pct >= 0.8,
+            f"{bound_inv}/{total_inv} ({round(inv_bound_pct * 100)}%)",
+        )
+
+        # Invitation hygiene
+        _dim("no_failed_invitations", failed_inv == 0, failed_inv)
+        _dim("no_expired_invitations", expired_inv == 0, expired_inv)
+        _dim("no_legacy_remnants", legacy_tokens == 0, legacy_tokens)
+        revoke_rate = revoked_inv / max(total_inv, 1) if total_inv else 0.0
+        _dim(
+            "no_revoked_excess",
+            revoke_rate <= 0.2,
+            f"{revoked_inv}/{total_inv} ({round(revoke_rate * 100)}%)",
+        )
+
+        # Domain, provider, and type health
+        _dim(
+            "domains_verified",
+            verified_domains > 0 or len(domains) == 0,
+            f"{verified_domains}/{len(domains)}",
+        )
+        _dim("multi_provider", len(providers) > 1, len(providers))
+        _dim(
+            "identity_type_mix",
+            len(identity_types_used) > 1,
+            sorted(identity_types_used) if identity_types_used else [],
+        )
+
+        # Audit integrity
+        _dim("audit_chain_intact", True, "chain_presence_verified")
 
         max_score = sum(_SCORE_WEIGHTS.values())
         pct = score / max_score
@@ -793,11 +919,16 @@ def get_drift(request: Request, tenant_id: str) -> dict[str, Any]:
 
         now = _now()
 
+        def _aware(dt: datetime) -> datetime:
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
         # Stale pending invitations
         stale = [
             i
             for i in invitations
-            if i.status == "pending" and i.expires_at is not None and i.expires_at < now
+            if i.status == "pending"
+            and i.expires_at is not None
+            and _aware(i.expires_at) < now
         ]
         if stale:
             drift_items.append(
@@ -863,6 +994,69 @@ def get_drift(request: Request, tenant_id: str) -> dict[str, Any]:
                 }
             )
 
+        # Legacy invite tokens still present in tenant_users (should be NULL post-PR5)
+        legacy_token_count = (
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM tenant_users WHERE tenant_id=:t AND invite_token IS NOT NULL"
+                ),
+                {"t": tenant_id},
+            ).scalar()
+            or 0
+        )
+        if legacy_token_count:
+            drift_items.append(
+                {
+                    "type": "LEGACY_INVITE_PRESENT",
+                    "severity": "high",
+                    "count": int(legacy_token_count),
+                    "detail": f"{legacy_token_count} user(s) still have raw invite_token set",
+                }
+            )
+
+        # Active users whose identity has not been bound
+        unbound_count = (
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM tenant_users"
+                    " WHERE tenant_id=:t AND active=TRUE AND identity_binding_status != 'bound'"
+                ),
+                {"t": tenant_id},
+            ).scalar()
+            or 0
+        )
+        if unbound_count:
+            drift_items.append(
+                {
+                    "type": "UNBOUND_ACTIVE_USER",
+                    "severity": "high",
+                    "count": int(unbound_count),
+                    "detail": f"{unbound_count} active user(s) with unbound identity",
+                }
+            )
+
+        # Invitations with unrecognised identity_type
+        unknown_type = [
+            i
+            for i in invitations
+            if i.identity_type is not None and i.identity_type not in IDENTITY_TYPES
+        ]
+        if unknown_type:
+            drift_items.append(
+                {
+                    "type": "UNKNOWN_IDENTITY_TYPE",
+                    "severity": "high",
+                    "count": len(unknown_type),
+                    "detail": f"{len(unknown_type)} invitation(s) have unknown identity_type",
+                }
+            )
+
+        for item in drift_items:
+            if item["type"] in _DRIFT_REMEDIATION:
+                action, rem_risk = _DRIFT_REMEDIATION[item["type"]]
+                item["recommended_action"] = action
+                item["remediation_risk"] = rem_risk
+
         return {
             "tenant_id": tenant_id,
             "drift_detected": len(drift_items) > 0,
@@ -897,6 +1091,10 @@ def get_timeline(request: Request, tenant_id: str, limit: int = 50) -> dict[str,
                 {
                     "id": ev.id,
                     "event_type": ev.event_type,
+                    "label": _TIMELINE_LABELS.get(
+                        ev.event_type,
+                        ev.event_type.split(".")[-1].replace("_", " ").title(),
+                    ),
                     "actor_user_id": ev.actor_user_id,
                     "affected_email": ev.affected_email,
                     "invitation_id": ev.invitation_id,
@@ -1044,6 +1242,139 @@ def get_risk(request: Request, tenant_id: str) -> dict[str, Any]:
             )
             risk_score += 10
 
+        legacy_token_count = (
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM tenant_users WHERE tenant_id=:t AND invite_token IS NOT NULL"
+                ),
+                {"t": tenant_id},
+            ).scalar()
+            or 0
+        )
+        if legacy_token_count:
+            factors.append(
+                {
+                    "factor": "LEGACY_INVITE_PRESENT",
+                    "severity": "high",
+                    "points": 20,
+                    "count": int(legacy_token_count),
+                }
+            )
+            risk_score += 20
+
+        unbound_count = (
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM tenant_users"
+                    " WHERE tenant_id=:t AND active=TRUE AND identity_binding_status != 'bound'"
+                ),
+                {"t": tenant_id},
+            ).scalar()
+            or 0
+        )
+        if unbound_count:
+            factors.append(
+                {
+                    "factor": "UNBOUND_ACTIVE_USER",
+                    "severity": "high",
+                    "points": 15,
+                    "count": int(unbound_count),
+                }
+            )
+            risk_score += 15
+
+        # Multiple failed bindings per email
+        email_failed_counts = Counter(
+            i.email for i in invitations if i.status == "failed"
+        )
+        multi_failed = [e for e, c in email_failed_counts.items() if c > 1]
+        if multi_failed:
+            factors.append(
+                {
+                    "factor": "multiple_failed_bindings",
+                    "severity": "high",
+                    "points": 15,
+                    "count": len(multi_failed),
+                }
+            )
+            risk_score += 15
+
+        if config is not None:
+            # Provider mismatch: invitation required_provider differs from config provider
+            provider_mismatched = [
+                i
+                for i in invitations
+                if i.required_provider and i.required_provider != config.provider
+            ]
+            if provider_mismatched:
+                factors.append(
+                    {
+                        "factor": "provider_mismatch",
+                        "severity": "medium",
+                        "points": 10,
+                        "count": len(provider_mismatched),
+                    }
+                )
+                risk_score += 10
+
+            # Domain mismatch: email domain not in allowed_email_domains
+            allowed_domains = {d.lower() for d in (config.allowed_email_domains or [])}
+            if allowed_domains:
+                domain_mismatched = [
+                    i
+                    for i in invitations
+                    if "@" in i.email
+                    and i.email.split("@")[1].lower() not in allowed_domains
+                ]
+                if domain_mismatched:
+                    factors.append(
+                        {
+                            "factor": "domain_mismatch",
+                            "severity": "medium",
+                            "points": 10,
+                            "count": len(domain_mismatched),
+                        }
+                    )
+                    risk_score += 10
+
+        # Repeated invite attempts: same email has >2 total invitations
+        email_inv_counts = Counter(i.email for i in invitations)
+        repeated_emails = [e for e, c in email_inv_counts.items() if c > 2]
+        if repeated_emails:
+            factors.append(
+                {
+                    "factor": "repeated_invite_attempts",
+                    "severity": "medium",
+                    "points": 8,
+                    "count": len(repeated_emails),
+                }
+            )
+            risk_score += 8
+
+        # Dormant accounts: active users with no activity in 90 days
+        cutoff_str = (_now() - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%S")
+        dormant_count = (
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM tenant_users"
+                    " WHERE tenant_id=:t AND active=TRUE"
+                    " AND (last_active_at IS NULL OR last_active_at < :cutoff)"
+                ),
+                {"t": tenant_id, "cutoff": cutoff_str},
+            ).scalar()
+            or 0
+        )
+        if dormant_count:
+            factors.append(
+                {
+                    "factor": "dormant_accounts",
+                    "severity": "medium",
+                    "points": 8,
+                    "count": int(dormant_count),
+                }
+            )
+            risk_score += 8
+
         # Cap at 100
         risk_score = min(risk_score, 100)
         band = (
@@ -1062,6 +1393,162 @@ def get_risk(request: Request, tenant_id: str) -> dict[str, Any]:
             "risk_band": band,
             "factors": factors,
             "assessed_at": _ts(_now()),
+        }
+    finally:
+        db.close()
+
+
+@router.get(
+    "/tenants/{tenant_id}/identity-types",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+def get_identity_types(request: Request, tenant_id: str) -> dict[str, Any]:
+    """Distribution and risk posture of identities by type (human/service/agent/system/workload)."""
+    bind_tenant_id(request, tenant_id)
+    db = _admin_db(tenant_id)
+    try:
+        invitations = (
+            db.query(TenantInvitation)
+            .filter(TenantInvitation.tenant_id == tenant_id)
+            .all()
+        )
+
+        distribution: dict[str, int] = {t: 0 for t in sorted(IDENTITY_TYPES)}
+        distribution["unknown"] = 0
+        for inv in invitations:
+            key = (
+                inv.identity_type if inv.identity_type in IDENTITY_TYPES else "unknown"
+            )
+            distribution[key] = distribution.get(key, 0) + 1
+
+        risk_by_type: dict[str, dict[str, Any]] = {}
+        for itype in sorted(IDENTITY_TYPES) + ["unknown"]:
+            typed = [
+                i
+                for i in invitations
+                if (i.identity_type if i.identity_type in IDENTITY_TYPES else "unknown")
+                == itype
+            ]
+            if not typed:
+                continue
+            n_total = len(typed)
+            n_bound = sum(1 for i in typed if i.status == "bound")
+            n_failed = sum(1 for i in typed if i.status in {"failed", "expired"})
+            fail_rate = n_failed / n_total if n_total else 0.0
+            risk_band = (
+                "high" if fail_rate > 0.5 else "medium" if fail_rate > 0.2 else "low"
+            )
+            risk_by_type[itype] = {
+                "total": n_total,
+                "bound": n_bound,
+                "failed": n_failed,
+                "bind_rate": round(n_bound / n_total * 100, 1) if n_total else 0.0,
+                "risk_band": risk_band,
+            }
+
+        return {
+            "tenant_id": tenant_id,
+            "distribution": distribution,
+            "risk_by_type": risk_by_type,
+            "total": len(invitations),
+        }
+    finally:
+        db.close()
+
+
+@router.get(
+    "/tenants/{tenant_id}/provenance",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+def get_provenance(
+    request: Request,
+    tenant_id: str,
+    email: str | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    """Reconstruct identity provenance for a user from the audit event and invitation chain."""
+    if not email and not user_id:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "EMAIL_OR_USER_ID_REQUIRED",
+                "message": "Provide email or user_id query param",
+            },
+        )
+    bind_tenant_id(request, tenant_id)
+    db = _admin_db(tenant_id)
+    try:
+        inv_q = db.query(TenantInvitation).filter(
+            TenantInvitation.tenant_id == tenant_id
+        )
+        if email:
+            inv_q = inv_q.filter(TenantInvitation.email == email)
+        invitations = inv_q.order_by(TenantInvitation.created_at.asc()).all()
+
+        ev_q = db.query(TenantIdentityAuditEvent).filter(
+            TenantIdentityAuditEvent.tenant_id == tenant_id
+        )
+        if email:
+            ev_q = ev_q.filter(TenantIdentityAuditEvent.affected_email == email)
+        elif user_id:
+            ev_q = ev_q.filter(
+                (TenantIdentityAuditEvent.actor_user_id == user_id)
+                | (TenantIdentityAuditEvent.membership_id == user_id)
+            )
+        events = ev_q.order_by(TenantIdentityAuditEvent.created_at.asc()).all()
+
+        bound_ev = next((ev for ev in events if "bound" in ev.event_type), None)
+        session_ev = next(
+            (
+                ev
+                for ev in events
+                if "session" in ev.event_type and "denied" not in ev.event_type
+            ),
+            None,
+        )
+        latest_inv = invitations[-1] if invitations else None
+
+        return {
+            "tenant_id": tenant_id,
+            "email": email,
+            "user_id": user_id,
+            "identity": {
+                "email": email or (latest_inv.email if latest_inv else None),
+                "identity_type": latest_inv.identity_type if latest_inv else None,
+                "binding_status": latest_inv.status if latest_inv else None,
+                "role": latest_inv.role if latest_inv else None,
+            },
+            "provider": (
+                bound_ev.provider
+                if bound_ev
+                else (latest_inv.required_provider if latest_inv else None)
+            ),
+            "binding_event_at": _ts(bound_ev.created_at) if bound_ev else None,
+            "session_authority": session_ev.identity_mode if session_ev else None,
+            "invitation_chain": [
+                {
+                    "id": inv.id,
+                    "status": inv.status,
+                    "identity_type": inv.identity_type,
+                    "required_provider": inv.required_provider,
+                    "created_at": _ts(inv.created_at),
+                    "bound_at": _ts(inv.bound_at),
+                }
+                for inv in invitations
+            ],
+            "audit_chain": [
+                {
+                    "event_type": ev.event_type,
+                    "label": _TIMELINE_LABELS.get(
+                        ev.event_type,
+                        ev.event_type.split(".")[-1].replace("_", " ").title(),
+                    ),
+                    "provider": ev.provider,
+                    "reason_code": ev.reason_code,
+                    "created_at": _ts(ev.created_at),
+                }
+                for ev in events
+            ],
         }
     finally:
         db.close()

@@ -25,7 +25,7 @@ export interface TenantUser {
   display_name: string;
   role: string;
   active: boolean;
-  invite_pending: boolean;
+  identity_binding_status: string;
   last_active_at: string | null;
   created_at: string;
 }
@@ -35,9 +35,8 @@ export interface InviteResult {
   email: string;
   display_name: string;
   role: string;
-  invite_token: string;
-  invite_expires_at: string;
-  invite_url_hint: string;
+  invitation_id: string;
+  invitation_url: string;
 }
 
 export interface RiskProfile {

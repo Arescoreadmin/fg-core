@@ -50,6 +50,13 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.identity_session.issued",
         "tenant.identity_session.rejected",
         "tenant.identity_session.logout",
+        "tenant.invite.legacy_endpoint_used",
+        "tenant.invite.legacy_removed",
+        "tenant.invite.legacy_rejected",
+        "tenant.identity_config.invitation_blocked",
+        "tenant.identity_session.denied.not_bound",
+        "tenant.identity_session.denied.no_tenant",
+        "tenant.identity_session.denied.non_governed",
     }
 )
 INVITATION_TRANSITIONS = {

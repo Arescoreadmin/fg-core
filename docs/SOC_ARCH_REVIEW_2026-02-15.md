@@ -1,3 +1,23 @@
+## 2026-06-09 — PR 5: Legacy Invite Removal + Governed Identity Cutover
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (workforce API surface change; no auth subsystem changes, no privilege escalation, no new credential handling)
+
+**Route inventory changes:**
+- `POST /workforce/users/accept-invite` — converted from tenant-bound token-validation endpoint to a stateless 410 tombstone. `tenant_bound: True → False`. No DB access, no token lookup. Deterministic 410 for all callers. No info disclosure.
+- `POST /workforce/users` — response shape changed: `invite_token`/`invite_url_hint`/`invite_expires_at` removed; `invitation_id`/`invitation_url` added. Now requires identity config (fail-closed 422 if absent). Creates governance `TenantInvitation` record.
+- `GET /workforce/users` — response shape changed: `invite_pending` boolean removed; `identity_binding_status` string added.
+
+**Security invariants verified:**
+- No raw invite_token ever appears in any API response after this PR.
+- The tombstone endpoint accepts zero body parameters and returns no identity-revealing information.
+- All new governance invitation paths go through `TenantIdentityStore.create_invitation()` and are audited.
+- New drift types `LEGACY_INVITE_PRESENT` and `UNBOUND_ACTIVE_USER` add HIGH-severity signals to the risk engine.
+- `tools/ci/route_inventory.json` regenerated via `make route-inventory-generate`.
+
+**No security regressions:** No new auth paths. No new privilege escalation. No new tenant boundary crossings. No raw credential exposure.
+
+---
+
 ## 2026-05-27 — PR 20: Governance Topology Workspace UI
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (UI surface + read/write-gated graph query routes; no auth subsystem changes, no schema migrations)

@@ -73,7 +73,7 @@ function InviteModal({
   onInvited,
 }: {
   onClose: () => void;
-  onInvited: (token: string, email: string) => void;
+  onInvited: (invitationUrl: string, email: string) => void;
 }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -87,7 +87,7 @@ function InviteModal({
     setError('');
     try {
       const result = await workforceApi.inviteUser({ email, display_name: name, role });
-      onInvited(result.invite_token, result.email);
+      onInvited(result.invitation_url, result.email);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to send invite.');
     } finally {
@@ -801,7 +801,7 @@ export default function WorkforcePage() {
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
-  const [inviteResult, setInviteResult] = useState<{ token: string; email: string } | null>(null);
+  const [inviteResult, setInviteResult] = useState<{ invitationUrl: string; email: string } | null>(null);
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
 
   const loadData = useCallback(() => {
@@ -974,10 +974,12 @@ export default function WorkforcePage() {
                       </span>
                     </td>
                     <td className="px-3 py-2">
-                      {u.invite_pending ? (
+                      {u.identity_binding_status === 'unbound' || u.identity_binding_status === 'pending' ? (
                         <span className="text-amber-200">Pending</span>
+                      ) : u.identity_binding_status === 'bound' ? (
+                        <span className="text-green-300">Bound</span>
                       ) : (
-                        <span className="text-muted">Accepted</span>
+                        <span className="text-muted">{u.identity_binding_status}</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-muted">{fmtDate(u.last_active_at)}</td>
@@ -1023,11 +1025,11 @@ export default function WorkforcePage() {
       {inviteResult && (
         <div className="rounded border border-green-500/30 bg-green-500/5 p-4 space-y-2">
           <p className="text-sm font-medium text-green-300">Invite created for {inviteResult.email}</p>
-          <p className="text-xs text-muted">Share this link with the user (single-use, 72 hr expiry):</p>
+          <p className="text-xs text-muted">Share this governed invitation link with the user (72 hr expiry):</p>
           <code className="block text-xs bg-surface-2 border border-border rounded px-2 py-1.5 text-foreground break-all">
             {typeof window !== 'undefined'
-              ? `${window.location.protocol}//${window.location.host.replace('console.', 'app.')}/accept-invite?token=${inviteResult.token}`
-              : `/accept-invite?token=${inviteResult.token}`}
+              ? `${window.location.protocol}//${window.location.host}${inviteResult.invitationUrl}`
+              : inviteResult.invitationUrl}
           </code>
           <button onClick={() => setInviteResult(null)} className="text-xs text-muted hover:text-foreground">
             Dismiss
@@ -1039,9 +1041,9 @@ export default function WorkforcePage() {
       {showInvite && (
         <InviteModal
           onClose={() => setShowInvite(false)}
-          onInvited={(token, email) => {
+          onInvited={(invitationUrl, email) => {
             setShowInvite(false);
-            setInviteResult({ token, email });
+            setInviteResult({ invitationUrl, email });
             loadData();
           }}
         />

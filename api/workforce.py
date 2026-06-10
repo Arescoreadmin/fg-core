@@ -10,8 +10,8 @@ auth layer, and Postgres substrate.
 
 from __future__ import annotations
 
+import logging
 import re
-import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -22,8 +22,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
+from api.db_models_identity import TenantIdentityConfig
 from api.deps import tenant_db_required
 from api.error_contracts import api_error
+from api.identity.store import TenantIdentityStore, emit_identity_audit_event
+
+_log = logging.getLogger(__name__)
+_store = TenantIdentityStore()
 
 router = APIRouter(prefix="/workforce", tags=["workforce"])
 
@@ -165,16 +170,40 @@ def invite_user(
             ),
         )
 
+    # Fail closed: identity config must exist before invitations can be issued
+    config = (
+        db.query(TenantIdentityConfig)
+        .filter(TenantIdentityConfig.tenant_id == tenant_id)
+        .first()
+    )
+    if config is None:
+        emit_identity_audit_event(
+            db,
+            tenant_id=tenant_id,
+            event_type="tenant.identity_config.invitation_blocked",
+            affected_email=payload.email.lower(),
+            details={"invitation_status": "pending"},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "IDENTITY_CONFIGURATION_REQUIRED",
+                "Identity configuration is required before invitations can be created.",
+            ),
+        )
+
     user_id = str(uuid.uuid4())
-    invite_token = secrets.token_urlsafe(32)
-    expires_at = _now() + timedelta(hours=_INVITE_TTL_HOURS)
+    now = _now()
+    expires_at = now + timedelta(hours=_INVITE_TTL_HOURS)
+    now_iso = now.isoformat()
 
     db.execute(
         text("""
             INSERT INTO tenant_users
-                (id, tenant_id, email, display_name, role, invite_token, invite_expires_at, active, created_at, updated_at)
+                (id, tenant_id, email, display_name, role, active, identity_binding_status, created_at, updated_at)
             VALUES
-                (:id, :tenant_id, :email, :display_name, :role, :invite_token, :expires_at, TRUE, NOW(), NOW())
+                (:id, :tenant_id, :email, :display_name, :role, TRUE, 'unbound', :now, :now)
         """),
         {
             "id": user_id,
@@ -182,10 +211,22 @@ def invite_user(
             "email": payload.email.lower(),
             "display_name": payload.display_name,
             "role": payload.role,
-            "invite_token": invite_token,
-            "expires_at": expires_at,
+            "now": now_iso,
         },
     )
+
+    inv = _store.create_invitation(
+        db,
+        tenant_id=tenant_id,
+        email=payload.email.lower(),
+        role=payload.role,
+        required_provider=None,
+        created_by_user_id=None,
+        expires_at=expires_at,
+        identity_mode_at_invite=config.identity_mode,
+        identity_policy_config_id=config.id,
+    )
+    inv.identity_type = "human"
     db.commit()
 
     return {
@@ -193,9 +234,8 @@ def invite_user(
         "email": payload.email.lower(),
         "display_name": payload.display_name,
         "role": payload.role,
-        "invite_token": invite_token,
-        "invite_expires_at": expires_at.isoformat(),
-        "invite_url_hint": f"/accept-invite?token={invite_token}",
+        "invitation_id": inv.id,
+        "invitation_url": f"/identity/invitations/{inv.id}",
     }
 
 
@@ -208,7 +248,7 @@ def list_users(
     rows = db.execute(
         text("""
             SELECT id, email, display_name, role, active, last_active_at, created_at,
-                   (invite_token IS NOT NULL AND invite_expires_at > NOW()) AS invite_pending
+                   identity_binding_status
             FROM tenant_users
             WHERE tenant_id = :tenant_id
             ORDER BY created_at DESC
@@ -224,11 +264,13 @@ def list_users(
                 "display_name": r.display_name,
                 "role": r.role,
                 "active": r.active,
-                "invite_pending": bool(r.invite_pending),
+                "identity_binding_status": r.identity_binding_status,
                 "last_active_at": r.last_active_at.isoformat()
-                if r.last_active_at
-                else None,
-                "created_at": r.created_at.isoformat(),
+                if r.last_active_at and not isinstance(r.last_active_at, str)
+                else r.last_active_at,
+                "created_at": r.created_at
+                if isinstance(r.created_at, str)
+                else r.created_at.isoformat(),
             }
             for r in rows
         ],
@@ -407,71 +449,20 @@ def get_user_activity(
     }
 
 
-# ─── Accept invite (portal login) ────────────────────────────────────────────
-
-
-class _AcceptInviteBody(BaseModel):
-    invite_token: str
+# ─── Accept invite (tombstone — PR5) ─────────────────────────────────────────
 
 
 @router.post("/users/accept-invite")
-def accept_invite(
-    body: _AcceptInviteBody,
-    db: Session = Depends(tenant_db_required),
-) -> dict[str, Any]:
-    """Validate an invite token and return user identity for session creation.
-    Called by the portal BFF, not exposed directly to clients.
-    """
-    token = body.invite_token.strip()
-    if not token:
-        raise HTTPException(
-            status_code=400,
-            detail=api_error("INVITE_TOKEN_REQUIRED", "invite_token is required."),
-        )
-
-    row = db.execute(
-        text("""
-            SELECT id, tenant_id, email, display_name, role, invite_expires_at, active
-            FROM tenant_users
-            WHERE invite_token = :token
-        """),
-        {"token": token},
-    ).fetchone()
-
-    if not row:
-        raise HTTPException(
-            status_code=401,
-            detail=api_error("INVITE_INVALID", "Invalid or expired invite token."),
-        )
-    if not row.active:
-        raise HTTPException(
-            status_code=403,
-            detail=api_error("USER_INACTIVE", "This user account is deactivated."),
-        )
-    if row.invite_expires_at and row.invite_expires_at < _now():
-        raise HTTPException(
-            status_code=401,
-            detail=api_error("INVITE_EXPIRED", "This invite link has expired."),
-        )
-
-    # Clear the invite token (one-time use) and record last_active_at
-    db.execute(
-        text("""
-            UPDATE tenant_users
-            SET invite_token = NULL, invite_expires_at = NULL, last_active_at = NOW(), updated_at = NOW()
-            WHERE id = :user_id
-        """),
-        {"user_id": row.id},
+def accept_invite() -> dict[str, Any]:
+    """Removed in PR5. Identity onboarding uses the governed invitation flow."""
+    _log.warning("Legacy accept-invite endpoint hit — returning 410 tombstone")
+    raise HTTPException(
+        status_code=410,
+        detail=api_error(
+            "LEGACY_INVITE_ENDPOINT_REMOVED",
+            "This endpoint has been removed. Use the governed identity invitation flow.",
+        ),
     )
-    db.commit()
-
-    return {
-        "user_id": row.id,
-        "tenant_id": row.tenant_id,
-        "email": row.email,
-        "display_name": row.display_name,
-        "role": row.role,
-    }
 
 
 # ─── PR 37 additions: risk history · keywords · alerts ───────────────────────

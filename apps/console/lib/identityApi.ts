@@ -154,6 +154,8 @@ export interface DriftItem {
   detail?: string;
   count?: number;
   error_code?: string | null;
+  recommended_action?: string;
+  remediation_risk?: string;
 }
 
 export interface DriftReport {
@@ -166,6 +168,7 @@ export interface DriftReport {
 export interface TimelineEvent {
   id: string;
   event_type: string;
+  label: string;
   actor_user_id: string | null;
   affected_email: string | null;
   invitation_id: string | null;
@@ -322,4 +325,73 @@ export async function getReadinessHistory(tenantId: string): Promise<SafeResult<
 
 export async function getIdentityRisk(tenantId: string): Promise<SafeResult<IdentityRisk>> {
   return safe(() => identityRequest<IdentityRisk>(`${base(tenantId)}/risk`));
+}
+
+// ── Identity Type Governance ──────────────────────────────────────────────────
+
+export interface IdentityTypeRisk {
+  total: number;
+  bound: number;
+  failed: number;
+  bind_rate: number;
+  risk_band: string;
+}
+
+export interface IdentityTypeGovernance {
+  tenant_id: string;
+  distribution: Record<string, number>;
+  risk_by_type: Record<string, IdentityTypeRisk>;
+  total: number;
+}
+
+export async function getIdentityTypeGovernance(tenantId: string): Promise<SafeResult<IdentityTypeGovernance>> {
+  return safe(() => identityRequest<IdentityTypeGovernance>(`${base(tenantId)}/identity-types`));
+}
+
+// ── Session Provenance ────────────────────────────────────────────────────────
+
+export interface ProvenanceChainEntry {
+  event_type: string;
+  label: string;
+  provider: string | null;
+  reason_code: string | null;
+  created_at: string;
+}
+
+export interface ProvenanceInvitation {
+  id: string;
+  status: string;
+  identity_type: string | null;
+  required_provider: string | null;
+  created_at: string;
+  bound_at: string | null;
+}
+
+export interface ProvenanceResult {
+  tenant_id: string;
+  email: string | null;
+  user_id: string | null;
+  identity: {
+    email: string | null;
+    identity_type: string | null;
+    binding_status: string | null;
+    role: string | null;
+  };
+  provider: string | null;
+  binding_event_at: string | null;
+  session_authority: string | null;
+  invitation_chain: ProvenanceInvitation[];
+  audit_chain: ProvenanceChainEntry[];
+}
+
+export async function getSessionProvenance(
+  tenantId: string,
+  params: { email?: string; user_id?: string },
+): Promise<SafeResult<ProvenanceResult>> {
+  const qs = new URLSearchParams();
+  if (params.email) qs.set('email', params.email);
+  if (params.user_id) qs.set('user_id', params.user_id);
+  return safe(() =>
+    identityRequest<ProvenanceResult>(`${base(tenantId)}/provenance?${qs.toString()}`),
+  );
 }

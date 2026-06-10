@@ -142,11 +142,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     if (type === 'console_invite') {
-      const { to, name, invite_url_hint, tenant_label } = body;
-      if (!to || !name || !invite_url_hint) {
-        return NextResponse.json({ error: 'Missing required fields: to, name, invite_url_hint' }, { status: 422 });
+      const { to, name, invitation_url, tenant_label } = body;
+      if (!to || !name || !invitation_url) {
+        return NextResponse.json({ error: 'Missing required fields: to, name, invitation_url' }, { status: 422 });
       }
-      const inviteUrl = `${CONSOLE_ORIGIN}${invite_url_hint}`;
+      const inviteUrl = `${CONSOLE_ORIGIN}${invitation_url}`;
       const label = tenant_label || 'your workspace';
       await sendMail({
         to,

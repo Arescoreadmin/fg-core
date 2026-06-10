@@ -14,7 +14,7 @@ interface ConsoleUser {
   display_name: string;
   role: 'user' | 'admin' | 'auditor';
   active: boolean;
-  invite_pending: boolean;
+  identity_binding_status: string;
   last_active_at: string | null;
   created_at: string;
 }
@@ -93,7 +93,7 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<'user' | 'admin' | 'auditor'>('user');
-  const [inviteResult, setInviteResult] = useState<{ invite_token: string; invite_url_hint: string } | null>(null);
+  const [inviteResult, setInviteResult] = useState<{ invitation_id: string; invitation_url: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
 
@@ -109,7 +109,7 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
   async function handleInvite() {
     setSubmitting(true); setError(null); setEmailStatus('idle');
     try {
-      const r = await coreApi<{ invite_token: string; invite_url_hint: string }>('workforce/users', tenantId, {
+      const r = await coreApi<{ invitation_id: string; invitation_url: string }>('workforce/users', tenantId, {
         method: 'POST',
         body: JSON.stringify({ email: inviteEmail, display_name: inviteName, role: inviteRole }),
       });
@@ -121,7 +121,7 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
       const res = await fetch('/api/email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'console_invite', to: inviteEmail, name: inviteName, invite_url_hint: r.invite_url_hint, tenant_label: label }),
+        body: JSON.stringify({ type: 'console_invite', to: inviteEmail, name: inviteName, invitation_url: r.invitation_url, tenant_label: label }),
       });
       setEmailStatus(res.ok ? 'sent' : 'failed');
     } catch (e) { setError(e instanceof Error ? e.message : 'Invite failed'); setEmailStatus('failed'); }
@@ -148,7 +148,7 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
       {inviteResult && (
         <div style={s.successBanner}>
           <strong>Invite created{emailStatus === 'sent' ? ' — email sent ✓' : emailStatus === 'failed' ? ' — email failed (copy link below)' : emailStatus === 'sending' ? ' — sending email…' : ''}.</strong>
-          <code style={s.code}>{typeof window !== 'undefined' ? window.location.origin : ''}{inviteResult.invite_url_hint}</code>
+          <code style={s.code}>{typeof window !== 'undefined' ? window.location.origin : ''}{inviteResult.invitation_url}</code>
         </div>
       )}
 
@@ -186,7 +186,8 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
                     <td style={s.td}>{u.display_name || '—'}</td>
                     <td style={s.td}><span style={roleBadge(u.role)}>{u.role}</span></td>
                     <td style={s.td}>
-                      {u.invite_pending ? <span style={{ color: '#f59e0b', fontSize: '0.8rem' }}>Invite pending</span>
+                      {u.identity_binding_status === 'unbound' || u.identity_binding_status === 'pending'
+                        ? <span style={{ color: '#f59e0b', fontSize: '0.8rem' }}>Invite pending</span>
                         : u.active ? <span style={{ color: '#22c55e', fontSize: '0.8rem' }}>Active</span>
                         : <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>Inactive</span>}
                     </td>
