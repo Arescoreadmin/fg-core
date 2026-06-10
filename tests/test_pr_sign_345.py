@@ -150,6 +150,27 @@ def test_startup_errors_missing_billing_hmac_key_in_prod(monkeypatch):
     assert result.severity == "error"
 
 
+def test_validate_startup_config_raises_in_prod_missing_signing_key(monkeypatch):
+    """Full boot chain: FG_ENV=prod + fail_on_error=True + missing signing key → RuntimeError."""
+    monkeypatch.setenv("FG_ENV", "prod")
+    monkeypatch.delenv("FG_REPORT_SIGNING_KEY", raising=False)
+    monkeypatch.delenv("FG_REPORT_SIGNING_PUBLIC_KEY", raising=False)
+    from api.config.startup_validation import validate_startup_config
+
+    with pytest.raises(RuntimeError, match="FG_REPORT_SIGNING_KEY"):
+        validate_startup_config(fail_on_error=True, log_results=False)
+
+
+def test_validate_startup_config_raises_in_prod_missing_billing_key(monkeypatch):
+    """Full boot chain: FG_ENV=prod + fail_on_error=True + missing billing key → RuntimeError."""
+    monkeypatch.setenv("FG_ENV", "prod")
+    monkeypatch.delenv("FG_BILLING_EVIDENCE_HMAC_KEY", raising=False)
+    from api.config.startup_validation import validate_startup_config
+
+    with pytest.raises(RuntimeError, match="FG_BILLING_EVIDENCE_HMAC_KEY"):
+        validate_startup_config(fail_on_error=True, log_results=False)
+
+
 def test_startup_passes_billing_hmac_key_present(monkeypatch):
     monkeypatch.setenv(
         "FG_BILLING_EVIDENCE_HMAC_KEY", "some-strong-secret-key-here-xxx"
