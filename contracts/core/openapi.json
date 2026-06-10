@@ -50003,6 +50003,29 @@
         ]
       }
     },
+    "/signing/public-key": {
+      "get": {
+        "description": "Return the Ed25519 public key used to sign governance reports.\n\nVerification-only clients can use this key to independently verify\nX-Report-Signature headers on PDF export responses.",
+        "operationId": "get_report_signing_public_key_signing_public_key_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Report Signing Public Key Signing Public Key Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Report Signing Public Key",
+        "tags": [
+          "signing"
+        ]
+      }
+    },
     "/stats": {
       "get": {
         "operationId": "get_stats_stats_get",
