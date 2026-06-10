@@ -57,6 +57,11 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.identity_session.denied.not_bound",
         "tenant.identity_session.denied.no_tenant",
         "tenant.identity_session.denied.non_governed",
+        "tenant.invite.approval_requested",
+        "tenant.invite.approved",
+        "tenant.invite.approval_rejected",
+        "tenant.identity_governance.violation_detected",
+        "tenant.identity_governance.action_recorded",
     }
 )
 INVITATION_TRANSITIONS = {

@@ -258,6 +258,16 @@ class TenantInvitation(Base):
     accepted_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_by_user_id: Mapped[Any] = mapped_column(String(128), nullable=True)
     approved_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    approval_required: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    approval_state: Mapped[Any] = mapped_column(
+        String(32),
+        nullable=False,
+        default="not_required",
+        server_default=text("'not_required'"),
+    )
+    approval_reason: Mapped[Any] = mapped_column(Text, nullable=True)
     bound_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_user_id: Mapped[Any] = mapped_column(String(128), nullable=True)
     created_at: Mapped[Any] = mapped_column(

@@ -470,6 +470,60 @@
       ],
       "file": "api/admin_identity.py",
       "method": "POST",
+      "path": "/admin/identity/invitations/{invitation_id}/approve",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "POST",
+      "path": "/admin/identity/invitations/{invitation_id}/reject-approval",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "POST",
+      "path": "/admin/identity/invitations/{invitation_id}/request-approval",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "POST",
       "path": "/admin/identity/invitations/{invitation_id}/resend",
       "plane": "control",
       "plane_id": "control",
@@ -494,6 +548,24 @@
       "scoped": true,
       "scopes": [
         "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/approval-queue",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -578,7 +650,205 @@
       ],
       "file": "api/admin_identity.py",
       "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-action-summary",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-actions",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "POST",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-actions",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-benchmark",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-findings",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-forecast",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
       "path": "/admin/identity/tenants/{tenant_id}/governance-score",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-sla",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-snapshots",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "POST",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-snapshots",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/governance-trend",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/identity-types",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -632,6 +902,42 @@
       ],
       "file": "api/admin_identity.py",
       "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/policy-violations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/provenance",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
       "path": "/admin/identity/tenants/{tenant_id}/readiness",
       "plane": "control",
       "plane_id": "control",
@@ -651,6 +957,24 @@
       "file": "api/admin_identity.py",
       "method": "GET",
       "path": "/admin/identity/tenants/{tenant_id}/readiness-history",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin_identity.py",
+      "method": "GET",
+      "path": "/admin/identity/tenants/{tenant_id}/recommendations",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -9753,7 +10077,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-10T00:41:48.219784+00:00",
+  "generated_at": "2026-06-10T11:26:51.423032+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

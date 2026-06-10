@@ -89,6 +89,11 @@ export interface IdentityInvitation {
   bound_at: string | null;
   created_at: string;
   updated_at: string;
+  approval_required: boolean;
+  approval_state: string;
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  approval_reason: string | null;
 }
 
 export interface InvitationsResponse {
@@ -137,6 +142,7 @@ export interface ScoreDimension {
   pass: boolean;
   weight: number;
   detail: unknown;
+  evidence?: Record<string, unknown>;
 }
 
 export interface GovernanceScore {
@@ -393,5 +399,397 @@ export async function getSessionProvenance(
   if (params.user_id) qs.set('user_id', params.user_id);
   return safe(() =>
     identityRequest<ProvenanceResult>(`${base(tenantId)}/provenance?${qs.toString()}`),
+  );
+}
+
+// ── Policy Violations ─────────────────────────────────────────────────────────
+
+export interface PolicyViolation {
+  rule_id: string;
+  severity: string;
+  category: string;
+  description: string;
+  affected_email: string;
+  invitation_id: string | null;
+  detail: string;
+}
+
+export interface PolicyViolationsReport {
+  tenant_id: string;
+  violation_count: number;
+  critical_count: number;
+  high_count: number;
+  violations: PolicyViolation[];
+}
+
+export async function getPolicyViolations(tenantId: string): Promise<SafeResult<PolicyViolationsReport>> {
+  return safe(() => identityRequest<PolicyViolationsReport>(`${base(tenantId)}/policy-violations`));
+}
+
+// ── Approval Workflows ────────────────────────────────────────────────────────
+
+export interface ApprovalActionPayload {
+  approver_user_id?: string | null;
+  reason?: string | null;
+}
+
+export interface ApprovalQueueResponse {
+  tenant_id: string;
+  pending_count: number;
+  items: IdentityInvitation[];
+}
+
+export async function requestApproval(
+  invitationId: string,
+  payload: ApprovalActionPayload = {},
+): Promise<SafeResult<{ invitation_id: string; approval_state: string }>> {
+  return safe(() =>
+    identityRequest(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/request-approval`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  );
+}
+
+export async function approveInvitation(
+  invitationId: string,
+  payload: ApprovalActionPayload = {},
+): Promise<SafeResult<{ invitation_id: string; approval_state: string; approved_by_user_id: string | null; approved_at: string }>> {
+  return safe(() =>
+    identityRequest(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  );
+}
+
+export async function rejectApproval(
+  invitationId: string,
+  payload: ApprovalActionPayload = {},
+): Promise<SafeResult<{ invitation_id: string; approval_state: string; reason: string | null }>> {
+  return safe(() =>
+    identityRequest(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/reject-approval`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  );
+}
+
+export async function getApprovalQueue(tenantId: string): Promise<SafeResult<ApprovalQueueResponse>> {
+  return safe(() => identityRequest<ApprovalQueueResponse>(`${base(tenantId)}/approval-queue`));
+}
+
+// ── Governance Snapshots ──────────────────────────────────────────────────────
+
+export interface GovernanceSnapshot {
+  snapshot_id: string;
+  score: number;
+  max_score: number;
+  percent: number;
+  grade: string;
+  dimensions: Record<string, { pass: boolean; weight: number }>;
+  created_at: string;
+}
+
+export interface GovernanceSnapshotsReport {
+  tenant_id: string;
+  days: number;
+  snapshot_count: number;
+  score_delta_pct: number | null;
+  snapshots: GovernanceSnapshot[];
+}
+
+export async function takeGovernanceSnapshot(tenantId: string): Promise<SafeResult<GovernanceSnapshot & { snapshot_id: string; tenant_id: string }>> {
+  return safe(() =>
+    identityRequest(`${base(tenantId)}/governance-snapshots`, { method: 'POST' }),
+  );
+}
+
+export async function getGovernanceSnapshots(
+  tenantId: string,
+  days = 90,
+): Promise<SafeResult<GovernanceSnapshotsReport>> {
+  return safe(() =>
+    identityRequest<GovernanceSnapshotsReport>(`${base(tenantId)}/governance-snapshots?days=${days}`),
+  );
+}
+
+// ── Recommendations Engine ────────────────────────────────────────────────────
+
+export interface Recommendation {
+  dimension: string;
+  action: string;
+  detail: string | null;
+  expected_score_gain: number;
+  risk_reduction: string;
+  category: string;
+  priority: number;
+}
+
+export interface RecommendationsReport {
+  tenant_id: string;
+  current_score: number;
+  current_percent: number;
+  current_grade: string;
+  recommendation_count: number;
+  total_expected_score_gain: number;
+  projected_percent_if_all_applied: number;
+  recommendations: Recommendation[];
+}
+
+export async function getRecommendations(tenantId: string): Promise<SafeResult<RecommendationsReport>> {
+  return safe(() => identityRequest<RecommendationsReport>(`${base(tenantId)}/recommendations`));
+}
+
+// ── Gap A: Governance Trend Analytics ────────────────────────────────────────
+
+export interface TrendDimension {
+  dimension: string;
+  label: string;
+  score_impact: number;
+}
+
+export interface GovernanceTrend {
+  tenant_id: string;
+  has_trend: boolean;
+  message?: string;
+  snapshot_count?: number;
+  period_start?: string;
+  period_end?: string;
+  snapshots_compared?: number;
+  grade_from?: string;
+  grade_to?: string;
+  score_delta?: number;
+  percent_delta?: number;
+  degraded: TrendDimension[];
+  improved: TrendDimension[];
+  stable_failing: TrendDimension[];
+  narrative: string[];
+}
+
+export async function getGovernanceTrend(
+  tenantId: string,
+  snapshots = 5,
+): Promise<SafeResult<GovernanceTrend>> {
+  return safe(() =>
+    identityRequest<GovernanceTrend>(`${base(tenantId)}/governance-trend?snapshots=${snapshots}`),
+  );
+}
+
+// ── Gap B: Governance Forecasting ────────────────────────────────────────────
+
+export interface ForecastRiskDimension {
+  dimension: string;
+  label: string;
+  fail_rate_pct: number;
+  trend: string;
+}
+
+export interface GovernanceForecast {
+  tenant_id: string;
+  has_forecast: boolean;
+  message?: string;
+  snapshot_count?: number;
+  current_percent?: number;
+  current_grade?: string;
+  slope_per_day?: number;
+  trend_direction?: string;
+  forecast_days?: number;
+  projected_percent?: number;
+  projected_grade?: string;
+  at_risk_dimensions: ForecastRiskDimension[];
+}
+
+export async function getGovernanceForecast(
+  tenantId: string,
+  days = 30,
+): Promise<SafeResult<GovernanceForecast>> {
+  return safe(() =>
+    identityRequest<GovernanceForecast>(`${base(tenantId)}/governance-forecast?days=${days}`),
+  );
+}
+
+// ── Gap C: Governance SLA Tracking ───────────────────────────────────────────
+
+export interface SlaItem {
+  item_id: string;
+  type: string;
+  severity: string;
+  title: string;
+  detail: string;
+  open_since: string | null;
+  days_open: number | null;
+  sla_days: number;
+  sla_status: 'on_track' | 'at_risk' | 'breached' | 'unknown';
+}
+
+export interface GovernanceSlaReport {
+  tenant_id: string;
+  total_open_items: number;
+  breached_count: number;
+  at_risk_count: number;
+  items: SlaItem[];
+}
+
+export async function getGovernanceSla(tenantId: string): Promise<SafeResult<GovernanceSlaReport>> {
+  return safe(() => identityRequest<GovernanceSlaReport>(`${base(tenantId)}/governance-sla`));
+}
+
+// ── Gap D: Cross-Tenant Benchmarking ─────────────────────────────────────────
+
+export interface GovernanceBenchmark {
+  tenant_id: string;
+  has_benchmark: boolean;
+  message?: string;
+  participating_tenants?: number;
+  own_score?: {
+    percent: number | null;
+    grade: string | null;
+    snapshot_at: string | null;
+    percentile_rank: number | null;
+  };
+  benchmark?: {
+    p25: number;
+    median: number;
+    p75: number;
+    p90: number;
+    description: string;
+  };
+}
+
+export async function getGovernanceBenchmark(tenantId: string): Promise<SafeResult<GovernanceBenchmark>> {
+  return safe(() => identityRequest<GovernanceBenchmark>(`${base(tenantId)}/governance-benchmark`));
+}
+
+// ── Gap E: Governance Findings ────────────────────────────────────────────────
+
+export interface GovernanceFinding {
+  finding_id: string;
+  type: 'policy_violation' | 'risk' | 'drift';
+  severity: string;
+  category: string;
+  title: string;
+  detail: string;
+  sources: string[];
+  evidence: Record<string, unknown>;
+  affected_email: string | null;
+  invitation_id: string | null;
+}
+
+export interface GovernanceFindingsReport {
+  tenant_id: string;
+  finding_count: number;
+  critical_count: number;
+  high_count: number;
+  governance_score: number;
+  governance_percent: number;
+  governance_grade: string;
+  findings: GovernanceFinding[];
+}
+
+export async function getGovernanceFindings(tenantId: string): Promise<SafeResult<GovernanceFindingsReport>> {
+  return safe(() =>
+    identityRequest<GovernanceFindingsReport>(`${base(tenantId)}/governance-findings`),
+  );
+}
+
+// ── Governance Actions Ledger ─────────────────────────────────────────────────
+
+export type GovernanceActionState = 'accepted' | 'rejected' | 'deferred' | 'implemented' | 'unaddressed';
+
+export interface GovernanceAction {
+  action_id: string;
+  dimension: string;
+  action_state: GovernanceActionState;
+  actor_id: string | null;
+  actor_email: string | null;
+  actor_role: string | null;
+  reason: string | null;
+  outcome: string | null;
+  deferred_until: string | null;
+  snapshot_id: string | null;
+  previous_action_id: string | null;
+  recommendation_action: string | null;
+  created_at: string;
+}
+
+export interface GovernanceActionsLedger {
+  tenant_id: string;
+  total: number;
+  actions: GovernanceAction[];
+}
+
+export interface GovernanceActionSummaryEntry {
+  dimension: string;
+  recommendation_action: string;
+  priority: number;
+  risk_reduction: string;
+  current_state: GovernanceActionState;
+  is_terminal: boolean;
+  actor_email: string | null;
+  reason: string | null;
+  outcome: string | null;
+  deferred_until: string | null;
+  decided_at: string | null;
+  action_id: string | null;
+}
+
+export interface GovernanceActionSummary {
+  tenant_id: string;
+  total_dimensions: number;
+  unaddressed: number;
+  accepted: number;
+  deferred: number;
+  rejected: number;
+  implemented: number;
+  dimensions: GovernanceActionSummaryEntry[];
+}
+
+export interface RecordGovernanceActionPayload {
+  dimension: string;
+  action_state: 'accepted' | 'rejected' | 'deferred' | 'implemented';
+  actor_id?: string;
+  actor_email?: string;
+  actor_role?: string;
+  reason?: string;
+  outcome?: string;
+  deferred_until?: string;
+  snapshot_id?: string;
+}
+
+export async function recordGovernanceAction(
+  tenantId: string,
+  payload: RecordGovernanceActionPayload,
+): Promise<SafeResult<GovernanceAction>> {
+  return safe(() =>
+    identityRequest<GovernanceAction>(`${base(tenantId)}/governance-actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  );
+}
+
+export async function listGovernanceActions(
+  tenantId: string,
+  opts?: { dimension?: string; state?: string; limit?: number },
+): Promise<SafeResult<GovernanceActionsLedger>> {
+  const params = new URLSearchParams();
+  if (opts?.dimension) params.set('dimension', opts.dimension);
+  if (opts?.state) params.set('state', opts.state);
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  return safe(() =>
+    identityRequest<GovernanceActionsLedger>(
+      `${base(tenantId)}/governance-actions${qs ? `?${qs}` : ''}`,
+    ),
+  );
+}
+
+export async function getGovernanceActionSummary(
+  tenantId: string,
+): Promise<SafeResult<GovernanceActionSummary>> {
+  return safe(() =>
+    identityRequest<GovernanceActionSummary>(`${base(tenantId)}/governance-action-summary`),
   );
 }

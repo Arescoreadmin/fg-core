@@ -2297,6 +2297,35 @@
         "title": "AnomalyResponse",
         "type": "object"
       },
+      "ApprovalActionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "approver_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver User Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "ApprovalActionBody",
+        "type": "object"
+      },
       "ApprovalCreateRequest": {
         "properties": {
           "action": {

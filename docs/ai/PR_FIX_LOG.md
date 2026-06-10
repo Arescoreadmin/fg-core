@@ -13677,3 +13677,194 @@ Four findings from the PR4 review remediated. No functionality removed, no trust
 - Tenant-bound key cannot access a different tenant's resources (400/403 enforced by bind_tenant_id)
 - Admin internal token (admin_internal_token reason) may supply any tenant_id via path
 - No data leakage: wrong-tenant requests fail before any DB mutation
+
+## 2026-06-10 — Gap Closure: Identity Governance 5-Gap Audit
+
+Eight findings from the post-PR6 gap review addressed. No routes removed. No trust assumptions changed. Admin Gateway session authority unchanged.
+
+**Gap 1 — Identity Policy Violations surface (new route):**
+New `GET /tenants/{id}/policy-violations` evaluates `_POLICY_RULES` against current invitation and tenant_user state. Six rules enforced: `non_human_admin_role`, `service_human_role`, `unapproved_provider`, `unauthorized_domain`, `unbound_admin`, `agent_without_required_approval`. Violations include rule_id, severity, category, description, affected_email, invitation_id, and detail.
+
+**Gap 2 — Approval Workflow (4 new routes + state machine guards):**
+- `POST /invitations/{id}/request-approval` → sets `approval_state='pending'`, emits `tenant.invite.approval_requested`
+- `POST /invitations/{id}/approve` → sets `approval_state='approved'`, records approver + timestamp, emits `tenant.invite.approved`. Guards: 409 if state is not `pending`/`not_required`; 409 if invitation is `revoked` or `expired`.
+- `POST /invitations/{id}/reject-approval` → sets `approval_state='rejected'`, emits `tenant.invite.approval_rejected`. Guards: 409 if already `rejected`; 409 if invitation is `revoked` or `expired`.
+- `GET /tenants/{id}/approval-queue` → returns only `approval_state='pending'` invitations.
+- All four routes use `_admin_db_by_invitation` helper which does tenant lookup then calls `bind_tenant_id(request, inv.tenant_id)` — wrong-tenant callers get 400/403.
+- Auto-approval on `create_invitation`: if `capability_flags.require_approval_non_human/service/admin` is set, new invitation is created with `approval_state='pending'` automatically.
+
+**Gap 3 — Governance Evidence (score dimensions):**
+All 14 dimension calls in `get_governance_score` now pass structured `evidence` dicts (raw counts, percents, thresholds). TypeScript `ScoreDimension` interface updated with `evidence?: Record<string, unknown>`. UI ScorePanel renders expandable evidence chips per dimension.
+
+**Gap 4 — Governance Snapshots (2 new routes):**
+- `POST /tenants/{id}/governance-snapshots` → computes current score via `_compute_score_for_snapshot` and writes to `tenant_identity_governance_snapshots`. Each POST creates a new row; old rows are never mutated (immutable append-only).
+- `GET /tenants/{id}/governance-snapshots?days=90` → returns all snapshots for the period ordered DESC, plus `score_delta_pct` trend.
+
+**Gap 5 — Recommendations Engine (1 new route):**
+`GET /tenants/{id}/recommendations` → for every failing dimension that has an entry in `_DIMENSION_RECOMMENDATIONS`, returns action, detail, `expected_score_gain` (= dimension weight), `risk_reduction`, category, and priority. Results sorted by priority then score gain descending. Response includes `projected_percent_if_all_applied`.
+
+**Database:**
+- `migrations/postgres/0102_identity_approval_governance.sql` — adds `approval_required`, `approval_state`, `approval_reason` to `tenant_invitations`; creates `tenant_identity_governance_snapshots` table.
+- `api/db.py` `_auto_migrate_sqlite` — adds same columns to SQLite test DBs; idempotent CREATE TABLE IF NOT EXISTS for `tenant_identity_governance_snapshots`.
+
+**Tests (14 new test functions → 66 total in test_admin_identity_routes.py):**
+- Wrong-tenant 400/403 for all 8 new routes (policy-violations, approval-queue, snapshots GET/POST, recommendations, approve, reject, request-approval).
+- Approval state machine: request→approve, request→reject, approve-twice→409, approve-after-reject→409, reject-twice→409, approve-revoked→409.
+- Approval queue correctness: pending-only filter, approved items excluded.
+- Snapshot immutability: two POSTs produce two distinct snapshot_ids; GET returns both.
+- Snapshot score preservation: written score/percent/grade round-trips exactly.
+- Recommendation correctness: expected_score_gain == _SCORE_WEIGHTS[dim]; passing dims produce no recommendations; projected_percent >= current_percent.
+- Policy violations: clean tenant → 0 violations; non-human-admin → rule detected; unauthorized-domain → rule detected.
+- Audit events: approval_requested + approved emitted; approval_rejected emitted.
+
+**Route inventory:** `tools/ci/route_inventory.json` regenerated (`make route-inventory-update`).
+
+**Files modified:**
+- `api/admin_identity.py` — 8 new route handlers, `_compute_score_for_snapshot` helper, `_admin_db_by_invitation` helper, state machine guards on approve/reject
+- `api/db.py` — `_auto_migrate_sqlite`: approval columns + snapshots table (SCHEMA CHANGE — called out)
+- `migrations/postgres/0102_identity_approval_governance.sql` — new migration (SCHEMA CHANGE — called out)
+- `api/db_models_identity.py` — 3 approval columns on `TenantInvitation` ORM model (SCHEMA CHANGE — called out)
+- `api/identity/store.py` — 4 new audit event types in `IDENTITY_AUDIT_EVENTS`
+- `apps/console/lib/identityApi.ts` — 7 new interfaces, 8 new functions, updated ScoreDimension + IdentityInvitation
+- `apps/console/components/identity/IdentityGovernancePanel.tsx` — 4 new panels, evidence expansion in ScorePanel, approval badge in InvitationsPanel, 14-tab nav
+- `tests/test_admin_identity_routes.py` — 14 new tests (66 total)
+- `tools/ci/route_inventory.json` — regenerated
+
+**Security invariants preserved:**
+- All 8 new routes enforce `bind_tenant_id` — wrong-tenant callers blocked before any read or write
+- Approval state machine is entirely server-side; UI buttons call backend endpoints that enforce all guards
+- No approval state can be set by the frontend directly — only via `/approve`, `/reject-approval`, `/request-approval` routes
+- Snapshots are append-only — no update or delete route exists
+- `_admin_db_by_invitation` does a two-phase lookup (find tenant_id, then bind) to prevent invitation ID guessing across tenants
+
+---
+
+### 2026-06-09 — Gap A-E: Governance Intelligence Layer
+
+**Area:** Identity Governance / Analytics / Forecasting / SLA / Benchmarking / Findings
+
+**Summary:** Five intelligence routes added on top of the governance snapshot foundation. All routes are operator-scoped, bind to tenant via `bind_tenant_id`, and return only anonymized or tenant-own data.
+
+**Gap A — Governance Trend Analytics (`GET /tenants/{id}/governance-trend`):**
+- Compares the two most recent governance snapshots; computes `percent_delta` and `grade_from` → `grade_to`.
+- Each dimension classified as `degraded`, `improved`, or `stable_failing` by comparing pass/fail state.
+- `narrative` array of human-readable sentences derived from grade change and critical dimension deltas.
+- Returns `has_trend: false` with single snapshot (no historical data yet).
+
+**Gap B — Governance Forecasting (`GET /tenants/{id}/governance-forecast`):**
+- Pure-Python least-squares linear regression over up to 90 days of snapshots; no numpy dependency.
+- `slope` = `cov(t, pct) / var(t)`, projected score = `slope * (last_t + 30) + intercept`, clamped [0, 100].
+- `trend_direction`: `improving` (slope ≥ 0.05/day), `declining` (slope ≤ −0.05/day), or `stable`.
+- `at_risk_dimensions`: failing dimensions in current snapshot annotated with `trend_slope`.
+- Returns `has_forecast: false` with fewer than 2 snapshots.
+
+**Gap C — Governance SLA Tracking (`GET /tenants/{id}/governance-sla`):**
+- `_SLA_DAYS` thresholds: critical=7d, high=14d, medium=30d, low=60d, pending_approval=3d, unbound_admin=7d.
+- Items sourced from: pending approval invitations, active policy violations, unbound admin users.
+- `sla_status`: `on_track` (<50% elapsed), `at_risk` (50–100% elapsed), `breached` (>100% elapsed), `unknown` (no `open_since`).
+- Response includes `summary` with counts by status.
+
+**Gap D — Cross-Tenant Benchmarking (`GET /tenants/{id}/governance-benchmark`):**
+- Aggregate SQL: `SELECT percent FROM tenant_identity_governance_snapshots WHERE (tenant_id, created_at) IN (SELECT tenant_id, MAX(created_at) FROM ... GROUP BY tenant_id)`.
+- Computes p25/median/p75/p90 across all tenants; own `percentile_rank` via sorted index.
+- Privacy invariant: response never exposes individual tenant IDs or scores — only percentile stats and own position.
+- Returns `has_benchmark: false` with fewer than 2 participating tenants.
+
+**Gap E — Identity Governance Findings (`GET /tenants/{id}/governance-findings`):**
+- Unified finding object aggregating: active policy violations (type=`policy_violation`), failing score dimensions (type=`risk`), unbound admin users (type=`drift`).
+- Deduplication via Python `Set` of `finding_id` strings; prevents same finding appearing from multiple sources.
+- Each finding: `finding_id`, `type`, `severity`, `title`, `detail`, `sources` list, `evidence` dict, `detected_at`.
+- Sorted critical → high → medium → low; paginated via `?limit=` (default 50).
+- Acts as assessment platform bridge: `evidence` dict contains structured data for downstream consumption.
+
+**Database:** No schema changes — all new routes query existing `tenant_identity_governance_snapshots`, `tenant_invitations`, and `tenant_users` tables.
+
+**Tests (22 new test functions → 88 total in test_admin_identity_routes.py):**
+- Wrong-tenant 400/403 for all 5 new routes.
+- Trend: single-snapshot returns `has_trend: false`; two snapshots return delta and narrative.
+- Forecast: fewer-than-2-snapshots returns `has_forecast: false`; regression produces valid projected_percent in [0, 100].
+- SLA: empty tenant → empty items; pending-approval invitation → `pending_approval` item with correct sla_days.
+- Benchmark: single tenant → `has_benchmark: false`; two tenants → percentile stats computed.
+- Findings: clean tenant → empty list; unbound admin → `drift` finding; policy violation → `policy_violation` finding.
+
+**Route inventory:** `tools/ci/route_inventory.json` regenerated (`make route-inventory-update`).
+
+**Files modified:**
+- `api/admin_identity.py` — 5 new route handlers (`get_governance_trend`, `get_governance_forecast`, `get_governance_sla`, `get_governance_benchmark`, `get_governance_findings`); `_SLA_DAYS` + `_DIM_LABELS` + `_DIM_LABELS_RESOLVED` constants; `_grade()` helper extracted
+- `apps/console/lib/identityApi.ts` — 5 new interface groups (`GovernanceTrend`, `GovernanceForecast`, `SlaItem`/`GovernanceSla`, `GovernanceBenchmark`, `GovernanceFinding`/`GovernanceFindings`) + 5 new fetch functions
+- `apps/console/components/identity/IdentityGovernancePanel.tsx` — 5 new panels (`TrendPanel`, `ForecastPanel`, `SlaPanel`, `BenchmarkPanel`, `FindingsPanel`); tabs extended 14 → 19; `INNER_TABS` reordered with Findings first
+- `tests/test_admin_identity_routes.py` — 22 new tests (88 total)
+- `tools/ci/route_inventory.json` — regenerated
+
+**Security invariants preserved:**
+- All 5 new routes enforce `bind_tenant_id` — wrong-tenant callers blocked before any read
+- Benchmark route never exposes individual tenant IDs or percent values — only aggregate percentile stats
+- Findings route aggregates from server-side checks only; no client-supplied filter affects what security rules apply
+- SLA thresholds are server-side constants (`_SLA_DAYS`) — not configurable by callers
+
+---
+
+### 2026-06-10 — PR 9: Identity Governance Actions Ledger
+
+**Area:** Identity Governance / Audit / Decision Tracking
+
+**Summary:** Append-only ledger for recording governance decisions on recommendations. Closes the loop between "here's what to fix" and "here's what was decided, by whom, and what happened."
+
+**State machine (server-enforced):**
+- First action on any dimension: `accepted`, `rejected`, `deferred`, or `implemented` (retroactive mark)
+- `accepted → implemented | deferred`
+- `deferred → accepted | rejected`
+- `rejected` — terminal (409 on any further action)
+- `implemented` — terminal (409 on any further action)
+- Invalid transitions return 409 `INVALID_TRANSITION`; terminal state returns 409 `ACTION_TERMINAL`
+
+**3 new routes:**
+
+`POST /tenants/{id}/governance-actions` — record a decision on a dimension with actor attribution (actor_id, actor_email, actor_role), reason (why), outcome (what happened), optional deferred_until and snapshot_id. Returns 201 with the action row and `previous_action_id` linked-list pointer.
+
+`GET /tenants/{id}/governance-actions` — full append-only ledger, ordered DESC, filterable by `?dimension=` and `?state=`, capped at 500 rows. Includes `recommendation_action` label from `_DIMENSION_RECOMMENDATIONS` on each row.
+
+`GET /tenants/{id}/governance-action-summary` — latest state per dimension (current posture view). Uses `NOT EXISTS` subquery for correct latest-per-group in both SQLite and PostgreSQL. Returns per-dimension: `current_state`, `is_terminal`, `actor_email`, `reason`, `outcome`, `deferred_until`, `decided_at`. Top-level counts: `unaddressed`, `accepted`, `deferred`, `rejected`, `implemented`.
+
+**Database (SCHEMA CHANGE — called out):**
+- `migrations/postgres/0103_identity_governance_actions.sql` — new table `tenant_identity_governance_actions` with `id`, `tenant_id`, `dimension`, `action_state`, `actor_*`, `reason`, `outcome`, `deferred_until`, `snapshot_id`, `previous_action_id`, `created_at`; two indexes
+- `api/db.py` `_auto_migrate_sqlite` — same table + indexes for SQLite test environments
+- `api/admin_identity.py` — `audit_chain_intact` added to `_DIMENSION_RECOMMENDATIONS` (was in `_SCORE_WEIGHTS` but missing from recommendations); validation changed to check `_SCORE_WEIGHTS` (all 14 dimensions)
+
+**Audit event:** `tenant.identity_governance.action_recorded` — added to `IDENTITY_AUDIT_EVENTS`
+
+**Tests (14 new → 102 total):**
+- Record accepted/rejected/deferred/implemented (happy path, first action)
+- Full lifecycle: accepted → implemented → 409 (terminal)
+- Deferred lifecycle: deferred → accepted → implemented
+- Invalid transition 409 (`accepted → rejected`)
+- Unknown dimension 422
+- Invalid state 422
+- List empty / list with entries / filter by dimension
+- Summary: all unaddressed on empty tenant
+- Summary reflects decisions: implemented + accepted appear correctly
+- Wrong-tenant 403 on POST and GET summary
+- Ledger ordered DESC; `previous_action_id` forms correct linked list
+
+**Frontend:**
+- `ActionsLedgerPanel` — summary counts (5 state cards), dimension table with current state badge, "Record" button on non-terminal dimensions, inline decision form (state select, actor email/role, reason, outcome, deferred_until), full audit ledger toggle
+- Tabs extended 19 → 20; "Actions Ledger" tab added after "Findings"
+- `identityApi.ts` — 6 new interfaces (`GovernanceAction`, `GovernanceActionsLedger`, `GovernanceActionSummaryEntry`, `GovernanceActionSummary`, `RecordGovernanceActionPayload`) + 3 new functions
+
+**Route inventory:** `tools/ci/route_inventory.json` regenerated (129 routes)
+
+**Files modified (9 — called out per repo rule):**
+- `api/admin_identity.py` — 3 new routes, `GovernanceActionBody` model, `_ACTION_TRANSITIONS` state machine, `audit_chain_intact` recommendation added (SCHEMA-adjacent)
+- `api/db.py` — `_auto_migrate_sqlite`: new table + indexes (SCHEMA CHANGE)
+- `migrations/postgres/0103_identity_governance_actions.sql` — new migration (SCHEMA CHANGE)
+- `api/identity/store.py` — 1 new audit event type
+- `apps/console/lib/identityApi.ts` — 6 new interfaces + 3 new functions
+- `apps/console/components/identity/IdentityGovernancePanel.tsx` — `ActionsLedgerPanel`, tab 19→20
+- `tests/test_admin_identity_routes.py` — 14 new tests (102 total)
+- `tools/ci/route_inventory.json` — regenerated
+
+**Security invariants preserved:**
+- All 3 new routes enforce `bind_tenant_id` — wrong-tenant callers blocked before any read or write
+- State machine is entirely server-side; UI sends decisions to the backend which validates all transitions
+- Ledger is append-only — no update or delete route exists; `previous_action_id` forms an immutable chain
+- `actor_*` attribution comes from the request body only (no server-side identity injection yet); consistent with existing approval routes

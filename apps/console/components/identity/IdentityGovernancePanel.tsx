@@ -17,6 +17,18 @@ import {
   getIdentityTypeGovernance,
   getSessionProvenance,
   upsertIdentityConfig,
+  getPolicyViolations,
+  approveInvitation,
+  rejectApproval,
+  getApprovalQueue,
+  takeGovernanceSnapshot,
+  getGovernanceSnapshots,
+  getRecommendations,
+  getGovernanceTrend,
+  getGovernanceForecast,
+  getGovernanceSla,
+  getGovernanceBenchmark,
+  getGovernanceFindings,
   type IdentityConfig,
   type IdentityReadiness,
   type IdentityInvitation,
@@ -28,6 +40,15 @@ import {
   type AuditSummary,
   type IdentityTypeGovernance,
   type ProvenanceResult,
+  type PolicyViolationsReport,
+  type ApprovalQueueResponse,
+  type GovernanceSnapshotsReport,
+  type RecommendationsReport,
+  type GovernanceTrend,
+  type GovernanceForecast,
+  type GovernanceSlaReport,
+  type GovernanceBenchmark,
+  type GovernanceFindingsReport,
 } from '@/lib/identityApi';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -163,6 +184,7 @@ function ScorePanel({ tenantId }: { tenantId: string }) {
   const [data, setData] = useState<GovernanceScore | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setLoading(true);
@@ -175,6 +197,9 @@ function ScorePanel({ tenantId }: { tenantId: string }) {
   if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
   if (error) return <div style={s.errorBanner}>{error}</div>;
   if (!data) return null;
+
+  const toggle = (key: string) =>
+    setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   return (
     <div>
@@ -196,15 +221,32 @@ function ScorePanel({ tenantId }: { tenantId: string }) {
       <div style={{ marginTop: '1.25rem' }}>
         <div style={s.sectionTitle}>Dimension breakdown</div>
         {Object.entries(data.dimensions).map(([key, dim]) => (
-          <div key={key} style={s.dimRow}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ color: dim.pass ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{dim.pass ? '✓' : '✗'}</span>
-              <span>{key.replace(/_/g, ' ')}</span>
-            </span>
-            <span style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{String(dim.detail)}</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{dim.weight} pts</span>
-            </span>
+          <div key={key}>
+            <div
+              style={{ ...s.dimRow, cursor: dim.evidence && Object.keys(dim.evidence).length > 0 ? 'pointer' : 'default' }}
+              onClick={() => dim.evidence && Object.keys(dim.evidence).length > 0 && toggle(key)}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: dim.pass ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{dim.pass ? '✓' : '✗'}</span>
+                <span>{key.replace(/_/g, ' ')}</span>
+                {dim.evidence && Object.keys(dim.evidence).length > 0 && (
+                  <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>{expanded.has(key) ? '▲' : '▼'}</span>
+                )}
+              </span>
+              <span style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{String(dim.detail)}</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{dim.weight} pts</span>
+              </span>
+            </div>
+            {expanded.has(key) && dim.evidence && (
+              <div style={{ padding: '0.5rem 0.75rem 0.75rem 1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {Object.entries(dim.evidence).map(([ek, ev]) => (
+                  <span key={ek} style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: 'var(--surface-2, var(--background))' }}>
+                    <span style={{ color: 'var(--muted)' }}>{ek}: </span><strong>{String(ev)}</strong>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -533,7 +575,7 @@ function InvitationsPanel({ tenantId }: { tenantId: string }) {
           <table style={s.table}>
             <thead>
               <tr>
-                {['Email', 'Role', 'Identity type', 'Status', 'Mode', 'Expires', 'Actions'].map(h => (
+                {['Email', 'Role', 'Type', 'Status', 'Approval', 'Expires', 'Actions'].map(h => (
                   <th key={h} style={s.th}>{h}</th>
                 ))}
               </tr>
@@ -548,7 +590,11 @@ function InvitationsPanel({ tenantId }: { tenantId: string }) {
                   <td style={s.td}>{inv.role}</td>
                   <td style={s.td}>{inv.identity_mode_at_invite ?? '—'}</td>
                   <td style={s.td}><span style={statusBadgeStyle(inv.status)}>{inv.status}</span></td>
-                  <td style={s.td}>{inv.identity_mode_at_invite ?? '—'}</td>
+                  <td style={s.td}>
+                    {inv.approval_required
+                      ? <span style={statusBadgeStyle(inv.approval_state === 'approved' ? 'ready' : inv.approval_state === 'rejected' ? 'failed' : 'pending')}>{inv.approval_state}</span>
+                      : <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>—</span>}
+                  </td>
                   <td style={s.td}>{fmtShort(inv.expires_at)}</td>
                   <td style={{ ...s.td, display: 'flex', gap: '0.4rem' }}>
                     {(inv.status === 'pending' || inv.status === 'auth_started') && (
@@ -883,6 +929,672 @@ function ProvenancePanel({ tenantId }: { tenantId: string }) {
   );
 }
 
+// ── Gap 1: Policy Violations ──────────────────────────────────────────────────
+
+function PolicyViolationsPanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<PolicyViolationsReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getPolicyViolations(tenantId).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+  if (!data) return null;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <span style={statusBadgeStyle(data.critical_count > 0 ? 'failed' : data.high_count > 0 ? 'auth_started' : 'ready')}>
+          {data.violation_count === 0 ? 'No violations' : `${data.violation_count} violation${data.violation_count !== 1 ? 's' : ''}`}
+        </span>
+        {data.critical_count > 0 && <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600 }}>{data.critical_count} critical</span>}
+        {data.high_count > 0 && <span style={{ fontSize: '0.75rem', color: '#ea580c', fontWeight: 600 }}>{data.high_count} high</span>}
+      </div>
+      {data.violations.length === 0 ? (
+        <p style={{ color: '#16a34a', fontSize: '0.875rem' }}>All policy rules are satisfied.</p>
+      ) : (
+        data.violations.map((v, i) => (
+          <div key={i} style={{ ...s.driftItem, borderLeftColor: severityColor(v.severity), borderLeftWidth: 3 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{v.rule_id.replace(/_/g, ' ')}</span>
+                <span style={{ fontSize: '0.7rem', color: severityColor(v.severity), textTransform: 'uppercase', fontWeight: 600 }}>{v.severity}</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{v.category}</span>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: '0.2rem' }}>{v.description}</div>
+              <div style={{ fontSize: '0.78rem' }}>{v.detail}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '0.2rem' }}>{v.affected_email}</div>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ── Gap 2: Approval Queue ─────────────────────────────────────────────────────
+
+function ApprovalQueuePanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<ApprovalQueueResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
+    getApprovalQueue(tenantId).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleApprove = async (id: string) => {
+    const r = await approveInvitation(id, {});
+    if (r.ok) { setActionMsg('Approved.'); load(); } else setActionMsg(`Error: ${r.error}`);
+  };
+
+  const handleReject = async (id: string) => {
+    const reason = window.prompt('Rejection reason (optional):') ?? undefined;
+    const r = await rejectApproval(id, { reason });
+    if (r.ok) { setActionMsg('Rejected.'); load(); } else setActionMsg(`Error: ${r.error}`);
+  };
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+  if (!data) return null;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <div style={s.sectionTitle}>Pending approvals ({data.pending_count})</div>
+      </div>
+      {actionMsg && (
+        <div style={{ ...s.errorBanner, backgroundColor: actionMsg.startsWith('Error') ? undefined : 'rgba(34,197,94,0.08)', color: actionMsg.startsWith('Error') ? undefined : '#16a34a', marginBottom: '0.75rem' }}>
+          {actionMsg}
+        </div>
+      )}
+      {data.items.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>No pending approvals.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={s.table}>
+            <thead>
+              <tr>{['Email', 'Role', 'Type', 'Status', 'Created', 'Actions'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {data.items.map(inv => (
+                <tr key={inv.id}>
+                  <td style={s.td}>{inv.email}</td>
+                  <td style={s.td}>{inv.role}</td>
+                  <td style={s.td}>{inv.identity_mode_at_invite ?? '—'}</td>
+                  <td style={s.td}><span style={statusBadgeStyle(inv.status)}>{inv.status}</span></td>
+                  <td style={s.td}>{fmtShort(inv.created_at)}</td>
+                  <td style={{ ...s.td, display: 'flex', gap: '0.4rem' }}>
+                    <button style={s.btn} onClick={() => handleApprove(inv.id)}>Approve</button>
+                    <button style={s.dangerBtn} onClick={() => handleReject(inv.id)}>Reject</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Gap 4: Governance Snapshots ───────────────────────────────────────────────
+
+function SnapshotsPanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<GovernanceSnapshotsReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [snapping, setSnapping] = useState(false);
+  const [snapMsg, setSnapMsg] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    getGovernanceSnapshots(tenantId, 90).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSnapshot = async () => {
+    setSnapping(true); setSnapMsg(null);
+    const r = await takeGovernanceSnapshot(tenantId);
+    setSnapping(false);
+    if (r.ok) { setSnapMsg('Snapshot recorded.'); load(); } else setSnapMsg(`Error: ${r.error}`);
+  };
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <div style={s.sectionTitle}>Governance snapshots — last 90 days {data ? `(${data.snapshot_count})` : ''}</div>
+        <button style={s.btn} onClick={handleSnapshot} disabled={snapping}>{snapping ? 'Capturing…' : 'Capture now'}</button>
+      </div>
+      {snapMsg && (
+        <div style={{ ...s.errorBanner, backgroundColor: snapMsg.startsWith('Error') ? undefined : 'rgba(34,197,94,0.08)', color: snapMsg.startsWith('Error') ? undefined : '#16a34a', marginBottom: '0.75rem' }}>
+          {snapMsg}
+        </div>
+      )}
+      {data && data.score_delta_pct !== null && (
+        <div style={{ marginBottom: '0.75rem', fontSize: '0.82rem' }}>
+          Score trend over period:&nbsp;
+          <strong style={{ color: data.score_delta_pct >= 0 ? '#16a34a' : '#dc2626' }}>
+            {data.score_delta_pct >= 0 ? '+' : ''}{data.score_delta_pct}%
+          </strong>
+        </div>
+      )}
+      {!data || data.snapshots.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>No snapshots yet. Capture one to start tracking posture over time.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={s.table}>
+            <thead>
+              <tr>{['Date', 'Grade', 'Score', 'Percent', 'Passing dims'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {data.snapshots.map(snap => {
+                const passing = Object.values(snap.dimensions).filter(d => d.pass).length;
+                const total = Object.keys(snap.dimensions).length;
+                return (
+                  <tr key={snap.snapshot_id}>
+                    <td style={s.td}>{fmt(snap.created_at)}</td>
+                    <td style={s.td}><span style={{ ...s.gradeCircle, width: 28, height: 28, fontSize: '0.85rem', backgroundColor: gradeBg(snap.grade) }}>{snap.grade}</span></td>
+                    <td style={s.td}>{snap.score}/{snap.max_score}</td>
+                    <td style={s.td}>{snap.percent}%</td>
+                    <td style={s.td}>{passing}/{total}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Gap 5: Recommendations Engine ────────────────────────────────────────────
+
+function RecommendationsPanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<RecommendationsReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getRecommendations(tenantId).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+  if (!data) return null;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Current grade</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ ...s.gradeCircle, backgroundColor: gradeBg(data.current_grade) }}>{data.current_grade}</span>
+            <span style={{ fontWeight: 600 }}>{data.current_percent}%</span>
+          </div>
+        </div>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Projected (if all applied)</div>
+          <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#16a34a' }}>{data.projected_percent_if_all_applied}%</span>
+        </div>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Score gain available</div>
+          <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>+{data.total_expected_score_gain} pts</span>
+        </div>
+      </div>
+      {data.recommendations.length === 0 ? (
+        <p style={{ color: '#16a34a', fontSize: '0.875rem' }}>All governance dimensions are passing — no recommendations at this time.</p>
+      ) : (
+        data.recommendations.map((rec, i) => (
+          <div key={i} style={{ ...s.driftItem, borderLeftColor: severityColor(rec.risk_reduction === 'critical' ? 'critical' : rec.risk_reduction === 'high' ? 'high' : rec.risk_reduction === 'medium' ? 'medium' : 'low'), borderLeftWidth: 3 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>#{i + 1} {rec.action}</span>
+                <span style={{ fontSize: '0.7rem', color: severityColor(rec.risk_reduction as string), textTransform: 'uppercase', fontWeight: 600 }}>{rec.risk_reduction} risk</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{rec.category}</span>
+              </div>
+              {rec.detail && <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: '0.2rem' }}>{rec.detail}</div>}
+              <div style={{ fontSize: '0.75rem' }}>
+                Dimension: <code style={{ fontSize: '0.72rem' }}>{rec.dimension}</code>
+              </div>
+            </div>
+            <span style={{ fontWeight: 700, color: '#16a34a', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>+{rec.expected_score_gain} pts</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ── Gap A: Governance Trend Analytics ────────────────────────────────────────
+
+function TrendPanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<GovernanceTrend | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getGovernanceTrend(tenantId).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+  if (!data) return null;
+
+  if (!data.has_trend) return (
+    <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>{data.message ?? 'Capture more snapshots to see trend analysis.'}</p>
+  );
+
+  const deltaColor = (data.percent_delta ?? 0) >= 0 ? '#16a34a' : '#dc2626';
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Grade change</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem', fontWeight: 700 }}>
+            <span style={{ ...s.gradeCircle, width: 28, height: 28, fontSize: '0.85rem', backgroundColor: gradeBg(data.grade_from!) }}>{data.grade_from}</span>
+            <span style={{ color: 'var(--muted)' }}>→</span>
+            <span style={{ ...s.gradeCircle, width: 28, height: 28, fontSize: '0.85rem', backgroundColor: gradeBg(data.grade_to!) }}>{data.grade_to}</span>
+          </div>
+        </div>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Score delta</div>
+          <span style={{ fontSize: '1.25rem', fontWeight: 700, color: deltaColor }}>
+            {(data.percent_delta ?? 0) >= 0 ? '+' : ''}{data.percent_delta}%
+          </span>
+        </div>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Period</div>
+          <span style={{ fontSize: '0.75rem' }}>{fmtShort(data.period_start)} → {fmtShort(data.period_end)}</span>
+        </div>
+      </div>
+
+      {data.narrative.length > 0 && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={s.sectionTitle}>Why it changed</div>
+          {data.narrative.map((n, i) => (
+            <div key={i} style={{ padding: '0.6rem 0.75rem', borderLeft: '3px solid #2563eb', marginBottom: '0.5rem', fontSize: '0.85rem', backgroundColor: 'rgba(37,99,235,0.04)', borderRadius: '0 4px 4px 0' }}>
+              {n}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.degraded.length > 0 && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ ...s.sectionTitle, color: '#dc2626' }}>Degraded ({data.degraded.length})</div>
+          {data.degraded.map((d, i) => (
+            <div key={i} style={s.dimRow}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: '#dc2626', fontWeight: 700 }}>↓</span>
+                <span>{d.label}</span>
+              </span>
+              <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '0.8rem' }}>{d.score_impact} pts</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.improved.length > 0 && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ ...s.sectionTitle, color: '#16a34a' }}>Improved ({data.improved.length})</div>
+          {data.improved.map((d, i) => (
+            <div key={i} style={s.dimRow}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: '#16a34a', fontWeight: 700 }}>↑</span>
+                <span>{d.label}</span>
+              </span>
+              <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.8rem' }}>+{d.score_impact} pts</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.stable_failing.length > 0 && (
+        <div>
+          <div style={{ ...s.sectionTitle, color: 'var(--muted)' }}>Persistently failing ({data.stable_failing.length})</div>
+          {data.stable_failing.map((d, i) => (
+            <div key={i} style={s.dimRow}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: '#6b7280' }}>—</span>
+                <span style={{ color: 'var(--muted)' }}>{d.label}</span>
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{d.score_impact} pts</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Gap B: Governance Forecasting ────────────────────────────────────────────
+
+function ForecastPanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<GovernanceForecast | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getGovernanceForecast(tenantId, 30).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+  if (!data) return null;
+
+  if (!data.has_forecast) return (
+    <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>{data.message ?? 'Capture more snapshots to enable forecasting.'}</p>
+  );
+
+  const trendColor = data.trend_direction === 'declining' ? '#dc2626' : data.trend_direction === 'improving' ? '#16a34a' : '#ca8a04';
+  const projectedDelta = (data.projected_percent ?? 0) - (data.current_percent ?? 0);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Current</div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ ...s.gradeCircle, width: 28, height: 28, fontSize: '0.85rem', backgroundColor: gradeBg(data.current_grade!) }}>{data.current_grade}</span>
+            <span style={{ fontWeight: 600 }}>{data.current_percent}%</span>
+          </div>
+        </div>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Projected in {data.forecast_days}d</div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ ...s.gradeCircle, width: 28, height: 28, fontSize: '0.85rem', backgroundColor: gradeBg(data.projected_grade!) }}>{data.projected_grade}</span>
+            <span style={{ fontWeight: 600 }}>{data.projected_percent}%</span>
+          </div>
+        </div>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Trend</div>
+          <span style={{ fontWeight: 700, color: trendColor, textTransform: 'capitalize' }}>{data.trend_direction}</span>
+        </div>
+        <div style={s.scoreCard}>
+          <div style={s.scoreLabel}>Expected change</div>
+          <span style={{ fontWeight: 700, color: projectedDelta >= 0 ? '#16a34a' : '#dc2626' }}>
+            {projectedDelta >= 0 ? '+' : ''}{projectedDelta.toFixed(1)}%
+          </span>
+        </div>
+      </div>
+
+      {data.at_risk_dimensions.length > 0 && (
+        <div>
+          <div style={s.sectionTitle}>Dimensions driving decline</div>
+          {data.at_risk_dimensions.map((d, i) => (
+            <div key={i} style={{ ...s.driftItem, borderLeftColor: d.trend === 'worsening' ? '#dc2626' : '#ca8a04', borderLeftWidth: 3 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{d.label}</span>
+                  <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 600, color: d.trend === 'worsening' ? '#dc2626' : '#ca8a04' }}>{d.trend}</span>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.15rem' }}>Failing in {d.fail_rate_pct}% of snapshots</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Gap C: Governance SLA Tracking ───────────────────────────────────────────
+
+function SlaPanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<GovernanceSlaReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getGovernanceSla(tenantId).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+  if (!data) return null;
+
+  const slaColor = (status: string) =>
+    status === 'breached' ? '#dc2626' : status === 'at_risk' ? '#ca8a04' : status === 'on_track' ? '#16a34a' : '#6b7280';
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+        <span style={statusBadgeStyle(data.breached_count > 0 ? 'failed' : data.at_risk_count > 0 ? 'pending' : 'ready')}>
+          {data.total_open_items === 0 ? 'No open items' : `${data.total_open_items} open`}
+        </span>
+        {data.breached_count > 0 && <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600 }}>{data.breached_count} SLA breached</span>}
+        {data.at_risk_count > 0 && <span style={{ fontSize: '0.75rem', color: '#ca8a04', fontWeight: 600 }}>{data.at_risk_count} at risk</span>}
+      </div>
+      {data.items.length === 0 ? (
+        <p style={{ color: '#16a34a', fontSize: '0.875rem' }}>All governance SLAs are on track.</p>
+      ) : (
+        data.items.map((item, i) => (
+          <div key={i} style={{ ...s.driftItem, borderLeftColor: slaColor(item.sla_status), borderLeftWidth: 3 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.title}</span>
+                <span style={{ fontSize: '0.7rem', color: severityColor(item.severity), textTransform: 'uppercase', fontWeight: 600 }}>{item.severity}</span>
+                <span style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '9999px', backgroundColor: slaColor(item.sla_status) + '22', color: slaColor(item.sla_status), fontWeight: 600 }}>
+                  {item.sla_status.replace('_', ' ')}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{item.detail}</div>
+            </div>
+            <div style={{ textAlign: 'right', minWidth: '80px' }}>
+              <div style={{ fontWeight: 700, fontSize: '1rem', color: slaColor(item.sla_status) }}>
+                {item.days_open !== null ? `${item.days_open}d` : '—'}
+              </div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>SLA: {item.sla_days}d</div>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ── Gap D: Cross-Tenant Benchmarking ─────────────────────────────────────────
+
+function BenchmarkPanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<GovernanceBenchmark | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getGovernanceBenchmark(tenantId).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+  if (!data) return null;
+
+  if (!data.has_benchmark) return (
+    <div>
+      <p style={{ color: 'var(--muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{data.message ?? 'No benchmark data available.'}</p>
+      <p style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>Capture governance snapshots to participate in anonymized benchmarking.</p>
+    </div>
+  );
+
+  const own = data.own_score;
+  const bm = data.benchmark;
+
+  const barWidth = (v: number | null | undefined) => v != null ? `${Math.min(100, v)}%` : '0%';
+
+  return (
+    <div>
+      <div style={{ marginBottom: '1.5rem', fontSize: '0.75rem', color: 'var(--muted)' }}>
+        Based on {data.participating_tenants} participating tenant{data.participating_tenants !== 1 ? 's' : ''} · {bm?.description}
+      </div>
+
+      {own && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={s.sectionTitle}>Your position</div>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={s.scoreCard}>
+              <div style={s.scoreLabel}>Your score</div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {own.grade && <span style={{ ...s.gradeCircle, width: 28, height: 28, fontSize: '0.85rem', backgroundColor: gradeBg(own.grade) }}>{own.grade}</span>}
+                <span style={{ fontWeight: 600, fontSize: '1rem' }}>{own.percent}%</span>
+              </div>
+            </div>
+            <div style={s.scoreCard}>
+              <div style={s.scoreLabel}>Percentile rank</div>
+              <span style={{ fontSize: '1.25rem', fontWeight: 700, color: (own.percentile_rank ?? 0) >= 75 ? '#16a34a' : (own.percentile_rank ?? 0) >= 50 ? '#2563eb' : '#ca8a04' }}>
+                {own.percentile_rank != null ? `${own.percentile_rank}th` : '—'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bm && (
+        <div>
+          <div style={s.sectionTitle}>Industry distribution</div>
+          {[
+            { label: 'Top 10% (p90)', value: bm.p90, color: '#16a34a' },
+            { label: 'Top quartile (p75)', value: bm.p75, color: '#2563eb' },
+            { label: 'Median (p50)', value: bm.median, color: '#ca8a04' },
+            { label: 'Bottom quartile (p25)', value: bm.p25, color: '#6b7280' },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{ marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem', fontSize: '0.78rem' }}>
+                <span style={{ color: 'var(--muted)' }}>{label}</span>
+                <span style={{ fontWeight: 600 }}>{value}%</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 3, backgroundColor: 'var(--border)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: barWidth(value), backgroundColor: color, borderRadius: 3 }} />
+              </div>
+              {own?.percent != null && Math.abs(own.percent - value) < 3 && (
+                <div style={{ fontSize: '0.68rem', color, marginTop: '0.1rem' }}>← your score is near this threshold</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Gap E: Governance Findings ────────────────────────────────────────────────
+
+function FindingsPanel({ tenantId }: { tenantId: string }) {
+  const [data, setData] = useState<GovernanceFindingsReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setLoading(true);
+    getGovernanceFindings(tenantId).then(r => {
+      if (r.ok) setData(r.data); else setError(r.error);
+      setLoading(false);
+    });
+  }, [tenantId]);
+
+  if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
+  if (error) return <div style={s.errorBanner}>{error}</div>;
+  if (!data) return null;
+
+  const toggle = (id: string) =>
+    setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const typeColor = (t: string) => t === 'policy_violation' ? '#dc2626' : t === 'risk' ? '#ea580c' : '#ca8a04';
+  const typeLabel = (t: string) => t === 'policy_violation' ? 'Violation' : t === 'risk' ? 'Risk' : 'Drift';
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+        <span style={statusBadgeStyle(data.critical_count > 0 ? 'failed' : data.high_count > 0 ? 'auth_started' : 'ready')}>
+          {data.finding_count === 0 ? 'Clean' : `${data.finding_count} finding${data.finding_count !== 1 ? 's' : ''}`}
+        </span>
+        {data.critical_count > 0 && <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600 }}>{data.critical_count} critical</span>}
+        {data.high_count > 0 && <span style={{ fontSize: '0.75rem', color: '#ea580c', fontWeight: 600 }}>{data.high_count} high</span>}
+        <span style={{ fontSize: '0.75rem', color: 'var(--muted)', marginLeft: 'auto' }}>
+          Score: {data.governance_score}pts · {data.governance_percent}% · {data.governance_grade}
+        </span>
+      </div>
+
+      {data.findings.length === 0 ? (
+        <p style={{ color: '#16a34a', fontSize: '0.875rem' }}>No governance findings. All risk, violation, and drift checks are passing.</p>
+      ) : (
+        data.findings.map(f => (
+          <div key={f.finding_id} style={{ ...s.driftItem, borderLeftColor: severityColor(f.severity), borderLeftWidth: 3, cursor: 'pointer' }} onClick={() => toggle(f.finding_id)}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{f.title}</span>
+                <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: typeColor(f.type) + '22', color: typeColor(f.type), fontWeight: 600 }}>
+                  {typeLabel(f.type)}
+                </span>
+                <span style={{ fontSize: '0.7rem', color: severityColor(f.severity), textTransform: 'uppercase', fontWeight: 600 }}>{f.severity}</span>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{f.detail}</div>
+              {expanded.has(f.finding_id) && Object.keys(f.evidence).length > 0 && (
+                <div style={{ marginTop: '0.6rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {Object.entries(f.evidence).map(([k, v]) => (
+                    <span key={k} style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: 'var(--surface-2, var(--background))' }}>
+                      <span style={{ color: 'var(--muted)' }}>{k}: </span><strong>{String(v)}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                {f.sources.map(src => (
+                  <span key={src} style={{ fontSize: '0.65rem', padding: '1px 5px', borderRadius: '3px', backgroundColor: 'var(--border)', color: 'var(--muted)' }}>{src.replace('_', ' ')}</span>
+                ))}
+              </div>
+            </div>
+            <span style={{ fontSize: '0.68rem', color: 'var(--muted)', flexShrink: 0 }}>{expanded.has(f.finding_id) ? '▲' : '▼'}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 // ── Top scorecard summary ─────────────────────────────────────────────────────
 
 function SummaryRow({ tenantId }: { tenantId: string }) {
@@ -928,16 +1640,260 @@ function SummaryRow({ tenantId }: { tenantId: string }) {
   );
 }
 
+// ── ActionsLedgerPanel ────────────────────────────────────────────────────────
+
+import {
+  recordGovernanceAction,
+  getGovernanceActionSummary,
+  listGovernanceActions,
+  type GovernanceActionSummary,
+  type GovernanceActionsLedger,
+  type RecordGovernanceActionPayload,
+} from '@/lib/identityApi';
+
+const STATE_COLORS: Record<string, string> = {
+  accepted: '#2563eb',
+  deferred: '#ca8a04',
+  rejected: '#6b7280',
+  implemented: '#16a34a',
+  unaddressed: '#9ca3af',
+};
+
+function ActionStateBadge({ state }: { state: string }) {
+  return (
+    <span style={{
+      display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+      fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.03em',
+      background: STATE_COLORS[state] ? `${STATE_COLORS[state]}22` : '#f3f4f6',
+      color: STATE_COLORS[state] ?? '#6b7280',
+      border: `1px solid ${STATE_COLORS[state] ?? '#d1d5db'}`,
+    }}>
+      {state.toUpperCase()}
+    </span>
+  );
+}
+
+function ActionsLedgerPanel({ tenantId }: { tenantId: string }) {
+  const [summary, setSummary] = useState<GovernanceActionSummary | null>(null);
+  const [ledger, setLedger] = useState<GovernanceActionsLedger | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showLedger, setShowLedger] = useState(false);
+  const [recordingDim, setRecordingDim] = useState<string | null>(null);
+  const [form, setForm] = useState<RecordGovernanceActionPayload>({
+    dimension: '', action_state: 'accepted',
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [s, l] = await Promise.all([
+      getGovernanceActionSummary(tenantId),
+      listGovernanceActions(tenantId, { limit: 200 }),
+    ]);
+    if (s.ok) setSummary(s.data);
+    if (l.ok) setLedger(l.data);
+    setLoading(false);
+  }, [tenantId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openRecord = (dim: string, currentState: string) => {
+    setRecordingDim(dim);
+    setFormError(null);
+    const nextStates: Record<string, string[]> = {
+      unaddressed: ['accepted', 'rejected', 'deferred'],
+      accepted: ['implemented', 'deferred'],
+      deferred: ['accepted', 'rejected'],
+    };
+    const allowed = nextStates[currentState] ?? [];
+    setForm({
+      dimension: dim,
+      action_state: (allowed[0] ?? 'accepted') as RecordGovernanceActionPayload['action_state'],
+    });
+  };
+
+  const submitRecord = async () => {
+    setSubmitting(true);
+    setFormError(null);
+    const r = await recordGovernanceAction(tenantId, form);
+    setSubmitting(false);
+    if (!r.ok) { setFormError(r.error); return; }
+    setRecordingDim(null);
+    load();
+  };
+
+  if (loading) return <div style={{ padding: 24, color: 'var(--muted)' }}>Loading…</div>;
+
+  const counts = summary ? [
+    { label: 'Implemented', value: summary.implemented, color: '#16a34a' },
+    { label: 'Accepted', value: summary.accepted, color: '#2563eb' },
+    { label: 'Deferred', value: summary.deferred, color: '#ca8a04' },
+    { label: 'Rejected', value: summary.rejected, color: '#6b7280' },
+    { label: 'Unaddressed', value: summary.unaddressed, color: '#9ca3af' },
+  ] : [];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Summary row */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        {counts.map(c => (
+          <div key={c.label} style={{
+            background: `${c.color}11`, border: `1px solid ${c.color}44`,
+            borderRadius: 8, padding: '8px 14px', minWidth: 90, textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: c.color }}>{c.value}</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Dimension table */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              {['Dimension', 'Recommendation', 'State', 'Actor', 'Reason / Outcome', 'Decided', ''].map(h => (
+                <th key={h} style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(summary?.dimensions ?? []).map(d => (
+              <tr key={d.dimension} style={{ borderBottom: '1px solid var(--border)' }}>
+                <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{d.dimension}</td>
+                <td style={{ padding: '6px 8px', maxWidth: 240, color: 'var(--muted)' }}>{d.recommendation_action}</td>
+                <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}><ActionStateBadge state={d.current_state} /></td>
+                <td style={{ padding: '6px 8px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{d.actor_email ?? '—'}</td>
+                <td style={{ padding: '6px 8px', color: 'var(--muted)', maxWidth: 200 }}>
+                  {d.reason ? <span title={d.outcome ?? undefined}>{d.reason}</span> : '—'}
+                  {d.deferred_until && <span style={{ marginLeft: 4, color: '#ca8a04' }}>until {d.deferred_until}</span>}
+                </td>
+                <td style={{ padding: '6px 8px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{d.decided_at ? fmtShort(d.decided_at) : '—'}</td>
+                <td style={{ padding: '6px 8px' }}>
+                  {!d.is_terminal && (
+                    <button
+                      style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer' }}
+                      onClick={() => openRecord(d.dimension, d.current_state)}
+                    >
+                      Record
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Record action modal */}
+      {recordingDim && (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 480 }}>
+          <div style={{ fontWeight: 600 }}>Record decision: <code style={{ fontSize: '0.82rem' }}>{recordingDim}</code></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[
+              { label: 'Decision', field: 'action_state', type: 'select', options: ['accepted', 'rejected', 'deferred', 'implemented'] },
+              { label: 'Actor email', field: 'actor_email', type: 'text' },
+              { label: 'Actor role', field: 'actor_role', type: 'text' },
+              { label: 'Reason (why)', field: 'reason', type: 'text' },
+              { label: 'Outcome (what happened)', field: 'outcome', type: 'text' },
+              { label: 'Defer until (YYYY-MM-DD)', field: 'deferred_until', type: 'text' },
+            ].map(({ label, field, type, options }) => (
+              <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.8rem' }}>
+                <span style={{ color: 'var(--muted)' }}>{label}</span>
+                {type === 'select' ? (
+                  <select
+                    value={(form as unknown as Record<string, string>)[field] ?? ''}
+                    onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+                    style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)' }}
+                  >
+                    {(options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    value={(form as unknown as Record<string, string>)[field] ?? ''}
+                    onChange={e => setForm(f => ({ ...f, [field]: e.target.value || undefined }))}
+                    style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)' }}
+                  />
+                )}
+              </label>
+            ))}
+          </div>
+          {formError && <div style={{ color: '#dc2626', fontSize: '0.8rem' }}>{formError}</div>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={submitRecord}
+              disabled={submitting}
+              style={{ padding: '6px 14px', borderRadius: 4, background: '#2563eb', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+            >
+              {submitting ? 'Saving…' : 'Save decision'}
+            </button>
+            <button
+              onClick={() => setRecordingDim(null)}
+              style={{ padding: '6px 14px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', fontSize: '0.82rem' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Full audit ledger toggle */}
+      <div>
+        <button
+          onClick={() => setShowLedger(v => !v)}
+          style={{ fontSize: '0.8rem', padding: '4px 10px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer' }}
+        >
+          {showLedger ? 'Hide' : 'Show'} full audit ledger ({ledger?.total ?? 0} entries)
+        </button>
+        {showLedger && ledger && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', marginTop: 8 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['When', 'Dimension', 'Decision', 'Actor', 'Reason', 'Outcome'].map(h => (
+                  <th key={h} style={{ padding: '5px 8px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ledger.actions.map(a => (
+                <tr key={a.action_id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', color: 'var(--muted)' }}>{fmtShort(a.created_at)}</td>
+                  <td style={{ padding: '5px 8px', fontFamily: 'monospace' }}>{a.dimension}</td>
+                  <td style={{ padding: '5px 8px' }}><ActionStateBadge state={a.action_state} /></td>
+                  <td style={{ padding: '5px 8px', color: 'var(--muted)' }}>{a.actor_email ?? '—'}</td>
+                  <td style={{ padding: '5px 8px', color: 'var(--muted)' }}>{a.reason ?? '—'}</td>
+                  <td style={{ padding: '5px 8px', color: 'var(--muted)' }}>{a.outcome ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
-type InnerTab = 'scorecard' | 'readiness' | 'invitations' | 'drift' | 'risk' | 'timeline' | 'identity-types' | 'provenance' | 'config' | 'audit';
+type InnerTab = 'scorecard' | 'readiness' | 'invitations' | 'drift' | 'risk' | 'timeline' | 'identity-types' | 'provenance' | 'config' | 'audit' | 'violations' | 'approvals' | 'snapshots' | 'recommendations' | 'trend' | 'forecast' | 'sla' | 'benchmark' | 'findings' | 'actions';
 
 const INNER_TABS: Array<{ id: InnerTab; label: string }> = [
+  { id: 'findings', label: 'Findings' },
+  { id: 'actions', label: 'Actions Ledger' },
   { id: 'scorecard', label: 'Scorecard' },
+  { id: 'violations', label: 'Violations' },
+  { id: 'sla', label: 'SLA' },
+  { id: 'approvals', label: 'Approvals' },
+  { id: 'recommendations', label: 'Recommendations' },
+  { id: 'trend', label: 'Trend' },
+  { id: 'forecast', label: 'Forecast' },
+  { id: 'benchmark', label: 'Benchmark' },
+  { id: 'snapshots', label: 'Snapshots' },
+  { id: 'risk', label: 'Risk' },
+  { id: 'drift', label: 'Drift' },
   { id: 'readiness', label: 'Readiness' },
   { id: 'invitations', label: 'Invitations' },
-  { id: 'drift', label: 'Drift' },
-  { id: 'risk', label: 'Risk' },
   { id: 'timeline', label: 'Timeline' },
   { id: 'identity-types', label: 'Identity Types' },
   { id: 'provenance', label: 'Provenance' },
@@ -980,6 +1936,16 @@ export function IdentityGovernancePanel({ tenantId }: { tenantId: string }) {
         {tab === 'timeline' && <TimelinePanel tenantId={tenantId} />}
         {tab === 'identity-types' && <IdentityTypesPanel tenantId={tenantId} />}
         {tab === 'provenance' && <ProvenancePanel tenantId={tenantId} />}
+        {tab === 'violations' && <PolicyViolationsPanel tenantId={tenantId} />}
+        {tab === 'approvals' && <ApprovalQueuePanel tenantId={tenantId} />}
+        {tab === 'snapshots' && <SnapshotsPanel tenantId={tenantId} />}
+        {tab === 'recommendations' && <RecommendationsPanel tenantId={tenantId} />}
+        {tab === 'trend' && <TrendPanel tenantId={tenantId} />}
+        {tab === 'forecast' && <ForecastPanel tenantId={tenantId} />}
+        {tab === 'sla' && <SlaPanel tenantId={tenantId} />}
+        {tab === 'benchmark' && <BenchmarkPanel tenantId={tenantId} />}
+        {tab === 'findings' && <FindingsPanel tenantId={tenantId} />}
+        {tab === 'actions' && <ActionsLedgerPanel tenantId={tenantId} />}
         {tab === 'config' && <ConfigPanel tenantId={tenantId} />}
         {tab === 'audit' && <AuditPanel tenantId={tenantId} />}
       </div>

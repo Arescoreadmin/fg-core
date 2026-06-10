@@ -1326,6 +1326,67 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 conn, "fa_field_observations", "deleted_at", "TEXT"
             )
 
+        # Migration 0102 — identity approval workflow + governance snapshots
+        if "tenant_invitations" in tables:
+            _sqlite_add_column_if_missing(
+                conn,
+                "tenant_invitations",
+                "approval_required",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
+            _sqlite_add_column_if_missing(
+                conn,
+                "tenant_invitations",
+                "approval_state",
+                "TEXT NOT NULL DEFAULT 'not_required'",
+            )
+            _sqlite_add_column_if_missing(
+                conn, "tenant_invitations", "approval_reason", "TEXT"
+            )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_identity_governance_snapshots (
+                id          TEXT PRIMARY KEY,
+                tenant_id   TEXT NOT NULL,
+                score       INTEGER NOT NULL,
+                max_score   INTEGER NOT NULL,
+                percent     REAL NOT NULL,
+                grade       TEXT NOT NULL,
+                dimensions  TEXT NOT NULL DEFAULT '{}',
+                created_at  TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_tig_snapshots_tenant_created "
+            "ON tenant_identity_governance_snapshots (tenant_id, created_at)"
+        )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_identity_governance_actions (
+                id                  TEXT PRIMARY KEY,
+                tenant_id           TEXT NOT NULL,
+                dimension           TEXT NOT NULL,
+                action_state        TEXT NOT NULL,
+                actor_id            TEXT,
+                actor_email         TEXT,
+                actor_role          TEXT,
+                reason              TEXT,
+                outcome             TEXT,
+                deferred_until      TEXT,
+                snapshot_id         TEXT,
+                previous_action_id  TEXT,
+                created_at          TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_tiga_tenant_dim "
+            "ON tenant_identity_governance_actions (tenant_id, dimension, created_at)"
+        )
+
 
 # ---------------------------------------------------------------------
 # Public API
