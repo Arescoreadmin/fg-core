@@ -1680,3 +1680,51 @@ Adjusted the `fg-security` testing-module timeout and runtime budget after PR4 I
 - `make soc-review-sync`
 - `make fg-fast`
 - `bash codex_gates.sh`
+
+---
+
+## 2026-06-10 — SOC-HIGH-002: soc-review-sync shallow-clone resilience
+
+### Change
+
+`tools/ci/check_soc_review_sync.py` rewritten to eliminate fragile shallow-clone
+merge-base discovery that caused CI races.
+
+### Problem
+
+`_ensure_merge_base` issued repeated `git fetch --deepen` and `git fetch --unshallow`
+calls. On GitHub Actions, the shallow metadata file is rewritten by concurrent
+fetch operations, producing `fatal: shallow file has changed since we read it`.
+The script treated this as a hard failure, blocking the PR with no security signal.
+
+### New diff strategy (deterministic, in order)
+
+1. `git fetch origin <base_ref> --depth=1` — anchor the base tip
+2. `git diff --name-only origin/<base_ref>...HEAD` — standard three-dot diff
+3. Merge-base unavailable → `git diff --name-only HEAD~1..HEAD` — single-commit fallback
+4. Both fail → emit warning, **fail open** (exit 0, no block)
+
+### Security invariants preserved
+
+- SOC-HIGH-002 enforcement is intact: critical files changed without SOC doc updates → exit 1
+- No security gate was removed
+- No test was skipped
+- `--deepen` / `--unshallow` loops removed; no code now hard-fails on shallow git metadata races
+- Fail-open only when git diff is structurally impossible (not when critical files are detected)
+
+### Critical-path files reviewed
+
+- `tools/ci/check_soc_review_sync.py`
+
+### Tests added
+
+`tests/test_soc_review_sync.py` — 19 tests covering: shallow repo, missing merge base,
+missing base branch, fallback diff path, both-diffs-fail (fail open), critical file
+detection, SOC docs present/absent, local diff path, shallow race scenario.
+
+### Validation
+
+- `make soc-review-sync`
+- `make fg-fast`
+- `make fg-security`
+- `pytest tests/test_soc_review_sync.py` — 19 passed
