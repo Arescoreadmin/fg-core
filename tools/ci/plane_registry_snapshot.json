@@ -542,6 +542,14 @@
           "method": "GET",
           "path": "/metrics",
           "permanent": true
+        },
+        {
+          "class_name": "public",
+          "expires_at": "",
+          "justification": "Public Ed25519 report signing key endpoint. Required for external auditor/client verification of signed reports. Returns no tenant data, no customer data, no secrets, and no private key material.",
+          "method": "GET",
+          "path": "/signing/public-key",
+          "permanent": true
         }
       ],
       "required_ci_gates": [
@@ -580,7 +588,8 @@
         "/_legacy",
         "/dev",
         "/rag",
-        "/metrics"
+        "/metrics",
+        "/signing"
       ]
     },
     {
@@ -1085,7 +1094,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-10T17:31:43.218652+00:00",
+  "generated_at": "2026-06-10T18:53:27.586568+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

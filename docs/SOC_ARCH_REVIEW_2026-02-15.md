@@ -1812,3 +1812,36 @@ Two targeted changes to fix `pr-base-mainline-check` failing in CI with
 - `GITHUB_BASE_REF=main .venv/bin/python tools/ci/check_soc_review_sync.py` → OK
 - `PYTHONPATH=. .venv/bin/python tools/ci/check_route_inventory.py` → OK
 - `pytest tests/test_report_signing_pki.py` — 17 passed
+
+## 2026-06-10 — SOC-HIGH-002 — PR414 signing public key plane registry and inventory sync
+
+**Classification:** SOC-HIGH-002
+
+**Files changed:**
+- `services/plane_registry/registry.py`
+- `tools/ci/route_inventory.json`
+- `tools/ci/route_inventory_summary.json`
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+
+**Reason:**
+PR414 adds `GET /signing/public-key` as the public verification endpoint for report signing. The endpoint exposes only public Ed25519 verification metadata and no tenant data, customer data, secrets, private key material, or report contents.
+
+**Security review:**
+The `/signing` prefix is classified under the `control` plane so the route is governed by the plane registry. The exact route `GET /signing/public-key` is registered as a public control-plane exception because external auditors and clients must be able to retrieve the public key without tenant authentication in order to independently verify signed report exports.
+
+**Invariants preserved:**
+- No private signing key material is exposed.
+- No tenant data is exposed.
+- No customer data is exposed.
+- No report content is exposed.
+- No route guard was weakened.
+- Public access is limited to the exact public key endpoint.
+- Report signing remains server-side only.
+- Route inventory, plane registry snapshot, and topology hash were regenerated after classification.
+
+**Validation:**
+- `make control-plane-check`: passed
+- `make fg-contract`: passed
+- `make route-inventory-generate`: completed
+- `make fg-fast`: reached SOC review sync and correctly required this SOC entry
