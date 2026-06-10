@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 from unittest.mock import patch
 
 import pytest
@@ -214,8 +213,6 @@ def test_render_pdf_export_unavailable_error():
 
     with patch.dict(sys.modules, {"reportlab": None, "reportlab.lib": None,
                                    "reportlab.platypus": None}):
-        # Force re-import inside the function to hit the ImportError path
-        import importlib
         import api.report_exports as _mod
         orig = _mod.render_pdf_export
 
