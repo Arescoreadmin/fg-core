@@ -98,6 +98,14 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "no auth, no tenant data, no customer PII. "
                 "Must not be exposed on the public customer-facing ingress.",
             ),
+            ex(
+                "GET",
+                "/signing/public-key",
+                "public",
+                "Public Ed25519 report signing key endpoint. Required for external "
+                "auditor/client verification of signed reports. Returns no tenant data, "
+                "no customer data, no secrets, and no private key material.",
+            ),
         ),
         global_routes=(
             ex(
