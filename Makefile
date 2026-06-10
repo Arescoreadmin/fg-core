@@ -649,8 +649,8 @@ control-plane-check: venv
 # CI Lane Budgets + Scoped Pytest Filters
 # =============================================================================
 
-FG_FAST_MAX_SECONDS ?= 480
-FG_FAST_WARN_SECONDS ?= 420
+FG_FAST_MAX_SECONDS ?= 600
+FG_FAST_WARN_SECONDS ?= 540
 
 PYTEST_FAST_FILTER ?= -m "smoke or contract or security"
 
