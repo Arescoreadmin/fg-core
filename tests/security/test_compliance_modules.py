@@ -60,6 +60,9 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "FG_OIDC_ISSUER": "https://issuer.example.test/realms/frostgate",
         "FG_OIDC_CLIENT_ID": "frostgate-admin",
         "FG_DEV_AUTH_BYPASS": "0",
+        # PR-SIGN-4: startup validation errors in prod when these are absent.
+        "FG_REPORT_SIGNING_KEY": "0" * 63 + "1",
+        "FG_BILLING_EVIDENCE_HMAC_KEY": "test-billing-hmac-key-32-bytes-x",
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)

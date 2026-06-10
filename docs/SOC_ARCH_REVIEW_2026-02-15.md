@@ -1845,3 +1845,35 @@ The `/signing` prefix is classified under the `control` plane so the route is go
 - `make fg-contract`: passed
 - `make route-inventory-generate`: completed
 - `make fg-fast`: reached SOC review sync and correctly required this SOC entry
+
+---
+
+## 2026-06-10 — SOC-HIGH-002 — PR415 Docker CI: add required signing and billing keys to env generation
+
+**Classification:** SOC-HIGH-002
+
+**Files changed:**
+- `.github/workflows/docker-ci.yml`
+
+**Reason:**
+PR-SIGN-4 added startup validation that errors in production mode if `FG_REPORT_SIGNING_KEY` or `FG_BILLING_EVIDENCE_HMAC_KEY` are absent. The Docker Compose CI job generates `.env.ci` and `env/prod.env` inline in `docker-ci.yml` with `FG_ENV=prod`; neither key was present, causing the frostgate-core container to fail its health check on startup.
+
+**Change description:**
+Added two CI-safe placeholder values to both the `.env.ci` heredoc block and the `env/prod.env` heredoc block in `docker-ci.yml`:
+- `FG_REPORT_SIGNING_KEY=0000000000000000000000000000000000000000000000000000000000000001` — a valid 64-char hex Ed25519 seed (all-zeros-except-last-byte), used only in the ephemeral CI container. Not a secret; produces a deterministic but CI-only key pair with no relation to any production key.
+- `FG_BILLING_EVIDENCE_HMAC_KEY=ci-billing-hmac-evidence-key-32-bytes` — a static CI string satisfying the non-empty HMAC key requirement. Not a secret; never used against any billing data.
+
+**Security review:**
+- No production secrets are added to the workflow file.
+- The CI signing key is a known, non-secret value with no relationship to any production or staging key. All CI report artifacts generated with this key are identifiable as CI artifacts and cannot be forged as production reports (different key pair).
+- The billing HMAC key is a static CI string; no real billing evidence is produced in CI.
+- No auth, route guard, or enforcement logic was changed.
+- No production deployment path was modified.
+
+**Invariants preserved:**
+- Production signing keys remain exclusively in secrets management, never in workflow files.
+- CI containers now start successfully and exercise the full startup validation path.
+- The startup validator's fail-closed behavior is confirmed working in CI.
+
+**Validation:**
+- `make fg-fast`: passed locally before this commit

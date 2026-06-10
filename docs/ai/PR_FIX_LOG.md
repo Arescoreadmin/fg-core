@@ -13899,3 +13899,24 @@ All 14 dimension calls in `get_governance_score` now pass structured `evidence` 
 
 **Why:**
 The previous `render_pdf_export()` produced a fraudulent PDF (JSON with a `%PDF-1.4` prefix) — any auditor opening it would see raw JSON. The `verify_report()` function required the private key to verify signatures, making independent verification by external parties structurally impossible. These two gaps together meant the report package could not be trusted as audit evidence.
+
+---
+
+### 2026-06-10 — PR 415: Billing HMAC hardening, startup validation, ingest signing (PR-SIGN-3 + PR-SIGN-4 + PR-SIGN-5)
+
+**Branch:** `feat/pr-sign-1-2-pki-signing`
+
+**Area:** Billing Security / Startup Validation / Ingest Report Signing
+
+**Summary of changes:**
+
+1. **`api/billing.py`** — Removed static `"billing-dev-key"` fallback in `_attest()`. Any call without `FG_BILLING_EVIDENCE_HMAC_KEY` set now raises `RuntimeError` immediately. Previously anyone with source access could forge billing attestations using the known hardcoded key.
+
+2. **`api/config/startup_validation.py`** — Added two new validation checks: `_check_report_signing_key()` (warns in dev / errors in prod if neither `FG_REPORT_SIGNING_KEY` nor `FG_REPORT_SIGNING_PUBLIC_KEY` is set) and `_check_billing_hmac_key()` (warns in dev / errors in prod if `FG_BILLING_EVIDENCE_HMAC_KEY` is not set). Both are wired into `validate()`.
+
+3. **`api/reports_engine.py`** — Added inline Ed25519 signing block in `export_report_artifact()`. After PDF bytes are generated the canonical manifest JSON is signed and three headers are attached to the response: `X-FrostGate-Manifest-Hash` (SHA-256 of manifest), `X-Report-Signature` (128-char Ed25519 hex), and `X-Report-Public-Key-Id` (16-char key fingerprint). Signing failure is silent (headers omitted) so the download still works when no key is configured.
+
+4. **`tests/test_pr_sign_345.py`** (new) — 15 unit tests: 4 for `_attest()` billing HMAC behavior, 7 for startup validation checks across dev/prod contexts, 4 for ingest-path signing functions (`sign_report`, `verify_report`, `get_public_key_hex`).
+
+**Why:**
+The `"billing-dev-key"` fallback was a P0 security bug — the key was known from source and any attacker could produce valid HMAC attestations without ever touching a production secret. The startup validator gap meant operators could deploy without signing keys and only discover the problem at runtime when a signature was attempted. The ingest path had no signing at all, leaving the governance export path (the highest-value audit artifact) unsigned.
