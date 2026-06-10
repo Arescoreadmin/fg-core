@@ -211,14 +211,18 @@ def test_render_pdf_export_unavailable_error():
     import sys
     from api.report_exports import ExportUnavailableError
 
-    with patch.dict(sys.modules, {"reportlab": None, "reportlab.lib": None,
-                                   "reportlab.platypus": None}):
+    with patch.dict(
+        sys.modules,
+        {"reportlab": None, "reportlab.lib": None, "reportlab.platypus": None},
+    ):
         import api.report_exports as _mod
+
         orig = _mod.render_pdf_export
 
         def _patched(manifest, digest):
             try:
                 import reportlab.platypus  # noqa: F401
+
                 raise AssertionError("should have raised ImportError")
             except (ImportError, TypeError):
                 raise ExportUnavailableError("reportlab is required for PDF export")

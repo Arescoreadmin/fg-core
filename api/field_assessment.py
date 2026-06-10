@@ -8384,10 +8384,7 @@ def export_engagement_report_route(
             ),
         )
 
-    from services.governance.report.signing import (
-        ReportSigningKeyError as _RskErr,
-        get_public_key_hex as _gpkh,
-    )
+    from services.governance.report.signing import get_public_key_hex as _gpkh
     import hashlib as _hl
 
     export_headers: dict[str, str] = {
