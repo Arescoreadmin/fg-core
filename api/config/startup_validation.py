@@ -279,6 +279,8 @@ class StartupValidator:
         self._check_localhost_urls(report)
         self._check_migrations_required(report)
         self._check_connectors_router_wiring(report)
+        self._check_report_signing_key(report)
+        self._check_billing_hmac_key(report)
 
         return report
 
@@ -1070,6 +1072,62 @@ class StartupValidator:
                 name="dos_hardening",
                 passed=True,
                 message="DoS hardening checks completed.",
+                severity="info",
+            )
+
+    def _check_report_signing_key(self, report: StartupValidationReport) -> None:
+        signing_key = _env_str("FG_REPORT_SIGNING_KEY", "")
+        pub_key = _env_str("FG_REPORT_SIGNING_PUBLIC_KEY", "")
+        if not signing_key and not pub_key:
+            report.add(
+                name="report_signing_key_missing",
+                passed=False,
+                message=(
+                    "FG_REPORT_SIGNING_KEY is not set. "
+                    "Report generation will fail with HTTP 503 until this is configured. "
+                    'Generate with: python -c "import secrets; print(secrets.token_hex(32))"'
+                ),
+                severity="error" if self.is_production else "warning",
+            )
+        else:
+            try:
+                import reportlab  # noqa: F401
+
+                report.add(
+                    name="report_signing_and_pdf",
+                    passed=True,
+                    message="Report signing key and reportlab are configured.",
+                    severity="info",
+                )
+            except ImportError:
+                report.add(
+                    name="reportlab_missing",
+                    passed=False,
+                    message=(
+                        "reportlab is not installed. PDF export will return HTTP 501. "
+                        "Install with: pip install reportlab"
+                    ),
+                    severity="warning",
+                )
+
+    def _check_billing_hmac_key(self, report: StartupValidationReport) -> None:
+        billing_key = _env_str("FG_BILLING_EVIDENCE_HMAC_KEY", "")
+        if not billing_key:
+            report.add(
+                name="billing_hmac_key_missing",
+                passed=False,
+                message=(
+                    "FG_BILLING_EVIDENCE_HMAC_KEY is not set. "
+                    "Billing evidence export will raise an error at call time. "
+                    'Generate with: python -c "import secrets; print(secrets.token_hex(32))"'
+                ),
+                severity="error" if self.is_production else "warning",
+            )
+        else:
+            report.add(
+                name="billing_hmac_key",
+                passed=True,
+                message="Billing evidence HMAC key configured.",
                 severity="info",
             )
 
