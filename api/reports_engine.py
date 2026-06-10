@@ -856,10 +856,26 @@ def export_report_artifact(
         pdf_bytes = render_pdf_export(manifest, digest)
     except ExportUnavailableError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
+    import hashlib as _hl
+
+    from services.governance.report.signing import (
+        ReportSigningKeyError as _RskErr,
+        get_public_key_hex as _gpkh,
+        sign_report as _sign,
+    )
+
+    pdf_headers: dict[str, str] = {"X-FrostGate-Manifest-Hash": digest}
+    try:
+        _sig = _sign(json.dumps(manifest, sort_keys=True, separators=(",", ":")))
+        pdf_headers["X-Report-Signature"] = _sig
+        _pub = _gpkh()
+        pdf_headers["X-Report-Public-Key-Id"] = _hl.sha256(
+            bytes.fromhex(_pub)
+        ).hexdigest()[:16]
+    except _RskErr:
+        pass
     return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"X-FrostGate-Manifest-Hash": digest},
+        content=pdf_bytes, media_type="application/pdf", headers=pdf_headers
     )
 
 

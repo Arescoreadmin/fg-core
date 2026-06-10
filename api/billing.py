@@ -1535,10 +1535,13 @@ def _git_commit() -> str:
 
 
 def _attest(payload: bytes) -> tuple[str, str]:
-    secret = (os.getenv("FG_BILLING_EVIDENCE_HMAC_KEY") or "billing-dev-key").encode(
-        "utf-8"
-    )
-    sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    key = os.getenv("FG_BILLING_EVIDENCE_HMAC_KEY", "").strip()
+    if not key:
+        raise RuntimeError(
+            "FG_BILLING_EVIDENCE_HMAC_KEY is required for billing attestation but is not set. "
+            "Set this environment variable to a secret random value before generating billing evidence."
+        )
+    sig = hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
     return sig, "hmac-sha256:key_id=fg_billing_default"
 
 
