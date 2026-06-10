@@ -1728,3 +1728,40 @@ detection, SOC docs present/absent, local diff path, shallow race scenario.
 - `make fg-fast`
 - `make fg-security`
 - `pytest tests/test_soc_review_sync.py` — 19 passed
+
+## 2026-06-10 — SOC-HIGH-002 — PR414 public_paths: add /signing/public-key
+
+**Reviewer:** Jason  
+**Classification:** SOC-HIGH-002 (api/security/public_paths.py modification)
+
+### Change Summary
+
+Added `/signing/public-key` to `PUBLIC_PATHS_EXACT` in `api/security/public_paths.py`.
+This endpoint returns the server's Ed25519 public key so external auditors and
+verification-only deployments can independently verify report signatures without
+possessing the private key.
+
+### Critical-path files reviewed
+
+- `api/security/public_paths.py`
+- `api/signing.py` (new endpoint — no auth, read-only key material exposure)
+
+### Security Assessment
+
+- The endpoint returns only the **public key** — no private key material is ever
+  accessible or derivable from this route.
+- Marking it public is intentional and correct: a public key by definition must be
+  distributable without restriction. Requiring authentication would defeat the purpose
+  of allowing independent signature verification.
+- No tenant isolation control is affected — the route is stateless and tenant-agnostic.
+- No session authority or Admin Gateway configuration was changed.
+- The underlying `get_public_key_hex()` function raises `ReportSigningKeyError` (→ HTTP 503)
+  if neither `FG_REPORT_SIGNING_KEY` nor `FG_REPORT_SIGNING_PUBLIC_KEY` is configured,
+  so unconfigured deployments fail closed rather than silently returning empty data.
+
+### Validation
+
+- `make route-inventory-update`
+- `make soc-review-sync`
+- `make fg-fast`
+- `pytest tests/test_report_signing_pki.py` — 17 passed
