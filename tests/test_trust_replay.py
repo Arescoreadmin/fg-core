@@ -908,9 +908,7 @@ def test_replay_summary_correct(build_app):
 
     build_app()
     with Session(get_engine()) as db:
-        genesis = _make_provenance(
-            db, engagement_id="eng-summary-001"
-        )
+        genesis = _make_provenance(db, engagement_id="eng-summary-001")
         db.commit()
         latest = _extend_chain(db, genesis, steps=2)
         db.commit()
