@@ -1,4 +1,4 @@
-"""Tests for PR 1.2 — Trust Replay Engine Foundation.
+"""Tests for PR 1.2 / PR 1.2A — Trust Replay Engine Foundation + Proof Authority Hardening.
 
 Covers:
   - verify_chain_node: single-node hash validation
@@ -24,12 +24,14 @@ from sqlalchemy.orm import Session
 
 from api.db_models_field_assessment import FaEvidenceProvenance
 from services.field_assessment.trust_replay import (
+    REPLAY_MANIFEST_VERSION,
     ChainNodeData,
     SCORE_BROKEN,
     SCORE_PERFECT,
     SCORE_WARNINGS,
     compute_chain_replay_score,
     generate_chain_verification_manifest,
+    generate_trust_proof,
     replay_provenance_chain,
     verify_chain_node,
     verify_full_provenance_chain,
@@ -734,6 +736,10 @@ def test_verify_full_chain_result_has_all_required_fields(build_app):
             "failed_nodes",
             "warnings",
             "verification_manifest_hash",
+            "engagement_id",
+            "replay_manifest_version",
+            "replay_summary",
+            "replay_hash",
         }
         assert required <= result.keys()
 
@@ -873,3 +879,257 @@ def test_replay_nonexistent_provenance_returns_empty(build_app):
             db, tenant_id=TENANT_A, provenance_id="does-not-exist"
         )
         assert chain == []
+
+
+# ---------------------------------------------------------------------------
+# PR 1.2A — Proof Authority Hardening
+# ---------------------------------------------------------------------------
+
+
+def test_replay_manifest_version_is_set(build_app):
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-version-001", artifact_hash="v" * 64
+        )
+        db.commit()
+
+        result = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=record.id
+        )
+        assert result["replay_manifest_version"] == REPLAY_MANIFEST_VERSION
+        assert result["replay_manifest_version"] == "trust-replay-v1"
+
+
+def test_replay_summary_correct(build_app):
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        genesis = _make_provenance(db, engagement_id="eng-summary-001")
+        db.commit()
+        latest = _extend_chain(db, genesis, steps=2)
+        db.commit()
+
+        result = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=latest.id
+        )
+        summary = result["replay_summary"]
+        assert summary["chain_depth"] == 3
+        assert summary["verified_node_count"] == 3
+        assert summary["failed_node_count"] == 0
+        assert summary["warning_count"] > 0  # no artifact_hash → warnings
+        assert summary["chain_replay_score"] == SCORE_WARNINGS
+
+
+def test_replay_summary_perfect_chain(build_app):
+    """Chain with artifact_hash set has 0 warnings → score 100 and warning_count 0."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-summary-perfect-001", artifact_hash="p" * 64
+        )
+        db.commit()
+
+        result = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=record.id
+        )
+        summary = result["replay_summary"]
+        assert summary["chain_replay_score"] == SCORE_PERFECT
+        assert summary["warning_count"] == 0
+        assert summary["failed_node_count"] == 0
+        assert summary["verified_node_count"] == 1
+
+
+def test_replay_hash_stable_for_identical_chain(build_app):
+    """Same chain state → same replay_hash across multiple calls."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-rh-stable-001", artifact_hash="r" * 64
+        )
+        db.commit()
+
+        r1 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=record.id
+        )
+        r2 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=record.id
+        )
+        assert r1["replay_hash"] == r2["replay_hash"]
+
+
+def test_replay_hash_changes_when_chain_tampered(build_app):
+    """Tampered event_hash changes the verification outcome → different replay_hash."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-rh-tamper-001", artifact_hash="t" * 64
+        )
+        db.commit()
+
+        r_before = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=record.id
+        )
+
+        db.execute(
+            sqlalchemy.text(
+                "UPDATE fa_evidence_provenance SET event_hash = :bad WHERE id = :id"
+            ),
+            {"bad": "0" * 64, "id": record.id},
+        )
+        db.commit()
+
+        r_after = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=record.id
+        )
+        assert r_before["replay_hash"] != r_after["replay_hash"]
+        assert r_after["chain_valid"] is False
+
+
+def test_replay_hash_excludes_timestamps(build_app):
+    """verified_at and verification_duration_ms must not influence replay_hash."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-rh-no-ts-001", artifact_hash="x" * 64
+        )
+        db.commit()
+
+        r1 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=record.id
+        )
+        r2 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=record.id
+        )
+        # verified_at and verification_duration_ms will almost certainly differ
+        # across two calls; replay_hash must still match
+        assert r1["replay_hash"] == r2["replay_hash"]
+
+
+def test_replay_hash_not_found_is_unique_per_id(build_app):
+    """not_found replay_hash varies with provenance_id (not constant)."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        r1 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id="proof-missing-aaa"
+        )
+        r2 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id="proof-missing-bbb"
+        )
+        assert r1["replay_hash"] != r2["replay_hash"]
+
+
+def test_result_has_engagement_id(build_app):
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(db, engagement_id="eng-eid-001")
+        db.commit()
+
+        result = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id=record.id
+        )
+        assert result["engagement_id"] == "eng-eid-001"
+
+
+def test_result_engagement_id_none_on_not_found(build_app):
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        result = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id="missing-for-eid"
+        )
+        assert result["engagement_id"] is None
+
+
+def test_generate_trust_proof_has_required_fields(build_app):
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-proof-fields-001", artifact_hash="q" * 64
+        )
+        db.commit()
+
+        proof = generate_trust_proof(db, tenant_id=TENANT_A, provenance_id=record.id)
+        assert "replay_manifest" in proof
+        assert "replay_hash" in proof
+        assert "verification_summary" in proof
+        assert "chain_valid" in proof
+        assert "chain_replay_score" in proof
+
+        summary = proof["verification_summary"]
+        assert "verified_node_count" in summary
+        assert "failed_node_count" in summary
+        assert "warning_count" in summary
+        assert "chain_depth" in summary
+        assert "chain_replay_score" in summary
+
+        manifest = proof["replay_manifest"]
+        assert "replay_manifest_version" in manifest
+        assert manifest["replay_manifest_version"] == "trust-replay-v1"
+
+
+def test_generate_trust_proof_deterministic(build_app):
+    """Same chain → same proof (excluding ephemeral timing fields)."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-proof-det-001", artifact_hash="w" * 64
+        )
+        db.commit()
+
+        p1 = generate_trust_proof(db, tenant_id=TENANT_A, provenance_id=record.id)
+        p2 = generate_trust_proof(db, tenant_id=TENANT_A, provenance_id=record.id)
+
+        assert p1["replay_hash"] == p2["replay_hash"]
+        assert p1["chain_valid"] == p2["chain_valid"]
+        assert p1["chain_replay_score"] == p2["chain_replay_score"]
+        assert p1["verification_summary"] == p2["verification_summary"]
+        assert p1["replay_manifest"] == p2["replay_manifest"]
+
+
+def test_generate_trust_proof_wrong_tenant_safe(build_app):
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(db, engagement_id="eng-proof-xten-001")
+        db.commit()
+
+        proof = generate_trust_proof(db, tenant_id=TENANT_B, provenance_id=record.id)
+        assert proof["chain_valid"] is False
+        assert proof["chain_replay_score"] == SCORE_BROKEN
+        assert proof["replay_manifest"]["engagement_id"] is None
+
+
+def test_generate_trust_proof_no_signing_fields(build_app):
+    """PR 1.2A must not include PR 1.3 signing fields."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(db, engagement_id="eng-proof-nosign-001")
+        db.commit()
+
+        proof = generate_trust_proof(db, tenant_id=TENANT_A, provenance_id=record.id)
+        pr13_fields = {"signature", "signing_key_id", "authority_version", "signed_at"}
+        assert not (pr13_fields & proof.keys()), "PR 1.3 signing fields must not appear"

@@ -7,9 +7,10 @@ This module is a trust infrastructure primitive designed for:
   - Generality: verify_hash_chain() is chain-type-agnostic; reuse it for report,
     identity, RBAC, governance, and future AGI governance chains
 
-PR 1.3 compatibility: ChainNodeData has a reserved `signature_meta` dict so
-signed nodes (signature, signing_key_id, signed_at, authority_version) can be
-verified in the replay pipeline without redesign.
+PR 1.3 compatibility:
+  - ChainNodeData.signature_meta reserved for signature, signing_key_id,
+    signed_at, authority_version — no redesign needed
+  - generate_trust_proof() returns the deterministic package that PR 1.3 will sign
 
 Performance targets: 100-node chain <100ms, 1000-node chain <1s.
 """
@@ -32,13 +33,17 @@ from services.field_assessment.evidence_provenance import (
 )
 
 # ---------------------------------------------------------------------------
-# Score constants
+# Constants
 # ---------------------------------------------------------------------------
 
 SCORE_PERFECT: int = 100  # all nodes valid, no warnings
 SCORE_WARNINGS: int = 75  # all nodes valid, soft warnings present
 SCORE_DEGRADED: int = 50  # reserved for PR 1.3 (valid chain, unsigned nodes)
 SCORE_BROKEN: int = 0  # any hard integrity failure
+
+REPLAY_MANIFEST_VERSION: str = "trust-replay-v1"
+# Increment to "trust-replay-v2" etc. when the replay schema changes.
+# Consumers must check this field before interpreting replay results.
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +81,66 @@ def _elapsed_ms(t_start: float) -> int:
 
 def _canonical_hash(obj: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(obj)).hexdigest()
+
+
+def _build_replay_summary(
+    verified_nodes: list[dict],
+    failed_nodes: list[dict],
+    warnings: list[str],
+    chain_depth: int,
+    chain_replay_score: int,
+) -> dict[str, Any]:
+    """Deterministic summary of verification outcome for dashboards and reporting."""
+    return {
+        "verified_node_count": len(verified_nodes),
+        "failed_node_count": len(failed_nodes),
+        "warning_count": len(warnings),
+        "chain_depth": chain_depth,
+        "chain_replay_score": chain_replay_score,
+    }
+
+
+def _build_replay_hash(
+    *,
+    chain_valid: bool,
+    chain_depth: int,
+    genesis_hash: str | None,
+    latest_hash: str | None,
+    chain_replay_score: int,
+    verified_nodes: list[dict],
+    failed_nodes: list[dict],
+    warnings: list[str],
+    verification_manifest_hash: str,
+    replay_summary: dict[str, Any],
+    replay_manifest_version: str,
+) -> str:
+    """SHA-256 of the deterministic verification outcome.
+
+    Covers the replay result — not the underlying chain. The underlying chain
+    already has verification_manifest_hash. This hash covers scores, failures,
+    warnings, and summary so any change in the verification outcome changes
+    the replay_hash.
+
+    Explicitly excluded: verified_at, verification_duration_ms (ephemeral).
+    Nodes and failures sorted by node_id for stable ordering.
+    """
+    payload: dict[str, Any] = {
+        "replay_manifest_version": replay_manifest_version,
+        "chain_valid": chain_valid,
+        "chain_depth": chain_depth,
+        "genesis_hash": genesis_hash,
+        "latest_hash": latest_hash,
+        "chain_replay_score": chain_replay_score,
+        "verified_nodes": sorted(verified_nodes, key=lambda n: n.get("node_id") or ""),
+        "failed_nodes": sorted(
+            failed_nodes,
+            key=lambda n: (n.get("node_id") or "", n.get("reason", "")),
+        ),
+        "warnings": sorted(warnings),
+        "verification_manifest_hash": verification_manifest_hash,
+        "replay_summary": replay_summary,
+    }
+    return _canonical_hash(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -328,18 +393,22 @@ def verify_full_provenance_chain(
     Tenant-safe: wrong-tenant or missing record returns a safe 'not_found' failure
     without revealing whether another tenant's chain exists.
 
-    Result fields (all deterministic):
-      chain_valid             bool
-      chain_depth             int
-      verified_at             str (ISO8601)
-      verification_duration_ms int
-      genesis_hash            str | None
-      latest_hash             str | None
-      chain_replay_score      int  (100/75/50/0)
-      verified_nodes          list[{node_id, event_hash, previous_hash}]
-      failed_nodes            list[{node_id, ..., reason}]
-      warnings                list[str]
-      verification_manifest_hash str (SHA-256 of canonical manifest payload)
+    Result fields (all deterministic except verified_at and verification_duration_ms):
+      chain_valid               bool
+      chain_depth               int
+      verified_at               str (ISO8601) — ephemeral, excluded from replay_hash
+      verification_duration_ms  int — ephemeral, excluded from replay_hash
+      genesis_hash              str | None
+      latest_hash               str | None
+      chain_replay_score        int  (100/75/50/0)
+      verified_nodes            list[{node_id, event_hash, previous_hash}]
+      failed_nodes              list[{node_id, ..., reason}]
+      warnings                  list[str]
+      verification_manifest_hash str
+      engagement_id             str | None
+      replay_manifest_version   str  ("trust-replay-v1")
+      replay_summary            dict  (verified_node_count, failed_node_count, …)
+      replay_hash               str  (SHA-256 of deterministic outcome fields)
     """
     from services.field_assessment.evidence_provenance import get_evidence_provenance
 
@@ -352,12 +421,27 @@ def verify_full_provenance_chain(
     if start is None:
         # Hash over (tenant_id, provenance_id) so each failed lookup gets a
         # unique, recomputable fingerprint — not a constant shared across all failures.
-        not_found_hash = _canonical_hash(
+        not_found_manifest_hash = _canonical_hash(
             {
                 "tenant_id": tenant_id,
                 "provenance_id": provenance_id,
                 "chain_valid": False,
             }
+        )
+        nf_failed = [{"node_id": None, "reason": "not_found"}]
+        nf_summary = _build_replay_summary([], nf_failed, [], 0, SCORE_BROKEN)
+        nf_replay_hash = _build_replay_hash(
+            chain_valid=False,
+            chain_depth=0,
+            genesis_hash=None,
+            latest_hash=None,
+            chain_replay_score=SCORE_BROKEN,
+            verified_nodes=[],
+            failed_nodes=nf_failed,
+            warnings=[],
+            verification_manifest_hash=not_found_manifest_hash,
+            replay_summary=nf_summary,
+            replay_manifest_version=REPLAY_MANIFEST_VERSION,
         )
         return {
             "chain_valid": False,
@@ -368,9 +452,13 @@ def verify_full_provenance_chain(
             "latest_hash": None,
             "chain_replay_score": SCORE_BROKEN,
             "verified_nodes": [],
-            "failed_nodes": [{"node_id": None, "reason": "not_found"}],
+            "failed_nodes": nf_failed,
             "warnings": [],
-            "verification_manifest_hash": not_found_hash,
+            "verification_manifest_hash": not_found_manifest_hash,
+            "engagement_id": None,
+            "replay_manifest_version": REPLAY_MANIFEST_VERSION,
+            "replay_summary": nf_summary,
+            "replay_hash": nf_replay_hash,
         }
 
     by_hash = _load_engagement_records(
@@ -460,8 +548,7 @@ def verify_full_provenance_chain(
     latest_hash = traversal[0].event_hash if traversal else None
     depth = len(traversal)
 
-    # Manifest hash is over stable chain data only — excludes verified_at (ephemeral)
-    # so the hash is identical for the same chain regardless of when verification runs.
+    # Manifest hash covers stable chain data only (no ephemeral timestamps).
     manifest_payload: dict[str, Any] = {
         "tenant_id": tenant_id,
         "engagement_id": start.engagement_id,
@@ -472,6 +559,23 @@ def verify_full_provenance_chain(
         "verified_nodes": sorted(base["verified_nodes"], key=lambda n: n["node_id"]),
     }
     manifest_hash = _canonical_hash(manifest_payload)
+
+    replay_summary = _build_replay_summary(
+        base["verified_nodes"], all_failed, all_warnings, depth, score
+    )
+    replay_hash = _build_replay_hash(
+        chain_valid=chain_valid,
+        chain_depth=depth,
+        genesis_hash=genesis_hash,
+        latest_hash=latest_hash,
+        chain_replay_score=score,
+        verified_nodes=base["verified_nodes"],
+        failed_nodes=all_failed,
+        warnings=all_warnings,
+        verification_manifest_hash=manifest_hash,
+        replay_summary=replay_summary,
+        replay_manifest_version=REPLAY_MANIFEST_VERSION,
+    )
 
     return {
         "chain_valid": chain_valid,
@@ -485,6 +589,10 @@ def verify_full_provenance_chain(
         "failed_nodes": all_failed,
         "warnings": all_warnings,
         "verification_manifest_hash": manifest_hash,
+        "engagement_id": start.engagement_id,
+        "replay_manifest_version": REPLAY_MANIFEST_VERSION,
+        "replay_summary": replay_summary,
+        "replay_hash": replay_hash,
     }
 
 
@@ -501,32 +609,72 @@ def generate_chain_verification_manifest(
 ) -> dict[str, Any]:
     """Generate a deterministic, hashable manifest for a provenance chain.
 
-    Suitable for export to auditors and regulators. The manifest_hash is
-    deterministic: canonical JSON, sorted keys, stable encoding.
-
-    Returns the same fields as the verify result manifest_payload plus
-    verification_manifest_hash. Safe for wrong-tenant calls.
+    Suitable for export to auditors and regulators. Safe for wrong-tenant calls.
+    engagement_id is taken from the verify result — no extra DB query.
     """
-    from services.field_assessment.evidence_provenance import get_evidence_provenance
-
     result = verify_full_provenance_chain(
         db, tenant_id=tenant_id, provenance_id=provenance_id
     )
-
-    # Recover engagement_id from DB if chain was found
-    start = get_evidence_provenance(
-        db, provenance_id=provenance_id, tenant_id=tenant_id
-    )
-    engagement_id = start.engagement_id if start is not None else None
-
     return {
         "tenant_id": tenant_id,
-        "engagement_id": engagement_id,
+        "engagement_id": result["engagement_id"],
         "chain_depth": result["chain_depth"],
         "genesis_hash": result["genesis_hash"],
         "latest_hash": result["latest_hash"],
         "verified_at": result["verified_at"],
         "chain_replay_score": result["chain_replay_score"],
+        "replay_manifest_version": result["replay_manifest_version"],
         "verified_nodes": sorted(result["verified_nodes"], key=lambda n: n["node_id"]),
         "verification_manifest_hash": result["verification_manifest_hash"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Trust proof
+# ---------------------------------------------------------------------------
+
+
+def generate_trust_proof(
+    db: Session,
+    *,
+    tenant_id: str,
+    provenance_id: str,
+) -> dict[str, Any]:
+    """Generate a deterministic trust proof package for a provenance chain.
+
+    This is the object PR 1.3 (Evidence Authority) will sign with Ed25519.
+    No signatures here — this PR produces the deterministic input to signing.
+
+    The proof is self-describing: a consumer with the chain data can
+    independently recompute replay_hash and verify it matches.
+
+    PR 1.3 will add: signature, signing_key_id, authority_version, signed_at.
+
+    Returns:
+      replay_manifest        dict — chain verification manifest
+      replay_hash            str  — deterministic fingerprint of the outcome
+      verification_summary   dict — executive/dashboard metrics
+      chain_valid            bool
+      chain_replay_score     int
+    """
+    result = verify_full_provenance_chain(
+        db, tenant_id=tenant_id, provenance_id=provenance_id
+    )
+    manifest = {
+        "tenant_id": tenant_id,
+        "engagement_id": result["engagement_id"],
+        "chain_depth": result["chain_depth"],
+        "genesis_hash": result["genesis_hash"],
+        "latest_hash": result["latest_hash"],
+        "chain_replay_score": result["chain_replay_score"],
+        "replay_manifest_version": result["replay_manifest_version"],
+        "verified_nodes": sorted(result["verified_nodes"], key=lambda n: n["node_id"]),
+        "verification_manifest_hash": result["verification_manifest_hash"],
+    }
+    return {
+        "replay_manifest": manifest,
+        "replay_hash": result["replay_hash"],
+        "verification_summary": result["replay_summary"],
+        "chain_valid": result["chain_valid"],
+        "chain_replay_score": result["chain_replay_score"],
     }
