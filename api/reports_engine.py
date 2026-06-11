@@ -68,6 +68,7 @@ from api.report_exports import (
     render_html_export,
     render_pdf_export,
 )
+from api.config.env import is_production_env
 from api.security_audit import AuditEvent, EventType, get_auditor
 from services.governance.timeline import TimelineStore
 from services.governance.timeline.adapters import (
@@ -800,6 +801,68 @@ def get_report_manifest(
     return hashed
 
 
+_SIGNATURE_VERSION = "report-signature-v1"
+_SIGNATURE_ALGORITHM = "ed25519"
+
+
+def _build_signing_payload(report: ReportRecord) -> str:
+    """Return the canonical JSON string that is signed and stored on the report.
+
+    The payload is deterministic over stable report fields only. Transport
+    metadata, response headers, and timestamps are excluded. The manifest_hash
+    used here is the finalized value — either finalized_manifest_hash (after
+    finalize_report) or manifest_hash (during generation if not yet finalized).
+    """
+    return json.dumps(
+        {
+            "report_id": report.id,
+            "manifest_hash": report.finalized_manifest_hash or report.manifest_hash,
+            "report_version": report.report_version,
+            "signature_version": _SIGNATURE_VERSION,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _persist_report_signature(report: ReportRecord) -> None:
+    """Sign the canonical report payload and write metadata onto the report object.
+
+    In prod/staging: raises RuntimeError if the signing key is absent or signing fails.
+    In dev/test: logs a warning and leaves signature fields None.
+    Callers must db.commit() after this returns.
+    """
+    import hashlib as _hl
+
+    from services.governance.report.signing import (
+        ReportSigningKeyError,
+        get_public_key_hex,
+        sign_report,
+    )
+
+    payload = _build_signing_payload(report)
+    try:
+        sig = sign_report(payload)
+        pub_hex = get_public_key_hex()
+        report.signature = sig
+        report.signature_algorithm = _SIGNATURE_ALGORITHM
+        report.signature_key_id = _hl.sha256(bytes.fromhex(pub_hex)).hexdigest()[:16]
+        report.signed_at = datetime.now(timezone.utc)
+        report.signature_payload_hash = _hl.sha256(payload.encode("utf-8")).hexdigest()
+        report.signature_version = _SIGNATURE_VERSION
+    except ReportSigningKeyError:
+        if is_production_env():
+            raise RuntimeError(
+                f"report.signing_key_missing report_id={report.id} — "
+                "FG_REPORT_SIGNING_KEY must be set in prod/staging; "
+                "refusing to finalize unsigned report"
+            ) from None
+        log.warning(
+            "report.signing_key_missing report_id=%s — signature not persisted",
+            report.id,
+        )
+
+
 @router.get("/reports/{report_id}/exports/{export_format}")
 def export_report_artifact(
     report_id: str,
@@ -856,24 +919,43 @@ def export_report_artifact(
         pdf_bytes = render_pdf_export(manifest, digest)
     except ExportUnavailableError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
-    import hashlib as _hl
-
-    from services.governance.report.signing import (
-        ReportSigningKeyError as _RskErr,
-        get_public_key_hex as _gpkh,
-        sign_report as _sign,
-    )
 
     pdf_headers: dict[str, str] = {"X-FrostGate-Manifest-Hash": digest}
-    try:
-        _sig = _sign(json.dumps(manifest, sort_keys=True, separators=(",", ":")))
-        pdf_headers["X-Report-Signature"] = _sig
-        _pub = _gpkh()
-        pdf_headers["X-Report-Public-Key-Id"] = _hl.sha256(
-            bytes.fromhex(_pub)
-        ).hexdigest()[:16]
-    except _RskErr:
-        pass
+
+    if report.signature:
+        # Prefer the persisted signing event recorded at finalization time.
+        pdf_headers["X-Report-Signature"] = report.signature
+        if report.signature_key_id:
+            pdf_headers["X-Report-Public-Key-Id"] = report.signature_key_id
+    elif not is_production_env():
+        # Dev/test only: sign on the fly so unsigned legacy reports can be
+        # tested without a full finalize cycle. Never allowed in production.
+        import hashlib as _hl
+
+        from services.governance.report.signing import (
+            ReportSigningKeyError as _RskErr,
+            get_public_key_hex as _gpkh,
+            sign_report as _sign,
+        )
+
+        try:
+            _sig = _sign(json.dumps(manifest, sort_keys=True, separators=(",", ":")))
+            pdf_headers["X-Report-Signature"] = _sig
+            _pub = _gpkh()
+            pdf_headers["X-Report-Public-Key-Id"] = _hl.sha256(
+                bytes.fromhex(_pub)
+            ).hexdigest()[:16]
+        except _RskErr:
+            pass
+    else:
+        # Production: report was never finalized or was created before 0104.
+        # Omit signing headers rather than producing an unanchored signature.
+        log.warning(
+            "report.export_unsigned report_id=%s — no persisted signature; "
+            "omitting X-Report-Signature (legacy or unfinalized report)",
+            report.id,
+        )
+
     return Response(
         content=pdf_bytes, media_type="application/pdf", headers=pdf_headers
     )
@@ -909,6 +991,7 @@ def finalize_report(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     report.manifest_hash = hashed["manifest_hash"]
     report.finalized_manifest_hash = hashed["manifest_hash"]
+    _persist_report_signature(report)
     db.commit()
     emit_export_event(
         EXPORT_AUDIT_REVIEWER_ASSIGNED,
