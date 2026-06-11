@@ -14101,3 +14101,46 @@ PR 1.2 could verify chains but couldn't prove the verification result itself was
 
 **Why:**
 PR 1.2A proved the chain state is stable and deterministic. PR 1.3 proves that the party who recorded the chain is the same party who claims to have recorded it. Without signatures, a replay can confirm a chain is internally consistent but cannot prove the records were written by a trusted authority — an attacker with DB write access could fabricate a self-consistent chain. Ed25519 signatures over a canonical (mutable-field-excluded) event payload close this gap. The append-only constraint and the pre-INSERT signing pattern together ensure no post-hoc signature manipulation is possible at the application layer.
+
+## PR 1.5 — Trust Enforcement Authority (`pr/1.5-trust-enforcement-authority`)
+
+1. **`services/field_assessment/trust_enforcement.py`** (new, ~340 lines) — Mode-driven trust enforcement service:
+   - `ProvenanceMode(str, Enum)` — `OFF | WARN | STRICT`; `from_env()` reads `FG_PROVENANCE_MODE` (default: `warn`); invalid values fall back to `WARN`
+   - `TrustInputs(frozen dataclass)` — pre-computed inputs: `chain_valid`, `signature_valid` (None=legacy_unsigned/True=verified/False=invalid), `link_valid`, `replay_valid`, `tenant_valid`, `engagement_valid`, `is_legacy`
+   - `TrustDecision(frozen dataclass)` — immutable output: `allowed`, `mode`, `decision` (allow/warn/block), `severity` (low/medium/high/critical), `violations: list[str]`, `verified_at`, `trust_score: int`
+   - `TrustEnforcementError(RuntimeError)` — raised in STRICT mode on block; wraps `TrustDecision` for caller inspection
+   - `_compute_trust_score(inputs)` — deterministic 0–100 score: 0 for chain/sig/tenant/engagement failure, 25 for link failure, 50 for replay failure, 75 for legacy_unsigned, 100 for clean
+   - `_collect_hard_violations(inputs)` / `_collect_all_violations(inputs)` — separate hard failures (always block in STRICT) from soft warnings (legacy_unsigned, configurable)
+   - `_apply_mode(hard, all, mode, is_legacy)` — OFF: always allow; WARN: violations produce warn but allow; STRICT: hard violations block, legacy controlled by `FG_ALLOW_LEGACY_UNSIGNED` (default: false)
+   - `evaluate_trust_state(inputs, *, tenant_id, engagement_id)` — pure evaluation, WARN semantics, never raises; for dashboards and reporting
+   - `enforce_provenance_integrity(inputs, *, mode, …)` — evaluates chain_valid + tenant_valid + engagement_valid only
+   - `enforce_evidence_authority(inputs, *, mode, …)` — evaluates signature_valid + tenant_valid + engagement_valid only
+   - `enforce_report_link_authority(inputs, *, mode, …)` — evaluates link_valid + tenant_valid + engagement_valid only
+   - `enforce_full_trust_chain(inputs, *, mode, …)` — evaluates all six dimensions; primary integration point
+   - `_enforce_gate(inputs, …, gate)` — core: collect violations → compute score → apply mode → emit metrics → optionally emit audit event → raise if STRICT+blocked
+   - `_emit_metrics(decision, violations)` — increments 5 Prometheus counters per decision
+   - `_emit_enforcement_audit_event(db, …)` — emits `trust_validation_passed/warning/blocked`, `trust_chain_failure`, `authority_failure`, `report_link_failure` audit events via `emit_engagement_audit_event`; optional (only when `db` is provided)
+   - 5 Prometheus counters defined at module level (no api/ import): `TRUST_VALIDATION_TOTAL [mode, decision]`, `TRUST_VALIDATION_FAILED_TOTAL [mode, violation_type]`, `TRUST_VALIDATION_WARNING_TOTAL [mode]`, `TRUST_VALIDATION_BLOCKED_TOTAL [mode]`, `TRUST_CHAIN_FAILURE_TOTAL [mode, violation_type]`; tenant label omitted (cardinality safety — audit events carry per-tenant trust state)
+
+2. **`tests/test_trust_enforcement.py`** (new, 100 tests):
+   - `TestProvenanceModeFromEnv` — default=warn, off, strict, invalid fallback, uppercase accepted
+   - `TestTrustScore` — 100/75/50/25/0 paths, deterministic across 10 calls, worst-violation-wins hierarchy
+   - `TestViolationCollection` — each violation type collected, legacy_unsigned soft not hard, multiple violations
+   - `TestEvaluateTrustState` — allow on clean, warn on failure (never block), never raises on all-failures, violations listed, mode=warn, verified_at set
+   - `TestOffMode` — always allows, violations recorded even in off, never raises
+   - `TestWarnMode` — allow on clean, warn on each violation type, never raises
+   - `TestStrictMode` — allow on clean, blocks chain/authority/link/replay/tenant/engagement failures, decision accessible from exception, multiple violations in decision
+   - `TestSecurityIsolation` — tenant mismatch critical/score=0, engagement mismatch critical/score=0, authority failure high, link/replay medium; cross-tenant and cross-engagement fail closed in STRICT
+   - `TestLegacyRecords` — off/warn always allow, strict blocks by default, strict allows with FG_ALLOW_LEGACY_UNSIGNED=true, trust_score=75 for legacy, correct violations in both cases
+   - `TestEnforceProvenanceIntegrity` — chain blocked, sig/link ignored, tenant blocked
+   - `TestEnforceEvidenceAuthority` — invalid sig blocked, legacy warns in warn mode, chain ignored, tenant blocked
+   - `TestEnforceReportLinkAuthority` — link blocked, chain/sig ignored, score=25
+   - `TestEnforceFullTrustChain` — all modes × all-valid allowed, all-failures blocked in strict, error message format
+   - `TestTrustDecisionFields` — all fields present and typed, frozen dataclass, violations are strings
+   - `TestMetrics` — all 5 counters increment correctly; blocked counter not incremented on allow
+   - `TestModeEscalation` — unknown/empty env values fall back to warn, off mode cannot block
+
+3. **`ROADMAP.md`** — PR 1.5 row updated from `🗓 planned` → `🔄 open`
+
+**Why:**
+PR 1.3 proved records were signed by a trusted authority. PR 1.4 proved evidence-to-report links were signed. Neither PR introduced a way to *act* on a failed verification — a signature failure was recorded as a warning and operations continued regardless. PR 1.5 closes that gap: it introduces a central enforcement engine that consumes pre-computed trust inputs from any authority system and applies a configurable enforcement mode. In OFF mode, nothing changes from current behavior. In WARN mode, failures are audited but operations proceed. In STRICT mode, failures raise `TrustEnforcementError` and callers must handle or propagate the block. This model allows enterprise and GovCon customers to run `FG_PROVENANCE_MODE=strict` (fail closed on any trust failure) while SMB customers run the non-breaking `warn` default. The design is deliberately decoupled from evidence records so that Identity Authority, RBAC Authority, Agent Authority, and future AGI Governance Authority can plug into the same enforcement engine without code duplication.
