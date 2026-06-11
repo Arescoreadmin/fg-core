@@ -423,6 +423,12 @@ def verify_full_provenance_chain(
       replay_manifest_version   str  ("trust-replay-v1")
       replay_summary            dict  (verified_node_count, failed_node_count, …)
       replay_hash               str  (SHA-256 of deterministic outcome fields)
+
+      PR 1.4 — Report Link Authority fields (additive, not included in replay_hash):
+      linked_reports            list[{report_id, link_count, verified_count, invalid_count}]
+      verified_report_links     list[{link_id, evidence_id, report_id, event_hash, …}]
+      invalid_report_links      list[{link_id, evidence_id, report_id, reason, …}]
+      report_link_status        str  ("unlinked" | "verified" | "partially_verified" | "invalid")
     """
     from services.field_assessment.evidence_provenance import get_evidence_provenance
 
@@ -473,6 +479,10 @@ def verify_full_provenance_chain(
             "replay_manifest_version": REPLAY_MANIFEST_VERSION,
             "replay_summary": nf_summary,
             "replay_hash": nf_replay_hash,
+            "linked_reports": [],
+            "verified_report_links": [],
+            "invalid_report_links": [],
+            "report_link_status": "unlinked",
         }
 
     by_hash = _load_engagement_records(
@@ -632,6 +642,37 @@ def verify_full_provenance_chain(
         replay_manifest_version=REPLAY_MANIFEST_VERSION,
     )
 
+    # PR 1.4: load and verify all report links for this engagement
+    from services.field_assessment.report_link_authority import (
+        list_report_links_for_engagement,
+        verify_report_links_bulk,
+    )
+
+    all_links = list_report_links_for_engagement(
+        db, tenant_id=tenant_id, engagement_id=start.engagement_id
+    )
+    verified_report_links, invalid_report_links = verify_report_links_bulk(all_links)
+
+    # Aggregate linked_reports: distinct report_ids with link counts
+    report_counts: dict[str, dict] = {}
+    for entry in verified_report_links + invalid_report_links:
+        rid = entry["report_id"]
+        if rid not in report_counts:
+            report_counts[rid] = {"report_id": rid, "link_count": 0, "verified_count": 0, "invalid_count": 0}
+        report_counts[rid]["link_count"] += 1
+    for entry in verified_report_links:
+        report_counts[entry["report_id"]]["verified_count"] += 1
+    for entry in invalid_report_links:
+        report_counts[entry["report_id"]]["invalid_count"] += 1
+    linked_reports = sorted(report_counts.values(), key=lambda r: r["report_id"])
+
+    if not linked_reports:
+        report_link_status = "unlinked"
+    elif invalid_report_links:
+        report_link_status = "invalid" if not verified_report_links else "partially_verified"
+    else:
+        report_link_status = "verified"
+
     return {
         "chain_valid": chain_valid,
         "chain_depth": depth,
@@ -648,6 +689,10 @@ def verify_full_provenance_chain(
         "replay_manifest_version": REPLAY_MANIFEST_VERSION,
         "replay_summary": replay_summary,
         "replay_hash": replay_hash,
+        "linked_reports": linked_reports,
+        "verified_report_links": verified_report_links,
+        "invalid_report_links": invalid_report_links,
+        "report_link_status": report_link_status,
     }
 
 

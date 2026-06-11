@@ -14,6 +14,7 @@ Append-only contract:
   fa_scan_audit_events is append-only. No UPDATE or DELETE.
   fa_evidence_lifecycle_events is append-only. No UPDATE or DELETE.
   fa_evidence_provenance is append-only. No UPDATE or DELETE.
+  fa_evidence_report_links is append-only. No UPDATE or DELETE.
 
 Lifecycle states (H15):
   Evidence tables carry lifecycle_state in ('collected', 'locked', 'legal_hold').
@@ -37,6 +38,7 @@ Tables:
   fa_evidence_lifecycle_events   — H15: append-only chain-of-custody trail for lifecycle transitions
   fa_legal_holds                 — H15: legal hold application and removal audit record
   fa_evidence_provenance         — PR 1.1: append-only chain-of-custody provenance ledger
+  fa_evidence_report_links       — PR 1.4: append-only evidence-to-report link authority
 """
 
 from __future__ import annotations
@@ -639,4 +641,62 @@ class FaEvidenceProvenance(Base):
         ),
         Index("ix_fa_evidence_provenance_artifact_hash", "artifact_hash"),
         Index("ix_fa_evidence_provenance_event_hash", "event_hash"),
+    )
+
+
+class FaEvidenceReportLink(Base):
+    """PR 1.4: Append-only evidence-to-report link authority record.
+
+    Each row proves: evidence_id → report_id relationship, signed by
+    FrostGate authority. Append-only — amendments create new rows.
+    """
+
+    __tablename__ = "fa_evidence_report_links"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    provenance_record_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    report_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    report_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    linked_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    linked_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    authority_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    link_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    event_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signing_key_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    signature_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_evidence_report_links_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index(
+            "ix_fa_evidence_report_links_tenant_evidence",
+            "tenant_id",
+            "evidence_id",
+        ),
+        Index(
+            "ix_fa_evidence_report_links_tenant_report",
+            "tenant_id",
+            "report_id",
+        ),
+        Index("ix_fa_evidence_report_links_event_hash", "event_hash"),
     )
