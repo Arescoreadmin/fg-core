@@ -986,14 +986,11 @@ def finalize_report(
         TrustEnforcementError,
     )
 
-    _sig_valid = True if getattr(report, "signature", None) else None
     try:
         enforce_report_finalization(
             db,
             tenant_id=report.tenant_id,
             engagement_id=report.assessment_id,
-            signature_valid=_sig_valid,
-            is_legacy=(_sig_valid is None),
         )
     except TrustEnforcementError as _te:
         raise HTTPException(

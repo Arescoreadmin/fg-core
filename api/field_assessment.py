@@ -7070,7 +7070,22 @@ def qa_approve_report_route(
         TrustEnforcementError,
     )
 
-    _sig_valid = True if getattr(report, "signature", None) else None
+    import json  # noqa: PLC0415
+    from services.governance.report.signing import (  # noqa: PLC0415
+        ReportSigningKeyError,
+        verify_report,
+    )
+    _sig_valid: bool | None
+    if not getattr(report, "signature", None):
+        _sig_valid = None
+    else:
+        try:
+            _canonical = json.dumps(
+                report.report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+            )
+            _sig_valid = verify_report(_canonical, report.signature)
+        except ReportSigningKeyError:
+            _sig_valid = None
     try:
         enforce_evidence_approval(
             db,
@@ -8374,7 +8389,22 @@ def export_engagement_report_route(
         TrustEnforcementError,
     )
 
-    _sig_valid = True if getattr(record, "signature", None) else None
+    import json  # noqa: PLC0415
+    from services.governance.report.signing import (  # noqa: PLC0415
+        ReportSigningKeyError,
+        verify_report,
+    )
+    _sig_valid: bool | None
+    if not getattr(record, "signature", None):
+        _sig_valid = None
+    else:
+        try:
+            _canonical = json.dumps(
+                record.report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+            )
+            _sig_valid = verify_report(_canonical, record.signature)
+        except ReportSigningKeyError:
+            _sig_valid = None
     try:
         enforce_report_export(
             db,
