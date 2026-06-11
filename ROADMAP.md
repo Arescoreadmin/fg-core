@@ -181,7 +181,7 @@ Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
 
 ### Evidence Provenance PRs
 
-**Moat arc:** 1.1 (foundation) → 1.2 (chain integrity) → 1.3 (authority) → 1.4 (report linkage) → 1.5 (enforcement) → 1.6–1.8 (trust graph)
+**Moat arc:** 1.1 (foundation) → 1.2 (chain integrity) → 1.3 (authority) → 1.4 (report linkage) → 1.5 (enforcement) → 1.6–1.8 (trust graph) → 1.9 (trust replay)
 
 | PR | Item | Status | Deliverable |
 |---|---|---|---|
@@ -193,6 +193,7 @@ Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
 | — | PR 1.6: Evidence Correlation Engine | 🗓 planned | Graph layer: Evidence → Finding → Control → Framework Requirement → Risk → Report; not table joins — traversal-native model; enables "show me all evidence that supports this control across reassessments" queries; prerequisite for longitudinal drift and reassessment intelligence |
 | — | PR 1.7: Corroboration & Confidence | 🗓 planned | Per-evidence scoring: `evidence_count`, `source_diversity`, `confidence_score`, `contradiction_score`, `staleness_score`; answers "why do we believe this?" not just "what exists?"; confidence feeds finding severity weighting and governance readiness scores |
 | — | PR 1.8: Evidence Trust Graph | 🗓 planned | Unified trust authority: Evidence Authority + Report Authority + Identity Authority + RBAC Authority in one traversable graph; at this layer FrostGate is trust infrastructure, not an assessment platform |
+| — | PR 1.9: Trust Replay Engine | 🗓 planned | Six components: **Replay Engine Core** (point-in-time query layer over append-only records; `replay_trust_state(tenant_id, engagement_id, at)` reconstructs complete trust state at timestamp T); **Trust State Replay** (evidence collected, chains intact, records signed, authority in force, report links live — all as they existed at T); **Trust State Diff** (`diff_trust_state(from_t, to_t)` — delta between two replay points; answers "what changed between assessment date and report delivery?"); **Replay Manifest** (deterministic manifest of all nodes included in the replay, each with its `event_hash` and `signed_at`; manifest itself is hashed and signable); **Trust Proof Generation** (cryptographic proof object — self-proving because every node's `event_hash` was written before the question was asked; no mutable state in the reconstruction); **Auditor / Regulator Proof Package** (exportable package: replay manifest + proof object + chain of custody + report signatures; answers "what did you know on date X and how do you prove it?" with a verifiable artifact, not logs) |
 
 ## How to add a PR to this roadmap
 
