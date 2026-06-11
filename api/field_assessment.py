@@ -7063,6 +7063,47 @@ def qa_approve_report_route(
             ),
         )
 
+    from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+        enforce_evidence_approval,
+    )
+    from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
+        TrustEnforcementError,
+    )
+
+    import json  # noqa: PLC0415
+    from services.governance.report.signing import (  # noqa: PLC0415
+        ReportSigningKeyError,
+        verify_report,
+    )
+
+    _sig_valid: bool | None
+    if not getattr(report, "signature", None):
+        _sig_valid = None
+    else:
+        try:
+            _canonical = json.dumps(
+                report.report_json,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            )
+            _sig_valid = verify_report(_canonical, report.signature)
+        except ReportSigningKeyError:
+            _sig_valid = None
+    try:
+        enforce_evidence_approval(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            signature_valid=_sig_valid,
+            is_legacy=(_sig_valid is None),
+        )
+    except TrustEnforcementError as _te:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error("TRUST_ENFORCEMENT_BLOCKED", str(_te)),
+        ) from _te
+
     now = utc_iso8601_z_now()
     # reviewer_name is the human-readable display name (e.g. "Jane Smith, Senior Assessor").
     # The JWT actor is always recorded in the audit event for non-repudiation.
@@ -8344,6 +8385,47 @@ def export_engagement_report_route(
             status_code=404,
             detail=api_error("REPORT_VERSION_NOT_FOUND", "Report version not found."),
         )
+
+    from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+        enforce_report_export,
+    )
+    from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
+        TrustEnforcementError,
+    )
+
+    import json  # noqa: PLC0415
+    from services.governance.report.signing import (  # noqa: PLC0415
+        ReportSigningKeyError,
+        verify_report,
+    )
+
+    _sig_valid: bool | None
+    if not getattr(record, "signature", None):
+        _sig_valid = None
+    else:
+        try:
+            _canonical = json.dumps(
+                record.report_json,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            )
+            _sig_valid = verify_report(_canonical, record.signature)
+        except ReportSigningKeyError:
+            _sig_valid = None
+    try:
+        enforce_report_export(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            signature_valid=_sig_valid,
+            is_legacy=(_sig_valid is None),
+        )
+    except TrustEnforcementError as _te:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error("TRUST_ENFORCEMENT_BLOCKED", str(_te)),
+        ) from _te
 
     if format == "json":
         return {

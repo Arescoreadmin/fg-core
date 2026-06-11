@@ -979,6 +979,24 @@ def finalize_report(
     )
     if report.finalized_at is not None:
         raise HTTPException(status_code=409, detail="Report already finalized")
+    from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+        enforce_report_finalization,
+    )
+    from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
+        TrustEnforcementError,
+    )
+
+    try:
+        enforce_report_finalization(
+            db,
+            tenant_id=report.tenant_id,
+            engagement_id=report.assessment_id,
+        )
+    except TrustEnforcementError as _te:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "TRUST_ENFORCEMENT_BLOCKED", "message": str(_te)},
+        ) from _te
     report.reviewer_ref = reviewer_ref
     report.approval_status = "finalized"
     report.finalized_at = datetime.now(timezone.utc)

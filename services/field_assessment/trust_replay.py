@@ -789,6 +789,18 @@ def generate_trust_proof(
     result = verify_full_provenance_chain(
         db, tenant_id=tenant_id, provenance_id=provenance_id
     )
+    _engagement_id = result.get("engagement_id") or ""
+    if _engagement_id:
+        from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+            enforce_trust_replay,
+        )
+
+        enforce_trust_replay(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=_engagement_id,
+            replay_result=result,
+        )
     manifest = {
         "tenant_id": tenant_id,
         "engagement_id": result["engagement_id"],
