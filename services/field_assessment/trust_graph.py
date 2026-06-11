@@ -184,6 +184,7 @@ class TrustGraph:
         self._adj_out: dict[str, list[TrustGraphEdge]] = {}
         self._adj_in: dict[str, list[TrustGraphEdge]] = {}
         self._edge_keys: set[tuple[str, str, EdgeType]] = set()
+        self._edge_ids: set[str] = set()
 
     # ------------------------------------------------------------------
     # Mutation
@@ -245,15 +246,18 @@ class TrustGraph:
                 f"tgt.engagement_id={tgt.engagement_id!r}"
             )
 
-        # Duplicate edge guard
+        # Duplicate edge guard (relationship key and edge_id both must be unique)
         edge_key = (edge.source_node_id, edge.target_node_id, edge.edge_type)
         if edge_key in self._edge_keys:
             raise TrustGraphError(
                 f"duplicate edge: {edge.source_node_id!r} → {edge.target_node_id!r} "
                 f"type={edge.edge_type!r}"
             )
+        if edge.edge_id in self._edge_ids:
+            raise TrustGraphError(f"duplicate edge_id: {edge.edge_id!r}")
 
         self._edge_keys.add(edge_key)
+        self._edge_ids.add(edge.edge_id)
         self._edges.append(edge)
         self._adj_out[edge.source_node_id].append(edge)
         self._adj_in[edge.target_node_id].append(edge)
@@ -493,7 +497,33 @@ def verify_trust_graph(graph: TrustGraph) -> dict[str, Any]:
                 f"missing_node: edge {e.edge_id!r} target {e.target_node_id!r} not in graph"
             )
 
-    # --- Cross-tenant / cross-engagement edges ---
+    # --- Node scope: every node must belong to the graph's tenant/engagement ---
+    for n in nodes:
+        if n.tenant_id != graph.tenant_id:
+            violations.append(
+                f"cross_tenant_node: {n.node_id!r} "
+                f"node.tenant_id={n.tenant_id!r} graph.tenant_id={graph.tenant_id!r}"
+            )
+        if n.engagement_id != graph.engagement_id:
+            violations.append(
+                f"cross_engagement_node: {n.node_id!r} "
+                f"node.engagement_id={n.engagement_id!r} graph.engagement_id={graph.engagement_id!r}"
+            )
+
+    # --- Edge scope: every edge must belong to the graph's tenant/engagement ---
+    for e in edges:
+        if e.tenant_id != graph.tenant_id:
+            violations.append(
+                f"cross_tenant_edge: {e.edge_id!r} "
+                f"edge.tenant_id={e.tenant_id!r} graph.tenant_id={graph.tenant_id!r}"
+            )
+        if e.engagement_id != graph.engagement_id:
+            violations.append(
+                f"cross_engagement_edge: {e.edge_id!r} "
+                f"edge.engagement_id={e.engagement_id!r} graph.engagement_id={graph.engagement_id!r}"
+            )
+
+    # --- Cross-tenant / cross-engagement edges (endpoint pair check) ---
     for e in edges:
         src = graph.get_node(e.source_node_id)
         tgt = graph.get_node(e.target_node_id)
@@ -559,9 +589,13 @@ def verify_trust_graph(graph: TrustGraph) -> dict[str, Any]:
             color[nid] = GRAY
             stack.append((nid, True))
             for e in graph.edges_from(nid):
-                if color[e.target_node_id] == GRAY:
+                tgt_color = color.get(e.target_node_id)
+                if tgt_color is None:
+                    # dangling edge — already reported as missing_node; skip
+                    continue
+                if tgt_color == GRAY:
                     return True
-                if color[e.target_node_id] == WHITE:
+                if tgt_color == WHITE:
                     stack.append((e.target_node_id, False))
         return False
 

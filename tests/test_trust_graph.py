@@ -487,6 +487,50 @@ class TestCrossTenantIsolation:
         assert g1.get_node("ev-shared").tenant_id == TENANT  # type: ignore[union-attr]
         assert g2.get_node("ev-shared").tenant_id == TENANT_B  # type: ignore[union-attr]
 
+    def test_verify_detects_node_wrong_graph_tenant(self) -> None:
+        """verify_trust_graph catches a node whose tenant_id differs from graph.tenant_id."""
+        g = _graph()
+        rogue = TrustGraphNode(
+            node_id="ev-rogue",
+            node_type=NodeType.EVIDENCE,
+            tenant_id=TENANT_B,
+            engagement_id=ENG,
+            payload={
+                "evidence_id": "EV-r",
+                "event_hash": "h",
+                "authority_status": "signed",
+                "trust_score": 0,
+            },
+        )
+        g._nodes["ev-rogue"] = rogue
+        g._adj_out["ev-rogue"] = []
+        g._adj_in["ev-rogue"] = []
+        result = verify_trust_graph(g)
+        assert not result["graph_valid"]
+        assert any("cross_tenant_node" in v for v in result["violations"])
+
+    def test_verify_detects_edge_wrong_graph_tenant(self) -> None:
+        """verify_trust_graph catches an edge whose tenant_id differs from graph.tenant_id."""
+        g = _graph()
+        _ev(g, "ev-1")
+        _fi(g, "fi-1")
+        ev = g.get_node("ev-1")
+        assert ev is not None
+        bad_edge = TrustGraphEdge(
+            edge_id="e-bad",
+            edge_type=EdgeType.EVIDENCE_TO_FINDING,
+            source_node_id="ev-1",
+            target_node_id="fi-1",
+            tenant_id=TENANT_B,
+            engagement_id=ENG,
+        )
+        g._edges.append(bad_edge)
+        g._adj_out["ev-1"].append(bad_edge)
+        g._adj_in["fi-1"].append(bad_edge)
+        result = verify_trust_graph(g)
+        assert not result["graph_valid"]
+        assert any("cross_tenant_edge" in v for v in result["violations"])
+
     def test_verify_detects_cross_tenant_node_pair(self) -> None:
         # Manually construct an inconsistent graph (bypass guards via internal _nodes)
         g = _graph()
@@ -640,6 +684,31 @@ class TestDuplicateDetection:
         g._edges.append(e)
         result = verify_trust_graph(g)
         assert any("duplicate_edge" in v for v in result["violations"])
+
+    def test_duplicate_edge_id_rejected(self) -> None:
+        g = _graph()
+        _ev(g, "ev-1")
+        _fi(g, "fi-1")
+        _fi(g, "fi-2")
+        e1 = TrustGraphEdge(
+            edge_id="shared-id",
+            edge_type=EdgeType.EVIDENCE_TO_FINDING,
+            source_node_id="ev-1",
+            target_node_id="fi-1",
+            tenant_id=TENANT,
+            engagement_id=ENG,
+        )
+        e2 = TrustGraphEdge(
+            edge_id="shared-id",
+            edge_type=EdgeType.EVIDENCE_TO_FINDING,
+            source_node_id="ev-1",
+            target_node_id="fi-2",
+            tenant_id=TENANT,
+            engagement_id=ENG,
+        )
+        g.add_edge(e1)
+        with pytest.raises(TrustGraphError, match="duplicate edge_id"):
+            g.add_edge(e2)
 
 
 # ---------------------------------------------------------------------------
@@ -985,6 +1054,25 @@ class TestCycleDetection:
         result = verify_trust_graph(g)
         assert not result["graph_valid"]
         assert any("cyclic_authority_path" in v for v in result["violations"])
+
+    def test_dangling_edge_does_not_crash_cycle_detection(self) -> None:
+        """verify_trust_graph must not raise when a dangling edge exists; it should
+        report missing_node and still return graph_valid=False without KeyError."""
+        g = _graph()
+        _ev(g, "ev-1")
+        dangling = TrustGraphEdge(
+            edge_id="e-dangle",
+            edge_type=EdgeType.EVIDENCE_TO_FINDING,
+            source_node_id="ev-1",
+            target_node_id="fi-missing",  # not in graph
+            tenant_id=TENANT,
+            engagement_id=ENG,
+        )
+        g._edges.append(dangling)
+        g._adj_out["ev-1"].append(dangling)
+        result = verify_trust_graph(g)
+        assert not result["graph_valid"]
+        assert any("missing_node" in v for v in result["violations"])
 
     def test_self_loop_detected(self) -> None:
         g = _graph()
