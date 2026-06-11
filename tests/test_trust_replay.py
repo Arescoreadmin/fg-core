@@ -17,6 +17,8 @@ Covers:
 
 from __future__ import annotations
 
+from typing import Any
+
 import time
 
 import sqlalchemy
@@ -51,7 +53,7 @@ TENANT_B = "trust-replay-tenant-b"
 def _make_provenance(db: Session, **kwargs) -> FaEvidenceProvenance:
     from services.field_assessment.evidence_provenance import create_evidence_provenance
 
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         tenant_id=TENANT_A,
         engagement_id="eng-replay-001",
         evidence_id="ev-replay-001",

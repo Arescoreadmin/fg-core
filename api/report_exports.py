@@ -426,6 +426,7 @@ def render_pdf_export(manifest: dict[str, Any], digest: str) -> bytes:
     authority for integrity checking — not the PDF bytes themselves.
     """
     try:
+        from reportlab import rl_config as _rl_config
         from reportlab.lib import colors as _rc
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -449,6 +450,10 @@ def render_pdf_export(manifest: dict[str, Any], digest: str) -> bytes:
     _W = letter[0]
     CONTENT_W = _W - 2 * MARGIN
 
+    # Required for byte-stable PDF output used by report replay/signature tests.
+    # Without this, ReportLab injects variable metadata/document IDs.
+    _rl_config.invariant = 1
+
     buf = _io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -457,6 +462,7 @@ def render_pdf_export(manifest: dict[str, Any], digest: str) -> bytes:
         rightMargin=MARGIN,
         topMargin=MARGIN,
         bottomMargin=MARGIN + 0.3 * inch,
+        pageCompression=0,
     )
 
     base = getSampleStyleSheet()
