@@ -6,6 +6,51 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-11 — PR 1.6: Trust Graph Foundation
+
+**Branch:** `pr/1.6-trust-graph-foundation`
+
+**Area:** Field Assessment / Trust Infrastructure / Graph Substrate
+
+**Summary of changes:**
+
+1. **`services/field_assessment/trust_graph.py`** (new, ~500 lines) — Core graph engine:
+   - `NodeType` enum: EVIDENCE, FINDING, CONTROL, FRAMEWORK, RISK, REPORT
+   - `EdgeType` enum: EVIDENCE_TO_FINDING, FINDING_TO_CONTROL, CONTROL_TO_FRAMEWORK, FINDING_TO_RISK, RISK_TO_REPORT, EVIDENCE_TO_REPORT
+   - `_VALID_EDGES` / `_REVERSE_EDGE_MAP`: compile-time edge type constraints
+   - `TrustGraphNode` / `TrustGraphEdge`: frozen dataclasses with `created_at` for replay compatibility
+   - `TrustGraphError`: fail-closed exception for all security/structural violations
+   - `TrustGraph`: in-memory container with adjacency lists (`_adj_out`, `_adj_in`); enforces cross-tenant, cross-engagement, duplicate-node, duplicate-edge, and edge-type constraints at mutation time
+   - 6 factory functions: `build_evidence_node()`, `build_finding_node()`, `build_control_node()`, `build_framework_node()`, `build_risk_node()`, `build_report_node()`
+   - `verify_trust_graph()`: O(V+E) integrity check; detects missing nodes, cross-tenant/engagement edges, invalid edge types, duplicate edges, orphaned non-evidence nodes, cycles (DFS coloring), replay mismatch (empty event_hash)
+   - `get_evidence_lineage()`: downstream BFS from evidence node
+   - `get_finding_lineage()`, `get_control_lineage()`, `get_risk_lineage()`, `get_report_lineage()`: upstream BFS to evidence
+   - `generate_trust_path()`: deterministic BFS path between any two nodes
+   - `generate_trust_graph_manifest()`: SHA-256 over canonical graph bytes (no timestamps in hash); root_nodes, graph_hash, node_count, edge_count
+
+2. **`tests/test_trust_graph.py`** (new, 117 tests) — Full coverage matrix:
+   - `TestNodeCreation` (14): all 6 factory functions, frozen enforcement, sorted iteration, created_at
+   - `TestEdgeCreation` (10): all 6 edge types, wrong-type rejection, missing-node rejection, sorted iteration
+   - `TestCrossTenantIsolation` (5): add_node/add_edge rejection, verify detection via injected inconsistency
+   - `TestCrossEngagementIsolation` (3): same pattern for engagement boundary
+   - `TestDuplicateDetection` (4): duplicate node_id, duplicate edge, verify detection
+   - `TestTraversal` (11): downstream/upstream BFS, determinism, stable sort, wrong-type raises, multi-evidence upstream
+   - `TestTrustPath` (7): path found, not found, same node, missing endpoints, determinism, full chain, framework path
+   - `TestGraphIntegrity` (9): empty graph valid, orphaned non-evidence detected, evidence orphan passes, missing event_hash, node/edge counts, all return keys
+   - `TestCycleDetection` (3): no cycle valid, cycle detected, self-loop detected
+   - `TestManifestHashing` (9): required keys, version constants, hex hash, determinism, different graphs differ, root_nodes, sorted roots
+   - `TestReplayCompatibility` (5): created_at preserved on nodes+edges, empty event_hash detection, canonical bytes excludes timestamps
+   - `TestSecurityInvariants` (7): forged nodes, invalid edge type, orphaned authority chain, lineage type check, fail-closed verify
+   - `TestPerformance` (5): 100 nodes <50ms, 1000 nodes <250ms, 10000 nodes <1000ms
+   - `TestEdgeTypeEnumCoverage` (parametrized): all edge types in valid map, all node types accessible
+   - `TestAllNodeFactories` (6 parametrized): all factories produce correct type + fields
+   - `TestFullIntegrationScenario` (4): full assessment chain, auditor query, regulator query, executive query
+
+**Why:**
+Implements the graph substrate that makes trust decisions traversable. Every evidence item, finding, control, framework, risk, and report can now be connected in a verifiable, tenant-isolated graph. Prerequisite for PR 1.7 (corroboration) and PR 1.8 (unified trust authority). The generic payload model and extensible NodeType/EdgeType enums ensure future authority types (Identity, RBAC, Agent, AGI Governance) integrate without engine changes.
+
+---
+
 ### 2026-06-11 — PR 1.5A: Trust Enforcement Integration Layer
 
 **Branch:** `pr/1.5a-trust-enforcement-integration`
