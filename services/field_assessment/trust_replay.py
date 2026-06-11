@@ -664,7 +664,12 @@ def verify_full_provenance_chain(
     for entry in verified_report_links + invalid_report_links:
         rid = entry["report_id"]
         if rid not in report_counts:
-            report_counts[rid] = {"report_id": rid, "link_count": 0, "verified_count": 0, "invalid_count": 0}
+            report_counts[rid] = {
+                "report_id": rid,
+                "link_count": 0,
+                "verified_count": 0,
+                "invalid_count": 0,
+            }
         report_counts[rid]["link_count"] += 1
     for entry in verified_report_links:
         report_counts[entry["report_id"]]["verified_count"] += 1
@@ -675,7 +680,9 @@ def verify_full_provenance_chain(
     if not linked_reports:
         report_link_status = "unlinked"
     elif invalid_report_links:
-        report_link_status = "invalid" if not verified_report_links else "partially_verified"
+        report_link_status = (
+            "invalid" if not verified_report_links else "partially_verified"
+        )
     else:
         report_link_status = "verified"
 

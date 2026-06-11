@@ -229,7 +229,9 @@ def _try_sign_link(
     """
     try:
         seed = _load_signing_seed()
-        pub_bytes = Ed25519PrivateKey.from_private_bytes(seed).public_key().public_bytes_raw()
+        pub_bytes = (
+            Ed25519PrivateKey.from_private_bytes(seed).public_key().public_bytes_raw()
+        )
         key_id = _derive_key_id(pub_bytes)
         canonical = _build_canonical_link_event(
             event_hash=event_hash,
@@ -256,9 +258,7 @@ def _try_sign_link(
         from api.config.env import is_production_env
 
         if is_production_env():
-            raise RuntimeError(
-                f"report_link_authority.signing_failed: {exc}"
-            ) from exc
+            raise RuntimeError(f"report_link_authority.signing_failed: {exc}") from exc
         return {}
 
 

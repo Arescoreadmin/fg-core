@@ -1133,7 +1133,7 @@ def test_generate_trust_proof_has_required_fields(build_app):
 
         manifest = proof["replay_manifest"]
         assert "replay_manifest_version" in manifest
-        assert manifest["replay_manifest_version"] == "trust-replay-v1"
+        assert manifest["replay_manifest_version"] == "trust-replay-v2"
 
 
 def test_generate_trust_proof_deterministic(build_app):
