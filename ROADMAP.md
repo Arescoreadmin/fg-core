@@ -177,7 +177,13 @@ Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
 | PR | Item | Status | Deliverable |
 |---|---|---|---|
 | PR 415 | PR-SIGN-3/4/5: Billing HMAC hardening, startup validation, ingest signing | ✅ merged (#415) | `_attest()` fails closed without `FG_BILLING_EVIDENCE_HMAC_KEY`; startup validator errors in prod on missing signing/billing keys; Ed25519 signing headers on ingest report export |
-| PR 416 | PR-SIGN-5b: Persistent ingest report signature metadata | 🔄 open | Six nullable columns on `ReportRecord` (`signature`, `signature_algorithm`, `signature_key_id`, `signed_at`, `signature_payload_hash`, `signature_version`); `_persist_report_signature()` called at finalization; export prefers persisted signature; migration 0104; 16 tests |
+| PR 416 | PR-SIGN-5b: Persistent ingest report signature metadata | 🔄 open | Six nullable columns on `ReportRecord` (`signature`, `signature_algorithm`, `signature_key_id`, `signed_at`, `signature_payload_hash`, `signature_version`); `_persist_report_signature()` called at finalization; export prefers persisted signature; migration 0104; 18 tests |
+
+### Evidence Provenance PRs
+
+| PR | Item | Status | Deliverable |
+|---|---|---|---|
+| PR 417 | PR 1.1: Evidence Provenance Foundation | 🔄 open | `fa_evidence_provenance` table (30 cols, ORM-managed); append-only RLS + triggers (migration 0105); provenance service with sanitize/hash/create/list/review/verify; wired into `create_evidence_link_route`; 22 tests |
 
 ## How to add a PR to this roadmap
 
