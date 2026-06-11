@@ -905,7 +905,7 @@ def test_replay_manifest_version_is_set(build_app):
             db, tenant_id=TENANT_A, provenance_id=record.id
         )
         assert result["replay_manifest_version"] == REPLAY_MANIFEST_VERSION
-        assert result["replay_manifest_version"] == "trust-replay-v1"
+        assert result["replay_manifest_version"] == "trust-replay-v2"
 
 
 def test_replay_summary_correct(build_app):
@@ -999,6 +999,50 @@ def test_replay_hash_changes_when_chain_tampered(build_app):
         )
         assert r_before["replay_hash"] != r_after["replay_hash"]
         assert r_after["chain_valid"] is False
+
+
+def test_replay_hash_changes_when_report_link_added(build_app):
+    """Adding a report link changes report_link_status → different replay_hash (P1.1 fix)."""
+    from api.db import get_engine
+
+    from services.field_assessment.report_link_authority import create_report_link
+
+    build_app()
+    with Session(get_engine()) as db:
+        import os
+
+        import base64
+
+        _seed = b"\xcc" * 32
+        _key_b64 = base64.b64encode(_seed).decode()
+        os.environ["FG_EVIDENCE_SIGNING_KEY_B64"] = _key_b64
+        try:
+            record = _make_provenance(
+                db, engagement_id="eng-rh-link-001", artifact_hash="l" * 64
+            )
+            db.commit()
+
+            r_before = verify_full_provenance_chain(
+                db, tenant_id=TENANT_A, provenance_id=record.id
+            )
+            assert r_before["report_link_status"] == "unlinked"
+
+            create_report_link(
+                db,
+                tenant_id=TENANT_A,
+                engagement_id="eng-rh-link-001",
+                evidence_id="ev-link-rh-001",
+                report_id="rep-rh-link-001",
+            )
+            db.commit()
+
+            r_after = verify_full_provenance_chain(
+                db, tenant_id=TENANT_A, provenance_id=record.id
+            )
+            assert r_after["report_link_status"] == "verified"
+            assert r_before["replay_hash"] != r_after["replay_hash"]
+        finally:
+            os.environ.pop("FG_EVIDENCE_SIGNING_KEY_B64", None)
 
 
 def test_replay_hash_excludes_timestamps(build_app):

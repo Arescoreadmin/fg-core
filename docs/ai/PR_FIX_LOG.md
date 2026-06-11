@@ -6,6 +6,37 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-11 — PR 1.4: Evidence-to-Report Link Authority
+
+**Branch:** `feat/evidence-report-link-1.4`
+
+**Area:** Field Assessment / Evidence Provenance / Trust Infrastructure
+
+**Summary of changes:**
+
+1. **`migrations/postgres/0107_evidence_report_link_authority.sql`** (new) — `CREATE TABLE IF NOT EXISTS fa_evidence_report_links` (20 columns: id, tenant_id, engagement_id, evidence_id, provenance_record_id, report_id, report_hash, report_signature, linked_at, linked_by, authority_version, link_version, event_hash, previous_hash, signature, signing_key_id, signed_at, signature_version, schema_version, created_at); 7 partial/composite indexes; RLS tenant isolation policy mirroring 0105 pattern; append-only UPDATE/DELETE triggers using `append_only_guard()`.
+
+2. **`api/db_models_field_assessment.py`** (modified) — Added `FaEvidenceReportLink` ORM class (20 columns, 4 SQLAlchemy `__table_args__` indexes); updated module docstring to include table and append-only contract.
+
+3. **`services/field_assessment/report_link_authority.py`** (new) — Full Ed25519 link authority service:
+   - Constants: `LINK_AUTHORITY_VERSION = "evidence-report-authority-v1"`, `LINK_VERSION = "report-link-v1"`, `LINK_SIGNATURE_VERSION = "report-link-signature-v1"`
+   - `_link_hash_payload()` / `compute_link_event_hash()` — SHA-256 of deterministic canonical bytes
+   - `build_canonical_report_link_event()` — covers `event_hash`, `tenant_id`, `engagement_id`, `evidence_id`, `provenance_record_id`, `report_id`, `report_hash`, `report_signature`, `signing_key_id`, `authority_version`, `link_version`
+   - `create_report_link()` — pre-INSERT signing (append-only safe); `schema_version="1.1"` if signed
+   - `verify_link_signature()` — handles `partial_authority_fields`, `missing_signature` (schema 1.1), `legacy_unsigned` (schema 1.0), `verified`, `invalid`, `key_unavailable`
+   - `verify_report_link()` — event_hash check then signature check
+   - `verify_report_links_bulk()` — O(n) in-process bulk verification, no N+1 DB queries
+   - `list_report_links_for_engagement()` / `list_report_links_for_evidence()` / `list_report_links_for_report()` / `get_report_link()` — tenant-scoped query helpers
+
+4. **`services/field_assessment/trust_replay.py`** (modified) — `verify_full_provenance_chain()` now loads all links via `list_report_links_for_engagement()` and calls `verify_report_links_bulk()` post-chain-validation; adds `linked_reports` (unique report_id list), `verified_report_links` (list of link dicts), `invalid_report_links`, `report_link_status` (`"unlinked"` | `"verified"` | `"partially_verified"` | `"invalid"`) to result dict; not-found early return also includes these four fields.
+
+5. **`tests/test_evidence_report_link_authority.py`** (new, 50 tests) — Covers: link creation (signed/unsigned), deterministic event_hash, authority fields persistence, canonical event shape, schema_version, full/partial signature strip detection, key mismatch, key unavailable, tenant isolation (cross-tenant 0-result), event_hash tamper detection, signature tamper detection, bulk verification, report status aggregation (`verified`/`partially_verified`/`invalid`/`unlinked`), trust replay integration (linked_reports/verified_report_links/invalid_report_links/report_link_status in replay result), legacy compatibility (no links = unlinked), performance (1000 links < 2000ms).
+
+**Why:**
+Closes the evidence-to-report link gap in the trust chain. Without cryptographic report linkage, the chain from evidence collection through to report delivery is unverifiable by regulators. This PR creates the join table, signing authority, and replay integration that enables "prove what evidence was in this report on date X" queries.
+
+---
+
 ### 2026-06-09 — PR 5: Legacy Removal + Governed Identity Cutover
 
 **Branch:** `feat/identity-legacy-removal-pr5`
