@@ -1943,6 +1943,13 @@ class ReportRecord(Base):
     framework_mapping_version: Mapped[Any] = mapped_column(
         Text, nullable=False, default="framework-mapping-v1"
     )
+    # PR-SIGN-5b: persisted signing event (set at finalization; null on legacy rows)
+    signature: Mapped[Any] = mapped_column(Text, nullable=True)
+    signature_algorithm: Mapped[Any] = mapped_column(Text, nullable=True)
+    signature_key_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    signature_payload_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    signature_version: Mapped[Any] = mapped_column(Text, nullable=True)
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

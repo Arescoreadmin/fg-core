@@ -13920,3 +13920,27 @@ The previous `render_pdf_export()` produced a fraudulent PDF (JSON with a `%PDF-
 
 **Why:**
 The `"billing-dev-key"` fallback was a P0 security bug — the key was known from source and any attacker could produce valid HMAC attestations without ever touching a production secret. The startup validator gap meant operators could deploy without signing keys and only discover the problem at runtime when a signature was attempted. The ingest path had no signing at all, leaving the governance export path (the highest-value audit artifact) unsigned.
+
+---
+
+### 2026-06-10 — PR 416: Persistent ingest report signature metadata (PR-SIGN-5b)
+
+**Branch:** `feat/evidence-provenance-1.1`
+
+**Area:** Ingest Report Signing / ReportRecord
+
+**Summary of changes:**
+
+1. **`migrations/postgres/0104_report_record_signature.sql`** (new) — `ALTER TABLE reports ADD COLUMN IF NOT EXISTS` for six nullable columns: `signature`, `signature_algorithm`, `signature_key_id`, `signed_at`, `signature_payload_hash`, `signature_version`. All nullable for migration compatibility; existing rows remain unsigned until a new finalize cycle runs.
+
+2. **`api/db_models.py`** — Added the six nullable columns to `ReportRecord` mapped class (between `framework_mapping_version` and `created_at`). All `Mapped[Any]` with `nullable=True`.
+
+3. **`api/reports_engine.py`** — Added `_SIGNATURE_VERSION`, `_SIGNATURE_ALGORITHM` constants and two helper functions:
+   - `_build_signing_payload(report)` — produces canonical JSON `{report_id, manifest_hash, report_version, signature_version}`. Excludes `tenant_id` to prevent cross-tenant leakage. Prefers `finalized_manifest_hash` over `manifest_hash`.
+   - `_persist_report_signature(report)` — calls `sign_report()`, derives key fingerprint via SHA-256 of public key, writes all six fields to the report object. Silent (logs warning) if `FG_REPORT_SIGNING_KEY` is absent.
+   Modified `finalize_report()` to call `_persist_report_signature(report)` before `db.commit()`. Modified `export_report_artifact()` PDF section to prefer `report.signature` when set, fall back to on-the-fly signing in dev, and omit signing headers in prod for legacy unsigned reports.
+
+4. **`tests/test_pr_sign_5b_report_record_signature.py`** (new) — 16 tests covering: model column presence and nullability, payload stability and content, all six fields written by `_persist_report_signature`, no private key material in DB fields, silent behavior on missing key, Ed25519 verification of persisted signature, tamper detection, export header preference for persisted vs on-the-fly, legacy report safety, and prod header omission.
+
+**Why:**
+PR-SIGN-5 signed at export time (ephemeral). Any key rotation invalidated all prior signatures. Storing the signing event at finalization time means the signature is permanently bound to the report content and independently verifiable by auditors at any future point, regardless of key rotation.
