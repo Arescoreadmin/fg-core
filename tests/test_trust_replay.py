@@ -298,6 +298,29 @@ def test_verify_hash_chain_engagement_contamination():
     assert result["failed_nodes"][0]["reason"] == "engagement_contamination"
 
 
+def test_verify_hash_chain_disconnected_nodes_detected():
+    """Two individually hash-valid nodes with unrelated hashes must not pass as a chain."""
+    nodes = [
+        _node("n2", "hash_b", "hash_x"),  # previous_hash points nowhere in list
+        _node("n1", "hash_a", None),  # genesis, but n2 doesn't link to it
+    ]
+    result = verify_hash_chain(nodes)
+    assert result["chain_valid"] is False
+    reasons = {f["reason"] for f in result["failed_nodes"]}
+    assert "adjacency_mismatch" in reasons
+
+
+def test_verify_hash_chain_non_genesis_last_node_detected():
+    """Last node (genesis position) with previous_hash != None must be rejected."""
+    nodes = [
+        _node("n1", "hash_a", "orphan_hash")
+    ]  # single node, non-null previous_hash
+    result = verify_hash_chain(nodes)
+    assert result["chain_valid"] is False
+    reasons = {f["reason"] for f in result["failed_nodes"]}
+    assert "corrupt_genesis" in reasons
+
+
 # ---------------------------------------------------------------------------
 # compute_chain_replay_score
 # ---------------------------------------------------------------------------
@@ -490,6 +513,36 @@ def test_verify_full_chain_not_found(build_app):
         assert result["chain_replay_score"] == SCORE_BROKEN
         assert result["chain_depth"] == 0
         assert result["failed_nodes"][0]["reason"] == "not_found"
+
+
+def test_not_found_manifest_hash_unique_per_provenance_id(build_app):
+    """Different not-found IDs must produce different manifest hashes (not a constant)."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        r1 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id="missing-id-aaa"
+        )
+        r2 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id="missing-id-bbb"
+        )
+        assert r1["verification_manifest_hash"] != r2["verification_manifest_hash"]
+
+
+def test_not_found_manifest_hash_unique_per_tenant(build_app):
+    """Same provenance_id looked up under different tenants must produce different hashes."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        r1 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_A, provenance_id="missing-id-shared"
+        )
+        r2 = verify_full_provenance_chain(
+            db, tenant_id=TENANT_B, provenance_id="missing-id-shared"
+        )
+        assert r1["verification_manifest_hash"] != r2["verification_manifest_hash"]
 
 
 def test_verify_full_chain_wrong_tenant_safe_failure(build_app):

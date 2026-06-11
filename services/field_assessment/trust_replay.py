@@ -87,7 +87,7 @@ def verify_hash_chain(nodes: list[ChainNodeData]) -> dict[str, Any]:
     """Verify structural and hash integrity of an ordered chain of nodes.
 
     Generic — no DB access, no knowledge of node semantics. Caller loads and
-    converts nodes. Nodes should be ordered latest-first (traversal order).
+    converts nodes. Nodes must be ordered latest-first (traversal order).
 
     Detects:
       hash_mismatch          — computed_hash != event_hash
@@ -95,6 +95,8 @@ def verify_hash_chain(nodes: list[ChainNodeData]) -> dict[str, Any]:
       cycle_detected         — same node_id appears twice
       tenant_contamination   — node.tenant_id != head node's tenant_id
       engagement_contamination — node.engagement_id != head node's engagement_id
+      adjacency_mismatch     — nodes[i].previous_hash != nodes[i+1].event_hash
+      corrupt_genesis        — last node (genesis) has a non-null previous_hash
 
     Returns:
       chain_valid    bool
@@ -148,6 +150,32 @@ def verify_hash_chain(nodes: list[ChainNodeData]) -> dict[str, Any]:
             failed.append({**summary, "reason": failure})
         else:
             verified.append(summary)
+
+    # Adjacency: each node's previous_hash must equal the next node's event_hash.
+    # This catches disconnected or reordered lists that pass per-node hash checks.
+    for i in range(len(nodes) - 1):
+        curr, nxt = nodes[i], nodes[i + 1]
+        if curr.previous_hash != nxt.event_hash:
+            failed.append(
+                {
+                    "node_id": curr.node_id,
+                    "event_hash": curr.event_hash,
+                    "previous_hash": curr.previous_hash,
+                    "reason": "adjacency_mismatch",
+                }
+            )
+
+    # Genesis node (last in latest-first order) must have no previous_hash.
+    if nodes[-1].previous_hash is not None:
+        last = nodes[-1]
+        failed.append(
+            {
+                "node_id": last.node_id,
+                "event_hash": last.event_hash,
+                "previous_hash": last.previous_hash,
+                "reason": "corrupt_genesis",
+            }
+        )
 
     return {
         "chain_valid": len(failed) == 0,
@@ -322,6 +350,15 @@ def verify_full_provenance_chain(
         db, provenance_id=provenance_id, tenant_id=tenant_id
     )
     if start is None:
+        # Hash over (tenant_id, provenance_id) so each failed lookup gets a
+        # unique, recomputable fingerprint — not a constant shared across all failures.
+        not_found_hash = _canonical_hash(
+            {
+                "tenant_id": tenant_id,
+                "provenance_id": provenance_id,
+                "chain_valid": False,
+            }
+        )
         return {
             "chain_valid": False,
             "chain_depth": 0,
@@ -333,7 +370,7 @@ def verify_full_provenance_chain(
             "verified_nodes": [],
             "failed_nodes": [{"node_id": None, "reason": "not_found"}],
             "warnings": [],
-            "verification_manifest_hash": _canonical_hash({}),
+            "verification_manifest_hash": not_found_hash,
         }
 
     by_hash = _load_engagement_records(
