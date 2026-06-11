@@ -213,6 +213,25 @@ def create_evidence_provenance(
     )
     db.add(record)
     db.flush()
+    from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
+        TrustInputs,
+        ProvenanceMode,
+        enforce_evidence_authority,
+    )
+
+    _sig_valid: bool | None = True if authority.get("signature") else None
+    enforce_evidence_authority(
+        TrustInputs(
+            signature_valid=_sig_valid,
+            is_legacy=(_sig_valid is None),
+            tenant_valid=True,
+            engagement_valid=True,
+        ),
+        mode=ProvenanceMode.from_env(),
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        db=db,
+    )
     return record
 
 
@@ -312,6 +331,25 @@ def mark_provenance_reviewed(
     )
     db.add(review_record)
     db.flush()
+    from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
+        TrustInputs,
+        ProvenanceMode,
+        enforce_evidence_authority,
+    )
+
+    _sig_valid: bool | None = True if authority.get("signature") else None
+    enforce_evidence_authority(
+        TrustInputs(
+            signature_valid=_sig_valid,
+            is_legacy=(_sig_valid is None),
+            tenant_valid=True,
+            engagement_valid=True,
+        ),
+        mode=ProvenanceMode.from_env(),
+        tenant_id=tenant_id,
+        engagement_id=prior.engagement_id,
+        db=db,
+    )
     return review_record
 
 
