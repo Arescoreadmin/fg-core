@@ -10,12 +10,15 @@ Covers:
   - legacy reports (null signature) do not crash export
   - prod export omits headers for unsigned legacy reports
   - private key material is never stored in the signature column
+  - prod/staging refuses to finalize when signing key is absent (fail-closed)
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+
+import pytest
 
 _TEST_SEED = bytes(range(1, 33))
 _TEST_SEED_HEX = _TEST_SEED.hex()
@@ -169,7 +172,9 @@ def test_persist_report_signature_no_private_key_in_db(monkeypatch):
         assert _TEST_SEED_HEX not in (field or "")
 
 
-def test_persist_report_signature_silent_on_missing_key(monkeypatch):
+def test_persist_report_signature_silent_on_missing_key_in_dev(monkeypatch):
+    """In dev, missing key → warning only; finalization succeeds unsigned."""
+    monkeypatch.setenv("FG_ENV", "dev")
     monkeypatch.delenv("FG_REPORT_SIGNING_KEY", raising=False)
     monkeypatch.delenv("FG_REPORT_SIGNING_PUBLIC_KEY", raising=False)
 
@@ -179,6 +184,32 @@ def test_persist_report_signature_silent_on_missing_key(monkeypatch):
     _persist_report_signature(r)  # must not raise
 
     assert r.signature is None
+
+
+def test_persist_report_signature_raises_in_prod_missing_key(monkeypatch):
+    """In prod, missing signing key must refuse finalization."""
+    monkeypatch.setenv("FG_ENV", "prod")
+    monkeypatch.delenv("FG_REPORT_SIGNING_KEY", raising=False)
+    monkeypatch.delenv("FG_REPORT_SIGNING_PUBLIC_KEY", raising=False)
+
+    from api.reports_engine import _persist_report_signature
+
+    r = _make_report()
+    with pytest.raises(RuntimeError, match="FG_REPORT_SIGNING_KEY"):
+        _persist_report_signature(r)
+
+
+def test_persist_report_signature_raises_in_staging_missing_key(monkeypatch):
+    """In staging, missing signing key must refuse finalization."""
+    monkeypatch.setenv("FG_ENV", "staging")
+    monkeypatch.delenv("FG_REPORT_SIGNING_KEY", raising=False)
+    monkeypatch.delenv("FG_REPORT_SIGNING_PUBLIC_KEY", raising=False)
+
+    from api.reports_engine import _persist_report_signature
+
+    r = _make_report()
+    with pytest.raises(RuntimeError, match="FG_REPORT_SIGNING_KEY"):
+        _persist_report_signature(r)
 
 
 def test_persist_report_signature_payload_hash_is_stable(monkeypatch):

@@ -828,7 +828,8 @@ def _build_signing_payload(report: ReportRecord) -> str:
 def _persist_report_signature(report: ReportRecord) -> None:
     """Sign the canonical report payload and write metadata onto the report object.
 
-    Does nothing and logs a warning if the signing key is not configured.
+    In prod/staging: raises RuntimeError if the signing key is absent or signing fails.
+    In dev/test: logs a warning and leaves signature fields None.
     Callers must db.commit() after this returns.
     """
     import hashlib as _hl
@@ -850,6 +851,12 @@ def _persist_report_signature(report: ReportRecord) -> None:
         report.signature_payload_hash = _hl.sha256(payload.encode("utf-8")).hexdigest()
         report.signature_version = _SIGNATURE_VERSION
     except ReportSigningKeyError:
+        if is_production_env():
+            raise RuntimeError(
+                f"report.signing_key_missing report_id={report.id} — "
+                "FG_REPORT_SIGNING_KEY must be set in prod/staging; "
+                "refusing to finalize unsigned report"
+            ) from None
         log.warning(
             "report.signing_key_missing report_id=%s — signature not persisted",
             report.id,
