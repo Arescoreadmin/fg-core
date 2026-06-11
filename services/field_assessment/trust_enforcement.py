@@ -363,15 +363,23 @@ def _emit_enforcement_audit_event(
     """Emit an H13-atomic trust enforcement audit event.
 
     Must be called BEFORE db.commit() so the audit event commits with the mutation.
+    For STRICT-mode blocks, use _emit_enforcement_audit_event_independent() instead
+    so the event commits in its own transaction and survives the caller's rollback.
     """
     from services.field_assessment.audit import emit_engagement_audit_event  # noqa: PLC0415
 
-    event_type_map = {
-        "allow": "trust_validation_passed",
-        "warn": "trust_validation_warning",
-        "block": "trust_validation_blocked",
-    }
-    event_type = event_type_map.get(decision.decision, "trust_validation_passed")
+    # OFF mode with violations: decision=allow but violations exist.
+    # Record as trust_validation_warning (not trust_validation_passed) so audit
+    # consumers see that violations were detected even though no enforcement ran.
+    if decision.decision == "allow" and decision.violations:
+        event_type = "trust_validation_warning"
+    else:
+        event_type_map = {
+            "allow": "trust_validation_passed",
+            "warn": "trust_validation_warning",
+            "block": "trust_validation_blocked",
+        }
+        event_type = event_type_map.get(decision.decision, "trust_validation_passed")
 
     # Emit per-violation events for chain and authority failures
     if "chain_failure" in decision.violations:
@@ -457,6 +465,47 @@ def _emit_enforcement_audit_event(
 
 
 # ---------------------------------------------------------------------------
+# Independent-session audit emission (STRICT block durability)
+# ---------------------------------------------------------------------------
+
+
+def _emit_enforcement_audit_event_independent(
+    db: Any,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    decision: TrustDecision,
+    gate: str,
+) -> None:
+    """Emit a trust audit event in an independent, auto-committed session.
+
+    Used for STRICT-mode blocks where the calling operation's transaction will
+    be rolled back after TrustEnforcementError is raised.  A transaction-bound
+    flush (the normal path) would silently discard the blocked audit event along
+    with the caller's rolled-back mutation.  By opening a separate session here
+    and committing immediately, the blocked-enforcement audit event is durable
+    even when the surrounding operation is rolled back.
+
+    Errors are swallowed: audit emission must not mask the enforcement raise.
+    """
+    try:
+        from sqlalchemy.orm import Session as OrmSession  # noqa: PLC0415
+
+        bind = db.get_bind()
+        with OrmSession(bind) as ind_session:
+            _emit_enforcement_audit_event(
+                ind_session,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                decision=decision,
+                gate=gate,
+            )
+            ind_session.commit()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Core gate
 # ---------------------------------------------------------------------------
 
@@ -495,13 +544,25 @@ def _enforce_gate(
     _emit_metrics(decision, all_violations)
 
     if db is not None:
-        _emit_enforcement_audit_event(
-            db,
-            tenant_id=tenant_id,
-            engagement_id=engagement_id,
-            decision=decision,
-            gate=gate,
-        )
+        if not allowed and mode == ProvenanceMode.STRICT:
+            # STRICT block: audit in an independent session so the event is
+            # durable even after the caller's transaction rolls back.
+            _emit_enforcement_audit_event_independent(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                decision=decision,
+                gate=gate,
+            )
+        else:
+            # Allow or warn: transaction-bound; commits with the mutation.
+            _emit_enforcement_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                decision=decision,
+                gate=gate,
+            )
 
     if not allowed and mode == ProvenanceMode.STRICT:
         raise TrustEnforcementError(decision)

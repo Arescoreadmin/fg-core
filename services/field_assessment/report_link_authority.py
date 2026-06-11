@@ -339,6 +339,25 @@ def create_report_link(
     )
     db.add(link)
     db.flush()
+    from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
+        TrustInputs,
+        ProvenanceMode,
+        enforce_report_link_authority,
+    )
+
+    _link_signed = bool(authority.get("signature"))
+    enforce_report_link_authority(
+        TrustInputs(
+            link_valid=_link_signed,
+            is_legacy=not _link_signed,
+            tenant_valid=True,
+            engagement_valid=True,
+        ),
+        mode=ProvenanceMode.from_env(),
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        db=db,
+    )
     return link
 
 
