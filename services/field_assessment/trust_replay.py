@@ -7,12 +7,14 @@ This module is a trust infrastructure primitive designed for:
   - Generality: verify_hash_chain() is chain-type-agnostic; reuse it for report,
     identity, RBAC, governance, and future AGI governance chains
 
-PR 1.3 compatibility:
-  - ChainNodeData.signature_meta reserved for signature, signing_key_id,
-    signed_at, authority_version — no redesign needed
-  - generate_trust_proof() returns the deterministic package that PR 1.3 will sign
+PR 1.3 integration:
+  - ChainNodeData.signature_meta now populated from evidence_authority.py
+  - verify_full_provenance_chain() verifies both hash chain AND signature chain
+  - Legacy unsigned records: warning (legacy_unsigned), not failure
+  - Signed records with invalid signature: hard failure (invalid_signature)
+  - SCORE_DEGRADED (50) activates when all nodes are hash-valid but some unsigned
 
-Performance targets: 100-node chain <100ms, 1000-node chain <1s.
+Performance targets: 100-node chain <150ms, 1000-node chain <2s.
 """
 
 from __future__ import annotations
@@ -36,10 +38,10 @@ from services.field_assessment.evidence_provenance import (
 # Constants
 # ---------------------------------------------------------------------------
 
-SCORE_PERFECT: int = 100  # all nodes valid, no warnings
-SCORE_WARNINGS: int = 75  # all nodes valid, soft warnings present
-SCORE_DEGRADED: int = 50  # reserved for PR 1.3 (valid chain, unsigned nodes)
-SCORE_BROKEN: int = 0  # any hard integrity failure
+SCORE_PERFECT: int = 100  # all nodes valid, signed, no warnings
+SCORE_WARNINGS: int = 75  # all nodes valid, signed (or legacy), non-signature warnings
+SCORE_DEGRADED: int = 50  # all nodes hash-valid; only legacy_unsigned warnings
+SCORE_BROKEN: int = 0  # any hard integrity failure (hash or signature)
 
 REPLAY_MANIFEST_VERSION: str = "trust-replay-v1"
 # Increment to "trust-replay-v2" etc. when the replay schema changes.
@@ -256,10 +258,13 @@ def verify_hash_chain(nodes: list[ChainNodeData]) -> dict[str, Any]:
 
 
 def verify_chain_node(record: FaEvidenceProvenance) -> dict[str, Any]:
-    """Recompute event_hash for one provenance record and compare to stored value.
+    """Recompute event_hash and verify Ed25519 authority signature for one record.
 
-    Returns hash_valid bool, computed_hash, and failure_reason (None if valid).
+    Returns hash_valid bool, computed_hash, failure_reason, and signature fields.
+    signature_valid=None means legacy_unsigned (warning, not failure).
     """
+    from services.field_assessment.evidence_authority import verify_provenance_signature
+
     payload = _hash_payload(
         tenant_id=record.tenant_id,
         engagement_id=record.engagement_id,
@@ -275,13 +280,19 @@ def verify_chain_node(record: FaEvidenceProvenance) -> dict[str, Any]:
         created_at=record.created_at,
     )
     computed = compute_provenance_hash(payload)
-    valid = computed == record.event_hash
+    hash_valid = computed == record.event_hash
+
+    sig_result = verify_provenance_signature(record)
+
     return {
         "node_id": record.id,
         "event_hash": record.event_hash,
         "computed_hash": computed,
-        "hash_valid": valid,
-        "failure_reason": None if valid else "hash_mismatch",
+        "hash_valid": hash_valid,
+        "failure_reason": None if hash_valid else "hash_mismatch",
+        "signature_valid": sig_result["valid"],
+        "signature_status": sig_result["status"],
+        "authority_version": sig_result.get("authority_version"),
     }
 
 
@@ -360,16 +371,19 @@ def compute_chain_replay_score(
 ) -> int:
     """Deterministic replay score.
 
-    100 — perfect: all nodes valid, no warnings
-     75 — warnings: all nodes valid, soft warnings present
-     50 — reserved: PR 1.3 will use for valid-chain-but-unsigned-nodes
-      0 — broken: any hard integrity failure
+    100 — perfect: all nodes hash-valid AND signature-valid, no warnings
+     75 — warnings: all nodes valid, but non-legacy soft warnings present
+     50 — degraded: all nodes hash-valid; only legacy_unsigned signature warnings
+      0 — broken: any hard integrity failure (hash mismatch or invalid signature)
     """
     if failed_nodes:
         return SCORE_BROKEN
-    if warnings:
-        return SCORE_WARNINGS
-    return SCORE_PERFECT
+    if not warnings:
+        return SCORE_PERFECT
+    # SCORE_DEGRADED activates when all warnings are legacy_unsigned — no other issues
+    if all(w.endswith(":legacy_unsigned") for w in warnings):
+        return SCORE_DEGRADED
+    return SCORE_WARNINGS
 
 
 # ---------------------------------------------------------------------------
@@ -503,9 +517,13 @@ def verify_full_provenance_chain(
             break
         current = parent
 
-    # --- Build ChainNodeData list and run generic verifier ---
+    # --- Build ChainNodeData list, run generic hash verifier, verify signatures ---
+    from services.field_assessment.evidence_authority import verify_provenance_signature
+
     nodes: list[ChainNodeData] = []
     soft_warnings: list[str] = []
+    # Map node_id → signature verification result for post-hash-chain enrichment
+    sig_results: dict[str, dict] = {}
 
     for record in traversal:
         payload = _hash_payload(
@@ -523,6 +541,9 @@ def verify_full_provenance_chain(
             created_at=record.created_at,
         )
         computed = compute_provenance_hash(payload)
+        sig_result = verify_provenance_signature(record)
+        sig_results[record.id] = sig_result
+
         nodes.append(
             ChainNodeData(
                 node_id=record.id,
@@ -531,6 +552,12 @@ def verify_full_provenance_chain(
                 computed_hash=computed,
                 tenant_id=record.tenant_id,
                 engagement_id=record.engagement_id,
+                signature_meta={
+                    "signature_valid": sig_result["valid"],
+                    "signature_status": sig_result["status"],
+                    "authority_version": sig_result.get("authority_version"),
+                    "signing_key_id": sig_result.get("signing_key_id"),
+                },
             )
         )
         if record.artifact_hash is None:
@@ -538,11 +565,39 @@ def verify_full_provenance_chain(
 
     base = verify_hash_chain(nodes)
 
-    all_failed = base["failed_nodes"] + structural_failures
-    all_warnings = base["warnings"] + soft_warnings
+    # Enrich hash-verified nodes with signature data; move sig-invalid to failed
+    enriched_verified: list[dict] = []
+    sig_failures: list[dict] = []
+    sig_warnings: list[str] = []
+
+    for node_dict in base["verified_nodes"]:
+        nid = node_dict["node_id"]
+        sr = sig_results.get(nid, {})
+        enriched = {
+            **node_dict,
+            "signature_valid": sr.get("valid"),
+            "signature_status": sr.get("status"),
+            "authority_version": sr.get("authority_version"),
+        }
+        if sr.get("valid") is False:
+            # Invalid signature on an otherwise hash-valid node → hard failure
+            sig_failures.append(
+                {
+                    "node_id": nid,
+                    "event_hash": node_dict["event_hash"],
+                    "reason": "invalid_signature",
+                }
+            )
+        else:
+            enriched_verified.append(enriched)
+            if sr.get("status") == "legacy_unsigned":
+                sig_warnings.append(f"node:{nid}:legacy_unsigned")
+
+    all_failed = base["failed_nodes"] + structural_failures + sig_failures
+    all_warnings = base["warnings"] + soft_warnings + sig_warnings
 
     chain_valid = len(all_failed) == 0
-    score = compute_chain_replay_score(base["verified_nodes"], all_failed, all_warnings)
+    score = compute_chain_replay_score(enriched_verified, all_failed, all_warnings)
 
     genesis_hash = traversal[-1].event_hash if traversal else None
     latest_hash = traversal[0].event_hash if traversal else None
@@ -556,12 +611,12 @@ def verify_full_provenance_chain(
         "genesis_hash": genesis_hash,
         "latest_hash": latest_hash,
         "chain_replay_score": score,
-        "verified_nodes": sorted(base["verified_nodes"], key=lambda n: n["node_id"]),
+        "verified_nodes": sorted(enriched_verified, key=lambda n: n["node_id"]),
     }
     manifest_hash = _canonical_hash(manifest_payload)
 
     replay_summary = _build_replay_summary(
-        base["verified_nodes"], all_failed, all_warnings, depth, score
+        enriched_verified, all_failed, all_warnings, depth, score
     )
     replay_hash = _build_replay_hash(
         chain_valid=chain_valid,
@@ -569,7 +624,7 @@ def verify_full_provenance_chain(
         genesis_hash=genesis_hash,
         latest_hash=latest_hash,
         chain_replay_score=score,
-        verified_nodes=base["verified_nodes"],
+        verified_nodes=enriched_verified,
         failed_nodes=all_failed,
         warnings=all_warnings,
         verification_manifest_hash=manifest_hash,
@@ -585,7 +640,7 @@ def verify_full_provenance_chain(
         "genesis_hash": genesis_hash,
         "latest_hash": latest_hash,
         "chain_replay_score": score,
-        "verified_nodes": base["verified_nodes"],
+        "verified_nodes": enriched_verified,
         "failed_nodes": all_failed,
         "warnings": all_warnings,
         "verification_manifest_hash": manifest_hash,
@@ -642,20 +697,16 @@ def generate_trust_proof(
 ) -> dict[str, Any]:
     """Generate a deterministic trust proof package for a provenance chain.
 
-    This is the object PR 1.3 (Evidence Authority) will sign with Ed25519.
-    No signatures here — this PR produces the deterministic input to signing.
-
-    The proof is self-describing: a consumer with the chain data can
-    independently recompute replay_hash and verify it matches.
-
-    PR 1.3 will add: signature, signing_key_id, authority_version, signed_at.
+    Includes both hash chain and signature chain verification results.
+    Self-describing: a consumer with the chain data and public key can
+    independently recompute replay_hash and verify all signatures.
 
     Returns:
-      replay_manifest        dict — chain verification manifest
+      replay_manifest        dict — chain verification manifest (stable, no timestamps)
       replay_hash            str  — deterministic fingerprint of the outcome
       verification_summary   dict — executive/dashboard metrics
-      chain_valid            bool
-      chain_replay_score     int
+      chain_valid            bool — True only if hash AND signature chain valid
+      chain_replay_score     int  — 100/75/50/0
     """
     result = verify_full_provenance_chain(
         db, tenant_id=tenant_id, provenance_id=provenance_id
