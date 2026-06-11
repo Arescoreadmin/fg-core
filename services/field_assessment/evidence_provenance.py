@@ -163,6 +163,18 @@ def create_evidence_provenance(
     )
     event_hash = compute_provenance_hash(payload)
 
+    # PR 1.3: sign before INSERT — append-only trigger blocks post-flush UPDATE
+    authority = _try_sign_new_event(
+        event_hash=event_hash,
+        previous_hash=previous_hash,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        evidence_id=evidence_id,
+        finding_id=finding_id,
+        source_type=source_type,
+        collected_at=actual_collected_at,
+    )
+
     record = FaEvidenceProvenance(
         id=_new_id(),
         tenant_id=tenant_id,
@@ -190,6 +202,11 @@ def create_evidence_provenance(
         event_hash=event_hash,
         created_at=now,
         schema_version="1.0",
+        signature=authority.get("signature"),
+        signing_key_id=authority.get("signing_key_id"),
+        signed_at=authority.get("signed_at"),
+        signature_version=authority.get("signature_version"),
+        authority_version=authority.get("authority_version"),
     )
     db.add(record)
     db.flush()
@@ -239,6 +256,18 @@ def mark_provenance_reviewed(
     )
     event_hash = compute_provenance_hash(payload)
 
+    # PR 1.3: sign before INSERT — append-only trigger blocks post-flush UPDATE
+    authority = _try_sign_new_event(
+        event_hash=event_hash,
+        previous_hash=prior.event_hash,
+        tenant_id=tenant_id,
+        engagement_id=prior.engagement_id,
+        evidence_id=prior.evidence_id,
+        finding_id=prior.finding_id,
+        source_type=prior.source_type,
+        collected_at=prior.collected_at,
+    )
+
     review_record = FaEvidenceProvenance(
         id=_new_id(),
         tenant_id=tenant_id,
@@ -269,6 +298,11 @@ def mark_provenance_reviewed(
         event_hash=event_hash,
         created_at=now,
         schema_version="1.0",
+        signature=authority.get("signature"),
+        signing_key_id=authority.get("signing_key_id"),
+        signed_at=authority.get("signed_at"),
+        signature_version=authority.get("signature_version"),
+        authority_version=authority.get("authority_version"),
     )
     db.add(review_record)
     db.flush()
@@ -387,3 +421,50 @@ def verify_provenance_chain(
         }
 
     return {"valid": True, "provenance_id": provenance_id, "reason": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# PR 1.3: Evidence Authority integration
+# ---------------------------------------------------------------------------
+
+
+def _try_sign_new_event(
+    *,
+    event_hash: str,
+    previous_hash: str | None,
+    tenant_id: str,
+    engagement_id: str,
+    evidence_id: str | None,
+    finding_id: str | None,
+    source_type: str,
+    collected_at: str,
+) -> dict:
+    """Return Ed25519 authority fields for a new event, or {} if key not configured.
+
+    Called before the record is flushed — append-only triggers block post-flush
+    UPDATE, so authority fields must be set in the initial INSERT.
+
+    In prod: raises if signing key missing (fail-closed).
+    In dev/test: returns {} and leaves the record unsigned (legacy-compatible).
+    """
+    try:
+        from services.field_assessment.evidence_authority import (
+            sign_new_provenance_event,
+        )
+
+        return sign_new_provenance_event(
+            event_hash=event_hash,
+            previous_hash=previous_hash,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            evidence_id=evidence_id,
+            finding_id=finding_id,
+            source_type=source_type,
+            collected_at=collected_at,
+        )
+    except Exception as exc:
+        from api.config.env import is_production_env
+
+        if is_production_env():
+            raise RuntimeError(f"evidence_authority.signing_failed: {exc}") from exc
+        return {}

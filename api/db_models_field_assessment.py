@@ -599,6 +599,13 @@ class FaEvidenceProvenance(Base):
     previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     event_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
+    # PR 1.3: Evidence Authority signing fields (null on legacy rows — not invalid)
+    signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signing_key_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    signature_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    authority_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"

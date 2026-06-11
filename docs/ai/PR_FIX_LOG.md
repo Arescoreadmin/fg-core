@@ -14026,3 +14026,47 @@ PR 1.1 stored provenance chains. PR 1.2 makes them provable. A stored chain can 
 
 **Why:**
 PR 1.2 could verify chains but couldn't prove the verification result itself was stable — two calls on the same chain could produce different manifest hashes if timestamps were included. PR 1.2A makes the outcome hash deterministic, adds a version string so downstream consumers can detect schema evolution, and provides `generate_trust_proof()` as the surface PR 1.3 will sign. Without a stable `replay_hash`, a regulator receiving a proof package can't independently verify that the hash matches the chain they inspect — this closes that gap.
+
+## PR 1.3 — Evidence Authority Foundation (`feat/evidence-authority-1.3`)
+
+1. **`migrations/postgres/0106_evidence_authority.sql`** (new) — adds 5 nullable authority columns to `fa_evidence_provenance` via `ALTER TABLE … ADD COLUMN IF NOT EXISTS`: `signature TEXT`, `signing_key_id TEXT`, `signed_at TEXT`, `signature_version TEXT`, `authority_version TEXT`; partial index `fa_evidence_provenance_signing_key_id_idx` on `signing_key_id WHERE signing_key_id IS NOT NULL`; no backfill (legacy rows remain unsigned — treated as `legacy_unsigned`, not invalid)
+
+2. **`api/db_models_field_assessment.py`** — added 5 nullable `Mapped[str | None]` columns to `FaEvidenceProvenance` ORM class (after `event_hash`): `signature`, `signing_key_id`, `signed_at`, `signature_version`, `authority_version`
+
+3. **`services/field_assessment/evidence_authority.py`** (new, ~320 lines) — Ed25519 signing/verification service:
+   - `AUTHORITY_VERSION = "evidence-authority-v1"`, `SIGNATURE_VERSION = "evidence-signature-v1"`
+   - `EvidenceAuthorityError(RuntimeError)` — raised when key material is missing or invalid
+   - `_load_private_key_seed()` — reads `FG_EVIDENCE_SIGNING_KEY_B64` (32-byte seed, base64-encoded); raises `EvidenceAuthorityError` if missing/invalid
+   - `_derive_public_key_bytes(seed)` / `_derive_key_id(pub_bytes)` — `SHA256(pub_bytes).hexdigest()[:16]` fingerprint
+   - `_build_canonical_event()` — deterministic dict over immutable provenance identity fields only (`event_hash`, `previous_hash`, `tenant_id`, `engagement_id`, `evidence_id`, `finding_id`, `source_type`, `collected_at`, `authority_version`, `signature_version`); excludes mutable review/status/report fields
+   - `build_canonical_provenance_event(record)` — public convenience wrapper over `_build_canonical_event`
+   - `_sign_canonical_bytes(canonical)` — `Ed25519PrivateKey.sign(SHA256(canonical_json_bytes))` → hex
+   - `sign_provenance_event(record)` — sign from existing ORM record → returns authority fields dict
+   - `sign_new_provenance_event(*, event_hash, …)` — sign before record creation (pre-INSERT pattern; required because Postgres append-only triggers block all UPDATE after INSERT)
+   - `verify_provenance_signature(record)` — returns `{valid, status, reason, authority_version, signing_key_id}`; `legacy_unsigned` (valid=None) for unsigned rows; `verified` (valid=True) on success; `invalid` (valid=False) on tamper; `key_unavailable` when env var missing
+
+4. **`services/field_assessment/evidence_provenance.py`** — integrated authority signing:
+   - `create_evidence_provenance()` — calls `_try_sign_new_event()` before `db.flush()`; authority fields set in ORM constructor (not post-INSERT UPDATE)
+   - `mark_provenance_reviewed()` — same pattern for review chain events
+   - `_try_sign_new_event()` — best-effort helper: calls `sign_new_provenance_event()`; in prod (`is_production_env()`) raises on failure (fail-closed); in dev/test returns `{}` (legacy-compatible)
+
+5. **`services/field_assessment/trust_replay.py`** — signature chain verification integrated:
+   - `verify_chain_node()` — now calls `verify_provenance_signature(record)` per node; adds `signature_valid`, `signature_status`, `authority_version` to node result
+   - `verify_full_provenance_chain()` — per-node sig verification; sig-invalid nodes move to `failed_nodes` with `invalid_signature` reason; `legacy_unsigned` nodes emit `"{node_id}:legacy_unsigned"` warning
+   - `compute_chain_replay_score()` updated: `SCORE_DEGRADED (50)` activates when `failed_nodes` is empty and all warnings are `legacy_unsigned`; `SCORE_WARNINGS (75)` for other warnings
+
+6. **`tests/test_evidence_authority.py`** (new, 33 tests):
+   - `signing_env` fixture: `monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_KEY_B64)` where `_TEST_KEY_B64 = base64.b64encode(b"\xab" * 32).decode()`
+   - Key management: `test_load_private_key_seed_*` — happy path, missing env, invalid base64, wrong length
+   - Canonical event: `test_build_canonical_event_*` — deterministic, excludes mutable fields, `None` fields stable
+   - Signing: `test_sign_new_provenance_event_*` — returns 5 fields, `signing_key_id` is 16 hex chars, deterministic per key+payload
+   - Verification: `test_verify_provenance_signature_*` — verified, legacy_unsigned, tampered payload, tampered signature, wrong key, encoding error, key unavailable
+   - DB-based: `test_authority_fields_verify_after_persist` — round-trip through create + verify; `test_verify_corrupted_signature_encoding_fails` — SQL tamper + expire_all + verify
+
+7. **`tests/test_trust_replay.py`** — updated 3 existing tests:
+   - `test_verify_full_chain_single_node_valid` → expects `SCORE_DEGRADED` (test env has no signing key → legacy_unsigned)
+   - `test_verify_full_chain_multi_node_valid` → expects `SCORE_DEGRADED`
+   - `test_replay_summary_perfect_chain` → expects `SCORE_DEGRADED`, `warning_count == 1`
+
+**Why:**
+PR 1.2A proved the chain state is stable and deterministic. PR 1.3 proves that the party who recorded the chain is the same party who claims to have recorded it. Without signatures, a replay can confirm a chain is internally consistent but cannot prove the records were written by a trusted authority — an attacker with DB write access could fabricate a self-consistent chain. Ed25519 signatures over a canonical (mutable-field-excluded) event payload close this gap. The append-only constraint and the pre-INSERT signing pattern together ensure no post-hoc signature manipulation is possible at the application layer.

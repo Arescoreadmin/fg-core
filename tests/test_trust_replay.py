@@ -27,6 +27,7 @@ from services.field_assessment.trust_replay import (
     REPLAY_MANIFEST_VERSION,
     ChainNodeData,
     SCORE_BROKEN,
+    SCORE_DEGRADED,
     SCORE_PERFECT,
     SCORE_WARNINGS,
     compute_chain_replay_score,
@@ -446,7 +447,8 @@ def test_verify_full_chain_single_node_valid(build_app):
         )
         assert result["chain_valid"] is True
         assert result["chain_depth"] == 1
-        assert result["chain_replay_score"] == SCORE_PERFECT
+        # No signing key in test env → legacy_unsigned warning → SCORE_DEGRADED
+        assert result["chain_replay_score"] == SCORE_DEGRADED
         assert result["genesis_hash"] == record.event_hash
         assert result["latest_hash"] == record.event_hash
         assert result["failed_nodes"] == []
@@ -470,7 +472,8 @@ def test_verify_full_chain_multi_node_valid(build_app):
         )
         assert result["chain_valid"] is True
         assert result["chain_depth"] == 3
-        assert result["chain_replay_score"] == SCORE_PERFECT
+        # No signing key in test env → legacy_unsigned warnings → SCORE_DEGRADED
+        assert result["chain_replay_score"] == SCORE_DEGRADED
         assert result["genesis_hash"] == genesis.event_hash
         assert result["latest_hash"] == latest.event_hash
         assert len(result["verified_nodes"]) == 3
@@ -939,8 +942,9 @@ def test_replay_summary_perfect_chain(build_app):
             db, tenant_id=TENANT_A, provenance_id=record.id
         )
         summary = result["replay_summary"]
-        assert summary["chain_replay_score"] == SCORE_PERFECT
-        assert summary["warning_count"] == 0
+        # No signing key in test env → legacy_unsigned warning → SCORE_DEGRADED
+        assert summary["chain_replay_score"] == SCORE_DEGRADED
+        assert summary["warning_count"] == 1  # legacy_unsigned
         assert summary["failed_node_count"] == 0
         assert summary["verified_node_count"] == 1
 
