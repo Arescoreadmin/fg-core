@@ -434,11 +434,12 @@ def verify_full_provenance_chain(
       warnings                  list[str]
       verification_manifest_hash str
       engagement_id             str | None
-      replay_manifest_version   str  ("trust-replay-v1")
+      replay_manifest_version   str  ("trust-replay-v2")
       replay_summary            dict  (verified_node_count, failed_node_count, …)
-      replay_hash               str  (SHA-256 of deterministic outcome fields)
+      replay_hash               str  (SHA-256 of deterministic outcome fields, includes
+                                      report-link results since trust-replay-v2)
 
-      PR 1.4 — Report Link Authority fields (additive, not included in replay_hash):
+      PR 1.4 — Report Link Authority fields (included in replay_hash since v2):
       linked_reports            list[{report_id, link_count, verified_count, invalid_count}]
       verified_report_links     list[{link_id, evidence_id, report_id, event_hash, …}]
       invalid_report_links      list[{link_id, evidence_id, report_id, reason, …}]
