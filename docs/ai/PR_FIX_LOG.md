@@ -6,6 +6,55 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-11 — PR 1.5A: Trust Enforcement Integration Layer
+
+**Branch:** `pr/1.5a-trust-enforcement-integration`
+
+**Area:** Field Assessment / Trust Enforcement / Workflow Integration
+
+**Summary of changes:**
+
+1. **`services/field_assessment/trust_enforcement_adapter.py`** (new) — Adapter layer decoupling workflows from enforcement implementation:
+   - `_trust_inputs_from_replay_result()` — converts `verify_full_provenance_chain()` result dict to `TrustInputs`; maps score 100→signed, 75→signed-with-warnings, 50→legacy_unsigned, 0→broken; detects `invalid_signature` in failed_nodes
+   - `enforce_evidence_creation()` — pre-persistence gate; called from `create_evidence_provenance()` after signing
+   - `enforce_evidence_review()` — pre-persistence gate; called from `mark_provenance_reviewed()` after signing
+   - `enforce_evidence_approval()` — pre-mutation gate; called before `qa_approve_report_route()` sets approval fields
+   - `enforce_report_finalization()` — pre-mutation gate; called before `finalize_report()` sets `approval_status="finalized"`
+   - `enforce_report_export()` — pre-generation gate; called before JSON/PDF content is returned
+   - `enforce_trust_replay()` — post-verification gate; called inside `generate_trust_proof()` after `verify_full_provenance_chain()`
+   - `_run_gate()` internal helper: calls `enforce_full_trust_chain()` and emits metrics whether the call returns or raises `TrustEnforcementError`
+   - 4 Prometheus counters: `frostgate_trust_enforcement_operations_total` (labels: operation, mode, decision), `frostgate_trust_enforcement_allowed_total`, `frostgate_trust_enforcement_warned_total`, `frostgate_trust_enforcement_blocked_total` (all with operation label only)
+
+2. **`services/field_assessment/evidence_provenance.py`** (modified) — Replaced direct `enforce_evidence_authority` calls (manual TrustInputs assembly) with adapter calls:
+   - `create_evidence_provenance()`: now calls `enforce_evidence_creation()` after flush
+   - `mark_provenance_reviewed()`: now calls `enforce_evidence_review()` after flush
+
+3. **`services/field_assessment/trust_replay.py`** (modified) — `generate_trust_proof()` now calls `enforce_trust_replay()` after `verify_full_provenance_chain()` completes; skipped when `engagement_id` is None (not-found chain)
+
+4. **`api/reports_engine.py`** (modified) — `finalize_report()` calls `enforce_report_finalization()` before any mutations; `TrustEnforcementError` surfaces as HTTP 422 `TRUST_ENFORCEMENT_BLOCKED`
+
+5. **`api/field_assessment.py`** (modified) — Two integration points:
+   - `export_engagement_report_route()`: calls `enforce_report_export()` after loading the record, before JSON/PDF generation; `TrustEnforcementError` → HTTP 403 `TRUST_ENFORCEMENT_BLOCKED`
+   - `qa_approve_report_route()`: calls `enforce_evidence_approval()` before setting approval fields; `TrustEnforcementError` → HTTP 422 `TRUST_ENFORCEMENT_BLOCKED`
+
+6. **`tests/test_trust_enforcement_integration.py`** (new, 81 tests) — Full coverage matrix:
+   - `TestReplayResultConversion` (10 tests): score 100/75/50/0, sig-failure detection, link validity, replay validity
+   - `TestEnforceEvidenceCreation` (12 tests): off/warn/strict modes, legacy bypass, cross-tenant/engagement denial, mode escalation, severity
+   - `TestEnforceEvidenceReview` (6 tests): all modes, trust score values
+   - `TestEnforceEvidenceApproval` (6 tests): chain/link/replay failures in all modes
+   - `TestEnforceReportFinalization` (6 tests): signed/unsigned/invalid/broken-chain in all modes
+   - `TestEnforceReportExport` (6 tests): sig/link/chain failures in all modes
+   - `TestEnforceTrustReplay` (7 tests): score-based dispatch, sig failure detection, invalid links
+   - `TestMetrics` (7 tests): all 4 counters across all 6 operations
+   - `TestSecurityIsolation` (11 tests): cross-tenant, cross-engagement, sig-tampering, replay-corruption, link-tampering, legacy-bypass, mode-escalation, severity levels
+   - `TestLegacyRecords` (4 tests): off/warn/strict with legacy flag
+   - `TestModeEscalation` (6 tests): parametrized off→warn→strict escalation for 5 workflow functions + replay
+
+**Why:**
+Closes the enforcement wiring gap identified in the PR 1.5 code review. Without this layer, `FG_PROVENANCE_MODE=strict` had no effect on production operations. After this PR, enforcement errors surface as HTTP 4xx responses at report finalization, export, QA approval, evidence creation/review, and trust replay proof generation.
+
+---
+
 ### 2026-06-11 — PR 1.4: Evidence-to-Report Link Authority
 
 **Branch:** `feat/evidence-report-link-1.4`

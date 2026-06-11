@@ -7063,6 +7063,28 @@ def qa_approve_report_route(
             ),
         )
 
+    from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+        enforce_evidence_approval,
+    )
+    from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
+        TrustEnforcementError,
+    )
+
+    _sig_valid = True if getattr(report, "signature", None) else None
+    try:
+        enforce_evidence_approval(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            signature_valid=_sig_valid,
+            is_legacy=(_sig_valid is None),
+        )
+    except TrustEnforcementError as _te:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error("TRUST_ENFORCEMENT_BLOCKED", str(_te)),
+        ) from _te
+
     now = utc_iso8601_z_now()
     # reviewer_name is the human-readable display name (e.g. "Jane Smith, Senior Assessor").
     # The JWT actor is always recorded in the audit event for non-repudiation.
@@ -8344,6 +8366,28 @@ def export_engagement_report_route(
             status_code=404,
             detail=api_error("REPORT_VERSION_NOT_FOUND", "Report version not found."),
         )
+
+    from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+        enforce_report_export,
+    )
+    from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
+        TrustEnforcementError,
+    )
+
+    _sig_valid = True if getattr(record, "signature", None) else None
+    try:
+        enforce_report_export(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            signature_valid=_sig_valid,
+            is_legacy=(_sig_valid is None),
+        )
+    except TrustEnforcementError as _te:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error("TRUST_ENFORCEMENT_BLOCKED", str(_te)),
+        ) from _te
 
     if format == "json":
         return {
