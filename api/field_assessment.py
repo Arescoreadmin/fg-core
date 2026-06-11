@@ -7075,13 +7075,17 @@ def qa_approve_report_route(
         ReportSigningKeyError,
         verify_report,
     )
+
     _sig_valid: bool | None
     if not getattr(report, "signature", None):
         _sig_valid = None
     else:
         try:
             _canonical = json.dumps(
-                report.report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+                report.report_json,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
             )
             _sig_valid = verify_report(_canonical, report.signature)
         except ReportSigningKeyError:
@@ -8394,13 +8398,17 @@ def export_engagement_report_route(
         ReportSigningKeyError,
         verify_report,
     )
+
     _sig_valid: bool | None
     if not getattr(record, "signature", None):
         _sig_valid = None
     else:
         try:
             _canonical = json.dumps(
-                record.report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+                record.report_json,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
             )
             _sig_valid = verify_report(_canonical, record.signature)
         except ReportSigningKeyError:
