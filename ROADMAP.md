@@ -181,13 +181,18 @@ Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
 
 ### Evidence Provenance PRs
 
+**Moat arc:** 1.1 (foundation) → 1.2 (chain integrity) → 1.3 (authority) → 1.4 (report linkage) → 1.5 (enforcement) → 1.6–1.8 (trust graph)
+
 | PR | Item | Status | Deliverable |
 |---|---|---|---|
 | PR 417 | PR 1.1: Evidence Provenance Foundation | 🔄 open | `fa_evidence_provenance` table (30 cols, ORM-managed); append-only RLS + triggers (migration 0105); provenance service with sanitize/hash/create/list/review/verify; wired into `create_evidence_link_route`; 22 tests |
-| — | PR 1.2: Full Chain Replay Verification | 🗓 planned | `verify_full_provenance_chain()` — walks latest → genesis via `previous_hash` links; verifies every hop; returns per-node result list + chain_valid bool; detects broken links (missing node, hash mismatch mid-chain, genesis with non-null previous_hash) |
-| — | PR 1.3: Evidence Authority (Signing) | 🗓 planned | Add `signature`, `signing_key_id`, `signed_at` to `fa_evidence_provenance`; `sign_provenance_record()` using Ed25519 (reuse `services/governance/report/signing.py` key infra); `verify_provenance_signature()` per-record + included in full chain replay; fail-closed in prod if signing key absent |
-| — | PR 1.4: Strong Report Linkage | 🗓 planned | Replace `used_in_report_ids` list with structured `report_id` + `report_hash` + `report_signature` fields (or a join table); enables independent evidence→report chain replay without re-running the report engine; prerequisite for regulator-ready verification bundles |
-| — | PR 1.5: Evidence Enforcement (Strict Mode) | 🗓 planned | Make provenance creation blocking for regulated verticals (bank, GovCon, healthcare); `FG_PROVENANCE_MODE=strict` env flag; evidence link route returns 500 if provenance write fails in strict mode; audit event on every provenance failure regardless of mode; prerequisite for Phase 3 moat layer |
+| — | PR 1.2: Full Chain Replay Verification | 🗓 planned | `verify_full_provenance_chain()` — walks latest → genesis via `previous_hash`; verifies every hop; result object: `chain_valid`, `chain_depth`, `genesis_hash`, `latest_hash`, `verified_at`, `verification_duration_ms`, per-node list; `chain_replay_score` (100=perfect / 75=warnings / 50=degraded / 0=broken); feeds Governance Score + Evidence Health dashboards |
+| — | PR 1.3: Evidence Authority | 🗓 planned | Sign `canonical_provenance_event` (not raw record) with Ed25519; persist `signature`, `signing_key_id`, `signed_at`, `signature_version`, `authority_version` on `fa_evidence_provenance`; `sign_provenance_record()` + `verify_provenance_signature()` per-record; included in chain replay; fail-closed in prod; `authority_version` field future-proofs evidence-authority-v1→v2 migration |
+| — | PR 1.4: Strong Report Linkage | 🗓 planned | New `fa_evidence_report_links` join table (many-to-many: one evidence item → Assessment / Risk / Governance / Monitoring reports); columns: `evidence_id`, `report_id`, `report_hash`, `report_signature`, `linked_at`, `linked_by`; enables independent evidence→report chain replay; prerequisite for regulator-ready verification bundles |
+| — | PR 1.5: Evidence Enforcement | 🗓 planned | Three-mode `FG_PROVENANCE_MODE`: `off` (no requirement), `warn` (current behavior + audit event emitted), `strict` (fail closed, 500 on provenance failure); SMB defaults `warn`; bank/GovCon/healthcare run `strict`; audit event on every provenance failure regardless of mode; prerequisite for Phase 3 moat |
+| — | PR 1.6: Evidence Correlation Engine | 🗓 planned | Graph layer: Evidence → Finding → Control → Framework Requirement → Risk → Report; not table joins — traversal-native model; enables "show me all evidence that supports this control across reassessments" queries; prerequisite for longitudinal drift and reassessment intelligence |
+| — | PR 1.7: Corroboration & Confidence | 🗓 planned | Per-evidence scoring: `evidence_count`, `source_diversity`, `confidence_score`, `contradiction_score`, `staleness_score`; answers "why do we believe this?" not just "what exists?"; confidence feeds finding severity weighting and governance readiness scores |
+| — | PR 1.8: Evidence Trust Graph | 🗓 planned | Unified trust authority: Evidence Authority + Report Authority + Identity Authority + RBAC Authority in one traversable graph; at this layer FrostGate is trust infrastructure, not an assessment platform |
 
 ## How to add a PR to this roadmap
 
