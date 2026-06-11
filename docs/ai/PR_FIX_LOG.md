@@ -13996,3 +13996,33 @@ PR-SIGN-5b stores signatures on reports. But the evidence feeding those reports 
 
 **Why:**
 PR 1.1 stored provenance chains. PR 1.2 makes them provable. A stored chain can be tampered with silently — a broken hash, a replaced link, an injected record. The replay engine detects all of these. The manifest hash gives auditors a stable fingerprint of the chain's integrity that can be independently recomputed. The generic `verify_hash_chain()` primitive is the foundation for future report, identity, and RBAC chain verification.
+
+---
+
+## PR 1.2A — Trust Replay Proof Authority Hardening (`feat/trust-replay-1.2a`)
+
+**Files changed:** 2 (both modified)
+
+1. **`services/field_assessment/trust_replay.py`** — Proof authority fields and stub for PR 1.3 signing:
+   - `REPLAY_MANIFEST_VERSION = "trust-replay-v1"` constant — stable version string for future schema evolution; included in all result dicts and the replay hash input
+   - `_build_replay_summary()` helper — `{verified_node_count, failed_node_count, warning_count, chain_depth, chain_replay_score}` extracted to avoid duplication across not-found and success paths
+   - `_build_replay_hash()` helper — deterministic SHA-256 over all stable outcome fields; explicitly excludes `verified_at` and `verification_duration_ms` so identical chains produce identical hashes regardless of when verification runs
+   - `verify_full_provenance_chain()` updated — adds `engagement_id`, `replay_manifest_version`, `replay_summary`, and `replay_hash` to result; `engagement_id` now sourced from chain walk (no extra DB query)
+   - `generate_chain_verification_manifest()` updated — derives `engagement_id` from replay result instead of a second `db.get()` call
+   - `generate_trust_proof()` (new) — deterministic proof package shaped for PR 1.3 Ed25519 signing; returns `{replay_manifest, replay_hash, verification_summary, chain_valid, chain_replay_score}`; no signing fields in this PR (no `replay_signature`, `signing_key_id`, `authority_version`, `signed_at`)
+
+2. **`tests/test_trust_replay.py`** — 53 tests (40 from PR 1.2 + 13 new):
+   - `test_result_has_engagement_id` / `test_result_engagement_id_none_on_not_found` — engagement_id present in all result paths
+   - `test_replay_manifest_version_is_set` — version constant propagates to result
+   - `test_replay_summary_correct` / `test_replay_summary_perfect_chain` — summary fields correct for warnings path (artifact_hash=None nodes) and perfect path (all fields set)
+   - `test_replay_hash_stable_for_identical_chain` — same chain produces same replay_hash across two calls
+   - `test_replay_hash_changes_when_chain_tampered` — tampered record changes replay_hash
+   - `test_replay_hash_excludes_timestamps` — `verified_at` and `verification_duration_ms` do not affect replay_hash
+   - `test_replay_hash_not_found_is_unique_per_id` — not-found hashes are unique per (tenant_id, provenance_id) pair
+   - `test_generate_trust_proof_has_required_fields` — all five output keys present
+   - `test_generate_trust_proof_deterministic` — same proof across two calls for identical chain
+   - `test_generate_trust_proof_wrong_tenant_safe` — wrong-tenant proof shows chain_valid=False, no leakage
+   - `test_generate_trust_proof_no_signing_fields` — confirmed absence of PR 1.3 fields
+
+**Why:**
+PR 1.2 could verify chains but couldn't prove the verification result itself was stable — two calls on the same chain could produce different manifest hashes if timestamps were included. PR 1.2A makes the outcome hash deterministic, adds a version string so downstream consumers can detect schema evolution, and provides `generate_trust_proof()` as the surface PR 1.3 will sign. Without a stable `replay_hash`, a regulator receiving a proof package can't independently verify that the hash matches the chain they inspect — this closes that gap.
