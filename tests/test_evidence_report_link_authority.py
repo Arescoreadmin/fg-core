@@ -416,6 +416,48 @@ def test_verify_tampered_signing_key_id_fails(build_app, signing_env):
         assert result["status"] == "invalid"
 
 
+def test_verify_tampered_authority_version_fails(build_app, signing_env):
+    """Changing authority_version changes the canonical event → signature_mismatch (P1.2 fix)."""
+    from api.db import get_engine
+
+    build_app()
+    link_id = None
+    with Session(get_engine()) as db:
+        link = _make_link(db, report_hash="n" * 64)
+        db.commit()
+        link_id = link.id
+
+    with Session(get_engine()) as db2:
+        stored = db2.get(FaEvidenceReportLink, link_id)
+        stored.authority_version = "evidence-report-authority-v99"
+
+        result = verify_link_signature(stored)
+        assert result["valid"] is False
+        assert result["status"] == "invalid"
+        assert result["reason"] == "signature_mismatch"
+
+
+def test_verify_tampered_link_version_fails(build_app, signing_env):
+    """Changing link_version changes the canonical event → signature_mismatch (P1.2 fix)."""
+    from api.db import get_engine
+
+    build_app()
+    link_id = None
+    with Session(get_engine()) as db:
+        link = _make_link(db, report_hash="o" * 64)
+        db.commit()
+        link_id = link.id
+
+    with Session(get_engine()) as db2:
+        stored = db2.get(FaEvidenceReportLink, link_id)
+        stored.link_version = "report-link-v99"
+
+        result = verify_link_signature(stored)
+        assert result["valid"] is False
+        assert result["status"] == "invalid"
+        assert result["reason"] == "signature_mismatch"
+
+
 # ---------------------------------------------------------------------------
 # verify_link_signature — unit tests
 # ---------------------------------------------------------------------------

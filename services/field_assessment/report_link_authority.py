@@ -151,11 +151,15 @@ def _build_canonical_link_event(
     report_hash: str | None,
     report_signature: str | None,
     signing_key_id: str | None,
+    authority_version: str,
+    link_version: str,
 ) -> dict[str, Any]:
     """Deterministic dict that is Ed25519-signed.
 
-    Includes signing_key_id so stripping it changes the digest and fails
-    signature verification. All identity fields are covered.
+    Includes signing_key_id, authority_version, and link_version so stripping
+    or tampering with any of them changes the digest and fails verification.
+    Callers must pass the actual stored values (not module-level constants) when
+    rebuilding a canonical event for an existing record.
     """
     return {
         "event_hash": event_hash,
@@ -167,14 +171,16 @@ def _build_canonical_link_event(
         "report_hash": report_hash,
         "report_signature": report_signature,
         "signing_key_id": signing_key_id,
-        "authority_version": LINK_AUTHORITY_VERSION,
-        "link_version": LINK_VERSION,
+        "authority_version": authority_version,
+        "link_version": link_version,
     }
 
 
 def build_canonical_report_link_event(link: FaEvidenceReportLink) -> dict[str, Any]:
     """Build the canonical authority event dict from an existing link record.
 
+    Uses the stored authority_version and link_version so that tampering with
+    either field changes the digest and fails signature verification.
     A verifier recomputes this, hashes it, and verifies the Ed25519 signature.
     """
     return _build_canonical_link_event(
@@ -187,6 +193,8 @@ def build_canonical_report_link_event(link: FaEvidenceReportLink) -> dict[str, A
         report_hash=link.report_hash,
         report_signature=link.report_signature,
         signing_key_id=link.signing_key_id,
+        authority_version=link.authority_version or LINK_AUTHORITY_VERSION,
+        link_version=link.link_version or LINK_VERSION,
     )
 
 
@@ -233,6 +241,8 @@ def _try_sign_link(
             report_hash=report_hash,
             report_signature=report_signature,
             signing_key_id=key_id,
+            authority_version=LINK_AUTHORITY_VERSION,
+            link_version=LINK_VERSION,
         )
         sig = _sign_canonical_link(canonical)
         return {

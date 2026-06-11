@@ -43,8 +43,8 @@ SCORE_WARNINGS: int = 75  # all nodes valid, signed (or legacy), non-signature w
 SCORE_DEGRADED: int = 50  # all nodes hash-valid; only legacy_unsigned warnings
 SCORE_BROKEN: int = 0  # any hard integrity failure (hash or signature)
 
-REPLAY_MANIFEST_VERSION: str = "trust-replay-v1"
-# Increment to "trust-replay-v2" etc. when the replay schema changes.
+REPLAY_MANIFEST_VERSION: str = "trust-replay-v2"
+# v2: report-link verification outcome included in replay_hash and manifest.
 # Consumers must check this field before interpreting replay results.
 
 
@@ -115,13 +115,21 @@ def _build_replay_hash(
     verification_manifest_hash: str,
     replay_summary: dict[str, Any],
     replay_manifest_version: str,
+    report_link_status: str,
+    verified_report_link_hashes: list[str],
+    invalid_report_links_summary: list[dict],
 ) -> str:
     """SHA-256 of the deterministic verification outcome.
 
     Covers the replay result — not the underlying chain. The underlying chain
     already has verification_manifest_hash. This hash covers scores, failures,
-    warnings, and summary so any change in the verification outcome changes
-    the replay_hash.
+    warnings, summary, and report-link verification outcome so any change in
+    the verification outcome changes the replay_hash.
+
+    Report link fields (v2): report_link_status, verified_report_link_hashes
+    (sorted event_hashes of verified links), and invalid_report_links_summary
+    (sorted {link_id, reason} for invalid links). Adding, removing, or tampering
+    with a link changes these fields and therefore changes replay_hash.
 
     Explicitly excluded: verified_at, verification_duration_ms (ephemeral).
     Nodes and failures sorted by node_id for stable ordering.
@@ -141,6 +149,12 @@ def _build_replay_hash(
         "warnings": sorted(warnings),
         "verification_manifest_hash": verification_manifest_hash,
         "replay_summary": replay_summary,
+        "report_link_status": report_link_status,
+        "verified_report_link_hashes": sorted(verified_report_link_hashes),
+        "invalid_report_links_summary": sorted(
+            invalid_report_links_summary,
+            key=lambda e: (e.get("link_id") or "", e.get("reason", "")),
+        ),
     }
     return _canonical_hash(payload)
 
@@ -462,6 +476,9 @@ def verify_full_provenance_chain(
             verification_manifest_hash=not_found_manifest_hash,
             replay_summary=nf_summary,
             replay_manifest_version=REPLAY_MANIFEST_VERSION,
+            report_link_status="unlinked",
+            verified_report_link_hashes=[],
+            invalid_report_links_summary=[],
         )
         return {
             "chain_valid": False,
@@ -628,21 +645,9 @@ def verify_full_provenance_chain(
     replay_summary = _build_replay_summary(
         enriched_verified, all_failed, all_warnings, depth, score
     )
-    replay_hash = _build_replay_hash(
-        chain_valid=chain_valid,
-        chain_depth=depth,
-        genesis_hash=genesis_hash,
-        latest_hash=latest_hash,
-        chain_replay_score=score,
-        verified_nodes=enriched_verified,
-        failed_nodes=all_failed,
-        warnings=all_warnings,
-        verification_manifest_hash=manifest_hash,
-        replay_summary=replay_summary,
-        replay_manifest_version=REPLAY_MANIFEST_VERSION,
-    )
 
-    # PR 1.4: load and verify all report links for this engagement
+    # Load and verify report links before computing replay_hash so the link
+    # verification outcome is bound to the proof fingerprint.
     from services.field_assessment.report_link_authority import (
         list_report_links_for_engagement,
         verify_report_links_bulk,
@@ -672,6 +677,26 @@ def verify_full_provenance_chain(
         report_link_status = "invalid" if not verified_report_links else "partially_verified"
     else:
         report_link_status = "verified"
+
+    replay_hash = _build_replay_hash(
+        chain_valid=chain_valid,
+        chain_depth=depth,
+        genesis_hash=genesis_hash,
+        latest_hash=latest_hash,
+        chain_replay_score=score,
+        verified_nodes=enriched_verified,
+        failed_nodes=all_failed,
+        warnings=all_warnings,
+        verification_manifest_hash=manifest_hash,
+        replay_summary=replay_summary,
+        replay_manifest_version=REPLAY_MANIFEST_VERSION,
+        report_link_status=report_link_status,
+        verified_report_link_hashes=[e["event_hash"] for e in verified_report_links],
+        invalid_report_links_summary=[
+            {"link_id": e["link_id"], "reason": e.get("reason", "invalid")}
+            for e in invalid_report_links
+        ],
+    )
 
     return {
         "chain_valid": chain_valid,
