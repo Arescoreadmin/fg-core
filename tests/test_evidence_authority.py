@@ -56,6 +56,7 @@ from services.field_assessment.evidence_authority import (
     SIGNATURE_VERSION,
     EvidenceAuthorityError,
     build_canonical_provenance_event,
+    get_signing_key_id,
     sign_new_provenance_event,
     sign_provenance_event,
     verify_provenance_signature,
@@ -165,6 +166,12 @@ def test_canonical_event_has_required_fields(build_app, signing_env):
         assert "signature_version" in event
         assert event["authority_version"] == AUTHORITY_VERSION
         assert event["signature_version"] == SIGNATURE_VERSION
+        # P1.1: signing_key_id in canonical so stripping it invalidates the signature
+        assert "signing_key_id" in event
+        # P1.2: decision fields covered by signature
+        assert "review_status" in event
+        assert "reviewed_by" in event
+        assert "trust_level" in event
 
 
 def test_canonical_event_deterministic(build_app, signing_env):
@@ -180,8 +187,12 @@ def test_canonical_event_deterministic(build_app, signing_env):
         assert e1 == e2
 
 
-def test_canonical_event_excludes_mutable_fields(build_app, signing_env):
-    """review_status, reviewed_by, used_in_report_ids must not appear in canonical event."""
+def test_canonical_event_excludes_ephemeral_fields(build_app, signing_env):
+    """Timestamps, IDs, and report linkage must not appear in canonical event.
+
+    Note: review_status, reviewed_by, trust_level ARE intentionally included
+    (P1.2 fix — decision fields must be covered by signature to prevent tampering).
+    """
     from api.db import get_engine
 
     build_app()
@@ -190,17 +201,15 @@ def test_canonical_event_excludes_mutable_fields(build_app, signing_env):
         db.commit()
 
         event = build_canonical_provenance_event(record)
-        mutable_fields = {
-            "review_status",
-            "reviewed_by",
+        excluded_fields = {
             "reviewed_at",
             "used_in_report_ids",
             "id",
             "created_at",
             "schema_version",
         }
-        assert not (mutable_fields & event.keys()), (
-            f"Mutable fields must not appear in canonical event: {mutable_fields & event.keys()}"
+        assert not (excluded_fields & event.keys()), (
+            f"Ephemeral fields must not appear in canonical event: {excluded_fields & event.keys()}"
         )
 
 
@@ -278,6 +287,9 @@ def test_sign_new_provenance_event_matches_sign_provenance_event(
             finding_id=record.finding_id,
             source_type=record.source_type,
             collected_at=record.collected_at,
+            review_status=record.review_status or "pending",
+            reviewed_by=record.reviewed_by,
+            trust_level=record.trust_level or "unverified",
         )
         assert sig_from_record["signature"] == sig_from_fields["signature"]
         assert sig_from_record["signing_key_id"] == sig_from_fields["signing_key_id"]
@@ -855,3 +867,256 @@ def test_100_node_signed_chain_under_150ms(build_app, signing_env):
         assert elapsed_ms < 150, (
             f"100-node signed chain took {elapsed_ms:.0f}ms, expected <150ms"
         )
+
+
+# ---------------------------------------------------------------------------
+# P1.1 — Signature stripping detection
+# ---------------------------------------------------------------------------
+
+
+def test_verify_partial_strip_signing_key_id_present_returns_invalid(
+    build_app, signing_env
+):
+    """signing_key_id set but signature=None → invalid (partial_authority_fields).
+
+    This detects the case where an attacker strips only the signature field.
+    """
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-partial-strip-001", artifact_hash="q" * 64
+        )
+        db.commit()
+
+        stored = db.get(FaEvidenceProvenance, record.id)
+        stored.signature = None  # strip signature only
+
+        result = verify_provenance_signature(stored)
+        assert result["valid"] is False
+        assert result["status"] == "invalid"
+        assert result["reason"] == "partial_authority_fields"
+
+
+def test_verify_full_strip_schema_v11_returns_invalid(build_app, signing_env):
+    """schema_version=1.1 with all authority fields null → invalid (missing_signature).
+
+    Detects full stripping of all authority fields from a signed record.
+    """
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-full-strip-001", artifact_hash="r" * 64
+        )
+        db.commit()
+
+        stored = db.get(FaEvidenceProvenance, record.id)
+        # Strip all authority fields — simulate full strip attack
+        stored.signature = None
+        stored.signing_key_id = None
+        stored.signed_at = None
+        stored.signature_version = None
+        stored.authority_version = None
+        # schema_version stays at "1.1" (set by create_evidence_provenance with signing key)
+        assert stored.schema_version == "1.1"
+
+        result = verify_provenance_signature(stored)
+        assert result["valid"] is False
+        assert result["status"] == "invalid"
+        assert result["reason"] == "missing_signature"
+
+
+def test_schema_version_1_0_unsigned_is_legacy(build_app, monkeypatch):
+    """schema_version=1.0 with null signature → legacy_unsigned (not invalid).
+
+    Records created before PR 1.3 have schema_version=1.0 and are genuinely unsigned.
+    """
+    from api.db import get_engine
+
+    monkeypatch.delenv("FG_EVIDENCE_SIGNING_KEY_B64", raising=False)
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(db, engagement_id="eng-legacy-schema-001")
+        db.commit()
+
+        stored = db.get(FaEvidenceProvenance, record.id)
+        assert stored.schema_version == "1.0"
+        result = verify_provenance_signature(stored)
+        assert result["valid"] is None
+        assert result["status"] == "legacy_unsigned"
+
+
+def test_signed_record_has_schema_version_1_1(build_app, signing_env):
+    """Records auto-signed via create_evidence_provenance get schema_version=1.1."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-schema-v11-001", artifact_hash="s" * 64
+        )
+        db.commit()
+
+        stored = db.get(FaEvidenceProvenance, record.id)
+        assert stored.schema_version == "1.1"
+
+
+def test_stripping_signing_key_id_alone_fails_signature_mismatch(signing_env):
+    """Stripping signing_key_id from a signed in-memory record → signature_mismatch.
+
+    The canonical event includes signing_key_id, so changing it (to None) changes
+    the digest → signature no longer matches.
+    """
+    record = FaEvidenceProvenance(
+        id="test-id-strip-keyid",
+        tenant_id=TENANT_A,
+        engagement_id="eng-strip-keyid-001",
+        source_type="scan",
+        collected_at="2024-01-01T00:00:00Z",
+        collection_method="automated",
+        collected_by_type="system",
+        event_hash="c" * 64,
+        previous_hash=None,
+        created_at="2024-01-01T00:00:00Z",
+        schema_version="1.0",
+        review_status="pending",
+        trust_level="unverified",
+        chain_status="active",
+        used_in_report_ids=[],
+        collection_context_json={},
+    )
+    sig_fields = sign_provenance_event(record)
+    record.signature = sig_fields["signature"]
+    record.signing_key_id = sig_fields["signing_key_id"]
+    record.signature_version = sig_fields["signature_version"]
+    record.authority_version = sig_fields["authority_version"]
+
+    # Strip signing_key_id only — canonical event changes → mismatch
+    record.signing_key_id = None
+
+    result = verify_provenance_signature(record)
+    # signing_key_id=None with signature present → key_id_mismatch check is skipped
+    # (None is falsy), but canonical event now has signing_key_id=None vs signed value
+    # → signature_mismatch
+    assert result["valid"] is False
+    assert result["status"] == "invalid"
+
+
+# ---------------------------------------------------------------------------
+# P1.2 — Decision field coverage
+# ---------------------------------------------------------------------------
+
+
+def test_canonical_event_includes_review_fields(build_app, signing_env):
+    """review_status, reviewed_by, trust_level appear in the canonical event."""
+    from api.db import get_engine
+
+    build_app()
+    with Session(get_engine()) as db:
+        genesis = _make_provenance(
+            db, engagement_id="eng-review-canon-001", artifact_hash="t" * 64
+        )
+        db.commit()
+        reviewed = _extend_chain(db, genesis)
+        db.commit()
+
+        event = build_canonical_provenance_event(reviewed)
+        assert event["review_status"] == "approved"
+        assert event["reviewed_by"] == "analyst@example.com"
+        assert "trust_level" in event
+
+
+def test_tampered_review_status_fails_signature(signing_env):
+    """Tampering with review_status on a signed in-memory record → signature_mismatch."""
+    record = FaEvidenceProvenance(
+        id="test-id-tamper-decision",
+        tenant_id=TENANT_A,
+        engagement_id="eng-tamper-decision-001",
+        source_type="scan",
+        collected_at="2024-01-01T00:00:00Z",
+        collection_method="automated",
+        collected_by_type="system",
+        event_hash="d" * 64,
+        previous_hash=None,
+        created_at="2024-01-01T00:00:00Z",
+        schema_version="1.0",
+        review_status="approved",
+        reviewed_by="alice@example.com",
+        trust_level="qa_approved",
+        chain_status="active",
+        used_in_report_ids=[],
+        collection_context_json={},
+    )
+    sig_fields = sign_provenance_event(record)
+    record.signature = sig_fields["signature"]
+    record.signing_key_id = sig_fields["signing_key_id"]
+    record.signature_version = sig_fields["signature_version"]
+    record.authority_version = sig_fields["authority_version"]
+
+    # Tamper the approval decision
+    record.review_status = "rejected"
+
+    result = verify_provenance_signature(record)
+    assert result["valid"] is False
+    assert result["status"] == "invalid"
+    assert result["reason"] == "signature_mismatch"
+
+
+# ---------------------------------------------------------------------------
+# P1.3 — Public-key-only verification
+# ---------------------------------------------------------------------------
+
+
+def test_verify_with_public_key_only_env(build_app, signing_env, monkeypatch):
+    """FG_EVIDENCE_VERIFY_KEY_B64 enables verification without the private key."""
+    from api.db import get_engine
+
+    build_app()
+    record_id = None
+    with Session(get_engine()) as db:
+        record = _make_provenance(
+            db, engagement_id="eng-pubkey-only-001", artifact_hash="u" * 64
+        )
+        db.commit()
+        record_id = record.id
+
+    # Switch to public-key-only mode: clear private key, set public key
+    pub_b64 = base64.b64encode(_TEST_PUB_BYTES).decode()
+    monkeypatch.delenv("FG_EVIDENCE_SIGNING_KEY_B64", raising=False)
+    monkeypatch.setenv("FG_EVIDENCE_VERIFY_KEY_B64", pub_b64)
+
+    with Session(get_engine()) as db2:
+        stored = db2.get(FaEvidenceProvenance, record_id)
+        result = verify_provenance_signature(stored)
+        assert result["valid"] is True
+        assert result["status"] == "verified"
+
+
+def test_verify_key_env_invalid_base64_raises(monkeypatch):
+    """FG_EVIDENCE_VERIFY_KEY_B64 with bad base64 raises EvidenceAuthorityError."""
+    from services.field_assessment.evidence_authority import (
+        _load_verification_public_key,
+    )
+
+    monkeypatch.setenv("FG_EVIDENCE_VERIFY_KEY_B64", "not-valid-base64!!!")
+    monkeypatch.delenv("FG_EVIDENCE_SIGNING_KEY_B64", raising=False)
+
+    with pytest.raises(EvidenceAuthorityError, match="valid base64"):
+        _load_verification_public_key()
+
+
+def test_get_signing_key_id_returns_fingerprint(signing_env):
+    """get_signing_key_id() returns SHA256(pub_bytes)[:16]."""
+    import hashlib
+
+    expected = hashlib.sha256(_TEST_PUB_BYTES).hexdigest()[:16]
+    assert get_signing_key_id() == expected
+
+
+def test_get_signing_key_id_raises_without_key(monkeypatch):
+    monkeypatch.delenv("FG_EVIDENCE_SIGNING_KEY_B64", raising=False)
+    with pytest.raises(EvidenceAuthorityError):
+        get_signing_key_id()

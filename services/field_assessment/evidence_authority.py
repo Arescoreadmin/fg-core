@@ -90,10 +90,31 @@ def _derive_key_id(pub_bytes: bytes) -> str:
 def _load_verification_public_key() -> bytes:
     """Load public key bytes for signature verification.
 
-    Tries FG_EVIDENCE_SIGNING_KEY_B64 first (derives pub from priv).
-    No separate public-key-only env var in this PR — rotation support is future work.
+    Tries FG_EVIDENCE_VERIFY_KEY_B64 first (32-byte raw Ed25519 public key, base64).
+    Falls back to deriving from FG_EVIDENCE_SIGNING_KEY_B64 private seed.
+    This allows verification-only services to operate without the private key.
     """
+    raw = (os.getenv("FG_EVIDENCE_VERIFY_KEY_B64") or "").strip()
+    if raw:
+        try:
+            pub_bytes = base64.b64decode(raw)
+        except Exception as exc:
+            raise EvidenceAuthorityError(
+                "FG_EVIDENCE_VERIFY_KEY_B64 must be valid base64"
+            ) from exc
+        if len(pub_bytes) != 32:
+            raise EvidenceAuthorityError(
+                f"FG_EVIDENCE_VERIFY_KEY_B64 must decode to 32 bytes (got {len(pub_bytes)})"
+            )
+        return pub_bytes
     return _derive_public_key_bytes(_load_private_key_seed())
+
+
+def get_signing_key_id() -> str:
+    """Return SHA256(pub_bytes)[:16] for the currently configured signing key."""
+    seed = _load_private_key_seed()
+    pub_bytes = _derive_public_key_bytes(seed)
+    return _derive_key_id(pub_bytes)
 
 
 # ---------------------------------------------------------------------------
@@ -111,11 +132,20 @@ def _build_canonical_event(
     finding_id: str | None,
     source_type: str,
     collected_at: str,
+    signing_key_id: str | None,
+    review_status: str,
+    reviewed_by: str | None,
+    trust_level: str,
 ) -> dict[str, Any]:
     """Build the deterministic dict that is signed.
 
-    Only immutable provenance identity fields are included.
-    Mutable review/status/report fields are excluded by design.
+    Covers immutable identity fields AND decision fields (review_status, reviewed_by,
+    trust_level) so that tampering with an approval/rejection decision invalidates the
+    signature. signing_key_id is included so stripping it is detected as signature_mismatch
+    rather than silently passing as legacy_unsigned.
+
+    Excluded: reviewed_at, used_in_report_ids, id, created_at, schema_version, and any
+    other fields that are not part of the core provenance identity or decision record.
     """
     return {
         "event_hash": event_hash,
@@ -126,6 +156,10 @@ def _build_canonical_event(
         "finding_id": finding_id,
         "source_type": source_type,
         "collected_at": collected_at,
+        "signing_key_id": signing_key_id,
+        "review_status": review_status,
+        "reviewed_by": reviewed_by,
+        "trust_level": trust_level,
         "authority_version": AUTHORITY_VERSION,
         "signature_version": SIGNATURE_VERSION,
     }
@@ -146,6 +180,10 @@ def build_canonical_provenance_event(record: FaEvidenceProvenance) -> dict[str, 
         finding_id=record.finding_id,
         source_type=record.source_type,
         collected_at=record.collected_at,
+        signing_key_id=record.signing_key_id,
+        review_status=record.review_status or "pending",
+        reviewed_by=record.reviewed_by,
+        trust_level=record.trust_level or "unverified",
     )
 
 
@@ -187,7 +225,21 @@ def sign_provenance_event(record: FaEvidenceProvenance) -> dict[str, str]:
     """
     seed = _load_private_key_seed()
     pub_bytes = _derive_public_key_bytes(seed)
-    canonical = build_canonical_provenance_event(record)
+    key_id = _derive_key_id(pub_bytes)
+    canonical = _build_canonical_event(
+        event_hash=record.event_hash,
+        previous_hash=record.previous_hash,
+        tenant_id=record.tenant_id,
+        engagement_id=record.engagement_id,
+        evidence_id=record.evidence_id,
+        finding_id=record.finding_id,
+        source_type=record.source_type,
+        collected_at=record.collected_at,
+        signing_key_id=key_id,
+        review_status=record.review_status or "pending",
+        reviewed_by=record.reviewed_by,
+        trust_level=record.trust_level or "unverified",
+    )
     sig = _sign_canonical_bytes(canonical)
     return _make_authority_fields(signature=sig, pub_bytes=pub_bytes)
 
@@ -202,16 +254,23 @@ def sign_new_provenance_event(
     finding_id: str | None,
     source_type: str,
     collected_at: str,
+    review_status: str,
+    reviewed_by: str | None,
+    trust_level: str,
 ) -> dict[str, str]:
     """Sign provenance fields before record creation.
 
     Use this when the ORM record does not exist yet (append-only tables cannot
     be updated after INSERT, so signatures must be computed before the first flush).
 
+    review_status, reviewed_by, trust_level are included in the canonical signed
+    event so that decision tampering invalidates the signature.
+
     Raises EvidenceAuthorityError if FG_EVIDENCE_SIGNING_KEY_B64 is not configured.
     """
     seed = _load_private_key_seed()
     pub_bytes = _derive_public_key_bytes(seed)
+    key_id = _derive_key_id(pub_bytes)
     canonical = _build_canonical_event(
         event_hash=event_hash,
         previous_hash=previous_hash,
@@ -221,6 +280,10 @@ def sign_new_provenance_event(
         finding_id=finding_id,
         source_type=source_type,
         collected_at=collected_at,
+        signing_key_id=key_id,
+        review_status=review_status,
+        reviewed_by=reviewed_by,
+        trust_level=trust_level,
     )
     sig = _sign_canonical_bytes(canonical)
     return _make_authority_fields(signature=sig, pub_bytes=pub_bytes)
@@ -247,6 +310,24 @@ def verify_provenance_signature(record: FaEvidenceProvenance) -> dict[str, Any]:
     Signed records with an invalid signature return valid=False — hard failure.
     """
     if record.signature is None:
+        # Partial strip: signing_key_id present means a signature existed and was removed.
+        if record.signing_key_id is not None:
+            return {
+                "valid": False,
+                "status": "invalid",
+                "reason": "partial_authority_fields",
+                "authority_version": record.authority_version,
+                "signing_key_id": record.signing_key_id,
+            }
+        # Full strip on a schema_version 1.1 record (should always be signed).
+        if (record.schema_version or "1.0") >= "1.1":
+            return {
+                "valid": False,
+                "status": "invalid",
+                "reason": "missing_signature",
+                "authority_version": None,
+                "signing_key_id": None,
+            }
         return {
             "valid": None,
             "status": "legacy_unsigned",

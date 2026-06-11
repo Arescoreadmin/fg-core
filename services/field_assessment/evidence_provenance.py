@@ -173,6 +173,9 @@ def create_evidence_provenance(
         finding_id=finding_id,
         source_type=source_type,
         collected_at=actual_collected_at,
+        review_status="pending",
+        reviewed_by=None,
+        trust_level=trust_level,
     )
 
     record = FaEvidenceProvenance(
@@ -201,7 +204,7 @@ def create_evidence_provenance(
         previous_hash=previous_hash,
         event_hash=event_hash,
         created_at=now,
-        schema_version="1.0",
+        schema_version="1.1" if authority.get("signature") else "1.0",
         signature=authority.get("signature"),
         signing_key_id=authority.get("signing_key_id"),
         signed_at=authority.get("signed_at"),
@@ -266,6 +269,9 @@ def mark_provenance_reviewed(
         finding_id=prior.finding_id,
         source_type=prior.source_type,
         collected_at=prior.collected_at,
+        review_status=new_status,
+        reviewed_by=reviewed_by,
+        trust_level=prior.trust_level,
     )
 
     review_record = FaEvidenceProvenance(
@@ -297,7 +303,7 @@ def mark_provenance_reviewed(
         previous_hash=prior.event_hash,
         event_hash=event_hash,
         created_at=now,
-        schema_version="1.0",
+        schema_version="1.1" if authority.get("signature") else "1.0",
         signature=authority.get("signature"),
         signing_key_id=authority.get("signing_key_id"),
         signed_at=authority.get("signed_at"),
@@ -438,6 +444,9 @@ def _try_sign_new_event(
     finding_id: str | None,
     source_type: str,
     collected_at: str,
+    review_status: str,
+    reviewed_by: str | None,
+    trust_level: str,
 ) -> dict:
     """Return Ed25519 authority fields for a new event, or {} if key not configured.
 
@@ -461,6 +470,9 @@ def _try_sign_new_event(
             finding_id=finding_id,
             source_type=source_type,
             collected_at=collected_at,
+            review_status=review_status,
+            reviewed_by=reviewed_by,
+            trust_level=trust_level,
         )
     except Exception as exc:
         from api.config.env import is_production_env
