@@ -184,6 +184,10 @@ Sequencing summary — see ENTERPRISE_PLAN.md for full spec:
 | PR | Item | Status | Deliverable |
 |---|---|---|---|
 | PR 417 | PR 1.1: Evidence Provenance Foundation | 🔄 open | `fa_evidence_provenance` table (30 cols, ORM-managed); append-only RLS + triggers (migration 0105); provenance service with sanitize/hash/create/list/review/verify; wired into `create_evidence_link_route`; 22 tests |
+| — | PR 1.2: Full Chain Replay Verification | 🗓 planned | `verify_full_provenance_chain()` — walks latest → genesis via `previous_hash` links; verifies every hop; returns per-node result list + chain_valid bool; detects broken links (missing node, hash mismatch mid-chain, genesis with non-null previous_hash) |
+| — | PR 1.3: Evidence Authority (Signing) | 🗓 planned | Add `signature`, `signing_key_id`, `signed_at` to `fa_evidence_provenance`; `sign_provenance_record()` using Ed25519 (reuse `services/governance/report/signing.py` key infra); `verify_provenance_signature()` per-record + included in full chain replay; fail-closed in prod if signing key absent |
+| — | PR 1.4: Strong Report Linkage | 🗓 planned | Replace `used_in_report_ids` list with structured `report_id` + `report_hash` + `report_signature` fields (or a join table); enables independent evidence→report chain replay without re-running the report engine; prerequisite for regulator-ready verification bundles |
+| — | PR 1.5: Evidence Enforcement (Strict Mode) | 🗓 planned | Make provenance creation blocking for regulated verticals (bank, GovCon, healthcare); `FG_PROVENANCE_MODE=strict` env flag; evidence link route returns 500 if provenance write fails in strict mode; audit event on every provenance failure regardless of mode; prerequisite for Phase 3 moat layer |
 
 ## How to add a PR to this roadmap
 
