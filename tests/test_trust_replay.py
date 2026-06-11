@@ -1104,10 +1104,7 @@ def test_generate_trust_proof_deterministic(build_app):
         assert p1["chain_valid"] == p2["chain_valid"]
         assert p1["chain_replay_score"] == p2["chain_replay_score"]
         assert p1["verification_summary"] == p2["verification_summary"]
-        assert (
-            p1["replay_manifest"]["verification_manifest_hash"]
-            == (p2["replay_manifest"]["verification_manifest_hash"])
-        )
+        assert p1["replay_manifest"] == p2["replay_manifest"]
 
 
 def test_generate_trust_proof_wrong_tenant_safe(build_app):

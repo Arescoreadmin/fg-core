@@ -666,7 +666,6 @@ def generate_trust_proof(
         "chain_depth": result["chain_depth"],
         "genesis_hash": result["genesis_hash"],
         "latest_hash": result["latest_hash"],
-        "verified_at": result["verified_at"],
         "chain_replay_score": result["chain_replay_score"],
         "replay_manifest_version": result["replay_manifest_version"],
         "verified_nodes": sorted(result["verified_nodes"], key=lambda n: n["node_id"]),
