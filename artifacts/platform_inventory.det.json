@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 454,
+    "contract_count": 455,
     "contract_only": [],
-    "runtime_count": 590,
+    "runtime_count": 591,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -149,7 +149,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "2b0eafce5a4c808c3b6bf385e168d9a69e841b81fa0a9d442f0f9c79b3ceb1e2",
+  "governance_fingerprint": "609f159a396599d637d00bd444e64d84e07d074e688f490c1b99bd2592f17b40",
   "planes": [
     {
       "compat": {
@@ -223,6 +223,7 @@
         "/planes",
         "/portal",
         "/rag",
+        "/signing",
         "/status"
       ]
     },
@@ -584,6 +585,7 @@
       "GET /rag/documents/{document_id}/ingestion",
       "GET /rag/retrieval-policy",
       "GET /rag/uploads",
+      "GET /signing/public-key",
       "GET /status",
       "HEAD /health",
       "PATCH /field-assessment/engagements/{engagement_id}",

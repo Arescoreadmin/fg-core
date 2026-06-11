@@ -13,6 +13,7 @@ Append-only contract:
   fa_engagement_audit_events is append-only. No UPDATE or DELETE.
   fa_scan_audit_events is append-only. No UPDATE or DELETE.
   fa_evidence_lifecycle_events is append-only. No UPDATE or DELETE.
+  fa_evidence_provenance is append-only. No UPDATE or DELETE.
 
 Lifecycle states (H15):
   Evidence tables carry lifecycle_state in ('collected', 'locked', 'legal_hold').
@@ -35,6 +36,7 @@ Tables:
   fa_scan_audit_events           — C6: append-only scanner audit trail
   fa_evidence_lifecycle_events   — H15: append-only chain-of-custody trail for lifecycle transitions
   fa_legal_holds                 — H15: legal hold application and removal audit record
+  fa_evidence_provenance         — PR 1.1: append-only chain-of-custody provenance ledger
 """
 
 from __future__ import annotations
@@ -535,4 +537,99 @@ class FaLegalHold(Base):
     __table_args__ = (
         Index("ix_fa_legal_holds_engagement_tenant", "engagement_id", "tenant_id"),
         Index("ix_fa_legal_holds_evidence", "evidence_type", "evidence_id"),
+    )
+
+
+class FaEvidenceProvenance(Base):
+    """PR 1.1: Append-only chain-of-custody provenance ledger for FA evidence.
+
+    Every provenance row answers: where did this evidence come from, who
+    collected it, when, what artifact backs it, has it been reviewed, and
+    was it used in a report?
+
+    Append-only. No UPDATE or DELETE permitted. Amendments (e.g. review
+    decisions) create a new row with previous_hash linking to the prior
+    record and chain_status='active'; the prior row is not mutated.
+    """
+
+    __tablename__ = "fa_evidence_provenance"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    finding_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_system: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_uri_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    artifact_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    collected_by_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    collected_by_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    collected_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    collection_method: Mapped[str] = mapped_column(String(64), nullable=False)
+    collection_context_json: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+
+    classification: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    retention_policy: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    freshness_at_collection: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    trust_level: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unverified"
+    )
+
+    review_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pending"
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reviewed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    chain_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="active"
+    )
+    used_in_report_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+    previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_evidence_provenance_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index(
+            "ix_fa_evidence_provenance_tenant_evidence",
+            "tenant_id",
+            "evidence_id",
+        ),
+        Index(
+            "ix_fa_evidence_provenance_tenant_finding",
+            "tenant_id",
+            "finding_id",
+        ),
+        Index(
+            "ix_fa_evidence_provenance_tenant_review",
+            "tenant_id",
+            "review_status",
+        ),
+        Index(
+            "ix_fa_evidence_provenance_tenant_trust",
+            "tenant_id",
+            "trust_level",
+        ),
+        Index("ix_fa_evidence_provenance_artifact_hash", "artifact_hash"),
+        Index("ix_fa_evidence_provenance_event_hash", "event_hash"),
     )

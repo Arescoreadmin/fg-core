@@ -13944,3 +13944,33 @@ The `"billing-dev-key"` fallback was a P0 security bug — the key was known fro
 
 **Why:**
 PR-SIGN-5 signed at export time (ephemeral). Any key rotation invalidated all prior signatures. Storing the signing event at finalization time means the signature is permanently bound to the report content and independently verifiable by auditors at any future point, regardless of key rotation.
+
+---
+
+### 2026-06-10 — PR 417: PR 1.1 Evidence Provenance Foundation
+
+**Branch:** `feat/evidence-provenance-1.1`
+
+**Area:** Field Assessment Evidence / Provenance Ledger
+
+**Summary of changes:**
+
+1. **`migrations/postgres/0105_fa_evidence_provenance.sql`** (new — schema change) — Applies Postgres-level RLS tenant isolation policy and append-only `UPDATE`/`DELETE` triggers to the new `fa_evidence_provenance` table. Table itself is ORM-managed (created by `Base.metadata.create_all`).
+
+2. **`api/db_models_field_assessment.py`** — Added `FaEvidenceProvenance` model (append-only, 30 columns, 7 composite indexes). Columns answer: source, collector, collection timestamp, artifact hash, review status, chain hash, and report usage. All sensitive nullable columns default to `None`; `trust_level`, `review_status`, `chain_status`, `schema_version` have safe defaults.
+
+3. **`services/field_assessment/evidence_provenance.py`** (new) — Full provenance service:
+   - `sanitize_provenance_payload()` — strips 20 forbidden key patterns before JSON storage
+   - `compute_provenance_hash()` / `_hash_payload()` — deterministic SHA-256 chain hashing
+   - `create_evidence_provenance()` — inserts append-only record, computes event_hash
+   - `get_evidence_provenance()` — tenant-isolated fetch (returns None for wrong tenant)
+   - `list_evidence_provenance_for_engagement()` / `list_evidence_provenance_for_finding()` — paginated, tenant-scoped lists
+   - `mark_provenance_reviewed()` — creates NEW chained row; prior row never mutated
+   - `verify_provenance_chain()` — recomputes event_hash and compares to stored value
+
+4. **`api/field_assessment.py`** — Wired `create_evidence_provenance()` into `create_evidence_link_route` within the same transaction (before `db.commit()`). Wrapped in `try/except` so a provenance failure never blocks evidence link creation.
+
+5. **`tests/test_fa_evidence_provenance.py`** (new) — 22 tests covering: model shape (column presence + nullability), provenance creation and field values, event_hash correctness, secret stripping from context, tenant isolation (get + list wrong-tenant returns empty), review workflow (new row created, invalid status rejected, wrong-tenant rejected), hash verification (valid chain passes, tampered hash fails, not-found), legacy compatibility (engagement without provenance returns empty list), report usage (used_in_report_ids is a safe list), and hash determinism.
+
+**Why:**
+PR-SIGN-5b stores signatures on reports. But the evidence feeding those reports had no chain of custody — no record of where it came from, who collected it, when, or whether it was reviewed. Without provenance, a regulator can ask "how do you know this scan result is authentic?" and the only answer is "we ingested it." With provenance, every evidence item can explain its origin, collector, artifact hash, review status, and report usage — enabling independent auditability and future automated governance agents.

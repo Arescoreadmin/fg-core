@@ -47,6 +47,7 @@ from api.auth_dispatch import require_permission
 from api.actor_context import ActorContext
 from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
+from services.field_assessment.evidence_provenance import create_evidence_provenance
 from services.field_assessment.audit import (
     audit_atomicity_svc,
     emit_engagement_audit_event,
@@ -2556,6 +2557,35 @@ def create_evidence_link_route(
         occurred_at=link.created_at,
         payload=link_audit_payload,
     )
+    # Record provenance for the evidence entity being linked (best-effort;
+    # failure must not block the link creation).
+    try:
+        _finding_id = (
+            body.source_entity_id if body.source_entity_type == "finding" else None
+        )
+        create_evidence_provenance(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            evidence_id=body.evidence_entity_id,
+            finding_id=_finding_id,
+            source_type=body.evidence_entity_type.value,
+            collected_by_type="assessor",
+            collected_by_id=actor,
+            collected_at=link.created_at,
+            collection_method="evidence_link",
+            collection_context={
+                "link_id": link.id,
+                "source_entity_type": body.source_entity_type,
+            },
+        )
+    except Exception:
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning(
+            "evidence_provenance.create_failed link_id=%s — provenance not recorded",
+            link.id,
+        )
     db.commit()
     db.refresh(link)
     return _evidence_link_to_response(link)
