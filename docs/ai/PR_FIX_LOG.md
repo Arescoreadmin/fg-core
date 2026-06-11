@@ -13974,3 +13974,25 @@ PR-SIGN-5 signed at export time (ephemeral). Any key rotation invalidated all pr
 
 **Why:**
 PR-SIGN-5b stores signatures on reports. But the evidence feeding those reports had no chain of custody — no record of where it came from, who collected it, when, or whether it was reviewed. Without provenance, a regulator can ask "how do you know this scan result is authentic?" and the only answer is "we ingested it." With provenance, every evidence item can explain its origin, collector, artifact hash, review status, and report usage — enabling independent auditability and future automated governance agents.
+
+---
+
+## PR 1.2 — Trust Replay Engine Foundation (`feat/trust-replay-1.2`)
+
+**Files changed:** 3 (2 new, 1 modified)
+
+1. **`services/field_assessment/trust_replay.py`** (new — trust infrastructure primitive) — Six public functions:
+   - `verify_hash_chain()` — generic chain verifier, no DB access, no node-type knowledge; detects hash_mismatch, duplicate_event_hash, cycle_detected, tenant_contamination, engagement_contamination; reusable for report/identity/RBAC/governance chains
+   - `verify_chain_node()` — recomputes event_hash for a single provenance record and compares to stored value
+   - `replay_provenance_chain()` — iterative O(n) walk; returns ordered records genesis-first; stops on cycle or broken link; wrong-tenant returns `[]`
+   - `verify_full_provenance_chain()` — full pipeline: load engagement records, walk chain, build ChainNodeData list, run generic verifier, merge structural failures, score, build manifest hash; tenant-safe (not_found for wrong tenant, no existence leakage)
+   - `compute_chain_replay_score()` — deterministic: 100=perfect, 75=warnings, 50=reserved (PR 1.3), 0=broken
+   - `generate_chain_verification_manifest()` — deterministic exportable manifest; manifest hash computed over stable chain data excluding ephemeral verified_at
+   - `ChainNodeData` frozen dataclass with `signature_meta: dict` reserved for PR 1.3 Evidence Authority signing fields
+
+2. **`tests/test_trust_replay.py`** (new) — 36 tests across 8 groups: verify_chain_node (valid + tampered), verify_hash_chain generic primitive (empty, single, multi, hash mismatch, duplicate hash, cycle, tenant contamination, engagement contamination), compute_chain_replay_score (100/75/0 branches), replay_provenance_chain (ordered, single node, wrong tenant, cycle stops), verify_full_provenance_chain (single valid, multi valid, deterministic, not found, wrong tenant safe failure, tampered hash, broken link, corrupt genesis, cycle, duplicate hash via generic, warnings→75 score, required fields), generate_chain_verification_manifest (fields, deterministic, wrong tenant safe), performance (100-node chain <1s), legacy (empty engagement).
+
+3. **`ROADMAP.md`** — Updated PR 1.2 status from planned to open.
+
+**Why:**
+PR 1.1 stored provenance chains. PR 1.2 makes them provable. A stored chain can be tampered with silently — a broken hash, a replaced link, an injected record. The replay engine detects all of these. The manifest hash gives auditors a stable fingerprint of the chain's integrity that can be independently recomputed. The generic `verify_hash_chain()` primitive is the foundation for future report, identity, and RBAC chain verification.
