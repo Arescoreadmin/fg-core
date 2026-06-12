@@ -6,6 +6,54 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-12 — PR 1.7A: Confidence Authority & Drift Intelligence
+
+**Branch:** `pr/1.7a-confidence-authority`
+
+**Area:** Field Assessment / Trust Infrastructure / Confidence Authority Layer
+
+**Summary of changes:**
+
+1. **`services/field_assessment/confidence_authority.py`** (new, ~700 lines) — Ed25519 authority layer over confidence scores:
+   - `CONFIDENCE_AUTHORITY_VERSION = "confidence-authority-v1"` — forward-compatibility marker
+   - `ConfidenceAuthorityError(RuntimeError)` — fail-closed exception for missing/invalid key material
+   - Key management reuses `FG_EVIDENCE_SIGNING_KEY_B64`/`FG_EVIDENCE_VERIFY_KEY_B64` (same pattern as `trust_graph_authority.py`); `signing_key_id = SHA256(pub_bytes)[:16]`
+   - **Part 1 — Manifest Authority**: `sign_confidence_manifest(manifest)` → `{event_hash, signature, signing_key_id, authority_version}` — fails closed if no key; `verify_confidence_manifest(manifest, authority)` → `{valid, reason}` — never raises; guards both args against non-dict inputs
+   - **Part 2 — Snapshot Authority**: `_canonical_snapshot_bytes()` excludes `snapshot_id`/`created_at` (identical confidence state → identical hash); `generate_confidence_snapshot(tenant_id, engagement_id, confidence_result, manifest)` → immutable signed snapshot; `verify_confidence_snapshot(snapshot)` → `{valid, reason}` — never raises; guards against non-dict input
+   - **Part 3 — Drift Engine**: `calculate_confidence_drift(previous, current)` — 5 directions (rapidly_improving/improving/stable/degrading/rapidly_degrading) with inclusive ±10 boundary (`>=` not `>`), 5 velocities (minimal/low/moderate/significant/rapid); returns `{previous_score, current_score, delta, direction, velocity, trend}`
+   - **Part 4 — Timeline**: `generate_confidence_timeline(snapshots)` — O(n log n) stable sort by `(created_at, snapshot_id)`; handles 10,000+ snapshots
+   - **Part 5 — Explainability Graph**: `generate_confidence_explainability_graph(confidence_result)` — Unicode tree with ├─/└─ connectors, factor grouping by section (scores, positive factors, negative factors, breakdown), auditor-readable
+   - **Part 6 — Trust Policy**: `TrustPolicy` dataclass (policy_name, minimum_confidence 0–100, subject_type="any", policy_version) with `__post_init__` validation; `evaluate_trust_policy(policy, confidence_result)` — 8 policy names (evidence_approval/qa_approval/report_finalization/report_export/ai_deployment/agent_approval/agent_execution/agent_autonomy); subject_type extensible for future AGI entities
+   - **Part 7 — Replay**: `replay_confidence_snapshot(snapshot_id, snapshots, *, verify, manifest_authority, graph_hash, replay_result)` — 4 validation layers (snapshot_located → snapshot_authority → manifest_authority → graph_authority); fail-closed; returns `{valid, reason, snapshot, validations}`
+   - **Part 8 — Anomaly Detection**: `detect_confidence_anomalies(snapshots, *, reference)` — 7 anomaly types (confidence_collapse/confidence_inflation/authority_downgrade/corroboration_collapse/replay_degradation/signature_loss/trust_score_manipulation); `valid_snapshots` filter guards against `None`/non-dict entries; `_SEVERITY_RANK` dict for max-severity selection; returns `{anomaly_detected, severity, reason, anomalies}`
+
+2. **`tests/test_confidence_authority.py`** (new, 224 tests) — Full coverage across 20 test classes:
+   - `TestConfidenceAuthorityConstants` (6): version string, exception hierarchy, all 4 threshold constants
+   - `TestSignConfidenceManifest` (14): no-key raises, required fields, hash/signature format, determinism, wrong-key
+   - `TestVerifyConfidenceManifest` (16): roundtrip, tamper, missing fields, wrong key, never raises (incl. non-dict inputs)
+   - `TestGenerateConfidenceSnapshot` (14): required fields, hash stability, timestamp exclusion, cross-tenant hash divergence
+   - `TestVerifyConfidenceSnapshot` (14): roundtrip, tamper, missing fields, key failure, never raises
+   - `TestCalculateConfidenceDrift` (18): all 5 directions, all 5 velocities, inclusive boundary (delta=±10), full confidence_result dicts
+   - `TestGenerateConfidenceTimeline` (12): ordering, stability, 100-snapshot sort (second-granularity timestamps), 10k performance
+   - `TestGenerateConfidenceExplainabilityGraph` (12): structure, sections, tree connectors, positive/negative factors
+   - `TestTrustPolicy` (10): dataclass fields, min_confidence validation (0–100), invalid policy names
+   - `TestEvaluateTrustPolicy` (16): allowed/blocked, all 8 policy names, future subject_type
+   - `TestReplayConfidenceSnapshot` (14): locate, all 4 validation layers, fail-closed behavior
+   - `TestDetectConfidenceAnomalies` (18): all 7 anomaly types, severity, single/multi snapshot, None/non-dict guards
+   - `TestDeterminism` (8): all functions produce stable output across multiple calls
+   - `TestCrossTenantIsolation` (6): snapshot hash diverges, replay validates independently
+   - `TestCrossEngagementIsolation` (4): same pattern as cross-tenant
+   - `TestTamperDetection` (12): manifest tamper, snapshot tamper, signature removal, score inflation
+   - `TestPerformance` (8): sign <5ms, verify <5ms, 1000-snapshot timeline <200ms, drift <1ms, policy <1ms, 500-snapshot anomaly <100ms
+   - `TestFutureNodeCompatibility` (6): extra fields tolerated, unknown policy names accepted
+   - `TestAGIGovernanceCompatibility` (6): agent_autonomy policy, future subject types, multi-layer agent approval
+   - `TestSecurityInvariants` (10): verify never raises (incl. non-dict), anomaly detection never raises, replay never raises, no private key leakage, bounded scores
+
+**Why:**
+Fills the authority gap between `trust_confidence.py` (generates scores) and downstream consumers (report engine, audit trail). The manifest signature proves "this confidence score on this date came from this engine with these inputs." The snapshot authority makes confidence state tamper-evident and replayable. The drift engine enables trend reporting across engagement reassessments. The anomaly detector flags when confidence rises without corroboration support — the exact pattern that would indicate score manipulation. The Trust Policy layer provides the governance gate that PR 1.8 will consume to enforce minimum confidence thresholds on evidence approval, QA, and report export — including `agent_autonomy` policy for future agentic deployment gates.
+
+---
+
 ### 2026-06-11 — PR 1.7: Trust Confidence & Corroboration Engine
 
 **Branch:** `pr/1.7-trust-confidence-corroboration`
