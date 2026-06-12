@@ -6,6 +6,55 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-12 — PR 1.8: Trust Intelligence Layer
+
+**Branch:** `pr/1.8-trust-intelligence`
+
+**Area:** Field Assessment / Trust Infrastructure / Intelligence Layer
+
+**Summary of changes:**
+
+1. **`services/field_assessment/trust_intelligence.py`** (new, ~900 lines) — Intelligence layer above all prior trust authorities (PRs 1.1–1.7A):
+   - `TRUST_INTELLIGENCE_VERSION = "trust-intelligence-v1"` — forward-compatibility marker
+   - 30+ named constants exported at module level (auditor visible): posture thresholds, risk thresholds, drift modifiers, forecast windows, graph node type constants
+   - **Part 1 — `calculate_trust_posture()`**: 5-component weighted composite (confidence 50%, replay 20%, graph 15%, authority 10%, enforcement 5%); drift modifier applied post-weighting; 6 posture levels (critical/degraded/watch/stable/healthy/excellent); all inputs optional — defaults assume 100 for missing components; returns `trust_posture`, `score`, `confidence`, `reasoning`, `generated_from`, `component_scores`
+   - **Part 2 — `calculate_trust_trend()`**: window filtering via `created_at`/`generated_at`/`timestamp`; 4 validated windows (30/90/180/365d, defaults to 90 on invalid); first-vs-last score comparison; 5 directions, 5 velocities; returns `direction`, `velocity`, `score_change`, `confidence_change`, `data_points`, `trend_available`
+   - **Part 3 — `generate_trust_priorities()`**: 12 candidate sources (broken chain delta=30, critical confidence delta=40, rapidly_degrading delta=35, critical risk delta=30, critical posture delta=50, etc.); sorted by trust_delta descending; deduplicated by issue; re-numbered 1..n; returns `priority`, `issue`, `impact`, `trust_delta`, `reason`, `evidence` per item
+   - **Part 4 — `calculate_trust_risk()`**: 7 named categories (authority_risk, replay_risk, graph_risk, confidence_risk, drift_risk, governance_risk, future_autonomy_risk), each 0–100; overall = max×0.70 + avg×0.30; contributing_factors sorted set; returns `risk_level`, `risk_score`, `contributing_factors`, `category_scores`
+   - **Part 5 — `generate_trust_insights()`**: deterministic insights from drift/trend/confidence/risk categories/hotspots/posture; sorted critical-first by `_SEVERITY_ORDER`; returns list of `{category, severity, insight, evidence, recommended_action}`
+   - **Part 6 — `detect_trust_hotspots()`**: 6 areas (evidence, authority, replay, graph, corroboration, governance); corroboration derives avg `corroboration_score` from confidence_snapshots; sorted by risk_score descending
+   - **Part 7 — `generate_executive_actions()`**: 4 priority tiers (immediate/short_term/medium_term/long_term) with audience tags (executive/management/operations/governance); sorted immediate-first
+   - **Part 8 — `generate_governance_recommendations()`**: `entity_type` extensible to human/agent/autonomous_system/agi/any and any future string; AGI always gets cryptographic verification recommendation; agent gets supervised vs. permitted-with-monitoring based on autonomy_risk+posture; autonomous_system requires posture≥75; returns `{recommendation, justification, trust_impact, applies_to, governance_layer}`
+   - **Part 9 — `forecast_trust_posture()`**: linear extrapolation `daily_rate = score_change / trend_window`; dampening 20% at 180d, 35% at 365d (uncertainty grows); forecast_confidence high/medium/low; no ML; returns `projected_posture`, `projected_score`, `score_delta`, `forecast_confidence`, `reasoning`
+   - **Part 10 — `generate_trust_intelligence_graph()`**: typed node IDs (`posture:0`, `trend:0`, `risk:0`, `priority:{n}`, `recommendation:{n}`, `forecast:0`, `insight:{n}`, `hotspot:{n}`); directed edges (informs_trend, informs_risk, drives_priority, generates_recommendation, drives_forecast, generates_insight, identifies_hotspot); all nodes carry `tenant_id`/`engagement_id`; returns `nodes`, `edges`, `node_count`, `edge_count`
+
+2. **`tests/test_trust_intelligence.py`** (new, 270 tests) — Full coverage across 20 test classes:
+   - `TestTrustIntelligenceConstants` (8): version string, all posture/risk/drift/forecast constants
+   - `TestCalculateTrustPosture` (20): all-None valid, required keys, component weights, drift modifiers, all 6 posture levels, clamping, tenant/engagement_id
+   - `TestCalculateTrustTrend` (18): empty stable, single no-trend, boundaries, velocities, window validation, data_points, trend_available
+   - `TestGenerateTrustPriorities` (19): all sources fire correctly, sorting, dedup, re-numbering, required keys
+   - `TestCalculateTrustRisk` (20): all 7 categories, contributing_factors, risk_level levels, category_scores dict
+   - `TestGenerateTrustInsights` (18): all insight sources, severity sorting, required keys, default info insight
+   - `TestDetectTrustHotspots` (16): all 6 areas, corroboration from snapshots, risk_score sorting
+   - `TestGenerateExecutiveActions` (18): all priority tiers, audience values, sorting, required keys
+   - `TestGenerateGovernanceRecommendations` (19): all entity types, agi always cryptographic, agent supervised vs permitted, required keys
+   - `TestForecastTrustPosture` (17): dampening 180d/365d, clamping, forecast_confidence, required keys
+   - `TestGenerateTrustIntelligenceGraph` (18): node types, edge types, node_count, edge_count, tenant propagation
+   - `TestDeterminism` (10): all 10 functions produce identical output on repeated calls
+   - `TestCrossTenantIsolation` (8): tenant_id in all outputs, no cross-contamination
+   - `TestCrossEngagementIsolation` (5): engagement_id preserved, scores unaffected
+   - `TestPerformance` (8): 100 posture <100ms, 1000 trend/priorities/risk/insights <250ms, graph <500ms
+   - `TestFutureAgentCompatibility` (8): entity_type="agent_fleet" doesn't crash, agent context works
+   - `TestAGIGovernanceCompatibility` (8): agi recommendations, agi posture, 365-day forecast
+   - `TestSecurityInvariants` (10): all functions never raise on garbage inputs
+   - `TestEnterpriseScenarios` (6): banking/healthcare/critical_infrastructure/govcon/ai_governance/full-pipeline
+   - `TestEdgeCases` (8): None items filtered, unknown directions, empty violations, score clamping
+
+**Why:**
+Closes the gap between "can we verify trust?" and "what does trust mean for our organization?" All prior PRs (1.1–1.7A) answered verification questions. PR 1.8 answers intelligence questions: What is my posture? Why is it changing? What should leadership do? Which systems need intervention? The governance recommendation engine future-proofs for AGI entities without schema changes — `entity_type` accepts any string. The trust intelligence graph provides the foundation for a future UI that renders trust as an explorable knowledge graph rather than a static dashboard.
+
+---
+
 ### 2026-06-12 — PR 1.7A: Confidence Authority & Drift Intelligence
 
 **Branch:** `pr/1.7a-confidence-authority`
