@@ -365,7 +365,7 @@ def calculate_trust_trend(
         if ts is None:
             continue
         delta_days = (now - ts).total_seconds() / 86400.0
-        if delta_days > window_days:
+        if delta_days < 0 or delta_days > window_days:
             continue
         # score: prefer "score" then "confidence_score"
         score_raw = item.get("score", item.get("confidence_score", 0))
@@ -1576,8 +1576,8 @@ def forecast_trust_posture(
     elif window_days >= 180:
         raw_delta = raw_delta * (1.0 - 0.20)
 
-    score_delta = int(round(raw_delta))
-    projected_score = _clamp(current_score + score_delta)
+    projected_score = _clamp(current_score + int(round(raw_delta)))
+    score_delta = projected_score - current_score
     projected_posture = _posture_from_score(projected_score)
 
     # Forecast confidence
@@ -1636,6 +1636,18 @@ def generate_trust_intelligence_graph(
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
 
+    def _scope_ok(result: dict[str, Any] | None) -> bool:
+        """Reject payloads whose tenant_id or engagement_id conflicts with caller scope."""
+        if not isinstance(result, dict):
+            return True
+        rt = result.get("tenant_id")
+        re_ = result.get("engagement_id")
+        if rt and tenant_id and rt != tenant_id:
+            return False
+        if re_ and engagement_id and re_ != engagement_id:
+            return False
+        return True
+
     def _make_node(node_id: str, node_type: str, payload: Any) -> dict[str, Any]:
         return {
             "node_id": node_id,
@@ -1658,17 +1670,39 @@ def generate_trust_intelligence_graph(
     risk_id = "risk:0"
     forecast_id = "forecast:0"
 
-    nodes.append(_make_node(posture_id, GRAPH_NODE_POSTURE, posture_result or {}))
-    nodes.append(_make_node(trend_id, GRAPH_NODE_TREND, trend_result or {}))
-    nodes.append(_make_node(risk_id, GRAPH_NODE_RISK, risk_result or {}))
+    nodes.append(
+        _make_node(
+            posture_id,
+            GRAPH_NODE_POSTURE,
+            posture_result if _scope_ok(posture_result) else {},
+        )
+    )
+    nodes.append(
+        _make_node(
+            trend_id, GRAPH_NODE_TREND, trend_result if _scope_ok(trend_result) else {}
+        )
+    )
+    nodes.append(
+        _make_node(
+            risk_id, GRAPH_NODE_RISK, risk_result if _scope_ok(risk_result) else {}
+        )
+    )
 
     if forecast_result is not None:
-        nodes.append(_make_node(forecast_id, GRAPH_NODE_FORECAST, forecast_result))
+        nodes.append(
+            _make_node(
+                forecast_id,
+                GRAPH_NODE_FORECAST,
+                forecast_result if _scope_ok(forecast_result) else {},
+            )
+        )
 
     # --- priority nodes ---
     priority_ids: list[str] = []
     for idx, item in enumerate(priorities or []):
         if not isinstance(item, dict):
+            continue
+        if not _scope_ok(item):
             continue
         pid = f"priority:{idx}"
         nodes.append(_make_node(pid, GRAPH_NODE_PRIORITY, item))
@@ -1677,7 +1711,7 @@ def generate_trust_intelligence_graph(
     # --- recommendation nodes ---
     recommendation_ids: list[str] = []
     for idx, item in enumerate(recommendations or []):
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or not _scope_ok(item):
             continue
         rid = f"recommendation:{idx}"
         nodes.append(_make_node(rid, GRAPH_NODE_RECOMMENDATION, item))
@@ -1686,7 +1720,7 @@ def generate_trust_intelligence_graph(
     # --- insight nodes ---
     insight_ids: list[str] = []
     for idx, item in enumerate(insights or []):
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or not _scope_ok(item):
             continue
         iid = f"insight:{idx}"
         nodes.append(_make_node(iid, GRAPH_NODE_INSIGHT, item))
@@ -1695,7 +1729,7 @@ def generate_trust_intelligence_graph(
     # --- hotspot nodes ---
     hotspot_ids: list[str] = []
     for idx, item in enumerate(hotspots or []):
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or not _scope_ok(item):
             continue
         hid = f"hotspot:{idx}"
         nodes.append(_make_node(hid, GRAPH_NODE_HOTSPOT, item))

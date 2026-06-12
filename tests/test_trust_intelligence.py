@@ -2097,6 +2097,59 @@ class TestCrossTenantIsolation:
             != r_b["category_scores"]["confidence_risk"]
         )
 
+    def test_graph_rejects_cross_tenant_posture_payload(self):
+        foreign_posture = {
+            "tenant_id": TENANT_B,
+            "score": 99,
+            "trust_posture": "excellent",
+        }
+        result = generate_trust_intelligence_graph(
+            posture_result=foreign_posture,
+            tenant_id=TENANT_A,
+        )
+        posture_node = next(
+            n for n in result["nodes"] if n["node_type"] == "trust_posture"
+        )
+        assert posture_node["tenant_id"] == TENANT_A
+        assert posture_node["payload"].get("tenant_id") != TENANT_B
+
+    def test_graph_rejects_cross_tenant_risk_payload(self):
+        foreign_risk = {
+            "tenant_id": TENANT_B,
+            "risk_level": "critical",
+            "risk_score": 90,
+        }
+        result = generate_trust_intelligence_graph(
+            risk_result=foreign_risk,
+            tenant_id=TENANT_A,
+        )
+        risk_node = next(n for n in result["nodes"] if n["node_type"] == "trust_risk")
+        assert risk_node["tenant_id"] == TENANT_A
+        assert risk_node["payload"] == {}
+
+    def test_graph_accepts_same_tenant_payload(self):
+        valid_posture = {"tenant_id": TENANT_A, "score": 85, "trust_posture": "healthy"}
+        result = generate_trust_intelligence_graph(
+            posture_result=valid_posture,
+            tenant_id=TENANT_A,
+        )
+        posture_node = next(
+            n for n in result["nodes"] if n["node_type"] == "trust_posture"
+        )
+        assert posture_node["payload"].get("score") == 85
+
+    def test_graph_accepts_payload_without_tenant_id(self):
+        no_tenant_posture = {"score": 70, "trust_posture": "stable"}
+        result = generate_trust_intelligence_graph(
+            posture_result=no_tenant_posture,
+            tenant_id=TENANT_A,
+        )
+        posture_node = next(
+            n for n in result["nodes"] if n["node_type"] == "trust_posture"
+        )
+        assert posture_node["payload"].get("score") == 70
+        assert posture_node["tenant_id"] == TENANT_A
+
 
 # ---------------------------------------------------------------------------
 # 14. TestCrossEngagementIsolation
@@ -2766,3 +2819,46 @@ class TestEdgeCases:
             drift_result={"direction": "rapidly_degrading"},
         )
         assert result2["score"] >= 0
+
+    def test_future_dated_snapshot_excluded_from_trend(self):
+        # A snapshot timestamped 1 year in the future must not become the trend endpoint
+        past = {"created_at": "2020-01-01T00:00:00Z", "score": 50}
+        future = {"created_at": "2099-12-31T00:00:00Z", "score": 99}
+        result = calculate_trust_trend([past, future], window_days=365)
+        # future snapshot should be excluded; only past is in window → single point → no trend
+        assert result["trend_available"] is False or result["score_change"] == 0
+
+    def test_forecast_score_delta_consistent_with_projected_score(self):
+        # When projection would exceed 100, score_delta must equal projected_score - current_score
+        trend = {
+            "score_change": 50,
+            "window_days": 30,
+            "direction": "rapidly_improving",
+            "velocity": "rapid",
+            "trend_available": True,
+        }
+        posture = {"score": 90, "trust_posture": "healthy"}
+        result = forecast_trust_posture(
+            trend_result=trend, posture_result=posture, window_days=30
+        )
+        assert result["projected_score"] <= 100
+        assert (
+            result["score_delta"] == result["projected_score"] - result["current_score"]
+        )
+
+    def test_forecast_score_delta_consistent_when_clamped_at_zero(self):
+        trend = {
+            "score_change": -80,
+            "window_days": 30,
+            "direction": "rapidly_degrading",
+            "velocity": "rapid",
+            "trend_available": True,
+        }
+        posture = {"score": 10, "trust_posture": "critical"}
+        result = forecast_trust_posture(
+            trend_result=trend, posture_result=posture, window_days=30
+        )
+        assert result["projected_score"] >= 0
+        assert (
+            result["score_delta"] == result["projected_score"] - result["current_score"]
+        )
