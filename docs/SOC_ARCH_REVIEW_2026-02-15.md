@@ -1,3 +1,26 @@
+## 2026-06-12 — P0: Quarantine Public Debug Route (`/_debug/routes`)
+
+**Reviewer:** Codex | **Classification:** SOC-P0 (auth bypass remediation; `/_debug` removed from public allowlist; enforcement code corrected)
+
+**Problem:**
+`/_debug` was present in `PUBLIC_PATHS_PREFIX` (`api/security/public_paths.py`), causing `AuthGateMiddleware` to skip all authentication for any path starting with `/_debug`. The `GET /_debug/routes` endpoint also silently swallowed `HTTPException` from `require_status_auth`, converting 401 responses into 200 `{"ok": false}` responses — meaning auth was non-functional even when callers reached the endpoint logic.
+
+**Changes:**
+- `api/security/public_paths.py` — removed `"/_debug"` from `PUBLIC_PATHS_PREFIX`. Auth middleware now enforces authentication on `/_debug/routes`.
+- `api/main.py` — `debug_routes()` handler no longer catches `HTTPException`. Auth exceptions propagate as 401/403 as designed.
+- `tests/security/test_router_mount_inventory.py` — added negative auth tests: unauthenticated request returns 401; `/_debug` not in `PUBLIC_PATHS_PREFIX`; authenticated request returns 200.
+- `tools/ci/route_inventory.json` — regenerated via `make route-inventory-generate` to match current AST state.
+
+**Security invariants verified:**
+- `/_debug` is absent from all public path allowlists.
+- Unauthenticated `GET /_debug/routes` returns 401 (confirmed by new test).
+- `/_debug/` remains in `ALLOWED_INTERNAL_PREFIXES` in `check_route_inventory.py` — the route is correctly classified as `allowed_internal` (not in public contract) and now auth-gated at runtime.
+- No new modules created. No dead code.
+
+**No regressions:** All existing tests pass. Route inventory passes. Security gates pass.
+
+---
+
 ## 2026-06-09 — PR 5: Legacy Invite Removal + Governed Identity Cutover
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (workforce API surface change; no auth subsystem changes, no privilege escalation, no new credential handling)

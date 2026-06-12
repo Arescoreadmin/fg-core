@@ -986,42 +986,34 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @app.get("/_debug/routes")
     async def debug_routes(request: Request) -> dict[str, Any]:
-        try:
-            require_status_auth(request)
+        # HTTPException (401/403) from require_status_auth must propagate so
+        # that unauthenticated callers receive a proper error response rather
+        # than a 200 {"ok": False}.
+        require_status_auth(request)
 
-            routes: list[dict[str, Any]] = []
-            for route in request.app.router.routes:
-                path = getattr(route, "path", None)
-                if not path:
-                    continue
-                endpoint = getattr(route, "endpoint", None)
-                module_name = (
-                    getattr(endpoint, "__module__", None) if endpoint else None
-                )
-                func_name = getattr(endpoint, "__name__", None) if endpoint else None
-                methods = sorted(list(getattr(route, "methods", []) or []))
+        routes: list[dict[str, Any]] = []
+        for route in request.app.router.routes:
+            path = getattr(route, "path", None)
+            if not path:
+                continue
+            endpoint = getattr(route, "endpoint", None)
+            module_name = getattr(endpoint, "__module__", None) if endpoint else None
+            func_name = getattr(endpoint, "__name__", None) if endpoint else None
+            methods = sorted(list(getattr(route, "methods", []) or []))
 
-                routes.append(
-                    {
-                        "path": path,
-                        "methods": methods,
-                        "endpoint": f"{module_name}.{func_name}"
-                        if module_name and func_name
-                        else None,
-                        "name": getattr(route, "name", None),
-                    }
-                )
+            routes.append(
+                {
+                    "path": path,
+                    "methods": methods,
+                    "endpoint": f"{module_name}.{func_name}"
+                    if module_name and func_name
+                    else None,
+                    "name": getattr(route, "name", None),
+                }
+            )
 
-            routes.sort(key=lambda item: (str(item["path"]), ",".join(item["methods"])))
-            return {"ok": True, "error": None, "routes": routes}
-        except HTTPException as exc:
-            return {
-                "ok": False,
-                "error": f"{exc.status_code}: {exc.detail}",
-                "routes": [],
-            }
-        except Exception as exc:
-            return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "routes": []}
+        routes.sort(key=lambda item: (str(item["path"]), ",".join(item["methods"])))
+        return {"ok": True, "error": None, "routes": routes}
 
     return app
 
