@@ -218,10 +218,15 @@ def _load_verification_public_key() -> bytes:
     if raw:
         try:
             pub_bytes = base64.b64decode(raw)
-            if len(pub_bytes) == 32:
-                return pub_bytes
-        except Exception:
-            pass
+        except Exception as exc:
+            raise ConfidenceAuthorityError(
+                "malformed FG_EVIDENCE_VERIFY_KEY_B64: base64 decode failed"
+            ) from exc
+        if len(pub_bytes) != 32:
+            raise ConfidenceAuthorityError(
+                f"malformed FG_EVIDENCE_VERIFY_KEY_B64: expected 32 bytes, got {len(pub_bytes)}"
+            )
+        return pub_bytes
     seed = _load_private_key_seed()
     return _derive_public_key_bytes(seed)
 
@@ -333,15 +338,20 @@ def verify_confidence_manifest(
     except ConfidenceAuthorityError:
         return {"valid": False, "reason": "key_unavailable"}
 
-    payload: dict[str, Any] = {
-        "authority_version": CONFIDENCE_AUTHORITY_VERSION,
-        "confidence_score": int(manifest["confidence_score"]),
-        "confidence_version": manifest.get("confidence_version", CONFIDENCE_VERSION),
-        "corroboration_score": int(manifest["corroboration_score"]),
-        "manifest_hash": str(manifest["manifest_hash"]),
-        "strength_score": int(manifest["strength_score"]),
-        "trust_quality_score": int(manifest["trust_quality_score"]),
-    }
+    try:
+        payload: dict[str, Any] = {
+            "authority_version": CONFIDENCE_AUTHORITY_VERSION,
+            "confidence_score": int(manifest["confidence_score"]),
+            "confidence_version": manifest.get(
+                "confidence_version", CONFIDENCE_VERSION
+            ),
+            "corroboration_score": int(manifest["corroboration_score"]),
+            "manifest_hash": str(manifest["manifest_hash"]),
+            "strength_score": int(manifest["strength_score"]),
+            "trust_quality_score": int(manifest["trust_quality_score"]),
+        }
+    except (TypeError, ValueError):
+        return {"valid": False, "reason": "invalid_manifest_values"}
 
     canonical = canonical_json_bytes(payload)
     expected_hash = hashlib.sha256(canonical).hexdigest()
@@ -355,6 +365,9 @@ def verify_confidence_manifest(
         pub.verify(sig_bytes, digest)
     except (InvalidSignature, ValueError, Exception):
         return {"valid": False, "reason": "signature_mismatch"}
+
+    if authority["signing_key_id"] != _derive_key_id(pub_bytes):
+        return {"valid": False, "reason": "signing_key_id_mismatch"}
 
     return {"valid": True, "reason": None}
 
@@ -867,13 +880,21 @@ def replay_confidence_snapshot(
 
     if graph_hash is not None:
         snap_manifest_hash = target.get("manifest_hash", "")
-        if graph_hash and snap_manifest_hash and graph_hash != snap_manifest_hash:
-            return {
-                "valid": False,
-                "reason": "graph_hash_mismatch",
-                "snapshot": target,
-                "validations": validations,
-            }
+        if graph_hash:
+            if not snap_manifest_hash:
+                return {
+                    "valid": False,
+                    "reason": "graph_hash_unbound",
+                    "snapshot": target,
+                    "validations": validations,
+                }
+            if graph_hash != snap_manifest_hash:
+                return {
+                    "valid": False,
+                    "reason": "graph_hash_mismatch",
+                    "snapshot": target,
+                    "validations": validations,
+                }
         validations.append("graph_authority")
 
     if replay_result is not None:

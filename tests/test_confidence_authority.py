@@ -394,6 +394,54 @@ class TestVerifyConfidenceManifest:
         result = verify_confidence_manifest(m, auth)
         assert result["valid"] is False
 
+    def test_malformed_verify_key_returns_key_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch, signing_env: Any
+    ) -> None:
+        m = _manifest()
+        auth = sign_confidence_manifest(m)
+        monkeypatch.setenv("FG_EVIDENCE_VERIFY_KEY_B64", "!!!not_valid_base64!!!")
+        result = verify_confidence_manifest(m, auth)
+        assert result["valid"] is False
+        assert result["reason"] == "key_unavailable"
+
+    def test_wrong_length_verify_key_returns_key_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch, signing_env: Any
+    ) -> None:
+        import base64 as _b64
+
+        m = _manifest()
+        auth = sign_confidence_manifest(m)
+        monkeypatch.setenv(
+            "FG_EVIDENCE_VERIFY_KEY_B64", _b64.b64encode(b"short").decode()
+        )
+        result = verify_confidence_manifest(m, auth)
+        assert result["valid"] is False
+        assert result["reason"] == "key_unavailable"
+
+    def test_forged_signing_key_id_rejected(self, signing_env: Any) -> None:
+        m = _manifest()
+        auth = sign_confidence_manifest(m)
+        auth["signing_key_id"] = "a" * 16
+        result = verify_confidence_manifest(m, auth)
+        assert result["valid"] is False
+        assert result["reason"] == "signing_key_id_mismatch"
+
+    def test_correct_signing_key_id_accepted(self, signing_env: Any) -> None:
+        m = _manifest()
+        auth = sign_confidence_manifest(m)
+        result = verify_confidence_manifest(m, auth)
+        assert result["valid"] is True
+
+    def test_non_numeric_score_returns_invalid_manifest_values(
+        self, signing_env: Any
+    ) -> None:
+        m = _manifest()
+        auth = sign_confidence_manifest(m)
+        m["confidence_score"] = "not_a_number"
+        result = verify_confidence_manifest(m, auth)
+        assert result["valid"] is False
+        assert result["reason"] == "invalid_manifest_values"
+
 
 # ---------------------------------------------------------------------------
 # 4. Generate Confidence Snapshot
@@ -582,6 +630,15 @@ class TestVerifyConfidenceSnapshot:
         for bad in bad_inputs:
             result = verify_confidence_snapshot(bad)  # type: ignore[arg-type]
             assert isinstance(result, dict)
+
+    def test_malformed_verify_key_returns_key_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch, signing_env: Any
+    ) -> None:
+        snap = _snap()
+        monkeypatch.setenv("FG_EVIDENCE_VERIFY_KEY_B64", "!!!not_valid_base64!!!")
+        result = verify_confidence_snapshot(snap)
+        assert result["valid"] is False
+        assert result["reason"] == "key_unavailable"
 
 
 # ---------------------------------------------------------------------------
@@ -1201,6 +1258,26 @@ class TestReplayConfidenceSnapshot:
         snap = _snap()
         result = replay_confidence_snapshot(snap["snapshot_id"], [snap])
         assert "snapshot_authority" in result["validations"]
+
+    def test_graph_hash_unbound_when_snapshot_has_empty_manifest_hash(
+        self, signing_env: Any
+    ) -> None:
+        snap = _snap(manifest_hash="")
+        result = replay_confidence_snapshot(
+            snap["snapshot_id"], [snap], graph_hash="deadbeef" * 8
+        )
+        assert result["valid"] is False
+        assert result["reason"] == "graph_hash_unbound"
+        assert "graph_authority" not in result["validations"]
+
+    def test_graph_hash_matching_manifest_hash_validates(
+        self, signing_env: Any
+    ) -> None:
+        snap = _snap(manifest_hash="abcd1234" * 8)
+        result = replay_confidence_snapshot(
+            snap["snapshot_id"], [snap], graph_hash="abcd1234" * 8
+        )
+        assert "graph_authority" in result["validations"]
 
 
 # ---------------------------------------------------------------------------
