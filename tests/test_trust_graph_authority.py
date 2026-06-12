@@ -1,22 +1,27 @@
 """Trust Graph Authority & Snapshot Foundation tests — PR 1.6A.
 
 Coverage matrix:
-  Edge Authority Creation       build_edge_authority_event, sign_edge_authority
-  Edge Authority Verification   verify_edge_authority — all check layers
-  Snapshot Creation             generate_signed_graph_snapshot
-  Snapshot Verification         verify_graph_snapshot — all check layers
-  Replay Anchors                build_replay_anchor
-  Trust Explanation Functions   why_report, why_risk, why_control, why_finding
-  Trust Query Result            TrustQueryResult fields, to_dict
-  Tamper Detection              hash mismatch, field mutation, field injection
-  Wrong Key Detection           key_unavailable, wrong key material
-  Cross Tenant Isolation        edge/snapshot across tenant boundaries
-  Cross Engagement Isolation    edge/snapshot across engagement boundaries
-  Determinism                   same graph → same hash → same output
-  Manifest Stability            timestamp exclusion from canonical bytes
-  Performance                   sign/verify latency targets
-  Future Node Compatibility     unknown payload fields tolerated
-  Security Invariants           missing fields, version spoofing, replay
+  Edge Authority Creation         build_edge_authority_event, sign_edge_authority
+  Edge Authority Verification     verify_edge_authority — all check layers
+  Snapshot Creation               generate_signed_graph_snapshot
+  Snapshot Verification           verify_graph_snapshot — all check layers
+  Snapshot Signature Invariant    snapshot_hash is signed (not snapshot_id, not created_at)
+  Replay Anchors                  build_replay_anchor
+  Replay Anchor Verification      verify_replay_anchor — all check layers
+  Trust Explanation Functions     why_report, why_risk, why_control, why_finding
+  Trust Query Result              TrustQueryResult fields, subject_id, query_type, to_dict
+  Tamper Detection                hash mismatch, field mutation, field injection
+  Wrong Key Detection             key_unavailable, wrong key material
+  Cross Tenant Isolation          edge/snapshot across tenant boundaries
+  Cross Engagement Isolation      edge/snapshot across engagement boundaries
+  Determinism                     same graph → same hash → same output
+  Manifest Stability              timestamp exclusion from canonical bytes
+  Performance                     sign/verify latency targets — 100-node and 1000-node
+  Future Node Compatibility       unknown payload fields tolerated
+  Security Invariants             missing fields, version spoofing, replay
+  No Private Key In Output        seed never appears in any output surface
+  Malformed Inputs                None/wrong types for all public verify paths
+  Edge Authority Version          EDGE_AUTHORITY_VERSION in payload, downgrade detection
 """
 
 from __future__ import annotations
@@ -56,6 +61,7 @@ from services.field_assessment.trust_graph_authority import (
     sign_edge_authority,
     verify_edge_authority,
     verify_graph_snapshot,
+    verify_replay_anchor,
     why_control,
     why_finding,
     why_report,
@@ -1661,3 +1667,602 @@ class TestSecurityInvariants:
         assert isinstance(result, dict)
         assert "valid" in result
         assert "reason" in result
+
+    def test_tampered_graph_hash_in_snapshot_detected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # P1 fix: snapshot["graph_hash"] must be validated against the recomputed
+        # manifest — mutating it with snapshot_hash intact must return invalid.
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = dict(generate_signed_graph_snapshot(g))
+        snap["graph_hash"] = "a" * 64  # attacker-controlled value
+        result = verify_graph_snapshot(g, snap)
+        assert result["valid"] is False
+        assert result["reason"] == "tampered_graph_hash"
+
+    def test_edge_id_mutation_detected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # P2 fix: authority signed for edge-A must not verify against edge-B
+        # with same type/endpoints but a different edge_id.
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        edge_a = TrustGraphEdge(
+            edge_id="edge-id-original",
+            edge_type=EdgeType.EVIDENCE_TO_FINDING,
+            source_node_id="ev-1",
+            target_node_id="fi-1",
+            tenant_id=TENANT,
+            engagement_id=ENG,
+        )
+        auth = sign_edge_authority(edge_a)
+        edge_b = TrustGraphEdge(
+            edge_id="edge-id-different",  # same endpoints, different id
+            edge_type=edge_a.edge_type,
+            source_node_id=edge_a.source_node_id,
+            target_node_id=edge_a.target_node_id,
+            tenant_id=edge_a.tenant_id,
+            engagement_id=edge_a.engagement_id,
+        )
+        result = verify_edge_authority(edge_b, auth)
+        assert result["valid"] is False
+
+    def test_edge_id_in_build_edge_authority_event(self) -> None:
+        edge = TrustGraphEdge(
+            edge_id="my-edge-id",
+            edge_type=EdgeType.EVIDENCE_TO_FINDING,
+            source_node_id="ev-1",
+            target_node_id="fi-1",
+            tenant_id=TENANT,
+            engagement_id=ENG,
+        )
+        event = build_edge_authority_event(edge)
+        assert event["edge_id"] == "my-edge-id"
+
+    def test_edge_id_in_sign_edge_authority(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        edge = TrustGraphEdge(
+            edge_id="signed-edge-id",
+            edge_type=EdgeType.EVIDENCE_TO_FINDING,
+            source_node_id="ev-1",
+            target_node_id="fi-1",
+            tenant_id=TENANT,
+            engagement_id=ENG,
+        )
+        auth = sign_edge_authority(edge)
+        # Round-trip: same edge with same id must verify
+        result = verify_edge_authority(edge, auth)
+        assert result["valid"] is True
+
+
+# ---------------------------------------------------------------------------
+# Snapshot Signature Invariant
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotSignatureInvariant:
+    def test_signature_is_over_snapshot_hash_not_snapshot_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Changing snapshot_id must not affect signature validity.
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = dict(generate_signed_graph_snapshot(g))
+        original_id = snap["snapshot_id"]
+        snap["snapshot_id"] = "different-uuid-entirely"
+        assert snap["snapshot_id"] != original_id
+        # Signature is over snapshot_hash, not snapshot_id — must still verify
+        result = verify_graph_snapshot(g, snap)
+        assert result["valid"] is True
+
+    def test_signature_is_not_over_created_at(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = dict(generate_signed_graph_snapshot(g))
+        snap["created_at"] = "2099-12-31T23:59:59Z"  # mutated timestamp
+        result = verify_graph_snapshot(g, snap)
+        assert result["valid"] is True
+
+    def test_snapshot_hash_identical_across_calls(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        s1 = generate_signed_graph_snapshot(g)
+        s2 = generate_signed_graph_snapshot(g)
+        assert s1["snapshot_hash"] == s2["snapshot_hash"]
+        assert s1["snapshot_id"] != s2["snapshot_id"]
+        assert (
+            s1["created_at"] != s2["created_at"] or True
+        )  # may coincide; hash must match
+
+    def test_mutating_snapshot_hash_itself_invalidates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = dict(generate_signed_graph_snapshot(g))
+        snap["snapshot_hash"] = "c" * 64
+        result = verify_graph_snapshot(g, snap)
+        assert result["valid"] is False
+        # Either tampered_snapshot (hash mismatch) or signature_mismatch
+        assert result["reason"] in ("tampered_snapshot", "signature_mismatch")
+
+    def test_graph_hash_alteration_detected_as_tampered_graph_hash(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = dict(generate_signed_graph_snapshot(g))
+        snap["graph_hash"] = "d" * 64
+        result = verify_graph_snapshot(g, snap)
+        assert result["valid"] is False
+        assert result["reason"] == "tampered_graph_hash"
+
+
+# ---------------------------------------------------------------------------
+# Replay Anchor Verification
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyReplayAnchor:
+    def _snap(self, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        return generate_signed_graph_snapshot(g)
+
+    def _anchor(self, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+        return build_replay_anchor(self._snap(monkeypatch))
+
+    def test_valid_anchor_returns_valid_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        anchor = self._anchor(monkeypatch)
+        result = verify_replay_anchor(anchor)
+        assert result["valid"] is True
+        assert result["reason"] is None
+
+    def test_none_anchor_returns_invalid(self) -> None:
+        result = verify_replay_anchor(None)  # type: ignore[arg-type]
+        assert result["valid"] is False
+
+    def test_empty_anchor_returns_invalid(self) -> None:
+        result = verify_replay_anchor({})
+        assert result["valid"] is False
+        assert "missing_anchor_fields" in result["reason"]
+
+    def test_missing_graph_hash(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        anchor = dict(self._anchor(monkeypatch))
+        del anchor["graph_hash"]
+        result = verify_replay_anchor(anchor)
+        assert result["valid"] is False
+        assert "graph_hash" in result["reason"]
+
+    def test_missing_snapshot_hash(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        anchor = dict(self._anchor(monkeypatch))
+        del anchor["snapshot_hash"]
+        result = verify_replay_anchor(anchor)
+        assert result["valid"] is False
+
+    def test_missing_snapshot_signature(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        anchor = dict(self._anchor(monkeypatch))
+        del anchor["snapshot_signature"]
+        result = verify_replay_anchor(anchor)
+        assert result["valid"] is False
+
+    def test_wrong_snapshot_version(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        anchor = dict(self._anchor(monkeypatch))
+        anchor["snapshot_version"] = "old-version-v0"
+        result = verify_replay_anchor(anchor)
+        assert result["valid"] is False
+        assert "invalid_snapshot_version" in result["reason"]
+
+    def test_bad_signature_returns_signature_mismatch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        anchor = dict(self._anchor(monkeypatch))
+        anchor["snapshot_signature"] = "ee" * 32
+        result = verify_replay_anchor(anchor)
+        assert result["valid"] is False
+        assert result["reason"] == "signature_mismatch"
+
+    def test_no_key_returns_key_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        anchor = self._anchor(monkeypatch)
+        monkeypatch.delenv("FG_EVIDENCE_SIGNING_KEY_B64", raising=False)
+        monkeypatch.delenv("FG_EVIDENCE_VERIFY_KEY_B64", raising=False)
+        result = verify_replay_anchor(anchor)
+        assert result["valid"] is False
+        assert result["reason"] == "key_unavailable"
+
+    def test_never_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("FG_EVIDENCE_SIGNING_KEY_B64", raising=False)
+        monkeypatch.delenv("FG_EVIDENCE_VERIFY_KEY_B64", raising=False)
+        result = verify_replay_anchor({"snapshot_signature": None, "garbage": 123})
+        assert result["valid"] is False
+
+    def test_anchor_snapshot_mismatch_detected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        snap = self._snap(monkeypatch)
+        anchor = build_replay_anchor(snap)
+        # Create a second snapshot for a different graph
+        g2 = _graph()
+        _ev(g2, "ev-1")
+        _fi(g2, "fi-1")
+        snap2 = generate_signed_graph_snapshot(g2)
+        result = verify_replay_anchor(anchor, snapshot=snap2)
+        assert result["valid"] is False
+        assert "mismatch" in result["reason"]
+
+    def test_anchor_snapshot_match_passes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        snap = self._snap(monkeypatch)
+        anchor = build_replay_anchor(snap)
+        result = verify_replay_anchor(anchor, snapshot=snap)
+        assert result["valid"] is True
+
+    def test_anchor_graph_stale_when_graph_mutated(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = generate_signed_graph_snapshot(g)
+        anchor = build_replay_anchor(snap)
+        _fi(g, "fi-1")  # mutate graph after anchor was built
+        result = verify_replay_anchor(anchor, graph=g)
+        assert result["valid"] is False
+        assert result["reason"] == "anchor_graph_hash_stale"
+
+    def test_anchor_graph_matches_current_graph(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = generate_signed_graph_snapshot(g)
+        anchor = build_replay_anchor(snap)
+        result = verify_replay_anchor(anchor, graph=g)
+        assert result["valid"] is True
+
+
+# ---------------------------------------------------------------------------
+# Edge Authority Version In Payload
+# ---------------------------------------------------------------------------
+
+
+class TestEdgeAuthorityVersionInPayload:
+    def test_authority_version_in_build_event(self) -> None:
+        edge = _make_ev_fi_edge()
+        event = build_edge_authority_event(edge)
+        assert event["authority_version"] == EDGE_AUTHORITY_VERSION
+
+    def test_authority_version_in_sign_output(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        edge = _make_ev_fi_edge()
+        auth = sign_edge_authority(edge)
+        assert auth["authority_version"] == EDGE_AUTHORITY_VERSION
+
+    def test_version_downgrade_after_signing_detected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        edge = _make_ev_fi_edge()
+        auth = dict(sign_edge_authority(edge))
+        auth["authority_version"] = "trust-graph-edge-authority-v0"
+        result = verify_edge_authority(edge, auth)
+        assert result["valid"] is False
+        assert "invalid_authority_version" in result["reason"]
+
+    def test_version_absent_from_authority_returns_missing_fields(self) -> None:
+        edge = _make_ev_fi_edge()
+        auth = {
+            "event_hash": "a" * 64,
+            "signature": "b" * 128,
+            "signing_key_id": "c" * 16,
+            # authority_version deliberately omitted
+        }
+        result = verify_edge_authority(edge, auth)
+        assert result["valid"] is False
+        assert "authority_version" in result["reason"]
+
+    def test_version_in_canonical_affects_hash(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Changing EDGE_AUTHORITY_VERSION would change the canonical bytes and
+        # therefore the event_hash. Confirm event_hash changes when version changes.
+        from services.field_assessment import trust_graph_authority as mod
+
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        edge = _make_ev_fi_edge()
+        auth1 = sign_edge_authority(edge)
+
+        orig_version = mod.EDGE_AUTHORITY_VERSION
+        monkeypatch.setattr(mod, "EDGE_AUTHORITY_VERSION", "tampered-version-vX")
+        auth2 = sign_edge_authority(edge)
+        monkeypatch.setattr(mod, "EDGE_AUTHORITY_VERSION", orig_version)
+
+        assert auth1["event_hash"] != auth2["event_hash"]
+
+
+# ---------------------------------------------------------------------------
+# TrustQueryResult — subject_id and query_type
+# ---------------------------------------------------------------------------
+
+
+class TestTrustQueryResultExtended:
+    def _base(self, **kwargs: Any) -> TrustQueryResult:
+        g = _graph()
+        ev = _ev(g, "ev-1")
+        return TrustQueryResult(
+            path=[ev], node_count=1, edge_count=0, graph_hash="tqr-hash", **kwargs
+        )
+
+    def test_subject_id_defaults_to_none(self) -> None:
+        assert self._base().subject_id is None
+
+    def test_query_type_defaults_to_none(self) -> None:
+        assert self._base().query_type is None
+
+    def test_subject_id_settable(self) -> None:
+        r = self._base(subject_id="re-1")
+        assert r.subject_id == "re-1"
+
+    def test_query_type_settable(self) -> None:
+        for qt in ("why_report", "why_risk", "why_control", "why_finding"):
+            r = self._base(query_type=qt)
+            assert r.query_type == qt
+
+    def test_to_dict_includes_subject_id(self) -> None:
+        r = self._base(subject_id="ri-1")
+        assert r.to_dict()["subject_id"] == "ri-1"
+
+    def test_to_dict_includes_query_type(self) -> None:
+        r = self._base(query_type="why_risk")
+        assert r.to_dict()["query_type"] == "why_risk"
+
+    def test_to_dict_subject_id_none_when_unset(self) -> None:
+        assert self._base().to_dict()["subject_id"] is None
+
+    def test_to_dict_query_type_none_when_unset(self) -> None:
+        assert self._base().to_dict()["query_type"] is None
+
+    def test_to_dict_all_keys_present(self) -> None:
+        r = self._base(subject_id="s1", query_type="why_finding")
+        d = r.to_dict()
+        for key in (
+            "path",
+            "node_count",
+            "edge_count",
+            "graph_hash",
+            "snapshot_hash",
+            "confidence",
+            "subject_id",
+            "query_type",
+        ):
+            assert key in d, f"missing key: {key}"
+
+
+# ---------------------------------------------------------------------------
+# No Private Key In Output
+# ---------------------------------------------------------------------------
+
+
+class TestNoPrivateKeyInOutput:
+    def _all_values(self, d: dict[str, Any]) -> list[str]:
+        return [str(v) for v in d.values() if v is not None]
+
+    def test_sign_edge_output_does_not_contain_seed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        edge = _make_ev_fi_edge()
+        auth = sign_edge_authority(edge)
+        for v in self._all_values(auth):
+            assert v != _TEST_SEED_B64, "private seed leaked into edge authority output"
+            assert v != _TEST_SEED.hex(), (
+                "raw seed bytes leaked into edge authority output"
+            )
+
+    def test_snapshot_output_does_not_contain_seed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = generate_signed_graph_snapshot(g)
+        for v in self._all_values(snap):
+            assert v != _TEST_SEED_B64
+            assert v != _TEST_SEED.hex()
+
+    def test_replay_anchor_does_not_contain_seed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = generate_signed_graph_snapshot(g)
+        anchor = build_replay_anchor(snap)
+        for v in self._all_values(anchor):
+            assert v != _TEST_SEED_B64
+            assert v != _TEST_SEED.hex()
+
+    def test_trust_query_result_to_dict_does_not_contain_seed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        ev = _ev(g, "ev-1")
+        r = TrustQueryResult(
+            path=[ev],
+            node_count=1,
+            edge_count=0,
+            graph_hash="hash",
+            subject_id="ev-1",
+            query_type="why_finding",
+        )
+        import json
+
+        serialized = json.dumps(r.to_dict())
+        assert _TEST_SEED_B64 not in serialized
+        assert _TEST_SEED.hex() not in serialized
+
+
+# ---------------------------------------------------------------------------
+# Malformed Inputs
+# ---------------------------------------------------------------------------
+
+
+class TestMalformedInputs:
+    def test_verify_edge_authority_with_none(self) -> None:
+        edge = _make_ev_fi_edge()
+        result = verify_edge_authority(edge, None)  # type: ignore[arg-type]
+        assert result["valid"] is False
+
+    def test_verify_edge_authority_with_wrong_types(self) -> None:
+        edge = _make_ev_fi_edge()
+        # All fields present but wrong types
+        result = verify_edge_authority(
+            edge,
+            {
+                "event_hash": 12345,
+                "signature": ["not", "a", "string"],
+                "signing_key_id": None,
+                "authority_version": EDGE_AUTHORITY_VERSION,
+            },
+        )
+        assert result["valid"] is False
+
+    def test_verify_edge_authority_with_non_hex_types(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        edge = _make_ev_fi_edge()
+        auth = dict(sign_edge_authority(edge))
+        auth["signature"] = {"nested": "object"}
+        result = verify_edge_authority(edge, auth)
+        assert result["valid"] is False
+
+    def test_verify_graph_snapshot_with_none(self) -> None:
+        g = _graph()
+        result = verify_graph_snapshot(g, None)  # type: ignore[arg-type]
+        assert result["valid"] is False
+
+    def test_verify_graph_snapshot_with_wrong_types(self) -> None:
+        g = _graph()
+        result = verify_graph_snapshot(
+            g,
+            {
+                "snapshot_hash": 99999,
+                "snapshot_signature": True,
+                "snapshot_key_id": [],
+                "snapshot_version": SNAPSHOT_VERSION,
+                "graph_hash": None,
+            },
+        )
+        assert result["valid"] is False
+
+    def test_verify_replay_anchor_with_none(self) -> None:
+        result = verify_replay_anchor(None)  # type: ignore[arg-type]
+        assert result["valid"] is False
+
+    def test_verify_replay_anchor_with_empty_dict(self) -> None:
+        result = verify_replay_anchor({})
+        assert result["valid"] is False
+
+    def test_verify_replay_anchor_with_wrong_types(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        _ev(g, "ev-1")
+        snap = generate_signed_graph_snapshot(g)
+        anchor = dict(build_replay_anchor(snap))
+        anchor["snapshot_signature"] = 12345  # wrong type
+        result = verify_replay_anchor(anchor)
+        assert result["valid"] is False
+
+    def test_verify_edge_authority_with_all_none_values(self) -> None:
+        edge = _make_ev_fi_edge()
+        result = verify_edge_authority(
+            edge,
+            {
+                "event_hash": None,
+                "signature": None,
+                "signing_key_id": None,
+                "authority_version": None,
+            },
+        )
+        assert result["valid"] is False
+
+
+# ---------------------------------------------------------------------------
+# Large Graph Performance (1000 nodes)
+# ---------------------------------------------------------------------------
+
+
+class TestLargeGraphPerformance:
+    def test_snapshot_generation_1000_nodes_under_500ms(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        for i in range(1000):
+            _ev(g, f"ev-{i:04d}")
+        t0 = time.perf_counter()
+        snap = generate_signed_graph_snapshot(g)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert snap["snapshot_hash"]
+        assert elapsed_ms < 500, f"1000-node snapshot took {elapsed_ms:.1f}ms"
+
+    def test_snapshot_verification_1000_nodes_under_500ms(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        for i in range(1000):
+            _ev(g, f"ev-{i:04d}")
+        snap = generate_signed_graph_snapshot(g)
+        t0 = time.perf_counter()
+        result = verify_graph_snapshot(g, snap)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert result["valid"] is True
+        assert elapsed_ms < 500, f"1000-node verify took {elapsed_ms:.1f}ms"
+
+    def test_replay_anchor_verification_1000_nodes_under_500ms(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", _TEST_SEED_B64)
+        g = _graph()
+        for i in range(1000):
+            _ev(g, f"ev-{i:04d}")
+        snap = generate_signed_graph_snapshot(g)
+        anchor = build_replay_anchor(snap)
+        t0 = time.perf_counter()
+        result = verify_replay_anchor(anchor, graph=g, snapshot=snap)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert result["valid"] is True
+        assert elapsed_ms < 500, f"1000-node anchor verify took {elapsed_ms:.1f}ms"

@@ -169,6 +169,7 @@ def build_edge_authority_event(edge: TrustGraphEdge) -> dict[str, Any]:
         key_id = None
 
     return {
+        "edge_id": edge.edge_id,
         "edge_type": edge.edge_type.value,
         "source_node_id": edge.source_node_id,
         "target_node_id": edge.target_node_id,
@@ -195,6 +196,7 @@ def sign_edge_authority(edge: TrustGraphEdge) -> dict[str, Any]:
     key_id = _derive_key_id(pub_bytes)
 
     canonical = {
+        "edge_id": edge.edge_id,
         "edge_type": edge.edge_type.value,
         "source_node_id": edge.source_node_id,
         "target_node_id": edge.target_node_id,
@@ -258,6 +260,7 @@ def verify_edge_authority(
 
     # --- Recompute canonical and check event_hash ---
     canonical = {
+        "edge_id": edge.edge_id,
         "edge_type": edge.edge_type.value,
         "source_node_id": edge.source_node_id,
         "target_node_id": edge.target_node_id,
@@ -398,6 +401,8 @@ def verify_graph_snapshot(
     expected_hash = hashlib.sha256(_canonical_snapshot_bytes(manifest)).hexdigest()
     if snapshot["snapshot_hash"] != expected_hash:
         return {"valid": False, "reason": "tampered_snapshot"}
+    if snapshot["graph_hash"] != manifest["graph_hash"]:
+        return {"valid": False, "reason": "tampered_graph_hash"}
 
     try:
         sig_bytes = bytes.fromhex(snapshot["snapshot_signature"])
@@ -437,6 +442,75 @@ def build_replay_anchor(snapshot: dict[str, Any]) -> dict[str, Any]:
         "snapshot_signature": snapshot["snapshot_signature"],
         "snapshot_version": snapshot["snapshot_version"],
     }
+
+
+def verify_replay_anchor(
+    anchor: dict[str, Any],
+    graph: TrustGraph | None = None,
+    snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Verify a replay anchor is internally consistent and cryptographically valid.
+
+    Anchors are proof objects consumed by PR 1.9 — this function makes them
+    independently verifiable without trusting the caller that built them.
+
+    Checks:
+      1. Required fields present
+      2. snapshot_version matches SNAPSHOT_VERSION
+      3. snapshot_signature verifies over snapshot_hash (Ed25519)
+      4. If snapshot provided, anchor fields must match snapshot
+      5. If graph provided, anchor graph_hash must match current graph manifest
+
+    Returns {"valid": bool, "reason": str | None}. Never raises.
+    """
+    required = {"graph_hash", "snapshot_hash", "snapshot_signature", "snapshot_version"}
+    if not anchor or not required.issubset(anchor.keys()):
+        missing = required - set(anchor or {})
+        return {"valid": False, "reason": f"missing_anchor_fields: {sorted(missing)}"}
+
+    if anchor.get("snapshot_version") != SNAPSHOT_VERSION:
+        return {
+            "valid": False,
+            "reason": (
+                f"invalid_snapshot_version: "
+                f"expected={SNAPSHOT_VERSION!r} "
+                f"got={anchor.get('snapshot_version')!r}"
+            ),
+        }
+
+    try:
+        sig_hex = anchor["snapshot_signature"]
+        try:
+            sig_bytes = bytes.fromhex(sig_hex)
+        except (ValueError, TypeError):
+            return {"valid": False, "reason": "signature_mismatch"}
+
+        pub_bytes = _load_verification_public_key()
+        pub = Ed25519PublicKey.from_public_bytes(pub_bytes)
+        snap_hash = anchor["snapshot_hash"]
+        if not isinstance(snap_hash, str):
+            return {"valid": False, "reason": "signature_mismatch"}
+        digest = hashlib.sha256(snap_hash.encode()).digest()
+        pub.verify(sig_bytes, digest)
+
+    except TrustGraphAuthorityError:
+        return {"valid": False, "reason": "key_unavailable"}
+    except InvalidSignature:
+        return {"valid": False, "reason": "signature_mismatch"}
+    except Exception:  # noqa: BLE001
+        return {"valid": False, "reason": "signature_mismatch"}
+
+    if snapshot is not None:
+        for field in ("graph_hash", "snapshot_hash", "snapshot_signature"):
+            if anchor.get(field) != snapshot.get(field):
+                return {"valid": False, "reason": f"anchor_{field}_mismatch"}
+
+    if graph is not None:
+        manifest = generate_trust_graph_manifest(graph)
+        if anchor.get("graph_hash") != manifest.get("graph_hash"):
+            return {"valid": False, "reason": "anchor_graph_hash_stale"}
+
+    return {"valid": True, "reason": None}
 
 
 # ---------------------------------------------------------------------------
@@ -601,6 +675,8 @@ class TrustQueryResult:
     graph_hash: SHA-256 canonical hash of the graph structure
     snapshot_hash: hash of a signed snapshot if one was generated; None otherwise
     confidence: placeholder = 100 (PR 1.7 will replace)
+    subject_id: node_id of the query subject (the node the question was asked about)
+    query_type: the question answered — why_report / why_risk / why_control / why_finding
     """
 
     path: list[TrustGraphNode]
@@ -609,6 +685,8 @@ class TrustQueryResult:
     graph_hash: str
     snapshot_hash: str | None = None
     confidence: int = 100
+    subject_id: str | None = None
+    query_type: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serializable representation for audit logs and API responses."""
@@ -627,4 +705,6 @@ class TrustQueryResult:
             "graph_hash": self.graph_hash,
             "snapshot_hash": self.snapshot_hash,
             "confidence": self.confidence,
+            "subject_id": self.subject_id,
+            "query_type": self.query_type,
         }
