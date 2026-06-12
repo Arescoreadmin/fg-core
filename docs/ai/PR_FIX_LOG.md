@@ -6,6 +6,53 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-12 — PR 1.9: Auditor Proof Package & Enterprise Trust Certification Authority
+
+**Branch:** `pr/1.9-auditor-proof-authority`
+
+#### New Files
+- `services/field_assessment/auditor_proof_authority.py` — 11 public functions, ~1050 lines
+- `migrations/postgres/0109_auditor_proof_authority.sql` — 4 append-only RLS tables, 23 indexes
+- `tests/test_auditor_proof_authority.py` — 334 tests across 22 classes
+
+#### Functions Implemented
+1. `generate_auditor_proof_package()` — complete signed proof bundle; 8 sections bound via section_hashes into Ed25519 package_hash; assessed_by extensible to any entity type
+2. `generate_executive_trust_brief()` — board/investor plain-English narratives; never raises
+3. `generate_regulator_package()` — framework-agnostic compliance proof (NIST CSF/AI RMF/ISO 42001/SOC 2/HIPAA/PCI DSS); readiness from posture score, not hardcoded mappings
+4. `generate_legal_defense_package()` — 7-question decision reconstruction with reconstruction_hash over stable fields
+5. `generate_machine_verification_bundle()` — third-party verifiable offline export; requires_frostgate=False; bundle_hash includes posture_score/posture_level to distinguish non-identical snapshots
+6. `generate_trust_certification()` — composite scoring (0.7×trust + 0.3×confidence); 5 levels (bronze/silver/gold/platinum/enterprise); 90-day validity
+7. `generate_chain_of_custody()` — hash-linked custody chain; custody_hash computed over stable fields (excluding custody_id) for full determinism; PROOF_GENESIS_HASH genesis
+8. `sign_proof_package()` — Ed25519 re-sign on deserialized package; raises on missing hash
+9. `verify_proof_package()` — 6-check fail-closed chain; never raises; returns {valid, reason}
+10. `replay_auditor_package()` — 7-layer replay engine (100 points total); evidence+intelligence required for valid=True
+11. `generate_enterprise_export()` — 5 formats; invalid format falls back to json
+
+#### Bugs Fixed During Implementation
+- **custody_hash non-determinism** — `custody_id = uuid4()` was included in canonical hash input before hash was computed; fix: compute hash over stable dict first, then set `custody_id = custody_hash`
+- **bundle_hash snapshot blindness** — bundle_stable dict omitted posture_score/posture_level so two snapshots differing only by score produced identical bundle_hash; fix: include both fields in bundle_stable
+- **f-string lint** — two bare string literals with `f""` prefix (no interpolation); auto-fixed by ruff
+
+#### Security Design
+- Package hash covers `section_hashes` (SHA-256 per section), binding all section content into the Ed25519 signature chain — payload substitution breaks verification
+- Chain of custody: each entry's hash covers all deterministic fields; previous_hash links to prior entry; first entry carries `PROOF_GENESIS_HASH = "0"*64`
+- Fail-closed: signing functions raise `AuditorProofAuthorityError`; verify/replay never raise, always return `{valid, reason}`
+
+#### DB: Migration 0109
+- `fa_auditor_proof_packages` — section_hashes TEXT NOT NULL; 6 indexes; append-only RLS
+- `fa_trust_certifications` — composite_score, certification_level; 5 indexes; append-only RLS
+- `fa_decision_reconstruction_records` — reconstruction_hash, replay_valid; 5 indexes; append-only RLS
+- `fa_chain_of_custody_records` — sequence, previous_hash, custody_hash; 7 indexes; append-only RLS
+
+#### Validation
+- 334 tests pass
+- ruff check: clean
+- ruff format: clean
+- make contract-authority-refresh: ✅
+- make fg-fast: ✅ (398 passed, 2 skipped)
+
+---
+
 ### 2026-06-12 — PR 1.8A: Trust Intelligence Authority & Historical Replay
 
 **Branch:** `pr/1.8a-trust-intelligence-authority`
