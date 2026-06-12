@@ -7077,7 +7077,8 @@ def qa_approve_report_route(
     )
 
     _sig_valid: bool | None
-    if not getattr(report, "signature", None):
+    _signature = report.signature
+    if not _signature:
         _sig_valid = None
     else:
         try:
@@ -7087,7 +7088,7 @@ def qa_approve_report_route(
                 separators=(",", ":"),
                 ensure_ascii=True,
             )
-            _sig_valid = verify_report(_canonical, report.signature)
+            _sig_valid = verify_report(_canonical, _signature)
         except ReportSigningKeyError:
             _sig_valid = None
     try:
@@ -8400,7 +8401,8 @@ def export_engagement_report_route(
     )
 
     _sig_valid: bool | None
-    if not getattr(record, "signature", None):
+    _signature = record.signature
+    if not _signature:
         _sig_valid = None
     else:
         try:
@@ -8410,7 +8412,7 @@ def export_engagement_report_route(
                 separators=(",", ":"),
                 ensure_ascii=True,
             )
-            _sig_valid = verify_report(_canonical, record.signature)
+            _sig_valid = verify_report(_canonical, _signature)
         except ReportSigningKeyError:
             _sig_valid = None
     try:
