@@ -60,6 +60,16 @@ def test_debug_routes_authenticated_is_200(build_app) -> None:
     assert data.get("ok") is True
 
 
+def test_debug_routes_bad_key_is_401(build_app) -> None:
+    """Wrong API key must be rejected with 401 — not silently allowed."""
+    app = build_app(auth_enabled=True)
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.get("/_debug/routes", headers={"X-API-Key": "not-a-valid-key"})
+    assert resp.status_code == 401, (
+        f"Expected 401 for bad API key on /_debug/routes, got {resp.status_code}"
+    )
+
+
 def test_debug_routes_auth_disabled_is_200(build_app) -> None:
     """When auth is disabled (dev/test env), /_debug/routes is accessible."""
     app = build_app(auth_enabled=False)
