@@ -6,6 +6,24 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-12 — PR 1.9 Addendum: P1 Security Fixes (post-review)
+
+**Branch:** `pr/1.9-auditor-proof-authority`
+
+Four P1 security findings from code review, all fixed:
+
+1. **Evidence status bypass in replay** — `bool(evidence_section)` passed on `{"status": "absent", ...}` (any non-empty wrapper dict), allowing evidence-free packages to replay as `valid=True` when an intelligence snapshot was supplied. Fixed: changed to `evidence_section.get("status") == "present"`. Added `test_absent_evidence_status_not_counted_as_present` regression test.
+
+2. **Machine bundle missing offline verification inputs** — `proof_component` omitted `section_hashes` and `assessed_by`, which are required inputs to recompute `package_hash` per the bundle's own verification instructions. Contradicted `requires_frostgate=False`. Fixed: added both fields to `proof_component`. Added `test_proof_component_includes_section_hashes` and `test_proof_component_includes_assessed_by` regression tests.
+
+3. **Decision content not bound into reconstruction_hash** — `reconstruction_stable` bound only `total_decisions` (count), `snapshot_hash`, and `replay_valid`. An attacker could replace every decision's ID, type, reasoning, and approver while preserving the count, leaving `reconstruction_hash` unchanged. Fixed: compute `decision_contents_hash = SHA256(canonical_json(decision_list))` and include in `reconstruction_stable`. Added `test_reconstruction_hash_changes_when_decision_content_changes` regression test.
+
+4. **Ledger chain_intact not actually verified** — `chain_intact: len(ledger) > 0` declared any non-empty ledger intact without checking `previous_hash` linkage. Also, ledger entry contents were not bound into the section hash. Fixed: added `_is_ledger_chain_intact()` helper (validates `previous_hash` chain linkage for every entry); added `ledger_hash = SHA256(canonical_json(ledger))` to bind all entry contents into the section hash (and thus into `package_hash`). Added `test_corrupted_ledger_chain_intact_false`, `test_intact_ledger_chain_intact_true`, and `test_ledger_hash_bound_in_section` regression tests.
+
+**Test count:** 334 → 342 (+8 regression tests)
+
+---
+
 ### 2026-06-12 — PR 1.9: Auditor Proof Package & Enterprise Trust Certification Authority
 
 **Branch:** `pr/1.9-auditor-proof-authority`

@@ -733,9 +733,29 @@ class TestReplayAuditorPackage:
             assert detail["passed"] is True, f"Layer {layer_name} should pass"
 
     def test_missing_evidence_fails_valid(self):
+        # Package built without evidence_summary → evidence section has status "absent"
+        # → evidence_authority layer must NOT pass → valid must be False
         pkg = generate_auditor_proof_package(TENANT_A, ENG_A)
         r = replay_auditor_package(pkg, intelligence_snapshot=_snap())
-        assert "evidence_authority" not in r["validations"] or r["valid"] is True
+        assert "evidence_authority" not in r["validations"]
+        assert r["valid"] is False
+
+    def test_absent_evidence_status_not_counted_as_present(self):
+        # Regression for P1: bool(evidence_section) passes on {"status": "absent", ...}
+        # The evidence layer must require status == "present", not just a non-empty dict.
+        pkg = generate_auditor_proof_package(TENANT_A, ENG_A)
+        assert pkg["sections"]["evidence"]["status"] == "absent"
+        r = replay_auditor_package(
+            pkg,
+            intelligence_snapshot=_snap(),
+            trust_ledger=_ledger(),
+            confidence_manifest=_conf(),
+            graph_snapshot=_graph(),
+            replay_result=_replay_ok(),
+            decision_memories=_decisions(),
+        )
+        assert r["layer_details"]["evidence_authority"]["passed"] is False
+        assert r["valid"] is False
 
     def test_no_intelligence_snapshot_reduces_score(self):
         pkg = _pkg()
@@ -1239,6 +1259,40 @@ class TestGenerateLegalDefensePackage:
         }
         assert len(ids) == 5
 
+    def test_reconstruction_hash_changes_when_decision_content_changes(self):
+        # Regression for P1: reconstruction_stable previously bound only count/snapshot_hash.
+        # An attacker could replace every decision's content while preserving count → same hash.
+        base_decisions = _decisions(2)
+        altered_decisions = [
+            {**d, "decision_reasoning": "FORGED reasoning", "entity_type": ENTITY_AGI}
+            for d in base_decisions
+        ]
+        snap = _snap()
+        h_original = generate_legal_defense_package(
+            TENANT_A,
+            ENG_A,
+            decision_memories=base_decisions,
+            intelligence_snapshot=snap,
+        )["reconstruction_hash"]
+        h_altered = generate_legal_defense_package(
+            TENANT_A,
+            ENG_A,
+            decision_memories=altered_decisions,
+            intelligence_snapshot=snap,
+        )["reconstruction_hash"]
+        assert h_original != h_altered
+
+    def test_reconstruction_hash_stable_for_same_content(self):
+        decisions = _decisions(2)
+        snap = _snap()
+        h1 = generate_legal_defense_package(
+            TENANT_A, ENG_A, decision_memories=decisions, intelligence_snapshot=snap
+        )["reconstruction_hash"]
+        h2 = generate_legal_defense_package(
+            TENANT_A, ENG_A, decision_memories=decisions, intelligence_snapshot=snap
+        )["reconstruction_hash"]
+        assert h1 == h2
+
 
 # ---------------------------------------------------------------------------
 # 9. TestGenerateMachineVerificationBundle
@@ -1374,6 +1428,26 @@ class TestGenerateMachineVerificationBundle:
         for comp in bundle["components"]["manifest"]["components"]:
             assert "name" in comp
             assert "present" in comp
+
+    def test_proof_component_includes_section_hashes(self):
+        # Regression for P1: offline verification of package_hash requires section_hashes.
+        pkg = _pkg()
+        bundle = generate_machine_verification_bundle(
+            TENANT_A, ENG_A, proof_package=pkg
+        )
+        proof = bundle["components"]["proof"]
+        assert "section_hashes" in proof
+        assert proof["section_hashes"] == pkg["section_hashes"]
+
+    def test_proof_component_includes_assessed_by(self):
+        # Regression for P1: offline verification of package_hash requires assessed_by.
+        pkg = _pkg()
+        bundle = generate_machine_verification_bundle(
+            TENANT_A, ENG_A, proof_package=pkg
+        )
+        proof = bundle["components"]["proof"]
+        assert "assessed_by" in proof
+        assert proof["assessed_by"] == pkg["assessed_by"]
 
 
 # ---------------------------------------------------------------------------
@@ -2206,6 +2280,45 @@ class TestTamperDetection:
         original_count = pkg["section_count"]
         pkg["sections"]["extra"] = {"note": "added"}
         assert len(pkg["sections"]) != original_count
+
+    def test_corrupted_ledger_chain_intact_false(self):
+        # Regression for P1: non-empty ledger was declared chain_intact=True without
+        # actually verifying the previous_hash linkage.
+        broken_ledger = [
+            {
+                "ledger_entry_hash": "a" * 64,
+                "previous_hash": "0" * 64,
+                "snapshot_hash": "s" * 64,
+                "timestamp": "2026-01-01T00:00:00Z",
+            },
+            {
+                "ledger_entry_hash": "b" * 64,
+                "previous_hash": "WRONG_HASH_NOT_MATCHING_PREV",
+                "snapshot_hash": "s" * 64,
+                "timestamp": "2026-01-02T00:00:00Z",
+            },
+        ]
+        pkg = generate_auditor_proof_package(
+            TENANT_A, ENG_A, trust_ledger=broken_ledger
+        )
+        assert pkg["sections"]["ledger"]["chain_intact"] is False
+
+    def test_intact_ledger_chain_intact_true(self):
+        pkg = generate_auditor_proof_package(TENANT_A, ENG_A, trust_ledger=_ledger(3))
+        assert pkg["sections"]["ledger"]["chain_intact"] is True
+
+    def test_ledger_hash_bound_in_section(self):
+        # Regression for P1: ledger contents must be bound into the section hash
+        # so that swapping ledger entries invalidates the proof package signature.
+        ledger_a = _ledger(2)
+        ledger_b = [{**e, "snapshot_hash": "x" * 64} for e in ledger_a]
+        pkg_a = generate_auditor_proof_package(TENANT_A, ENG_A, trust_ledger=ledger_a)
+        pkg_b = generate_auditor_proof_package(TENANT_A, ENG_A, trust_ledger=ledger_b)
+        assert (
+            pkg_a["sections"]["ledger"]["ledger_hash"]
+            != pkg_b["sections"]["ledger"]["ledger_hash"]
+        )
+        assert pkg_a["section_hashes"]["ledger"] != pkg_b["section_hashes"]["ledger"]
 
     def test_tampered_replay_section_detected(self):
         pkg = _pkg()

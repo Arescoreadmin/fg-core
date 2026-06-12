@@ -354,6 +354,28 @@ def _section_hash(data: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(data)).hexdigest()
 
 
+def _is_ledger_chain_intact(ledger: list[dict[str, Any]]) -> bool:
+    """Verify previous_hash linkage across all ledger entries.
+
+    Returns False if any entry is missing hash fields or if any
+    previous_hash does not match the prior entry's ledger_entry_hash.
+    """
+    if not ledger:
+        return False
+    prev_hash: str | None = None
+    for entry in ledger:
+        if not isinstance(entry, dict):
+            return False
+        entry_hash = entry.get("ledger_entry_hash", "")
+        previous_hash = entry.get("previous_hash", "")
+        if not entry_hash or not previous_hash:
+            return False
+        if prev_hash is not None and previous_hash != prev_hash:
+            return False
+        prev_hash = entry_hash
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Part 1 — Auditor Proof Package
 # ---------------------------------------------------------------------------
@@ -441,7 +463,10 @@ def generate_auditor_proof_package(
         "ledger": {
             "status": "present" if ledger else "absent",
             "entry_count": len(ledger),
-            "chain_intact": len(ledger) > 0,
+            "chain_intact": _is_ledger_chain_intact(ledger),
+            "ledger_hash": hashlib.sha256(canonical_json_bytes(ledger)).hexdigest()
+            if ledger
+            else "",
         },
         "decisions": {
             "status": "present" if decisions else "absent",
@@ -844,13 +869,17 @@ def generate_legal_defense_package(
         "can_decision_be_replayed": replay_validation["can_replay"],
     }
 
+    decision_contents_hash = hashlib.sha256(
+        canonical_json_bytes(decision_list)
+    ).hexdigest()
     reconstruction_stable = {
         "authority_version": AUDITOR_PROOF_AUTHORITY_VERSION,
+        "decision_contents_hash": decision_contents_hash,
         "engagement_id": engagement_id,
-        "total_decisions": total_decisions,
-        "snapshot_hash": snap.get("snapshot_hash", ""),
         "replay_valid": replay_validation["valid"],
+        "snapshot_hash": snap.get("snapshot_hash", ""),
         "tenant_id": tenant_id,
+        "total_decisions": total_decisions,
     }
     reconstruction_hash = hashlib.sha256(
         canonical_json_bytes(reconstruction_stable)
@@ -926,6 +955,8 @@ def generate_machine_verification_bundle(
             "authority_version", AUDITOR_PROOF_AUTHORITY_VERSION
         ),
         "section_count": _safe_int(pkg.get("section_count", 0)),
+        "assessed_by": pkg.get("assessed_by", ""),
+        "section_hashes": pkg.get("section_hashes", {}),
     }
 
     component_names = ["trust", "ledger", "proof", "manifest", "verification"]
@@ -1297,7 +1328,7 @@ def replay_auditor_package(
     evidence_section = (
         sections.get("evidence", {}) if isinstance(sections, dict) else {}
     )
-    evidence_present = bool(evidence_section)
+    evidence_present = evidence_section.get("status") == "present"
     if evidence_present:
         validations.append("evidence_authority")
         replay_score += _REPLAY_EVIDENCE_WEIGHT
