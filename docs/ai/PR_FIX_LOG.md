@@ -6,6 +6,56 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-11 — PR 1.7: Trust Confidence & Corroboration Engine
+
+**Branch:** `pr/1.7-trust-confidence-corroboration`
+
+**Area:** Field Assessment / Trust Infrastructure / Confidence Scoring
+
+**Summary of changes:**
+
+1. **`services/field_assessment/trust_confidence.py`** (new, ~520 lines) — Deterministic confidence scoring engine (no AI/ML/randomness):
+   - `CONFIDENCE_VERSION = "trust-confidence-v1"` — forward-compatibility marker
+   - `TrustConfidenceError(ValueError)` — fail-closed exception
+   - 5 confidence levels via `_confidence_level(score)`: critical (0–24), weak (25–49), moderate (50–74), strong (75–89), high_assurance (90–100)
+   - 5 strength levels via `_strength_level(score)`: very_weak/weak/moderate/strong/verified
+   - `_DECAY_TABLE` — 6-tier freshness decay: 0–30d: 0, 31–60d: −5, 61–90d: −10, 91–120d: −15, 121–180d: −20, 181+d: −25
+   - All factor weights as named constants in `_POS` / `_NEG` dicts (no magic numbers)
+   - `_source_family(node)` — checks `payload["source_type"]` first, falls back to first segment of `evidence_id` split on separators
+   - **Part 1 — `calculate_confidence_decay(created_at, reference_date=None)`**: date-driven tier lookup; accepts str or datetime; clamps to `[0, 25]`; deterministic
+   - **Part 2 — `evaluate_evidence_strength(path, ...)`**: signed vs unsigned ratio, trust_score tiers, edge authority presence, freshness; returns `{strength_score, strength_level, signed_count, unsigned_count, avg_trust_score, factors}`
+   - **Part 3 — `evaluate_corroboration(path)`**: source diversity scoring — 1→20/2→40/3→60/4→75/5+→90+pts; duplicate detection (same source + same event_hash) −5 each; returns `{corroboration_score, source_count, unique_sources, duplicate_count, sources_seen, duplicates}`
+   - **Part 4 — `evaluate_trust_quality(graph, path, ...)`**: positive/negative factor enumeration from `_POS`/`_NEG`; returns `{trust_quality_score, positive_factors, negative_factors}` with sorted output
+   - **Part 5 — `calculate_confidence(graph, path, ...)`**: composite score 0–100 combining all engines; keyword args: `edge_authorities`, `snapshot`, `replay_result`, `reference_date`, `graph_integrity`; returns full result dict with `confidence_score`, `confidence_level`, `evidence_count`, `component_scores`, and full sub-engine outputs
+   - **Part 6 — `why_confidence(result)`**: `+factor_name` / `−factor_name`-prefixed explanation list; deterministic; returns `{positive_reasons, negative_reasons, summary}`
+   - **Part 7 — `replay_confidence(graph, tenant_id, engagement_id, at, ...)`**: builds historical sub-graph by filtering `node.created_at <= at_dt` and `edge.created_at <= at_dt`; runs full `calculate_confidence()` with `reference_date=at`; fails closed on cross-tenant/cross-engagement (raises `TrustConfidenceError`)
+   - **Part 8 — `generate_confidence_manifest(result)`**: SHA-256 over canonical scores dict (confidence_score, corroboration_score, strength_score, trust_quality_score); `generated_at` timestamp excluded from hash — identical scores → identical manifest hash
+
+2. **`tests/test_trust_confidence.py`** (new, 152 tests) — Full coverage across 18 test classes:
+   - `TestConfidenceLevels` (14): boundary values for all 5 tiers, clamp at 0/100
+   - `TestCalculateConfidence` (15): required output keys, signed > unsigned, snapshot/replay factors, full-features composite
+   - `TestEvaluateCorroboration` (12): empty path, single source, 2/3/4/5+ sources, duplicate detection and penalty
+   - `TestEvaluateEvidenceStrength` (13): signed vs unsigned ratio, trust_score tiers, freshness, edge authority
+   - `TestEvaluateTrustQuality` (14): positive/negative factor enumeration and sorted output
+   - `TestCalculateConfidenceDecay` (15): all 6 decay tiers, `reference_date` override, datetime input, determinism
+   - `TestReplayConfidence` (12): required keys, cross-tenant/engagement raises, historical node count, `created_at` filtering
+   - `TestGenerateConfidenceManifest` (8): required keys, hash stability, timestamp exclusion, score change invalidates hash
+   - `TestWhyConfidence` (8): output format, +/− prefixes, determinism
+   - `TestDeterminism` (6): same inputs → same outputs for all engines
+   - `TestCrossTenantIsolation` (3): replay raises, independent graph scoring unaffected
+   - `TestCrossEngagementIsolation` (2): same pattern as cross-tenant
+   - `TestReplayConsistency` (3): replay at `now` matches current score
+   - `TestPerformance` (5): 100 calcs <100ms, 1000 calcs <500ms, corroboration <50ms, replay <250ms
+   - `TestFutureNodeCompatibility` (5): non-evidence nodes, unknown authority_status, agent nodes
+   - `TestAGIGovernanceCompatibility` (5): agent decision nodes, multi-agent chain corroboration, generic trust nodes
+   - `TestTamperDetection` (4): tampered manifest hash detected, replay_result manipulation
+   - `TestSecurityInvariants` (7): fail-closed, duplicate gaming, score bounded 0–100
+
+**Why:**
+Fills the `confidence=100` placeholder left by PR 1.6A with a real deterministic scoring engine. Every factor is a named constant — no inference, no ML, no hidden weights. The corroboration engine answers "do multiple independent sources agree?" not just "how many records exist?" — the distinction that matters for governance evidence. `replay_confidence()` ensures historical snapshots produce the same score as the live system did at that point in time, using the same decay table with the historical reference date. The manifest hash enables downstream assertion: "the confidence score on the day of delivery has not been altered."
+
+---
+
 ### 2026-06-11 — PR 1.6A: Trust Graph Authority & Snapshot Foundation
 
 **Branch:** `pr/1.6a-trust-graph-authority`
