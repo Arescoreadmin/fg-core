@@ -38,7 +38,6 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (
     "/health/",
-    "/_debug",
     "/missions",
     "/rings",
     "/roe",
