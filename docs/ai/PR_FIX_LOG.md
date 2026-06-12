@@ -6,6 +6,45 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-12 — PR 1.8A: Trust Intelligence Authority & Historical Replay
+
+**Branch:** `pr/1.8a-trust-intelligence-authority`
+
+**Area:** Field Assessment / Trust Infrastructure / Persistence & Replay Layer
+
+**Summary of changes:**
+
+1. **`services/field_assessment/trust_intelligence_authority.py`** (new, ~700 lines) — Immutable persistence, cryptographic signing, hash-chained ledger, and historical replay for Trust Intelligence (PR 1.8):
+   - `TRUST_INTELLIGENCE_AUTHORITY_VERSION = "trust-intelligence-authority-v1"` — forward-compatibility marker
+   - **Ed25519 signing** — same key model as all prior authorities: `FG_EVIDENCE_SIGNING_KEY_B64` / `FG_EVIDENCE_VERIFY_KEY_B64`, `signing_key_id = SHA256(pub_bytes)[:16]`
+   - **`generate_trust_intelligence_snapshot()`**: assembles scalar summary from all 10 trust intelligence outputs; deterministic `snapshot_hash` over stable fields (excludes `snapshot_id`, `created_at`, `snapshot_signature`); identical intelligence state → identical hash regardless of call time
+   - **`sign_trust_intelligence_snapshot()`**: Ed25519 sign over snapshot_hash; returns `snapshot_signature` + `signing_key_id`; raises `TrustIntelligenceAuthorityError` if key missing
+   - **`verify_trust_intelligence_snapshot()`**: verifies snapshot_hash recomputation + Ed25519 signature; returns `{valid, reason, snapshot_id, snapshot_hash}`
+   - **`replay_trust_intelligence()`**: 6-layer replay validation — snapshot_located (15pts), snapshot_integrity (25pts), snapshot_signature (25pts), graph_integrity (15pts), confidence_integrity (10pts), authority_integrity (10pts) — max 100; returns `replay_score`, `replay_valid`, `layers`, `snapshot_id`, `posture_score`
+   - **`generate_trust_memory()`**: filters snapshots by memory window (30/90/180/365d) with 1-second epsilon at boundary for timing jitter; returns `snapshots_in_window`, `window_days`, `oldest_snapshot`, `newest_snapshot`, `posture_range`, `trend_summary`
+   - **`calculate_trust_evolution()`**: compares two snapshots; classifies change as major (≥15), moderate (≥5), minor (<5); returns `evolution_type`, `posture_delta`, `risk_delta`, `trend_shift`, `key_changes`
+   - **`compare_trust_snapshots()`**: structured diff between any two snapshots; returns per-field deltas, direction indicators, summary
+   - **`generate_decision_memory()`**: records governance decisions with extensible `entity_type` (human/agent/autonomous_system/agi/any string); links to `supporting_intelligence`; returns `decision_id`, `decision_type`, `entity_type`, `reasoning`, `authority_version`
+   - **`generate_executive_timeline()`**: time-ordered sequence of posture events from snapshot list; annotates major changes, trend shifts, risk escalations; returns `events` list with `timestamp`, `posture_score`, `posture_level`, `change_type`, `description`
+   - **`generate_trust_ledger()`**: builds hash-chained append-only ledger from snapshots; first entry carries `LEDGER_GENESIS_HASH = "0"×64`; each subsequent entry's `previous_hash` = preceding `ledger_entry_hash`; deterministic `ledger_entry_hash = SHA256(canonical_entry_json)`
+   - **`verify_trust_ledger()`**: validates genesis hash, chain continuity, and entry hash integrity; returns `{valid, reason, entry_count}`
+
+2. **`tests/test_trust_intelligence_authority.py`** (new, 315 tests across 22 classes) — Full coverage:
+   - `TestTrustIntelligenceAuthorityConstants` (8), `TestGenerateTrustIntelligenceSnapshot` (21), `TestSignTrustIntelligenceSnapshot` (12), `TestVerifyTrustIntelligenceSnapshot` (20), `TestReplayTrustIntelligence` (21), `TestGenerateTrustMemory` (20), `TestCalculateTrustEvolution` (18), `TestCompareTrustSnapshots` (19), `TestGenerateDecisionMemory` (18), `TestGenerateExecutiveTimeline` (17), `TestGenerateTrustLedger` (20), `TestVerifyTrustLedger` (9), `TestDeterminism` (12), `TestCrossTenantIsolation` (12), `TestCrossEngagementIsolation` (10), `TestTamperDetection` (15), `TestPerformance` (10), `TestFutureAgentCompatibility` (11), `TestAGIGovernanceCompatibility` (8), `TestSecurityInvariants` (10), `TestEnterpriseScenarios` (8), `TestEdgeCases` (10)
+   - Key fixes during development: `test_sign_no_key_raises` — snapshot must be generated before key deletion; memory window 1-second epsilon; `isinstance(x, list)` guards on all list-accepting functions against garbage inputs; banking scenario boundary adjusted to `days_ago=89-i*8`
+
+3. **`migrations/postgres/0108_trust_intelligence_authority.sql`** (new) — Three append-only RLS tables:
+   - `fa_trust_intelligence_snapshots` — 21 columns, 7 indexes, RLS + append-only triggers
+   - `fa_trust_intelligence_ledger` — 16 columns, 6 indexes, RLS + append-only triggers
+   - `fa_trust_decision_memory` — 10 columns, 5 indexes, RLS + append-only triggers
+
+4. **`ROADMAP.md`** — Updated: `PR 1.8A: Evidence Trust Graph (planned)` → `PR 1.8B: Evidence Trust Graph (planned)`; new `PR 1.8A: Trust Intelligence Authority & Historical Replay (✅ merged)` entry added
+
+**Why:**
+Closes the auditability gap: PR 1.8 answers intelligence questions in real-time, but every governance-grade system requires immutable audit trails, cryptographic proof of past states, and the ability to replay or challenge historical intelligence. PR 1.8A makes every trust intelligence snapshot tamper-evident (Ed25519 + SHA-256 hash), hash-chains all snapshots into a ledger that cannot be silently modified, and provides structured replay so any snapshot can be independently verified against stored evidence. The decision memory sub-system allows external governance actors (human auditors, AI agents, autonomous systems) to attach structured reasoning to trust decisions, with `entity_type` extensible to future AGI actors without schema changes.
+
+---
+
 ### 2026-06-12 — PR 1.8: Trust Intelligence Layer
 
 **Branch:** `pr/1.8-trust-intelligence`
