@@ -1509,3 +1509,137 @@ class TestSecurityInvariants:
             "strong",
             "high_assurance",
         )
+
+
+# ---------------------------------------------------------------------------
+# P1/P2 Code Review Fixes
+# ---------------------------------------------------------------------------
+
+
+class TestPathScopeValidation:
+    """P1: path nodes must belong to the graph's tenant and engagement."""
+
+    def test_cross_tenant_path_node_raises(self) -> None:
+        g = _graph(TENANT, ENG)
+        foreign_g = _graph(TENANT_B, ENG)
+        foreign_ev = _ev(foreign_g, "ev-foreign")
+        with pytest.raises(TrustConfidenceError, match="out of graph scope"):
+            calculate_confidence(g, [foreign_ev])
+
+    def test_cross_engagement_path_node_raises(self) -> None:
+        g = _graph(TENANT, ENG)
+        foreign_g = _graph(TENANT, ENG_B)
+        foreign_ev = _ev(foreign_g, "ev-foreign")
+        with pytest.raises(TrustConfidenceError, match="out of graph scope"):
+            calculate_confidence(g, [foreign_ev])
+
+    def test_valid_path_node_does_not_raise(self) -> None:
+        g = _graph(TENANT, ENG)
+        ev = _ev(g, "ev-1")
+        result = calculate_confidence(g, [ev])
+        assert result["confidence_score"] >= 0
+
+    def test_foreign_signed_evidence_does_not_inflate_score(self) -> None:
+        # Empty graph + foreign signed evidence must raise, not score moderate
+        g = _graph(TENANT, ENG)
+        foreign_g = _graph(TENANT_B, ENG)
+        foreign_ev = _ev(
+            foreign_g,
+            "ev-foreign",
+            authority_status="signed",
+            trust_score=100,
+        )
+        with pytest.raises(TrustConfidenceError):
+            calculate_confidence(g, [foreign_ev])
+
+    def test_mixed_path_first_foreign_node_raises(self) -> None:
+        g = _graph(TENANT, ENG)
+        own_ev = _ev(g, "ev-own")
+        foreign_g = _graph(TENANT_B, ENG)
+        foreign_ev = _ev(foreign_g, "ev-foreign")
+        with pytest.raises(TrustConfidenceError):
+            calculate_confidence(g, [own_ev, foreign_ev])
+
+
+class TestAuthorityVersionCheck:
+    """P2: authority_version absent from verify results must not award the bonus."""
+
+    def test_verify_result_without_version_does_not_award_bonus(self) -> None:
+        # verify_edge_authority() returns {valid, reason} — no authority_version
+        g = _graph()
+        ev = _ev(g, "ev-1")
+        verify_result = {"valid": True, "reason": None}
+        r_with = calculate_confidence(g, [ev], edge_authorities={"e-1": verify_result})
+        # Must not award authority_version_current for a result without the field
+        with_factors = [f["factor"] for f in r_with["confidence_factors"]]
+        assert "authority_version_current" not in with_factors
+
+    def test_explicit_current_version_awards_bonus(self) -> None:
+        from services.field_assessment.trust_graph_authority import (
+            EDGE_AUTHORITY_VERSION,
+        )
+
+        g = _graph()
+        ev = _ev(g, "ev-1")
+        authority = {
+            "valid": True,
+            "reason": None,
+            "authority_version": EDGE_AUTHORITY_VERSION,
+        }
+        result = calculate_confidence(g, [ev], edge_authorities={"e-1": authority})
+        pos_factors = [f["factor"] for f in result["confidence_factors"]]
+        assert "authority_version_current" in pos_factors
+
+    def test_wrong_version_string_adds_downgrade_penalty(self) -> None:
+        g = _graph()
+        ev = _ev(g, "ev-1")
+        authority = {
+            "valid": True,
+            "reason": None,
+            "authority_version": "trust-graph-edge-authority-v0",
+        }
+        result = calculate_confidence(g, [ev], edge_authorities={"e-1": authority})
+        neg_factors = [f["factor"] for f in result["negative_factors"]]
+        assert "authority_version_downgraded" in neg_factors
+
+    def test_empty_edge_authorities_dict_not_awarded(self) -> None:
+        g = _graph()
+        ev = _ev(g, "ev-1")
+        result = calculate_confidence(g, [ev], edge_authorities={})
+        pos_factors = [f["factor"] for f in result["confidence_factors"]]
+        assert "authority_version_current" not in pos_factors
+
+
+class TestStaleTierLabel:
+    """P2: stale tier label must match the entry with the worst penalty, not lexicographic max."""
+
+    def test_mild_and_critical_evidence_labels_critical(self) -> None:
+        g = _graph()
+        # PAST_45D → mild (-5), PAST_200D → critical (-25)
+        _ev(g, "ev-mild", created_at=PAST_45D)
+        _ev(g, "ev-critical", created_at=PAST_200D)
+        result = calculate_confidence(g, list(g.nodes()))
+        neg_names = [f["factor"] for f in result["negative_factors"]]
+        stale_factors = [n for n in neg_names if n.startswith("stale_evidence_")]
+        assert len(stale_factors) == 1
+        assert stale_factors[0] == "stale_evidence_critical"
+
+    def test_mild_only_labels_mild(self) -> None:
+        g = _graph()
+        _ev(g, "ev-mild", created_at=PAST_45D)
+        result = calculate_confidence(g, list(g.nodes()))
+        neg_names = [f["factor"] for f in result["negative_factors"]]
+        stale_factors = [n for n in neg_names if n.startswith("stale_evidence_")]
+        assert stale_factors[0] == "stale_evidence_mild"
+
+    def test_stale_factor_points_match_worst_penalty(self) -> None:
+        g = _graph()
+        _ev(g, "ev-mild", created_at=PAST_45D)
+        _ev(g, "ev-critical", created_at=PAST_200D)
+        result = calculate_confidence(g, list(g.nodes()))
+        stale = next(
+            f
+            for f in result["negative_factors"]
+            if f["factor"].startswith("stale_evidence_")
+        )
+        assert stale["points"] == -25

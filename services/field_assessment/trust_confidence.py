@@ -564,7 +564,7 @@ def evaluate_trust_quality(
         )
 
         versions = [a.get("authority_version") for a in edge_authorities.values()]
-        if all(v == EDGE_AUTHORITY_VERSION for v in versions if v is not None):
+        if versions and all(v == EDGE_AUTHORITY_VERSION for v in versions):
             positive.append("authority_version_current")
             quality_score += _POS["authority_version_current"]
         else:
@@ -629,6 +629,17 @@ def calculate_confidence(
     negative_factors: list[dict[str, Any]] = []
     score = 0
 
+    for _node in path:
+        if (
+            _node.tenant_id != graph.tenant_id
+            or _node.engagement_id != graph.engagement_id
+        ):
+            raise TrustConfidenceError(
+                f"path node {_node.node_id!r} is out of graph scope: "
+                f"node=({_node.tenant_id!r}, {_node.engagement_id!r}) "
+                f"graph=({graph.tenant_id!r}, {graph.engagement_id!r})"
+            )
+
     evidence = _evidence_nodes(path)
     integrity = graph_integrity or verify_trust_graph(graph)
 
@@ -688,10 +699,11 @@ def calculate_confidence(
             score += pts
             confidence_factors.append({"factor": "fresh_evidence", "points": pts})
         else:
+            worst_decay = max(decays, key=lambda d: d["penalty"])
             score -= max_penalty
             negative_factors.append(
                 {
-                    "factor": f"stale_evidence_{max(d['tier'] for d in decays)}",
+                    "factor": f"stale_evidence_{worst_decay['tier']}",
                     "points": -max_penalty,
                 }
             )
@@ -790,7 +802,7 @@ def calculate_confidence(
         )
 
         versions = [a.get("authority_version") for a in edge_authorities.values()]
-        if all(v == EDGE_AUTHORITY_VERSION for v in versions if v is not None):
+        if versions and all(v == EDGE_AUTHORITY_VERSION for v in versions):
             pts = _POS["authority_version_current"]
             score += pts
             confidence_factors.append(
