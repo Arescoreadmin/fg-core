@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS fa_trust_intelligence_snapshots (
     recommendations_count    INTEGER NOT NULL DEFAULT 0,
     forecast_projected_score INTEGER NOT NULL DEFAULT 0,
     graph_node_count         INTEGER NOT NULL DEFAULT 0,
-    -- Full intelligence payloads (stored for replay, not in hash)
+    -- Payload hashes — SHA-256 of each full payload; bound into snapshot_hash
+    payload_hashes           TEXT NOT NULL,
+    -- Full intelligence payloads (stored for replay; authenticated via payload_hashes)
     posture_result           TEXT,
     trend_result             TEXT,
     risk_result              TEXT,

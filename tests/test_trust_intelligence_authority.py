@@ -361,6 +361,41 @@ class TestGenerateTrustIntelligenceSnapshot:
         )
         assert snap["posture_result"] == p
 
+    def test_payload_hashes_present_in_snapshot(self):
+        snap = _snap()
+        assert "payload_hashes" in snap
+        ph = snap["payload_hashes"]
+        assert isinstance(ph, dict)
+        for key in (
+            "posture_result",
+            "trend_result",
+            "risk_result",
+            "priorities",
+            "insights",
+            "recommendations",
+            "forecast_result",
+            "graph_result",
+        ):
+            assert key in ph, f"Missing payload hash for: {key}"
+            assert len(ph[key]) == 64  # SHA-256 hex digest
+
+    def test_payload_hash_changes_with_payload(self):
+        snap_a = generate_trust_intelligence_snapshot(
+            tenant_id=TENANT_A,
+            engagement_id=ENG_A,
+            posture_result={"score": 70, "trust_posture": "stable"},
+        )
+        snap_b = generate_trust_intelligence_snapshot(
+            tenant_id=TENANT_A,
+            engagement_id=ENG_A,
+            posture_result={"score": 90, "trust_posture": "excellent"},
+        )
+        assert (
+            snap_a["payload_hashes"]["posture_result"]
+            != snap_b["payload_hashes"]["posture_result"]
+        )
+        assert snap_a["snapshot_hash"] != snap_b["snapshot_hash"]
+
 
 # ---------------------------------------------------------------------------
 # 3. TestSignTrustIntelligenceSnapshot
@@ -529,6 +564,22 @@ class TestVerifyTrustIntelligenceSnapshot:
         snap["graph_node_count"] = 99
         r = verify_trust_intelligence_snapshot(snap)
         assert r["valid"] is False
+
+    def test_missing_payload_hashes_returns_invalid(self):
+        snap = _snap()
+        del snap["payload_hashes"]
+        r = verify_trust_intelligence_snapshot(snap)
+        assert r["valid"] is False
+        assert "missing_fields" in r["reason"]
+
+    def test_tampered_payload_hashes_rejected(self):
+        snap = _snap()
+        ph = dict(snap["payload_hashes"])
+        ph["posture_result"] = "a" * 64  # forge posture_result hash
+        snap["payload_hashes"] = ph
+        r = verify_trust_intelligence_snapshot(snap)
+        assert r["valid"] is False
+        assert r["reason"] == "tampered_payload"
 
     def test_valid_full_intelligence_snapshot(self):
         prio = [{"label": "fix_auth"}]
@@ -1729,6 +1780,25 @@ class TestCrossTenantIsolation:
         ledger = generate_trust_ledger([snap])
         assert ledger[0]["tenant_id"] == TENANT_A
 
+    def test_memory_rejects_foreign_tenant_snapshots(self):
+        snap_a = _snap(tenant_id=TENANT_A, posture_score=80, days_ago=1)
+        snap_b = _snap(tenant_id=TENANT_B, posture_score=50, days_ago=1)
+        r = generate_trust_memory([snap_a, snap_b], window_days=30, tenant_id=TENANT_A)
+        assert r["snapshot_count"] == 1
+        assert r["tenant_id"] == TENANT_A
+
+    def test_memory_tenant_scope_prevents_bleed(self):
+        snaps_a = [
+            _snap(tenant_id=TENANT_A, posture_score=80, days_ago=i) for i in range(1, 4)
+        ]
+        snaps_b = [
+            _snap(tenant_id=TENANT_B, posture_score=30, days_ago=i) for i in range(1, 4)
+        ]
+        mixed = snaps_a + snaps_b
+        r = generate_trust_memory(mixed, window_days=30, tenant_id=TENANT_A)
+        assert all(s["score"] == 80 for s in r["posture_history"])
+        assert r["snapshot_count"] == 3
+
 
 # ---------------------------------------------------------------------------
 # 15. TestCrossEngagementIsolation
@@ -1900,6 +1970,41 @@ class TestTamperDetection:
         snap["trend_velocity"] = "rapid"  # change without recomputing hash
         r = verify_trust_intelligence_snapshot(snap)
         assert r["valid"] is False
+
+    def test_tampered_posture_result_detected(self):
+        snap = _snap()
+        snap["posture_result"] = {"score": 99, "trust_posture": "excellent"}
+        r = verify_trust_intelligence_snapshot(snap)
+        assert r["valid"] is False
+        assert r["reason"] == "tampered_payload"
+
+    def test_tampered_risk_result_detected(self):
+        snap = _snap(risk_level="low", risk_score=10)
+        snap["risk_result"] = {"risk_level": "critical", "risk_score": 99}
+        r = verify_trust_intelligence_snapshot(snap)
+        assert r["valid"] is False
+        assert r["reason"] == "tampered_payload"
+
+    def test_tampered_priorities_payload_detected(self):
+        snap = generate_trust_intelligence_snapshot(
+            tenant_id=TENANT_A,
+            engagement_id=ENG_A,
+            priorities=[{"label": "fix_auth"}],
+        )
+        snap["priorities"] = [{"label": "FORGED"}, {"label": "FORGED_2"}]
+        r = verify_trust_intelligence_snapshot(snap)
+        assert r["valid"] is False
+        assert r["reason"] == "tampered_payload"
+
+    def test_tampered_graph_result_detected(self):
+        g = {"nodes": [{"node_id": "n1"}], "edges": []}
+        snap = generate_trust_intelligence_snapshot(
+            tenant_id=TENANT_A, engagement_id=ENG_A, graph_result=g
+        )
+        snap["graph_result"] = {"nodes": [{"node_id": "INJECTED"}], "edges": []}
+        r = verify_trust_intelligence_snapshot(snap)
+        assert r["valid"] is False
+        assert r["reason"] == "tampered_payload"
 
 
 # ---------------------------------------------------------------------------

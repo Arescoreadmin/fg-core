@@ -219,6 +219,62 @@ def _sign_digest(digest: bytes) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 
+def _compute_payload_hashes(
+    posture_result: dict[str, Any],
+    trend_result: dict[str, Any],
+    risk_result: dict[str, Any],
+    priorities: list[Any],
+    insights: list[Any],
+    recommendations: list[Any],
+    forecast_result: dict[str, Any],
+    graph_result: dict[str, Any],
+) -> dict[str, str]:
+    """SHA-256 hash each full intelligence payload for binding into snapshot_hash.
+
+    Keys sorted for determinism inside canonical_json_bytes.
+    Any payload substitution breaks the stored snapshot_hash.
+    """
+    return {
+        "forecast_result": hashlib.sha256(
+            canonical_json_bytes(forecast_result)
+        ).hexdigest(),
+        "graph_result": hashlib.sha256(canonical_json_bytes(graph_result)).hexdigest(),
+        "insights": hashlib.sha256(canonical_json_bytes(insights)).hexdigest(),
+        "posture_result": hashlib.sha256(
+            canonical_json_bytes(posture_result)
+        ).hexdigest(),
+        "priorities": hashlib.sha256(canonical_json_bytes(priorities)).hexdigest(),
+        "recommendations": hashlib.sha256(
+            canonical_json_bytes(recommendations)
+        ).hexdigest(),
+        "risk_result": hashlib.sha256(canonical_json_bytes(risk_result)).hexdigest(),
+        "trend_result": hashlib.sha256(canonical_json_bytes(trend_result)).hexdigest(),
+    }
+
+
+def _extract_and_hash_payloads(snapshot: dict[str, Any]) -> dict[str, str]:
+    """Re-derive payload hashes from a stored snapshot's full payload fields."""
+
+    def _nd(k: str) -> dict[str, Any]:
+        v = snapshot.get(k, {})
+        return v if isinstance(v, dict) else {}
+
+    def _nl(k: str) -> list[Any]:
+        v = snapshot.get(k, [])
+        return v if isinstance(v, list) else []
+
+    return _compute_payload_hashes(
+        _nd("posture_result"),
+        _nd("trend_result"),
+        _nd("risk_result"),
+        _nl("priorities"),
+        _nl("insights"),
+        _nl("recommendations"),
+        _nd("forecast_result"),
+        _nd("graph_result"),
+    )
+
+
 def _canonical_intelligence_bytes(
     authority_version: str,
     tenant_id: str,
@@ -234,6 +290,7 @@ def _canonical_intelligence_bytes(
     recommendations_count: int,
     forecast_projected_score: int,
     graph_node_count: int,
+    payload_hashes: dict[str, str],
 ) -> bytes:
     stable: dict[str, Any] = {
         "authority_version": authority_version,
@@ -241,6 +298,7 @@ def _canonical_intelligence_bytes(
         "forecast_projected_score": forecast_projected_score,
         "graph_node_count": graph_node_count,
         "insights_count": insights_count,
+        "payload_hashes": payload_hashes,
         "posture_level": posture_level,
         "posture_score": posture_score,
         "priorities_count": priorities_count,
@@ -274,6 +332,7 @@ _SNAPSHOT_REQUIRED: frozenset[str] = frozenset(
         "recommendations_count",
         "forecast_projected_score",
         "graph_node_count",
+        "payload_hashes",
         "snapshot_hash",
         "snapshot_signature",
         "signing_key_id",
@@ -321,16 +380,22 @@ def generate_trust_intelligence_snapshot(
     trend_velocity = str(t.get("velocity", "none"))
     risk_level = str(r.get("risk_level", "unknown"))
     risk_score = _safe_int(r.get("risk_score", 0))
-    priorities_count = len(priorities) if isinstance(priorities, list) else 0
-    insights_count = len(insights) if isinstance(insights, list) else 0
-    recommendations_count = (
-        len(recommendations) if isinstance(recommendations, list) else 0
-    )
+    pri_list = list(priorities) if isinstance(priorities, list) else []
+    ins_list = list(insights) if isinstance(insights, list) else []
+    rec_list = list(recommendations) if isinstance(recommendations, list) else []
+
+    priorities_count = len(pri_list)
+    insights_count = len(ins_list)
+    recommendations_count = len(rec_list)
     forecast_projected_score = _safe_int(
         f.get("projected_score", posture_score), fallback=posture_score
     )
     graph_nodes = g.get("nodes", [])
     graph_node_count = len(graph_nodes) if isinstance(graph_nodes, list) else 0
+
+    payload_hashes = _compute_payload_hashes(
+        p, t, r, pri_list, ins_list, rec_list, f, g
+    )
 
     canonical = _canonical_intelligence_bytes(
         TRUST_INTELLIGENCE_AUTHORITY_VERSION,
@@ -347,6 +412,7 @@ def generate_trust_intelligence_snapshot(
         recommendations_count,
         forecast_projected_score,
         graph_node_count,
+        payload_hashes,
     )
     snapshot_hash = hashlib.sha256(canonical).hexdigest()
     digest = hashlib.sha256(snapshot_hash.encode()).digest()
@@ -369,15 +435,15 @@ def generate_trust_intelligence_snapshot(
         "recommendations_count": recommendations_count,
         "forecast_projected_score": forecast_projected_score,
         "graph_node_count": graph_node_count,
-        # Full intelligence payloads (stored for replay, not in hash)
+        # Payload hashes bound into snapshot_hash; any payload swap breaks verification
+        "payload_hashes": payload_hashes,
+        # Full intelligence payloads (stored for replay; authenticated via payload_hashes)
         "posture_result": p,
         "trend_result": t,
         "risk_result": r,
-        "priorities": list(priorities) if isinstance(priorities, list) else [],
-        "insights": list(insights) if isinstance(insights, list) else [],
-        "recommendations": (
-            list(recommendations) if isinstance(recommendations, list) else []
-        ),
+        "priorities": pri_list,
+        "insights": ins_list,
+        "recommendations": rec_list,
         "forecast_result": f,
         "graph_result": g,
         # Authority fields
@@ -433,6 +499,14 @@ def verify_trust_intelligence_snapshot(
         }
 
     try:
+        recomputed_payload_hashes = _extract_and_hash_payloads(snapshot)
+    except Exception:
+        return {"valid": False, "reason": "payload_hash_recomputation_failed"}
+
+    if snapshot.get("payload_hashes") != recomputed_payload_hashes:
+        return {"valid": False, "reason": "tampered_payload"}
+
+    try:
         canonical = _canonical_intelligence_bytes(
             TRUST_INTELLIGENCE_AUTHORITY_VERSION,
             str(snapshot["tenant_id"]),
@@ -448,6 +522,7 @@ def verify_trust_intelligence_snapshot(
             int(snapshot["recommendations_count"]),
             int(snapshot["forecast_projected_score"]),
             int(snapshot["graph_node_count"]),
+            recomputed_payload_hashes,
         )
     except (TypeError, ValueError):
         return {"valid": False, "reason": "invalid_snapshot_values"}
@@ -483,16 +558,28 @@ def verify_trust_intelligence_snapshot(
 def generate_trust_memory(
     snapshots: list[dict[str, Any]] | None,
     window_days: int = MEMORY_WINDOW_90,
+    *,
+    tenant_id: str | None = None,
+    engagement_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate a historical intelligence timeline from a collection of snapshots.
 
     Filters to the requested window_days, then assembles posture, trend, and
     risk histories sorted chronologically. Future-dated snapshots are excluded.
+
+    tenant_id and engagement_id scope the query to a single tenant/engagement.
+    Callers should always pass these in multi-tenant environments to prevent
+    cross-tenant data bleed when the snapshot collection contains mixed data.
     """
     if not isinstance(snapshots, list):
         snapshots = []
     valid: list[dict[str, Any]] = [
-        s for s in snapshots if isinstance(s, dict) and s.get("snapshot_hash")
+        s
+        for s in snapshots
+        if isinstance(s, dict)
+        and s.get("snapshot_hash")
+        and (tenant_id is None or s.get("tenant_id") == tenant_id)
+        and (engagement_id is None or s.get("engagement_id") == engagement_id)
     ]
     now = datetime.now(timezone.utc)
     w = max(int(window_days), 0)
@@ -546,8 +633,10 @@ def generate_trust_memory(
         for s in in_window
     ]
 
-    tenant_id = in_window[0].get("tenant_id") if in_window else None
-    engagement_id = in_window[0].get("engagement_id") if in_window else None
+    out_tenant_id = tenant_id or (in_window[0].get("tenant_id") if in_window else None)
+    out_engagement_id = engagement_id or (
+        in_window[0].get("engagement_id") if in_window else None
+    )
 
     return {
         "window_days": w,
@@ -556,8 +645,8 @@ def generate_trust_memory(
         "posture_history": posture_history,
         "trend_history": trend_history,
         "risk_history": risk_history,
-        "tenant_id": tenant_id,
-        "engagement_id": engagement_id,
+        "tenant_id": out_tenant_id,
+        "engagement_id": out_engagement_id,
     }
 
 
@@ -718,6 +807,7 @@ def replay_trust_intelligence(
     # Layer 2: integrity — recompute hash independently
     integrity_ok = False
     try:
+        replay_payload_hashes = _extract_and_hash_payloads(snapshot)
         canonical = _canonical_intelligence_bytes(
             TRUST_INTELLIGENCE_AUTHORITY_VERSION,
             str(snapshot.get("tenant_id", "")),
@@ -733,6 +823,7 @@ def replay_trust_intelligence(
             int(snapshot.get("recommendations_count", 0)),
             int(snapshot.get("forecast_projected_score", 0)),
             int(snapshot.get("graph_node_count", 0)),
+            replay_payload_hashes,
         )
         expected_hash = hashlib.sha256(canonical).hexdigest()
         if snapshot_hash and snapshot_hash == expected_hash:
