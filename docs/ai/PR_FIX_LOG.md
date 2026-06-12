@@ -14280,3 +14280,34 @@ PR 1.2A proved the chain state is stable and deterministic. PR 1.3 proves that t
 
 **Why:**
 PR 1.3 proved records were signed by a trusted authority. PR 1.4 proved evidence-to-report links were signed. Neither PR introduced a way to *act* on a failed verification — a signature failure was recorded as a warning and operations continued regardless. PR 1.5 closes that gap: it introduces a central enforcement engine that consumes pre-computed trust inputs from any authority system and applies a configurable enforcement mode. In OFF mode, nothing changes from current behavior. In WARN mode, failures are audited but operations proceed. In STRICT mode, failures raise `TrustEnforcementError` and callers must handle or propagate the block. This model allows enterprise and GovCon customers to run `FG_PROVENANCE_MODE=strict` (fail closed on any trust failure) while SMB customers run the non-breaking `warn` default. The design is deliberately decoupled from evidence records so that Identity Authority, RBAC Authority, Agent Authority, and future AGI Governance Authority can plug into the same enforcement engine without code duplication.
+
+## 2026-06-12 — PR 1.6B Trust Graph Authority Hardening
+
+### Scope
+Hardening additions to Trust Graph Authority and Snapshot Foundation.
+
+### Changes
+- Added verify_replay_anchor()
+- Added replay anchor validation
+- Added graph_hash tamper detection
+- Added edge_id authority binding
+- Added authority downgrade protection
+- Added subject_id and query_type provenance fields
+- Added malformed input validation coverage
+- Added private-key leakage tests
+- Added 1000-node performance validation
+
+### Security Impact
+Improves replay proof verification, graph integrity validation, authority binding, and resistance to downgrade/tampering attacks.
+
+### Enterprise Impact
+Enables independently verifiable proof artifacts required for auditor proof packages and future trust replay workflows.
+
+### Moat Impact
+Replay anchors become portable trust artifacts that can be validated outside Frostgate while preserving cryptographic provenance.
+
+### Validation
+- pytest tests/test_trust_graph_authority.py
+- make fg-contract
+- make fg-fast
+- make fg-security
