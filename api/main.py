@@ -92,6 +92,7 @@ from api.reports_engine import router as reports_engine_router
 from api.signing import router as signing_router
 from api.stripe_webhooks import router as stripe_webhooks_router
 from api.tenant_rbac_router import router as tenant_rbac_router
+from api.auth_scopes.resolution import authz_scope
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.portal_scope import PortalClientScopeMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
@@ -985,7 +986,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         return result
 
     @app.get("/_debug/routes")
-    async def debug_routes(request: Request) -> dict[str, Any]:
+    async def debug_routes(
+        request: Request,
+        _auth: None = Depends(authz_scope("admin:read")),
+    ) -> dict[str, Any]:
         # HTTPException (401/403) from require_status_auth must propagate so
         # that unauthenticated callers receive a proper error response rather
         # than a 200 {"ok": False}.

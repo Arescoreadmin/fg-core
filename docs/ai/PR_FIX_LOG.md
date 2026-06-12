@@ -14562,3 +14562,23 @@ Replay anchors become portable trust artifacts that can be validated outside Fro
 - make fg-contract
 - make fg-fast
 - make fg-security
+
+
+## 2026-06-12 — PR 432 P0: Quarantine /_debug/routes
+
+### Scope
+P0 security remediation — remove public access to debug route inventory.
+
+### Changes
+- Removed `/_debug` from `PUBLIC_PATHS_PREFIX` in `api/security/public_paths.py`
+- Removed `except HTTPException` absorption in `api/main.py` `debug_routes()` handler
+- Added `Depends(authz_scope("admin:read"))` to `debug_routes` to satisfy route scope lint
+- Added 4 negative auth tests to `tests/security/test_router_mount_inventory.py`
+
+### Security Impact
+`GET /_debug/routes` no longer accessible without authentication. Eliminates topology leakage via unauthenticated route inventory endpoint.
+
+### Validation
+- make fg-fast
+- make fg-security
+- python tools/ci/check_route_inventory.py
