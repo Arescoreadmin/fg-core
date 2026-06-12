@@ -6,6 +6,48 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-11 — PR 1.6A: Trust Graph Authority & Snapshot Foundation
+
+**Branch:** `pr/1.6a-trust-graph-authority`
+
+**Area:** Field Assessment / Trust Infrastructure / Cryptographic Authority Layer
+
+**Summary of changes:**
+
+1. **`services/field_assessment/trust_graph_authority.py`** (new, ~632 lines) — Cryptographic authority layer over the trust graph:
+   - `TrustGraphAuthorityError(RuntimeError)`: fail-closed exception for missing/invalid key material
+   - Key management: `_load_private_key_seed()`, `_derive_public_key_bytes()`, `_derive_key_id()`, `_load_verification_public_key()` — `FG_EVIDENCE_SIGNING_KEY_B64` (private), `FG_EVIDENCE_VERIFY_KEY_B64` (verify-only mode); `signing_key_id = SHA256(pub_bytes)[:16]`
+   - `_sign_canonical(payload)`: `Ed25519PrivateKey.sign(SHA256(canonical_json_bytes(payload)))` — same algorithm as evidence_authority
+   - **Part 1 — Edge Authority**: `build_edge_authority_event(edge)` (canonical dict for signing); `sign_edge_authority(edge)` → `{event_hash, signature, signing_key_id, authority_version}`
+   - **Part 2 — Tamper Detection**: `verify_edge_authority(edge, authority)` → `{valid: bool, reason: str | None}` — checks missing fields → version → hash → signature; never raises; fails closed
+   - **Part 3+4 — Snapshot Authority**: `_canonical_snapshot_bytes(manifest)` excludes timestamps; `generate_signed_graph_snapshot(graph)` → `{snapshot_id, snapshot_hash, snapshot_signature, snapshot_key_id, snapshot_version, graph_hash, created_at}`; `verify_graph_snapshot(graph, snapshot)` → `{valid, reason}` — never raises
+   - **Part 5 — Replay Anchors**: `build_replay_anchor(snapshot)` → `{graph_hash, snapshot_hash, snapshot_signature, snapshot_version}` — self-contained, consumed by PR 1.9 without redesign
+   - **Part 6 — Explainability**: `_explain_lineage(subject_label, lineage)` deterministic natural-language output grouped by NodeType; `why_report()`, `why_risk()`, `why_control()`, `why_finding()` — pure graph traversal, no AI/LLM
+   - **Part 7 — Query Foundation**: `TrustQueryResult` dataclass: `path, node_count, edge_count, graph_hash, snapshot_hash=None, confidence=100` + `to_dict()`; `confidence=100` placeholder until PR 1.7
+
+2. **`tests/test_trust_graph_authority.py`** (new, 132 tests) — Full coverage matrix:
+   - `TestBuildEdgeAuthorityEvent` (8): required fields, edge_type as string value, authority_version, tenant/engagement/source/target preserved, no-key → None key_id, determinism, all 6 edge types
+   - `TestSignEdgeAuthority` (10): raises without key, required fields, hex signature, 64-char hash, 16-char key_id, version constant, deterministic, different edges differ, different tenants differ, invalid seed length, non-base64 seed
+   - `TestVerifyEdgeAuthority` (14): valid roundtrip, empty/None authority, missing individual fields, wrong version, tampered edge_type/tenant/source/event_hash, invalid hex signature, wrong key → mismatch, no key → key_unavailable, never raises, injected extra field tolerated
+   - `TestGenerateSignedGraphSnapshot` (9): raises without key, all required fields, version constant, snapshot_id unique per call, snapshot_hash stable, graph_hash matches manifest, key_id 16 chars, hash changes when graph changes, empty graph, full graph
+   - `TestVerifyGraphSnapshot` (11): valid roundtrip, missing fields, None, wrong version, tampered hash, graph mutation invalidates, signature mismatch, no key → key_unavailable, never raises, full graph roundtrip, different graph rejected
+   - `TestBuildReplayAnchor` (6): required fields, match snapshot, excludes snapshot_id/timestamps, deterministic, version constant, JSON-serializable
+   - `TestWhyFunctions` (23): why_report (returns string, contains Report, wrong type raises, missing node raises, deterministic, includes EVIDENCE block); why_risk (5); why_control (5); why_finding (5); explain_lineage sorts nodes by id
+   - `TestTrustQueryResult` (11): default confidence=100, default snapshot_hash=None, snapshot_hash settable, to_dict keys, path node fields, node_type is string, None snapshot_hash, confidence placeholder, empty path, graph_hash preserved, counts preserved
+   - `TestTamperDetection` (5): edge field mutation, all edge fields in hash, snapshot node addition invalidates, snapshot edge addition invalidates, authority_fields_included
+   - `TestCrossTenantIsolation` (2): edge signed for tenant A fails for tenant B; snapshot for tenant A rejected on tenant B graph
+   - `TestCrossEngagementIsolation` (2): edge/snapshot isolation across engagement boundaries
+   - `TestDeterminism` (5): event hash, snapshot hash, snapshot_id unique, why_report stable across 5 calls, signing_key_id stable
+   - `TestManifestStability` (4): timestamps excluded from canonical bytes, snapshot_hash excludes created_at, canonical bytes order, root_nodes sorted
+   - `TestPerformance` (5): sign <50ms, verify <50ms, snapshot 100 nodes <200ms, verify snapshot 100 nodes <200ms, why_report 1000 nodes <500ms
+   - `TestFutureNodeCompatibility` (4): unknown payload fields tolerated, missing optional fields → "unknown", TrustQueryResult with future node, sign all edge types
+   - `TestSecurityInvariants` (11): empty key raises, verify key env priority, version downgrade rejected, replay with different edge rejected, no private seed in output, snapshot not reusable across graphs, signing_key_id is public key fingerprint, TrustGraphAuthorityError is RuntimeError subclass, verify_edge/verify_snapshot return dict not bool
+
+**Why:**
+Elevates the trust graph from a structural substrate to a cryptographically provable trust layer. Every edge in the graph is now individually signable and verifiable; the graph as a whole is snapshotable with deterministic hashing and replay-compatible anchors. The explainability layer (`why_*` functions) gives auditors and regulators deterministic, traversal-based answers to "why does this trust claim exist?" with no AI inference in the path. `TrustQueryResult.confidence=100` is a deliberate placeholder — PR 1.7 replaces it with per-evidence scoring. Replay anchors are self-contained by design so PR 1.9 consumes them without redesign.
+
+---
+
 ### 2026-06-11 — PR 1.6: Trust Graph Foundation
 
 **Branch:** `pr/1.6-trust-graph-foundation`
