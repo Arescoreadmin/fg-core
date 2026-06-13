@@ -124,8 +124,8 @@ def test_classify_runtime_only_debug_route_is_internal_allowed():
 
 
 def test_internal_allowed_overlap_guard_is_empty():
-    # The overlap guard (internal_allowed routes that are also publicly reachable)
-    # should always be empty by construction — validate explicitly.
+    # Routes in ALLOWED_INTERNAL_PREFIXES that are NOT in public allowlists
+    # must end up in internal_allowed with zero public-reachable overlap.
     routes = ["GET /admin/keys", "GET /_debug/routes", "POST /dev/seed"]
     _, internal_allowed, _ = check_route_inventory._classify_runtime_only(routes)
     overlap = [
@@ -133,6 +133,24 @@ def test_internal_allowed_overlap_guard_is_empty():
         if check_route_inventory._is_public_reachable(r.split(" ", 1)[1] if " " in r else r)
     ]
     assert overlap == [], f"internal_allowed routes must not be publicly reachable: {overlap}"
+
+
+def test_accidental_public_internal_route_is_invalid_drift(monkeypatch):
+    # If /admin/foo is accidentally added to PUBLIC_PATHS_EXACT, it must be
+    # classified as invalid_drift (hard fail) — NOT silently moved to public_exempt.
+    from api.security import public_paths as pp
+    original = pp.PUBLIC_PATHS_EXACT
+    monkeypatch.setattr(
+        check_route_inventory,
+        "PUBLIC_PATHS_EXACT",
+        original + ("/admin/foo",),
+    )
+    routes = ["GET /admin/foo"]
+    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    assert "GET /admin/foo" in invalid_drift, (
+        "accidental internal route in public allowlist must be invalid_drift, not public_exempt"
+    )
+    assert "GET /admin/foo" not in public_exempt
 
 
 # ---------------------------------------------------------------------------

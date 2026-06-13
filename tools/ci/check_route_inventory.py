@@ -113,6 +113,19 @@ ALLOWED_RUNTIME_ONLY_ROUTES: set[str] = {
     "HEAD /health",
 }
 
+# Prefix families within ALLOWED_INTERNAL_PREFIXES that are intentionally also
+# publicly reachable (no API key required).  Any ALLOWED_INTERNAL_PREFIXES route
+# found in PUBLIC_PATHS_EXACT / PUBLIC_PATHS_PREFIX whose prefix does NOT appear
+# here is classified as invalid_drift — accidental auth bypass → HARD FAIL.
+#
+#   /metrics — Prometheus scrape; no tenant data; explicitly public by design.
+#   /ui/     — UI aggregation layer; session-level auth at the handler, not at
+#              the middleware level.  Public reachability is intentional.
+INTENTIONAL_PUBLIC_INTERNAL_PREFIXES: frozenset[str] = frozenset({
+    "/metrics",
+    "/ui/",
+})
+
 
 # -----------------------------
 # small, boring, correct utils
@@ -347,11 +360,19 @@ def _classify_runtime_only(
             continue
 
         # Route is in an allowed-internal prefix family.
-        # Routes that are also publicly reachable (e.g. /metrics for Prometheus,
-        # /ui/* for the UI layer which uses session-level auth) are classified as
-        # public_exempt rather than internal_allowed.
+        # If it is also publicly reachable, verify the overlap is intentional.
+        # Only prefixes listed in INTENTIONAL_PUBLIC_INTERNAL_PREFIXES are allowed
+        # to be both internal (not in contract) and public (no API key required).
+        # Any other overlap is an accidental auth bypass → hard fail (invalid_drift).
         if _is_public_reachable(path):
-            public_exempt.append(entry)
+            is_intentional = any(
+                path.startswith(pfx) or path == pfx.rstrip("/")
+                for pfx in INTENTIONAL_PUBLIC_INTERNAL_PREFIXES
+            )
+            if is_intentional:
+                public_exempt.append(entry)
+            else:
+                invalid_drift.append(entry)
         else:
             internal_allowed.append(entry)
 

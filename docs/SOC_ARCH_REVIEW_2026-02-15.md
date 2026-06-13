@@ -1937,3 +1937,28 @@ P0-2 remediation: the route classification model used by route inventory CI was 
 - `make route-inventory-audit`: OK (50 public_exempt, 79 internal_allowed)
 - All 18 tests in `tests/tools/test_route_inventory_summary.py`: passed
 - `make fg-fast`: reached SOC review sync and correctly required this SOC entry
+
+---
+
+## 2026-06-13 — SOC-HIGH-002 — P0-2 Addendum: fix vacuous overlap guard
+
+**Classification:** SOC-HIGH-002
+
+**Files changed:**
+- `tools/ci/check_route_inventory.py`
+
+**Reason:**
+Code review identified that the P0-2 overlap guard was vacuous by construction: internal-prefix routes accidentally in public allowlists were moved to `public_exempt` before the guard ran, so the guard's `internal_allowed` input was always empty for such routes. This addendum fixes the flaw.
+
+**Change description:**
+Added `INTENTIONAL_PUBLIC_INTERNAL_PREFIXES` (`/metrics`, `/ui/`) — an explicit set of which ALLOWED_INTERNAL_PREFIXES families are intentionally also publicly reachable. Any other internal-prefix route found in PUBLIC_PATHS_EXACT or PUBLIC_PATHS_PREFIX is now classified as `invalid_drift` (hard CI fail) rather than silently moved to `public_exempt`. The overlap guard in `main()` now has real enforcement power.
+
+**Security review:**
+- Net improvement: previously an accidental exposure (e.g. `/admin/foo` added to PUBLIC_PATHS_EXACT) would pass CI; now it fails CI.
+- No auth, enforcement, or middleware logic changed.
+- `/metrics` and `/ui/` remain correctly classified as `public_exempt` (intentional public-internal overlap).
+
+**Validation:**
+- `make route-inventory-audit`: OK
+- All 19 tests in `tests/tools/test_route_inventory_summary.py`: pass
+- `make fg-fast`: reached SOC sync and correctly required this entry
