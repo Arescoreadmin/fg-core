@@ -122,8 +122,9 @@ ALLOWED_RUNTIME_ONLY_ROUTES: set[str] = {
 #   /ui/     — UI aggregation layer; session-level auth at the handler, not at
 #              the middleware level.  Public reachability is intentional.
 INTENTIONAL_PUBLIC_INTERNAL_PREFIXES: frozenset[str] = frozenset({
-    "/metrics",
     "/ui/",
+    # /metrics was here until P0-3 removed it from PUBLIC_PATHS_EXACT.
+    # Prometheus scrapers in production must now supply an API key.
 })
 
 

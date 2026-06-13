@@ -177,6 +177,7 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
+    "GET /metrics",
     "POST /admin/agent/commands/issue",
     "POST /admin/agent/devices/{device_id}/disable",
     "POST /admin/agent/devices/{device_id}/enable",
@@ -229,7 +230,6 @@
   },
   "public_exempt": [
     "GET /health",
-    "GET /metrics",
     "GET /ui/ai",
     "GET /ui/ai/experience",
     "GET /ui/ai/usage",

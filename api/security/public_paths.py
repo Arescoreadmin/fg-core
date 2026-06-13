@@ -10,7 +10,6 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/forensics/chain/verify",
     "/forensics/snapshot",
     "/forensics/audit-trail",
-    "/metrics",
     "/status",
     "/v1/status",
     "/stats/debug",
