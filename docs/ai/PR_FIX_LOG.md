@@ -14624,3 +14624,40 @@ P0-3 remediation — remove unnecessary public exposure of `/metrics` and valida
 - `make route-inventory-audit`: OK (49 public_exempt, 80 internal_allowed)
 - `make fg-fast`: pass
 - `make fg-security`: pass
+
+## 2026-06-12 — PR 435 P0-4: Core Tenant RLS Hardening
+
+### Scope
+P0-4 remediation — close RLS coverage gap for 66 non-FA tables with `tenant_id` that lacked `ENABLE ROW LEVEL SECURITY` or `_tenant_isolation` policy.
+
+### Changes
+- New migration `0110_core_tenant_rls_hardening.sql`: `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` + `CREATE POLICY ..._tenant_isolation` for all 66 unguarded tables. Also adds `_tenant_isolation` policies for 3 tables that had RLS enabled but no policy (`evaluation_query_sets`, `evaluation_query_items`, `governance_timeline_events`).
+- New `tools/ci/check_core_rls.py`: static CI checker validating all tenant tables have RLS coverage across migrations. Excludes FA (0094/0095), agent-phase2, connectors, and 5 confirmed non-standard-policy tables.
+- `Makefile`: `check-core-rls` target wired into `fg-fast`.
+- 16 tests in `tests/tools/test_core_rls.py`.
+
+### Security Impact
+All non-FA tenant-bearing tables now have database-layer RLS enforcement. Cross-tenant reads require `SET LOCAL "app.tenant_id"` matching the authenticated tenant. `FORCE ROW LEVEL SECURITY` ensures table owner access is also filtered. CI now hard-fails on any future table addition missing RLS.
+
+### Validation
+- `python3 tools/ci/check_core_rls.py`: OK (100 tables verified)
+- 16 tests in `tests/tools/test_core_rls.py`: all pass
+- `make fg-fast`: pass
+- `make fg-security`: pass
+
+## 2026-06-12 — PR 435 P0-4 Addendum: Pre-tenant assessments RLS fix
+
+### Scope
+P1 reviewer fix — `POST /ingest/assessment/orgs` pre-tenant onboarding flow blocked by missing `app.tenant_id` GUC before inserts.
+
+### Changes
+- Added `set_tenant_context` import to `api/assessments.py`
+- Called `set_tenant_context(db, effective_tenant)` in `create_org()` after `effective_tenant` is resolved, before any `db.add()` call. Applies to both tenant-bound and pre-tenant `lead:<uuid>` flows.
+
+### Security Impact
+No policies relaxed. Application brought into compliance with migration 0110 RLS enforcement. Tenant context is set from authenticated request state or a freshly generated UUID — no user input determines the namespace.
+
+### Validation
+- 15 tests in `tests/security/test_assessment_tenant_isolation.py`: pass
+- 287 assessment-related tests: pass
+- `make fg-fast`: pass
