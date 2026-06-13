@@ -121,11 +121,13 @@ ALLOWED_RUNTIME_ONLY_ROUTES: set[str] = {
 #   /metrics — Prometheus scrape; no tenant data; explicitly public by design.
 #   /ui/     — UI aggregation layer; session-level auth at the handler, not at
 #              the middleware level.  Public reachability is intentional.
-INTENTIONAL_PUBLIC_INTERNAL_PREFIXES: frozenset[str] = frozenset({
-    "/ui/",
-    # /metrics was here until P0-3 removed it from PUBLIC_PATHS_EXACT.
-    # Prometheus scrapers in production must now supply an API key.
-})
+INTENTIONAL_PUBLIC_INTERNAL_PREFIXES: frozenset[str] = frozenset(
+    {
+        "/ui/",
+        # /metrics was here until P0-3 removed it from PUBLIC_PATHS_EXACT.
+        # Prometheus scrapers in production must now supply an API key.
+    }
+)
 
 
 # -----------------------------
@@ -719,7 +721,11 @@ def main() -> int:
         # Guard: internal_allowed routes must not be publicly reachable without auth.
         # By construction this should be empty (public-reachable routes are classified
         # as public_exempt), but validate explicitly as a regression defence.
-        overlap = [r for r in internal_allowed if _is_public_reachable(r.split(" ", 1)[1] if " " in r else r)]
+        overlap = [
+            r
+            for r in internal_allowed
+            if _is_public_reachable(r.split(" ", 1)[1] if " " in r else r)
+        ]
         if overlap:
             failures.append(
                 "internal_allowed routes overlap public unauthenticated allowlists "
