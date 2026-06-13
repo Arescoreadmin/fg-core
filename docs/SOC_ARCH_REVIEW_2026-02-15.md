@@ -1962,3 +1962,44 @@ Added `INTENTIONAL_PUBLIC_INTERNAL_PREFIXES` (`/metrics`, `/ui/`) — an explici
 - `make route-inventory-audit`: OK
 - All 19 tests in `tests/tools/test_route_inventory_summary.py`: pass
 - `make fg-fast`: reached SOC sync and correctly required this entry
+
+---
+
+## 2026-06-13 — SOC-HIGH-002 — P0-3 Metrics & UI Surface Hardening
+
+**Classification:** SOC-HIGH-002
+
+**Files changed:**
+- `api/security/public_paths.py`
+- `api/main.py`
+- `tools/ci/check_route_inventory.py`
+- `tools/ci/route_inventory.json`
+- `tools/ci/route_inventory_summary.json`
+- `tools/ci/topology.sha256`
+- `tests/security/test_router_mount_inventory.py`
+
+**Reason:**
+P0-3 remediation: `/metrics` was publicly accessible without authentication (in PUBLIC_PATHS_EXACT). Enterprise posture requires that Prometheus metrics are auth-gated in production. Removed `/metrics` from PUBLIC_PATHS_EXACT so auth_gate enforces API key checks. Added `authz_scope("admin:read")` dependency to satisfy route scope linter. Removed `/metrics` from INTENTIONAL_PUBLIC_INTERNAL_PREFIXES. Also confirmed `/ui/*` routes are scope-protected at handler level and added negative auth test.
+
+**Change description:**
+- `/metrics` removed from `PUBLIC_PATHS_EXACT` — no longer bypasses auth_gate middleware
+- `authz_scope("admin:read")` added to metrics handler for scope linter compliance
+- `/metrics` removed from `INTENTIONAL_PUBLIC_INTERNAL_PREFIXES` in check_route_inventory.py
+- Route inventory: `/metrics` moves from `public_exempt` (49) to `internal_allowed` (80)
+- 6 new tests: metrics 401 unauthenticated, 401 bad key, 200 authenticated, 200 auth-disabled; UI 401 unauthenticated
+
+**Security review:**
+- `/metrics` now requires a valid API key in production (auth_enabled=True)
+- Dev/test environments (auth_enabled=False) retain open metrics access for local observability
+- `/ui/*` routes were already scope-protected at router level via `require_scopes("ui:read")` — the middleware bypass is intentional (UI clients use session/token flow) and now explicitly tested
+- No observability is disabled — metrics are still emitted and accessible with valid credentials
+
+**Invariants preserved:**
+- `FG_METRICS_ENABLED=False` still disables metrics entirely
+- Auth-disabled environments (local dev) still get open /metrics access
+- `/ui/*` session-auth model unchanged
+
+**Validation:**
+- All 12 tests in `tests/security/test_router_mount_inventory.py`: pass
+- `make route-inventory-generate` + `make route-inventory-audit`: OK
+- `make fg-fast`: reached SOC sync gate and correctly required this entry

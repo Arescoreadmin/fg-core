@@ -700,11 +700,13 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     if _env_bool("FG_METRICS_ENABLED", default=True):
 
         @app.get("/metrics", include_in_schema=False)
-        async def metrics_endpoint():  # type: ignore[return]
+        async def metrics_endpoint(
+            _auth: None = Depends(authz_scope("admin:read")),
+        ) -> None:  # type: ignore[return]
             from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
             from fastapi.responses import PlainTextResponse
 
-            return PlainTextResponse(
+            return PlainTextResponse(  # type: ignore[return-value]
                 content=generate_latest().decode("utf-8"),
                 media_type=CONTENT_TYPE_LATEST,
             )

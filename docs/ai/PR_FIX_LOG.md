@@ -14604,3 +14604,23 @@ Fixes vacuous overlap guard: an internal-prefix route accidentally added to publ
 - `make route-inventory-audit`: OK (50 public_exempt, 79 internal_allowed, 0 invalid_drift)
 - `make fg-fast`: pass
 - `make fg-security`: pass (904 passed, 1 skipped)
+
+## 2026-06-13 — PR 434 P0-3: Metrics & UI Surface Hardening
+
+### Scope
+P0-3 remediation — remove unnecessary public exposure of `/metrics` and validate `/ui/*` surface governance.
+
+### Changes
+- Removed `/metrics` from `PUBLIC_PATHS_EXACT` in `api/security/public_paths.py`
+- Added `Depends(authz_scope("admin:read"))` to metrics handler in `api/main.py`
+- Removed `/metrics` from `INTENTIONAL_PUBLIC_INTERNAL_PREFIXES` in `check_route_inventory.py`
+- Added 6 tests to `tests/security/test_router_mount_inventory.py`
+
+### Security Impact
+`GET /metrics` now requires a valid API key in production (auth_enabled=True). Unauthenticated requests receive 401. Dev/local environments retain open access. `/ui/*` handler-level scope enforcement explicitly validated.
+
+### Validation
+- 12 tests in `tests/security/test_router_mount_inventory.py`: all pass
+- `make route-inventory-audit`: OK (49 public_exempt, 80 internal_allowed)
+- `make fg-fast`: pass
+- `make fg-security`: pass
