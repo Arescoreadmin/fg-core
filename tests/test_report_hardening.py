@@ -277,7 +277,7 @@ class TestTerminalStateProtection:
             ),
             patch.object(engine_mod, "get_auditor", return_value=auditor),
         ):
-            engine_mod._handle_timeout("r-t-001")
+            engine_mod._handle_timeout("r-t-001", "tenant-A")
 
         # Status must remain 'complete'
         assert report.status == "complete"
@@ -303,7 +303,7 @@ class TestTerminalStateProtection:
             ),
             patch.object(engine_mod, "get_auditor", return_value=auditor),
         ):
-            engine_mod._handle_timeout("r-t-002")
+            engine_mod._handle_timeout("r-t-002", "tenant-A")
 
         assert report.status == "failed"
         assert report.error_message == "REPORT_GENERATION_FAILED"
@@ -326,7 +326,7 @@ class TestTerminalStateProtection:
             ),
             patch.object(engine_mod, "get_auditor", return_value=auditor),
         ):
-            engine_mod._do_generate_report("r-t-003")
+            engine_mod._do_generate_report("r-t-003", "tenant-A")
 
         # Status must remain 'complete', not be overwritten to 'generating'
         assert report.status == "complete"
@@ -369,7 +369,7 @@ class TestTerminalStateProtection:
                 side_effect=RuntimeError("provider gone"),
             ),
         ):
-            engine_mod._do_generate_report("r-t-004")
+            engine_mod._do_generate_report("r-t-004", "tenant-A")
 
         # The already-failed report must not have its error_message overwritten
         assert report_already_failed.error_message == "prior-failure"
@@ -413,7 +413,7 @@ class TestAuditEventsUnderHardening:
                 side_effect=ProviderCallError("PROVIDER_ERROR", "down"),
             ),
         ):
-            engine_mod._do_generate_report("r-a-001")
+            engine_mod._do_generate_report("r-a-001", "tenant-A")
 
         assert "report_job_failed" in auditor.reasons
 
@@ -447,7 +447,7 @@ class TestAuditEventsUnderHardening:
             patch.object(engine_mod, "get_auditor", return_value=auditor),
             patch("services.ai.dispatch.call_provider", return_value=mock_resp),
         ):
-            engine_mod._do_generate_report("r-a-002")
+            engine_mod._do_generate_report("r-a-002", "tenant-A")
 
         assert "report_job_succeeded" in auditor.reasons
 
@@ -469,7 +469,7 @@ class TestAuditEventsUnderHardening:
             ),
             patch.object(engine_mod, "get_auditor", return_value=auditor),
         ):
-            engine_mod._handle_timeout("r-a-003")
+            engine_mod._handle_timeout("r-a-003", "tenant-A")
 
         assert report.status == "failed"
         assert report.error_message == REPORT_GENERATION_TIMEOUT
@@ -510,7 +510,7 @@ class TestAuditEventsUnderHardening:
                 side_effect=ProviderCallError("PROVIDER_ERROR", "down"),
             ),
         ):
-            engine_mod._do_generate_report("r-a-004")
+            engine_mod._do_generate_report("r-a-004", "tenant-A")
 
         failed = auditor.details_for("report_job_failed")
         assert len(failed) >= 1

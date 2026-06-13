@@ -34,6 +34,27 @@ _RLS_DISABLE_RE = re.compile(
     r"ALTER TABLE\s+(?:IF EXISTS\s+)?(\w+)\s+DISABLE ROW LEVEL SECURITY",
     re.IGNORECASE,
 )
+_WRONG_GUC_RE = re.compile(
+    r"app\.current_tenant_id",
+    re.IGNORECASE,
+)
+_SQL_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
+
+# Migration files known to contain app.current_tenant_id in policy USING clauses —
+# all fixed at runtime by migration 0111. Exempt from the GUC regression check.
+_LEGACY_GUC_PATCHED_MIGRATIONS: frozenset[str] = frozenset(
+    {
+        "0093_fa_engagement_audit_events_replay_repair.sql",
+        "0094_fa_rls_replay_repair.sql",
+        "0095_fa_rls_all_tables_replay_repair.sql",
+        "0096_fa_quarantined_scans_replay_repair.sql",
+        "0097_fa_orm_substrate_replay_repair.sql",
+        "0105_fa_evidence_provenance.sql",
+        "0107_evidence_report_link_authority.sql",
+        "0108_trust_intelligence_authority.sql",
+        "0109_auditor_proof_authority.sql",
+    }
+)
 _DROP_POLICY_RE = re.compile(
     r"DROP POLICY\s+(?:IF EXISTS\s+)?(\w+_tenant_isolation)\s+ON\s+(\w+)",
     re.IGNORECASE,
@@ -138,6 +159,20 @@ def main() -> int:
             tables_with_tenant.add(m.group(1))
 
     failures: list[str] = []
+
+    # Scan every migration file for the wrong GUC name in policy USING clauses.
+    # Strip single-line SQL comments first to avoid false positives from documentation.
+    # Legacy migrations 0093-0109 are exempt: the bug is fixed at runtime by 0111.
+    for p in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        if p.name in _LEGACY_GUC_PATCHED_MIGRATIONS:
+            continue
+        sql = p.read_text(encoding="utf-8")
+        sql_code = _SQL_LINE_COMMENT_RE.sub("", sql)
+        if _WRONG_GUC_RE.search(sql_code):
+            failures.append(
+                f"WRONG_GUC_NAME      {p.name}"
+                " (uses app.current_tenant_id; must use app.tenant_id)"
+            )
     for table in sorted(tables_with_tenant):
         if _is_excluded(table):
             continue
