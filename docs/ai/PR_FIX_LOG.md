@@ -14624,3 +14624,23 @@ P0-3 remediation — remove unnecessary public exposure of `/metrics` and valida
 - `make route-inventory-audit`: OK (49 public_exempt, 80 internal_allowed)
 - `make fg-fast`: pass
 - `make fg-security`: pass
+
+## 2026-06-12 — PR 435 P0-4: Core Tenant RLS Hardening
+
+### Scope
+P0-4 remediation — close RLS coverage gap for 66 non-FA tables with `tenant_id` that lacked `ENABLE ROW LEVEL SECURITY` or `_tenant_isolation` policy.
+
+### Changes
+- New migration `0110_core_tenant_rls_hardening.sql`: `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` + `CREATE POLICY ..._tenant_isolation` for all 66 unguarded tables. Also adds `_tenant_isolation` policies for 3 tables that had RLS enabled but no policy (`evaluation_query_sets`, `evaluation_query_items`, `governance_timeline_events`).
+- New `tools/ci/check_core_rls.py`: static CI checker validating all tenant tables have RLS coverage across migrations. Excludes FA (0094/0095), agent-phase2, connectors, and 5 confirmed non-standard-policy tables.
+- `Makefile`: `check-core-rls` target wired into `fg-fast`.
+- 16 tests in `tests/tools/test_core_rls.py`.
+
+### Security Impact
+All non-FA tenant-bearing tables now have database-layer RLS enforcement. Cross-tenant reads require `SET LOCAL "app.tenant_id"` matching the authenticated tenant. `FORCE ROW LEVEL SECURITY` ensures table owner access is also filtered. CI now hard-fails on any future table addition missing RLS.
+
+### Validation
+- `python3 tools/ci/check_core_rls.py`: OK (100 tables verified)
+- 16 tests in `tests/tools/test_core_rls.py`: all pass
+- `make fg-fast`: pass
+- `make fg-security`: pass

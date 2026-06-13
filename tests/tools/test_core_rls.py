@@ -1,0 +1,177 @@
+from __future__ import annotations
+
+from tools.ci import check_core_rls
+
+
+# ---------------------------------------------------------------------------
+# _is_excluded
+# ---------------------------------------------------------------------------
+
+
+def test_fa_tables_are_excluded():
+    assert check_core_rls._is_excluded("fa_engagements")
+    assert check_core_rls._is_excluded("fa_scan_results")
+    assert check_core_rls._is_excluded("fa_field_observations")
+
+
+def test_agent_phase2_tables_are_excluded():
+    for t in check_core_rls._AGENT_PHASE2_TABLES:
+        assert check_core_rls._is_excluded(t), f"expected {t} to be excluded"
+
+
+def test_connector_tables_are_excluded():
+    for t in check_core_rls._CONNECTOR_TABLES:
+        assert check_core_rls._is_excluded(t), f"expected {t} to be excluded"
+
+
+def test_nonstandard_policy_tables_are_excluded():
+    for t in check_core_rls._NONSTANDARD_POLICY_TABLES:
+        assert check_core_rls._is_excluded(t), f"expected {t} to be excluded"
+
+
+def test_regular_table_not_excluded():
+    assert not check_core_rls._is_excluded("billing_devices")
+    assert not check_core_rls._is_excluded("reports")
+    assert not check_core_rls._is_excluded("rag_corpora")
+
+
+# ---------------------------------------------------------------------------
+# main() integration — passes on actual migrations
+# ---------------------------------------------------------------------------
+
+
+def test_main_passes_on_actual_migrations():
+    result = check_core_rls.main()
+    assert result == 0, "check_core_rls.main() must pass after migration 0110"
+
+
+# ---------------------------------------------------------------------------
+# main() hard-fails when a table lacks RLS enable
+# ---------------------------------------------------------------------------
+
+
+def test_main_fails_on_missing_rls_enable(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_table.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS foo (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 1
+
+
+def test_main_fails_on_missing_policy(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_table.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS bar (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+        "ALTER TABLE bar ENABLE ROW LEVEL SECURITY;\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 1
+
+
+def test_main_passes_with_full_rls_coverage(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_table.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS baz (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+        "ALTER TABLE baz ENABLE ROW LEVEL SECURITY;\n"
+        "CREATE POLICY baz_tenant_isolation ON baz USING (tenant_id = current_setting('app.tenant_id', true));\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 0
+
+
+def test_main_passes_when_table_has_no_tenant_id(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_table.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS global_config (key TEXT PRIMARY KEY, value TEXT);\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 0
+
+
+def test_main_excludes_fa_tables(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    # fa_ table with no RLS — should be excluded (covered by 0094/0095 dynamic migration)
+    (sql_dir / "0001_table.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS fa_engagements (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 0
+
+
+def test_main_reports_both_enable_and_policy_missing(tmp_path, monkeypatch, capsys):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_table.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS no_rls_table (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    result = check_core_rls.main()
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "RLS_ENABLE_MISSING" in captured.out
+    assert "RLS_POLICY_MISSING" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Migration 0110 coverage assertion
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0110_covers_billing_tables():
+    sql = (
+        check_core_rls.MIGRATIONS_DIR / "0110_core_tenant_rls_hardening.sql"
+    ).read_text()
+    critical = [
+        "billing_devices",
+        "billing_invoices",
+        "billing_runs",
+        "billing_credit_notes",
+    ]
+    for table in critical:
+        assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql, (
+            f"{table} missing from migration 0110"
+        )
+        assert f"CREATE POLICY {table}_tenant_isolation" in sql, (
+            f"{table} missing tenant_isolation policy in migration 0110"
+        )
+
+
+def test_migration_0110_covers_agent_tables():
+    sql = (
+        check_core_rls.MIGRATIONS_DIR / "0110_core_tenant_rls_hardening.sql"
+    ).read_text()
+    tables = ["agent_enrollment_tokens", "agent_device_keys", "agent_device_registry"]
+    for table in tables:
+        assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql, (
+            f"{table} missing from migration 0110"
+        )
+
+
+def test_migration_0110_covers_rag_tables():
+    sql = (
+        check_core_rls.MIGRATIONS_DIR / "0110_core_tenant_rls_hardening.sql"
+    ).read_text()
+    for table in ("rag_corpora", "rag_chunks", "rag_documents", "embedding_vectors"):
+        assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql, (
+            f"{table} missing from migration 0110"
+        )
+
+
+def test_migration_0110_covers_evaluation_and_timeline_policy_gaps():
+    sql = (
+        check_core_rls.MIGRATIONS_DIR / "0110_core_tenant_rls_hardening.sql"
+    ).read_text()
+    for table in (
+        "evaluation_query_items",
+        "evaluation_query_sets",
+        "governance_timeline_events",
+    ):
+        assert f"CREATE POLICY {table}_tenant_isolation" in sql, (
+            f"{table} missing tenant_isolation policy in migration 0110"
+        )

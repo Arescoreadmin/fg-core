@@ -2003,3 +2003,43 @@ P0-3 remediation: `/metrics` was publicly accessible without authentication (in 
 - All 12 tests in `tests/security/test_router_mount_inventory.py`: pass
 - `make route-inventory-generate` + `make route-inventory-audit`: OK
 - `make fg-fast`: reached SOC sync gate and correctly required this entry
+
+---
+
+## 2026-06-12 — SOC-HIGH-003 — P0-4 Core Tenant RLS Hardening
+
+**Classification:** SOC-HIGH-003
+
+**Files changed:**
+- `migrations/postgres/0110_core_tenant_rls_hardening.sql`
+- `tools/ci/check_core_rls.py`
+- `tests/tools/test_core_rls.py`
+- `Makefile`
+
+**Reason:**
+P0-4 remediation: static analysis across all 110 SQL migrations revealed 66 non-FA tables with a `tenant_id` column but no `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` or `CREATE POLICY ..._tenant_isolation` statement. FA tables are covered dynamically by migrations 0094/0095. Agent-phase2 tables are validated by `check_agent_phase2_rls.py`. Connector tables are validated by `check_connectors_rls.py`. All remaining tenant-bearing tables were unguarded at the PostgreSQL RLS layer.
+
+Additionally, 3 tables (`evaluation_query_sets`, `evaluation_query_items`, `governance_timeline_events`) had RLS enabled but no policy — meaning with `FORCE ROW LEVEL SECURITY` in effect, all row access would be silently blocked rather than tenant-scoped.
+
+**Change description:**
+- Migration 0110: explicit `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` + `CREATE POLICY ..._tenant_isolation` for all 66 unguarded tables. All statements are idempotent (`IF to_regclass(...) IS NOT NULL`). Policy expression matches the established pattern: `tenant_id = current_setting('app.tenant_id', true)` with `WITH CHECK` enforcement.
+- `check_core_rls.py`: new static CI checker. Parses all migration SQL to build: (1) set of tables with `tenant_id`, (2) set of tables with RLS enabled, (3) set of tables with `_tenant_isolation` policy. Reports `RLS_ENABLE_MISSING` or `RLS_POLICY_MISSING` per table, hard-fails on any gap. Excludes FA tables (dynamic coverage), agent-phase2 tables, connector tables, and tables with confirmed non-standard policy names.
+- `Makefile`: `check-core-rls` target added; wired into `fg-fast` alongside `check-connectors-rls`.
+- 16 tests covering: exclusion logic, pass/fail scenarios, migration 0110 content assertions.
+
+**Security review:**
+- All tenant data tables now enforce RLS at the PostgreSQL layer — cross-tenant reads require `SET LOCAL "app.tenant_id" = '...'` to match, which is set by `auth_ctx_db_session` only after successful authentication.
+- `FORCE ROW LEVEL SECURITY` ensures table owners (superusers aside) are also filtered.
+- No application code changed; this is a pure database-layer hardening.
+- `_NONSTANDARD_POLICY_TABLES` allowlist documents the 5 tables using non-standard policy names (3 control_plane tables with abbreviated aliases, 1 append-only audit table, 1 receipts table without direct tenant_id). Each is manually verified.
+- GUC parameter confirmed as `app.tenant_id` (not `app.current_tenant_id` used in 0094 — that replay migration used a different parameter name and should be reviewed separately).
+
+**Invariants preserved:**
+- Agent-phase2 and connector tables remain under their dedicated CI checks — no coverage overlap.
+- FA tables remain under dynamic 0094/0095 migrations — no coverage overlap.
+- Existing policies are idempotent (`NOT EXISTS (SELECT 1 FROM pg_policies ...)` guard).
+
+**Validation:**
+- `python3 tools/ci/check_core_rls.py`: OK (100 tables verified)
+- 16 tests in `tests/tools/test_core_rls.py`: all pass
+- `make fg-fast`: reached SOC sync gate and correctly required this entry
