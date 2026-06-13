@@ -106,15 +106,16 @@ def test_classify_runtime_only_health_sub_paths_are_invalid_drift():
     assert set(invalid_drift) == {"GET /health/debug", "HEAD /health/debug"}
 
 
-def test_classify_runtime_only_metrics_are_public_exempt():
-    # /metrics is in ALLOWED_INTERNAL_PREFIXES (not in OpenAPI contract) but also
-    # in PUBLIC_PATHS_EXACT (Prometheus scraping needs no API key) → public_exempt.
+def test_classify_runtime_only_metrics_are_internal_allowed():
+    # P0-3: /metrics was removed from PUBLIC_PATHS_EXACT so Prometheus scrapers
+    # must now supply an API key. It remains in ALLOWED_INTERNAL_PREFIXES (not in
+    # OpenAPI contract) but is no longer publicly reachable → internal_allowed.
     routes = ["GET /metrics"]
     public_exempt, internal_allowed, invalid_drift = (
         check_route_inventory._classify_runtime_only(routes)
     )
-    assert "GET /metrics" in public_exempt
-    assert internal_allowed == []
+    assert "GET /metrics" in internal_allowed
+    assert public_exempt == []
     assert invalid_drift == []
 
 
