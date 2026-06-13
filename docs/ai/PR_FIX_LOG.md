@@ -14644,3 +14644,20 @@ All non-FA tenant-bearing tables now have database-layer RLS enforcement. Cross-
 - 16 tests in `tests/tools/test_core_rls.py`: all pass
 - `make fg-fast`: pass
 - `make fg-security`: pass
+
+## 2026-06-12 — PR 435 P0-4 Addendum: Pre-tenant assessments RLS fix
+
+### Scope
+P1 reviewer fix — `POST /ingest/assessment/orgs` pre-tenant onboarding flow blocked by missing `app.tenant_id` GUC before inserts.
+
+### Changes
+- Added `set_tenant_context` import to `api/assessments.py`
+- Called `set_tenant_context(db, effective_tenant)` in `create_org()` after `effective_tenant` is resolved, before any `db.add()` call. Applies to both tenant-bound and pre-tenant `lead:<uuid>` flows.
+
+### Security Impact
+No policies relaxed. Application brought into compliance with migration 0110 RLS enforcement. Tenant context is set from authenticated request state or a freshly generated UUID — no user input determines the namespace.
+
+### Validation
+- 15 tests in `tests/security/test_assessment_tenant_isolation.py`: pass
+- 287 assessment-related tests: pass
+- `make fg-fast`: pass

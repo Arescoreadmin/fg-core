@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from api.db import get_sessionmaker
+from api.db import get_sessionmaker, set_tenant_context
 from api.db_models import AssessmentRecord, AssessmentSchema, OrgProfile
 from api.auth_scopes.resolution import require_scopes
 
@@ -336,6 +336,7 @@ def create_org(
     # Tenant-bound callers use their real tenant; pre-tenant leads get an isolated
     # lead namespace keyed by the assessment UUID so no two leads share a namespace.
     effective_tenant = caller_tenant or f"lead:{assessment_id}"
+    set_tenant_context(db, effective_tenant)
 
     org = OrgProfile(
         org_id=org_id,

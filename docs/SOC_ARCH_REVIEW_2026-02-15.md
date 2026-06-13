@@ -2080,3 +2080,30 @@ Code review (P1 × 2, P2 × 1) on PR #435 identified three correctness issues:
 - 20 tests in `tests/tools/test_core_rls.py`: all pass
 - `make fg-fast`: pass
 - `make fg-security`: pass
+
+---
+
+## 2026-06-12 — SOC-HIGH-003 — P0-4 Addendum 2: assessments pre-tenant RLS fix
+
+**Classification:** SOC-HIGH-003
+
+**Files changed:**
+- `api/assessments.py`
+
+**Reason:**
+P1 reviewer comment on PR #435: `POST /ingest/assessment/orgs` (pre-tenant onboarding flow) creates a session via `_get_db()` without setting `app.tenant_id`. The `lead:<assessment_id>` tenant namespace is only constructed mid-request (after `assessment_id = uuid4()`). With FORCE RLS and the WITH CHECK policy on `assessments` and `org_profiles`, the INSERT was rejected because `current_setting('app.tenant_id', true) IS NOT NULL` evaluated false.
+
+**Change description:**
+- Added `set_tenant_context` import to `api/assessments.py`
+- Called `set_tenant_context(db, effective_tenant)` in `create_org()` immediately after `effective_tenant` is computed and before `db.add(org)`. This sets `app.tenant_id` for the session transaction, satisfying both `assessments` and `org_profiles` RLS WITH CHECK constraints.
+- Applies for both tenant-bound callers (real tenant_id) and pre-tenant lead flows (`lead:<uuid>`).
+
+**Security review:**
+- `set_tenant_context` is the established pattern (`api/db.py:1475`) used throughout the codebase for binding tenant context to DB sessions.
+- The tenant value `effective_tenant` is derived from the authenticated request context or from a freshly generated UUID — no user-supplied input determines the tenant namespace.
+- No policies were relaxed; the fix brings the application code into compliance with the RLS enforcement added in migration 0110.
+
+**Validation:**
+- 287 assessment-related tests pass
+- 15 tests in `tests/security/test_assessment_tenant_isolation.py`: all pass
+- `make fg-fast`: pass
