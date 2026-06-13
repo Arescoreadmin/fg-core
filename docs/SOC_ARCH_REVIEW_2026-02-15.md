@@ -1900,3 +1900,65 @@ Added two CI-safe placeholder values to both the `.env.ci` heredoc block and the
 
 **Validation:**
 - `make fg-fast`: passed locally before this commit
+
+---
+
+## 2026-06-12 — SOC-HIGH-002 — P0-2 Contract Authority Alignment: 3-bucket route classification
+
+**Classification:** SOC-HIGH-002
+
+**Files changed:**
+- `tools/ci/check_route_inventory.py`
+- `tools/ci/route_inventory_summary.json`
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+- `tests/tools/test_route_inventory_summary.py`
+
+**Reason:**
+P0-2 remediation: the route classification model used by route inventory CI was binary (allowed_internal / unauthorized). This PR adds explicit `public_exempt` / `internal_allowed` / `invalid_drift` classification. The `_classify_runtime_only()` function now returns three buckets and the summary artifact exposes both `public_exempt` and `internal_allowed` keys. An overlap guard is added to hard-fail if any `internal_allowed` route is also publicly reachable. Artifacts regenerated to reflect updated classification (50 public_exempt, 79 internal_allowed).
+
+**Change description:**
+- `_classify_runtime_only()` return type changed from 2-tuple to 3-tuple
+- Routes in `ALLOWED_INTERNAL_PREFIXES` that are also in `PUBLIC_PATHS_EXACT`/`PUBLIC_PATHS_PREFIX` are now `public_exempt` (e.g. `/metrics`, `/ui/*`)
+- Routes in `ALLOWED_INTERNAL_PREFIXES` that are NOT in public allowlists remain `internal_allowed` (e.g. `/admin/*`, `/_debug/*`)
+- `invalid_drift` replaces `unauthorized` terminology (same hard-fail behaviour)
+- `allowed_internal` key retained in summary for backward compatibility
+- Overlap guard added: hard-fail if `internal_allowed` route is publicly reachable
+
+**Security review:**
+- No auth, enforcement, or middleware logic changed
+- Classification is additive: existing `unauthorized` hard-fail is preserved as `invalid_drift`
+- `/ui/*` classification as `public_exempt` is intentional — UI layer uses session auth, not API keys
+- `/_debug/routes` correctly remains `internal_allowed` (P0-1 removed it from PUBLIC_PATHS_PREFIX)
+- Overlap guard is belt-and-suspenders — structurally impossible to trigger by construction
+
+**Validation:**
+- `make route-inventory-generate`: completed
+- `make route-inventory-audit`: OK (50 public_exempt, 79 internal_allowed)
+- All 18 tests in `tests/tools/test_route_inventory_summary.py`: passed
+- `make fg-fast`: reached SOC review sync and correctly required this SOC entry
+
+---
+
+## 2026-06-13 — SOC-HIGH-002 — P0-2 Addendum: fix vacuous overlap guard
+
+**Classification:** SOC-HIGH-002
+
+**Files changed:**
+- `tools/ci/check_route_inventory.py`
+
+**Reason:**
+Code review identified that the P0-2 overlap guard was vacuous by construction: internal-prefix routes accidentally in public allowlists were moved to `public_exempt` before the guard ran, so the guard's `internal_allowed` input was always empty for such routes. This addendum fixes the flaw.
+
+**Change description:**
+Added `INTENTIONAL_PUBLIC_INTERNAL_PREFIXES` (`/metrics`, `/ui/`) — an explicit set of which ALLOWED_INTERNAL_PREFIXES families are intentionally also publicly reachable. Any other internal-prefix route found in PUBLIC_PATHS_EXACT or PUBLIC_PATHS_PREFIX is now classified as `invalid_drift` (hard CI fail) rather than silently moved to `public_exempt`. The overlap guard in `main()` now has real enforcement power.
+
+**Security review:**
+- Net improvement: previously an accidental exposure (e.g. `/admin/foo` added to PUBLIC_PATHS_EXACT) would pass CI; now it fails CI.
+- No auth, enforcement, or middleware logic changed.
+- `/metrics` and `/ui/` remain correctly classified as `public_exempt` (intentional public-internal overlap).
+
+**Validation:**
+- `make route-inventory-audit`: OK
+- All 19 tests in `tests/tools/test_route_inventory_summary.py`: pass
+- `make fg-fast`: reached SOC sync and correctly required this entry

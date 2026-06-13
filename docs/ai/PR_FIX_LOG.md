@@ -14582,3 +14582,25 @@ P0 security remediation — remove public access to debug route inventory.
 - make fg-fast
 - make fg-security
 - python tools/ci/check_route_inventory.py
+
+## 2026-06-13 — PR 433 P0-2: Explicit route classification (public_exempt / internal_allowed / invalid_drift)
+
+### Scope
+P0-2 governance remediation — deterministic 3-bucket runtime route classification with accidental-exposure guard.
+
+### Changes
+- Split `_classify_runtime_only()` from 2-tuple to 3-tuple: `(public_exempt, internal_allowed, invalid_drift)`
+- Added `INTENTIONAL_PUBLIC_INTERNAL_PREFIXES` set: explicit allowlist of which internal-prefix families may also be publicly reachable (`/metrics`, `/ui/`)
+- Any other ALLOWED_INTERNAL_PREFIXES route found in public allowlists → `invalid_drift` (hard fail), not silently reclassified to `public_exempt`
+- Overlap guard in `main()` now has real enforcement power — not vacuous by construction
+- Updated summary artifact: emits `public_exempt`, `internal_allowed`, backward-compat `allowed_internal` alias
+- Added `test_accidental_public_internal_route_is_invalid_drift` — proves the guard fires for `/admin/foo` accidentally in PUBLIC_PATHS_EXACT
+
+### Security Impact
+Fixes vacuous overlap guard: an internal-prefix route accidentally added to public allowlists is now a hard CI fail, not a silent reclassification.
+
+### Validation
+- 19 tests in `tests/tools/test_route_inventory_summary.py`: all pass
+- `make route-inventory-audit`: OK (50 public_exempt, 79 internal_allowed, 0 invalid_drift)
+- `make fg-fast`: pass
+- `make fg-security`: pass (904 passed, 1 skipped)
