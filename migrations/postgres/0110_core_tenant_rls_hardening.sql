@@ -701,9 +701,16 @@ BEGIN
           AND tablename = 'deployment_environments'
           AND policyname = 'deployment_environments_tenant_isolation'
     ) THEN
+        -- tenant_id IS NULL denotes a platform-level (shared) environment visible
+        -- to any operator. USING allows those rows while WITH CHECK keeps writes
+        -- tenant-scoped (prevents tenants from creating platform-level rows).
         CREATE POLICY deployment_environments_tenant_isolation ON deployment_environments
-            USING (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL
-                   AND tenant_id = current_setting('app.tenant_id', true))
+            USING (
+                tenant_id IS NULL
+                OR (tenant_id IS NOT NULL
+                    AND current_setting('app.tenant_id', true) IS NOT NULL
+                    AND tenant_id = current_setting('app.tenant_id', true))
+            )
             WITH CHECK (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL
                         AND tenant_id = current_setting('app.tenant_id', true));
     END IF;
@@ -714,8 +721,12 @@ BEGIN
           AND policyname = 'deployment_events_tenant_isolation'
     ) THEN
         CREATE POLICY deployment_events_tenant_isolation ON deployment_events
-            USING (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL
-                   AND tenant_id = current_setting('app.tenant_id', true))
+            USING (
+                tenant_id IS NULL
+                OR (tenant_id IS NOT NULL
+                    AND current_setting('app.tenant_id', true) IS NOT NULL
+                    AND tenant_id = current_setting('app.tenant_id', true))
+            )
             WITH CHECK (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL
                         AND tenant_id = current_setting('app.tenant_id', true));
     END IF;
@@ -726,8 +737,12 @@ BEGIN
           AND policyname = 'deployment_health_records_tenant_isolation'
     ) THEN
         CREATE POLICY deployment_health_records_tenant_isolation ON deployment_health_records
-            USING (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL
-                   AND tenant_id = current_setting('app.tenant_id', true))
+            USING (
+                tenant_id IS NULL
+                OR (tenant_id IS NOT NULL
+                    AND current_setting('app.tenant_id', true) IS NOT NULL
+                    AND tenant_id = current_setting('app.tenant_id', true))
+            )
             WITH CHECK (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL
                         AND tenant_id = current_setting('app.tenant_id', true));
     END IF;
@@ -738,8 +753,12 @@ BEGIN
           AND policyname = 'deployment_records_tenant_isolation'
     ) THEN
         CREATE POLICY deployment_records_tenant_isolation ON deployment_records
-            USING (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL
-                   AND tenant_id = current_setting('app.tenant_id', true))
+            USING (
+                tenant_id IS NULL
+                OR (tenant_id IS NOT NULL
+                    AND current_setting('app.tenant_id', true) IS NOT NULL
+                    AND tenant_id = current_setting('app.tenant_id', true))
+            )
             WITH CHECK (tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL
                         AND tenant_id = current_setting('app.tenant_id', true));
     END IF;

@@ -332,19 +332,19 @@ def _emit_report_event(
         )
 
 
-async def _generate_report_core_async(report_id: str) -> None:
+async def _generate_report_core_async(report_id: str, tenant_id: str) -> None:
     """Pure async wrapper — no semaphore; timeout-guarded executor call only."""
     loop = asyncio.get_event_loop()
     try:
         await asyncio.wait_for(
-            loop.run_in_executor(None, _do_generate_report, report_id),
+            loop.run_in_executor(None, _do_generate_report, report_id, tenant_id),
             timeout=_REPORT_GENERATION_TIMEOUT_S,
         )
     except asyncio.TimeoutError:
-        _handle_timeout(report_id)
+        _handle_timeout(report_id, tenant_id)
 
 
-def _handle_timeout(report_id: str) -> None:
+def _handle_timeout(report_id: str, tenant_id: str) -> None:
     """Mark the report as failed due to timeout and emit the failure audit event.
 
     Guards against overwriting a terminal state that may have been written
@@ -353,6 +353,7 @@ def _handle_timeout(report_id: str) -> None:
     SessionLocal = get_sessionmaker()
     db = SessionLocal()
     try:
+        set_tenant_context(db, tenant_id)
         report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
         if report:
             # Terminal-state guard: never overwrite a final outcome.
@@ -386,17 +387,18 @@ def _handle_timeout(report_id: str) -> None:
         db.close()
 
 
-def _do_generate_report(report_id: str) -> None:
+def _do_generate_report(report_id: str, tenant_id: str) -> None:
     """
     Blocking report generation — called via BackgroundTasks executor.
     Opens its own DB session (the request session is closed by the time this runs).
+    tenant_id is passed by the caller so RLS GUC can be set before the first query.
     """
     SessionLocal = get_sessionmaker()
     db = SessionLocal()
     start_ms = int(time.monotonic() * 1000)
-    tenant_id: str = "unknown"
     assessment_id: str | None = None
     try:
+        set_tenant_context(db, tenant_id)
         report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
         if report is None:
             log.error("reports.generate report_not_found id=%s", report_id)
@@ -412,7 +414,7 @@ def _do_generate_report(report_id: str) -> None:
             )
             return
 
-        tenant_id = report.tenant_id or "unknown"
+        tenant_id = report.tenant_id or tenant_id
         assessment_id = report.assessment_id
 
         report.status = "generating"
@@ -581,7 +583,7 @@ def _do_generate_report(report_id: str) -> None:
         db.close()
 
 
-def _generate_report_sync(report_id: str) -> None:
+def _generate_report_sync(report_id: str, tenant_id: str) -> None:
     """
     BackgroundTask entry point: acquires the concurrency semaphore in thread
     context (loop-safe), manages counters, then drives async generation.
@@ -605,7 +607,7 @@ def _generate_report_sync(report_id: str) -> None:
         _queued_count -= 1
         _running_count += 1
     try:
-        asyncio.run(_generate_report_core_async(report_id))
+        asyncio.run(_generate_report_core_async(report_id, tenant_id))
     finally:
         with _STATUS_LOCK:
             _running_count -= 1
@@ -702,7 +704,7 @@ def generate_report(
         state=ReportJobState.QUEUED,
     )
 
-    background_tasks.add_task(_generate_report_sync, report_id)
+    background_tasks.add_task(_generate_report_sync, report_id, tenant_id)
 
     log.info(
         "reports.enqueued report_id=%s assessment_id=%s type=%s tenant_id=%s",
@@ -1161,7 +1163,9 @@ def regenerate_report(
         new_report.id,
         new_report.assessment_id,
     )
-    background_tasks.add_task(_generate_report_sync, new_report_id)
+    background_tasks.add_task(
+        _generate_report_sync, new_report_id, new_report.tenant_id
+    )
     return RegenerateReportResponse(
         report_id=new_report_id,
         previous_report_id=report.id,

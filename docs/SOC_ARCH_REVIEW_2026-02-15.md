@@ -2043,3 +2043,40 @@ Additionally, 3 tables (`evaluation_query_sets`, `evaluation_query_items`, `gove
 - `python3 tools/ci/check_core_rls.py`: OK (100 tables verified)
 - 16 tests in `tests/tools/test_core_rls.py`: all pass
 - `make fg-fast`: reached SOC sync gate and correctly required this entry
+
+---
+
+## 2026-06-12 — SOC-HIGH-003 — P0-4 Addendum: Reviewer fixes (deployment NULL-tenant, reports worker RLS, checker regression detection)
+
+**Classification:** SOC-HIGH-003
+
+**Files changed:**
+- `migrations/postgres/0110_core_tenant_rls_hardening.sql`
+- `api/reports_engine.py`
+- `tools/ci/check_core_rls.py`
+- `tests/tools/test_core_rls.py`
+
+**Reason:**
+Code review (P1 × 2, P2 × 1) on PR #435 identified three correctness issues:
+
+1. **Deployment NULL-tenant rows (P1):** `deployment_records`, `deployment_environments`, `deployment_events`, `deployment_health_records` all support `tenant_id IS NULL` for platform-level (shared) rows. `services/deployment/store.py` queries with `(tenant_id == t) | (tenant_id IS NULL)`. The original USING policy's `tenant_id IS NOT NULL` predicate hid these rows, breaking platform environment visibility.
+
+2. **Reports background worker sessions (P1):** `_do_generate_report` and `_handle_timeout` in `api/reports_engine.py` open fresh DB sessions without setting `app.tenant_id`. Under FORCE RLS, the initial `ReportRecord` lookup by `report_id` returns no rows, causing silent `report_not_found` errors. The fix passes `tenant_id` through the call chain and calls `set_tenant_context()` before the first query.
+
+3. **Checker doesn't track DROP/DISABLE regressions (P2):** `check_core_rls.py` unioned all historical CREATE POLICY / ENABLE statements; a later migration disabling or dropping a policy would still pass. Fixed by per-file ordered processing: ENABLE/DISABLE tracked positionally (last wins); DROP+CREATE in the same file treated as idempotent re-creation; DROP without CREATE in the same file removes table from effective set.
+
+**Change description:**
+- Migration 0110: 4 deployment table policies updated — USING allows `tenant_id IS NULL` (platform rows readable); WITH CHECK stays strict (only tenant-scoped writes allowed).
+- `reports_engine.py`: `_generate_report_sync`, `_generate_report_core_async`, `_do_generate_report`, `_handle_timeout` all now take `tenant_id: str` parameter. `set_tenant_context(db, tenant_id)` called at the start of each worker session before any query. Both `generate_report()` and `regenerate_report()` call sites updated.
+- `check_core_rls.py`: replaces union-all approach with per-file ordered processing. DISABLE/DROP regression detection added. 4 new tests covering regression scenarios.
+
+**Security review:**
+- Deployment USING change: NULL-tenant rows are platform rows created by operators, not by tenants. WITH CHECK still prevents tenant sessions from writing platform rows. Net: no tenant isolation weakened.
+- Reports worker: `tenant_id` is passed from the request context (known at enqueue time), so the worker always sets the correct tenant before querying. No cross-tenant access introduced.
+- Checker improvement: strengthens future regression detection without changing existing enforcement logic.
+
+**Validation:**
+- `python3 tools/ci/check_core_rls.py`: OK (100 tables verified)
+- 20 tests in `tests/tools/test_core_rls.py`: all pass
+- `make fg-fast`: pass
+- `make fg-security`: pass

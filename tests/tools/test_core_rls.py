@@ -119,6 +119,67 @@ def test_main_reports_both_enable_and_policy_missing(tmp_path, monkeypatch, caps
 
 
 # ---------------------------------------------------------------------------
+# P2: DISABLE / DROP regression detection
+# ---------------------------------------------------------------------------
+
+
+def test_later_disable_rls_is_caught(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_setup.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS tbl (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+        "ALTER TABLE tbl ENABLE ROW LEVEL SECURITY;\n"
+        "CREATE POLICY tbl_tenant_isolation ON tbl USING (tenant_id = current_setting('app.tenant_id', true));\n"
+    )
+    (sql_dir / "0002_regression.sql").write_text(
+        "ALTER TABLE tbl DISABLE ROW LEVEL SECURITY;\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 1
+
+
+def test_drop_policy_without_recreate_is_caught(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_setup.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS tbl (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+        "ALTER TABLE tbl ENABLE ROW LEVEL SECURITY;\n"
+        "CREATE POLICY tbl_tenant_isolation ON tbl USING (tenant_id = current_setting('app.tenant_id', true));\n"
+    )
+    (sql_dir / "0002_regression.sql").write_text(
+        "DROP POLICY IF EXISTS tbl_tenant_isolation ON tbl;\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 1
+
+
+def test_drop_then_recreate_in_same_file_is_ok(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_setup.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS tbl (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+        "ALTER TABLE tbl ENABLE ROW LEVEL SECURITY;\n"
+        "DROP POLICY IF EXISTS tbl_tenant_isolation ON tbl;\n"
+        "CREATE POLICY tbl_tenant_isolation ON tbl USING (tenant_id = current_setting('app.tenant_id', true));\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 0
+
+
+def test_disable_then_reenable_in_same_file_is_ok(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_setup.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS tbl (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+        "ALTER TABLE tbl DISABLE ROW LEVEL SECURITY;\n"
+        "ALTER TABLE tbl ENABLE ROW LEVEL SECURITY;\n"
+        "CREATE POLICY tbl_tenant_isolation ON tbl USING (tenant_id = current_setting('app.tenant_id', true));\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 0
+
+
+# ---------------------------------------------------------------------------
 # Migration 0110 coverage assertion
 # ---------------------------------------------------------------------------
 

@@ -30,6 +30,14 @@ _RLS_POLICY_RE = re.compile(
     r"CREATE POLICY\s+(\w+)_tenant_isolation\s+ON\s+\1",
     re.IGNORECASE,
 )
+_RLS_DISABLE_RE = re.compile(
+    r"ALTER TABLE\s+(?:IF EXISTS\s+)?(\w+)\s+DISABLE ROW LEVEL SECURITY",
+    re.IGNORECASE,
+)
+_DROP_POLICY_RE = re.compile(
+    r"DROP POLICY\s+(?:IF EXISTS\s+)?(\w+_tenant_isolation)\s+ON\s+(\w+)",
+    re.IGNORECASE,
+)
 
 # Tables that use non-standard policy names (e.g., abbreviated aliases or
 # append-only multi-policy patterns). Each entry is validated manually and
@@ -94,23 +102,40 @@ def main() -> int:
         print(f"MISSING migrations directory: {MIGRATIONS_DIR}")
         return 1
 
-    bodies: list[str] = []
+    all_sql = ""
+    rls_enabled: set[str] = set()
+    rls_policies: set[str] = set()
+
     for p in sorted(MIGRATIONS_DIR.glob("*.sql")):
-        bodies.append(p.read_text(encoding="utf-8"))
-    all_sql = "\n".join(bodies)
+        sql = p.read_text(encoding="utf-8")
+        all_sql += sql + "\n"
+
+        # Per-file RLS enable/disable — process in position order so the
+        # last statement in the file wins (handles DISABLE then re-ENABLE).
+        enable_ops: list[tuple[int, bool, str]] = []
+        for m in _RLS_ENABLE_RE.finditer(sql):
+            enable_ops.append((m.start(), True, m.group(1)))
+        for m in _RLS_DISABLE_RE.finditer(sql):
+            enable_ops.append((m.start(), False, m.group(1)))
+        for _, enabled, table in sorted(enable_ops):
+            if enabled:
+                rls_enabled.add(table)
+            else:
+                rls_enabled.discard(table)
+
+        # Per-file policy create/drop — a DROP followed by CREATE in the same
+        # file is the idempotent recreation pattern (net effect: policy exists).
+        # A DROP with no subsequent CREATE in the same file is a regression.
+        created_in_file: set[str] = {m.group(1) for m in _RLS_POLICY_RE.finditer(sql)}
+        dropped_in_file: set[str] = {m.group(2) for m in _DROP_POLICY_RE.finditer(sql)}
+
+        rls_policies.update(created_in_file)
+        rls_policies -= dropped_in_file - created_in_file  # dropped but not recreated
 
     tables_with_tenant: set[str] = set()
     for m in _CREATE_TABLE_RE.finditer(all_sql):
         if "tenant_id" in m.group(2):
             tables_with_tenant.add(m.group(1))
-
-    rls_enabled: set[str] = set()
-    for m in _RLS_ENABLE_RE.finditer(all_sql):
-        rls_enabled.add(m.group(1))
-
-    rls_policies: set[str] = set()
-    for m in _RLS_POLICY_RE.finditer(all_sql):
-        rls_policies.add(m.group(1))
 
     failures: list[str] = []
     for table in sorted(tables_with_tenant):
