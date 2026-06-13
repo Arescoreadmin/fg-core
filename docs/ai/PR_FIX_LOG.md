@@ -14645,6 +14645,27 @@ All non-FA tenant-bearing tables now have database-layer RLS enforcement. Cross-
 - `make fg-fast`: pass
 - `make fg-security`: pass
 
+## 2026-06-13 — PR 436 P0-4A: FA Tenant Context Authority Alignment & Report Job Signature Remediation
+
+### Scope
+P0-4A — two post-P0-4 issues: (1) all FA table RLS policies referenced the wrong GUC (`app.current_tenant_id`, never set by application, effectively deny-all); (2) 18 tests failing because report engine functions gained a required `tenant_id` parameter in P0-4.
+
+### Changes
+- New migration `0111_fa_rls_guc_authority_alignment.sql`: drops 7 abbreviated non-standard policy names from migrations 0108/0109; dynamic loop recreates `{table}_tenant_isolation` policies for all `fa_*` tables with `tenant_id` using the correct GUC `app.tenant_id` and the 0110 fail-closed pattern.
+- `tools/ci/check_core_rls.py`: adds `_WRONG_GUC_RE` to detect `app.current_tenant_id` in migration SQL; strips SQL comments before scanning; adds `_LEGACY_GUC_PATCHED_MIGRATIONS` exempt set for the 9 historical migrations fixed by 0111 at runtime.
+- `tests/tools/test_core_rls.py`: 6 new tests covering wrong GUC detection, comment stripping, legacy exempt set, and migration 0111 coverage assertions (26 total).
+- `tests/test_report_jobs.py`: 5 call sites updated to pass `tenant_id` to `_do_generate_report`, `_handle_timeout`, `_generate_report_core_async`.
+- `tests/test_report_hardening.py`: 8 call sites updated similarly.
+
+### Security Impact
+FA tenant isolation was silently broken (deny-all) due to wrong GUC name. Migration 0111 restores correct tenant scoping using `app.tenant_id`. CI now hard-fails if any migration introduces `app.current_tenant_id` in executable SQL. No policy bypass added; no isolation weakened.
+
+### Validation
+- `python3 tools/ci/check_core_rls.py`: OK (100 tables verified)
+- 26 tests in `tests/tools/test_core_rls.py`: all pass
+- 49 tests in `tests/test_report_jobs.py` + `tests/test_report_hardening.py`: all pass
+- `make fg-fast`: pass
+
 ## 2026-06-12 — PR 435 P0-4 Addendum: Pre-tenant assessments RLS fix
 
 ### Scope

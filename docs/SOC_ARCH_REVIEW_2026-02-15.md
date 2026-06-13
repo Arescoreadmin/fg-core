@@ -2107,3 +2107,39 @@ P1 reviewer comment on PR #435: `POST /ingest/assessment/orgs` (pre-tenant onboa
 - 287 assessment-related tests pass
 - 15 tests in `tests/security/test_assessment_tenant_isolation.py`: all pass
 - `make fg-fast`: pass
+
+---
+
+## 2026-06-13 — SOC-HIGH-004 — P0-4A: FA Tenant Context Authority Alignment & Report Job Signature Remediation
+
+**Classification:** SOC-HIGH-004
+
+**Files changed:**
+- `migrations/postgres/0111_fa_rls_guc_authority_alignment.sql`
+- `tools/ci/check_core_rls.py`
+- `tests/tools/test_core_rls.py`
+- `tests/test_report_jobs.py`
+- `tests/test_report_hardening.py`
+
+**Reason:**
+Post-P0-4 audit identified two issues:
+
+1. **RLS GUC mismatch (security):** Migrations 0093–0097, 0105, 0107, 0108, 0109 created tenant_isolation policies referencing `current_setting('app.current_tenant_id', true)`. The application exclusively sets `app.tenant_id` (via `set_tenant_context()` in `api/db.py` and `_set_pg_tenant()` in `api/auth_scopes/store.py`). Because `app.current_tenant_id` is never set, `current_setting('app.current_tenant_id', true)` evaluates to NULL, making all affected FA table policies silent deny-all.
+
+2. **Report job signature drift (correctness):** P0-4 updated `_do_generate_report`, `_handle_timeout`, and `_generate_report_core_async` to require a `tenant_id: str` parameter, but 18 tests in `test_report_jobs.py` and `test_report_hardening.py` still called the old single-argument signatures.
+
+**Change description:**
+- `migrations/postgres/0111_fa_rls_guc_authority_alignment.sql`: (1) drops the seven abbreviated non-standard policy names introduced by migrations 0108/0109 (`fa_tis_tenant_isolation`, `fa_til_tenant_isolation`, `fa_tdm_tenant_isolation`, `fa_app_tenant_isolation`, `fa_tc_tenant_isolation`, `fa_drr_tenant_isolation`, `fa_cocr_tenant_isolation`); (2) dynamic loop recreates standard `{table}_tenant_isolation` policies for all `fa_*` tables with `tenant_id`, using the correct GUC `app.tenant_id` and the 0110 fail-closed pattern (both USING and WITH CHECK; NOT NULL guard; no bypass).
+- `tools/ci/check_core_rls.py`: adds `_WRONG_GUC_RE` to detect `app.current_tenant_id` in migration SQL (strips single-line comments to avoid false positives); adds `_LEGACY_GUC_PATCHED_MIGRATIONS` exempt set for the nine historical migrations fixed by 0111 at runtime; adds `_SQL_LINE_COMMENT_RE` for comment stripping.
+- `tests/test_report_jobs.py` and `tests/test_report_hardening.py`: all 18 failing call sites updated to pass `tenant_id` to `_do_generate_report`, `_handle_timeout`, and `_generate_report_core_async`.
+
+**Security review:**
+- The RLS fix closes a silent deny-all for all FA tables — previously those tables were effectively inaccessible to any tenant, which means FA functionality was broken (not a relaxation of isolation). The corrected policies use the same fail-closed pattern as migration 0110: `tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL AND tenant_id = current_setting(...)`. No bypass permitted.
+- The `_LEGACY_GUC_PATCHED_MIGRATIONS` exempt set in the CI checker is bounded and explicitly enumerated. Any new migration using the wrong GUC will trigger the WRONG_GUC_NAME failure.
+- The test fixes are mechanical signature alignment — no business logic changed.
+
+**Validation:**
+- `python3 tools/ci/check_core_rls.py`: OK (100 tables verified)
+- 26 tests in `tests/tools/test_core_rls.py`: all pass
+- 49 tests in `tests/test_report_jobs.py` + `tests/test_report_hardening.py`: all pass
+- `make fg-fast`: pass

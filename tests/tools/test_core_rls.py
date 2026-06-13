@@ -236,3 +236,99 @@ def test_migration_0110_covers_evaluation_and_timeline_policy_gaps():
         assert f"CREATE POLICY {table}_tenant_isolation" in sql, (
             f"{table} missing tenant_isolation policy in migration 0110"
         )
+
+
+# ---------------------------------------------------------------------------
+# P3: Wrong GUC name detection (app.current_tenant_id must not appear)
+# ---------------------------------------------------------------------------
+
+
+def test_wrong_guc_in_new_migration_is_caught(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_setup.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS tbl (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+        "ALTER TABLE tbl ENABLE ROW LEVEL SECURITY;\n"
+        "CREATE POLICY tbl_tenant_isolation ON tbl USING (tenant_id = current_setting('app.current_tenant_id', true));\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 1
+
+
+def test_wrong_guc_in_plpgsql_execute_string_is_caught(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_setup.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS tbl (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+        "ALTER TABLE tbl ENABLE ROW LEVEL SECURITY;\n"
+        "CREATE POLICY tbl_tenant_isolation ON tbl USING (tenant_id = current_setting('app.tenant_id', true));\n"
+    )
+    # New migration with the wrong GUC inside a PL/pgSQL EXECUTE string.
+    (sql_dir / "0002_regression.sql").write_text(
+        "DO $$ BEGIN\n"
+        "  EXECUTE 'CREATE POLICY bad_policy ON tbl USING (tenant_id = current_setting(''app.current_tenant_id'', true))';\n"
+        "END $$;\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 1
+
+
+def test_wrong_guc_in_comment_is_not_flagged(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    (sql_dir / "0001_setup.sql").write_text(
+        "-- Fixes policies that used app.current_tenant_id (wrong GUC).\n"
+        "CREATE TABLE IF NOT EXISTS tbl (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+        "ALTER TABLE tbl ENABLE ROW LEVEL SECURITY;\n"
+        "CREATE POLICY tbl_tenant_isolation ON tbl USING (tenant_id = current_setting('app.tenant_id', true));\n"
+    )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 0
+
+
+def test_legacy_guc_patched_migrations_are_exempt(tmp_path, monkeypatch):
+    sql_dir = tmp_path / "postgres"
+    sql_dir.mkdir()
+    for fname in check_core_rls._LEGACY_GUC_PATCHED_MIGRATIONS:
+        (sql_dir / fname).write_text(
+            "CREATE TABLE IF NOT EXISTS fa_tbl (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL);\n"
+            "CREATE POLICY fa_tbl_tenant_isolation ON fa_tbl USING (tenant_id = current_setting('app.current_tenant_id', true));\n"
+        )
+    monkeypatch.setattr(check_core_rls, "MIGRATIONS_DIR", sql_dir)
+    assert check_core_rls.main() == 0
+
+
+# ---------------------------------------------------------------------------
+# Migration 0111 coverage assertion
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0111_drops_abbreviated_policy_names():
+    sql = (
+        check_core_rls.MIGRATIONS_DIR / "0111_fa_rls_guc_authority_alignment.sql"
+    ).read_text()
+    for policy in (
+        "fa_tis_tenant_isolation",
+        "fa_til_tenant_isolation",
+        "fa_tdm_tenant_isolation",
+        "fa_app_tenant_isolation",
+        "fa_tc_tenant_isolation",
+        "fa_drr_tenant_isolation",
+        "fa_cocr_tenant_isolation",
+    ):
+        assert f"DROP POLICY IF EXISTS {policy}" in sql, (
+            f"0111 missing DROP for {policy}"
+        )
+
+
+def test_migration_0111_uses_correct_guc():
+    sql = (
+        check_core_rls.MIGRATIONS_DIR / "0111_fa_rls_guc_authority_alignment.sql"
+    ).read_text()
+    import re
+
+    sql_code = re.sub(r"--[^\n]*", "", sql)
+    assert "app.current_tenant_id" not in sql_code, (
+        "0111 must not reference app.current_tenant_id in executable SQL"
+    )
+    assert "app.tenant_id" in sql_code, "0111 must reference app.tenant_id"

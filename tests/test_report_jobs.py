@@ -280,7 +280,7 @@ class TestDoGenerateReportSuccess:
                 return_value=mock_resp,
             ),
         ):
-            engine_mod._do_generate_report(report_id)
+            engine_mod._do_generate_report(report_id, tenant_id)
 
         return auditor, report
 
@@ -351,7 +351,7 @@ class TestDoGenerateReportFailure:
                 side_effect=ProviderCallError("PROVIDER_ERROR", "provider down"),
             ),
         ):
-            engine_mod._do_generate_report(report_id)
+            engine_mod._do_generate_report(report_id, "tenant-A")
 
         return auditor, report
 
@@ -403,7 +403,7 @@ class TestHandleTimeout:
             ),
             patch.object(engine_mod, "get_auditor", return_value=auditor),
         ):
-            engine_mod._handle_timeout("r-020")
+            engine_mod._handle_timeout("r-020", "tenant-A")
 
         assert report.status == "failed"
         assert report.error_message == REPORT_GENERATION_TIMEOUT
@@ -426,7 +426,7 @@ class TestHandleTimeout:
             ),
             patch.object(engine_mod, "get_auditor", return_value=auditor),
         ):
-            engine_mod._handle_timeout("r-021")
+            engine_mod._handle_timeout("r-021", "tenant-A")
 
         assert any(
             d.get("reason_code") == REPORT_GENERATION_TIMEOUT
@@ -445,8 +445,8 @@ class TestHandleTimeout:
                     side_effect=asyncio.TimeoutError,
                 ),
             ):
-                await engine_mod._generate_report_core_async("r-030")
-                mock_timeout.assert_called_once_with("r-030")
+                await engine_mod._generate_report_core_async("r-030", "tenant-A")
+                mock_timeout.assert_called_once_with("r-030", "tenant-A")
 
         asyncio.run(_test())
 
