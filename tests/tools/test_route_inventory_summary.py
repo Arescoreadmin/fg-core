@@ -18,8 +18,12 @@ def test_classify_runtime_only_all_allowed():
         "GET /control/testing/health",
         "GET /_debug/routes",
     ]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
-    assert invalid_drift == [], f"expected no invalid_drift routes, got: {invalid_drift}"
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
+    assert invalid_drift == [], (
+        f"expected no invalid_drift routes, got: {invalid_drift}"
+    )
     assert set(public_exempt + internal_allowed) == set(routes)
 
 
@@ -27,15 +31,23 @@ def test_classify_runtime_only_ai_routes_are_invalid_drift():
     # /ai/ and /ai-plane/ are no longer allowed_internal;
     # those routes belong in the contract (contracts_gen_core.py FG_AI_PLANE_ENABLED=1).
     routes = ["POST /ai/infer", "GET /ai-plane/policies", "GET /ai-plane/inference"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
-    assert public_exempt == [], f"expected no public_exempt for /ai* paths, got: {public_exempt}"
-    assert internal_allowed == [], f"expected no internal_allowed for /ai* paths, got: {internal_allowed}"
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
+    assert public_exempt == [], (
+        f"expected no public_exempt for /ai* paths, got: {public_exempt}"
+    )
+    assert internal_allowed == [], (
+        f"expected no internal_allowed for /ai* paths, got: {internal_allowed}"
+    )
     assert set(invalid_drift) == set(routes)
 
 
 def test_classify_runtime_only_unauthorized():
     routes = ["GET /secret/endpoint", "POST /unknown/route"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert public_exempt == []
     assert internal_allowed == []
     assert set(invalid_drift) == set(routes)
@@ -43,7 +55,9 @@ def test_classify_runtime_only_unauthorized():
 
 def test_classify_runtime_only_mixed():
     routes = ["GET /admin/keys", "GET /unknown/route"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert "GET /admin/keys" in internal_allowed
     assert "GET /unknown/route" in invalid_drift
     assert len(internal_allowed) == 1
@@ -53,13 +67,17 @@ def test_classify_runtime_only_mixed():
 def test_classify_runtime_only_prefix_exact_match():
     # path exactly equals prefix.rstrip("/")
     routes = ["GET /admin"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert "GET /admin" in internal_allowed
     assert invalid_drift == []
 
 
 def test_classify_runtime_only_empty():
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only([])
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only([])
+    )
     assert public_exempt == []
     assert internal_allowed == []
     assert invalid_drift == []
@@ -69,7 +87,9 @@ def test_classify_runtime_only_health_routes_are_public_exempt():
     # GET /health and HEAD /health are explicit ALLOWED_RUNTIME_ONLY_ROUTES.
     # They are public (in PUBLIC_PATHS_EXACT) and not in contract — public_exempt.
     routes = ["GET /health", "HEAD /health"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert set(public_exempt) == {"GET /health", "HEAD /health"}
     assert internal_allowed == []
     assert invalid_drift == []
@@ -78,7 +98,9 @@ def test_classify_runtime_only_health_routes_are_public_exempt():
 def test_classify_runtime_only_health_sub_paths_are_invalid_drift():
     # Exact-route matching must NOT cover sub-paths.
     routes = ["GET /health/debug", "HEAD /health/debug"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert public_exempt == []
     assert internal_allowed == []
     assert set(invalid_drift) == {"GET /health/debug", "HEAD /health/debug"}
@@ -88,7 +110,9 @@ def test_classify_runtime_only_metrics_are_public_exempt():
     # /metrics is in ALLOWED_INTERNAL_PREFIXES (not in OpenAPI contract) but also
     # in PUBLIC_PATHS_EXACT (Prometheus scraping needs no API key) → public_exempt.
     routes = ["GET /metrics"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert "GET /metrics" in public_exempt
     assert internal_allowed == []
     assert invalid_drift == []
@@ -98,7 +122,9 @@ def test_classify_runtime_only_ui_routes_are_public_exempt():
     # /ui/ is in ALLOWED_INTERNAL_PREFIXES (not in OpenAPI contract) but /ui is in
     # PUBLIC_PATHS_PREFIX (UI layer uses session auth, not API keys) → public_exempt.
     routes = ["GET /ui/dashboard", "POST /ui/data"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert set(public_exempt) == set(routes)
     assert internal_allowed == []
     assert invalid_drift == []
@@ -107,7 +133,9 @@ def test_classify_runtime_only_ui_routes_are_public_exempt():
 def test_classify_runtime_only_admin_routes_are_internal_allowed():
     # /admin/* is not in any public allowlist → internal_allowed (auth-required).
     routes = ["GET /admin/keys", "POST /admin/users"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert public_exempt == []
     assert set(internal_allowed) == set(routes)
     assert invalid_drift == []
@@ -117,7 +145,9 @@ def test_classify_runtime_only_debug_route_is_internal_allowed():
     # /_debug/routes is not in any public allowlist (P0-1 fix removed it from
     # PUBLIC_PATHS_PREFIX) → internal_allowed.
     routes = ["GET /_debug/routes"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert public_exempt == []
     assert internal_allowed == ["GET /_debug/routes"]
     assert invalid_drift == []
@@ -129,16 +159,22 @@ def test_internal_allowed_overlap_guard_is_empty():
     routes = ["GET /admin/keys", "GET /_debug/routes", "POST /dev/seed"]
     _, internal_allowed, _ = check_route_inventory._classify_runtime_only(routes)
     overlap = [
-        r for r in internal_allowed
-        if check_route_inventory._is_public_reachable(r.split(" ", 1)[1] if " " in r else r)
+        r
+        for r in internal_allowed
+        if check_route_inventory._is_public_reachable(
+            r.split(" ", 1)[1] if " " in r else r
+        )
     ]
-    assert overlap == [], f"internal_allowed routes must not be publicly reachable: {overlap}"
+    assert overlap == [], (
+        f"internal_allowed routes must not be publicly reachable: {overlap}"
+    )
 
 
 def test_accidental_public_internal_route_is_invalid_drift(monkeypatch):
     # If /admin/foo is accidentally added to PUBLIC_PATHS_EXACT, it must be
     # classified as invalid_drift (hard fail) — NOT silently moved to public_exempt.
     from api.security import public_paths as pp
+
     original = pp.PUBLIC_PATHS_EXACT
     monkeypatch.setattr(
         check_route_inventory,
@@ -146,7 +182,9 @@ def test_accidental_public_internal_route_is_invalid_drift(monkeypatch):
         original + ("/admin/foo",),
     )
     routes = ["GET /admin/foo"]
-    public_exempt, internal_allowed, invalid_drift = check_route_inventory._classify_runtime_only(routes)
+    public_exempt, internal_allowed, invalid_drift = (
+        check_route_inventory._classify_runtime_only(routes)
+    )
     assert "GET /admin/foo" in invalid_drift, (
         "accidental internal route in public allowlist must be invalid_drift, not public_exempt"
     )
