@@ -2199,3 +2199,37 @@ Following P0-5 commit, plane registry checker (`test_plane_registry_checker_pass
 - `python tools/ci/check_db_dependency.py`: OK (no violations)
 - 45 tests in `tests/security/test_entitlements.py`: all pass
 - `make route-inventory-generate`: OK
+
+**Addendum — P0-6A Trust Arc Persistence & Delivery Foundation (2026-06-14):**
+Activated dormant trust arc infrastructure (migrations 0108/0109 tables existed but had zero ORM models, zero production callers, zero delivery routes). Created:
+- `api/db_models_trust_arc.py`: ORM models for all four tables (`fa_trust_intelligence_snapshots`, `fa_auditor_proof_packages`, `fa_trust_certifications`, `fa_trust_decision_memory`), append-only (no UPDATE/DELETE).
+- `services/trust_arc/orchestrator.py`: non-blocking orchestration layer with `generate_and_persist_trust_arc()` (snapshot + proof + cert) and `persist_decision_memory()`; caller owns DB transaction; absent signing key returns `{skipped: True}` without interrupting host workflow.
+- `api/trust_arc.py`: four delivery routes under `/field-assessment/engagements/{engagement_id}/trust-arc/` — `GET intelligence-snapshot`, `GET proof-package`, `GET certification` (all `governance:read`), `POST rebuild` (`governance:write`, internal/governance-only). Each GET returns 404 via `api_error("TRUST_ARC_NOT_FOUND")` when no record found. `POST rebuild` returns 503 if signing key absent.
+- Wired orchestrator into `services/verification_bundle/bundle_service.py` (trust arc generated on every bundle creation, non-blocking try/except) and `api/field_assessment.py` `qa_approve_report_route` (decision memory persisted on QA approval, non-blocking).
+- Registered `trust_arc_router` in both `build_app()` and `build_contract_app()` in `api/main.py`; `api/db_models_trust_arc` added to `_ensure_models_imported()` in `api/db.py`.
+- Route inventory, plane registry snapshot, contract routes, and topology hash regenerated; OpenAPI contract regenerated and authority markers refreshed.
+
+**Files changed:**
+- `api/db_models_trust_arc.py` (new)
+- `services/trust_arc/__init__.py` (new)
+- `services/trust_arc/orchestrator.py` (new)
+- `api/trust_arc.py` (new)
+- `api/main.py` (router import + include_router in both app builders)
+- `api/db.py` (`_ensure_models_imported` extended)
+- `services/verification_bundle/bundle_service.py` (non-blocking trust arc activation on bundle persist)
+- `api/field_assessment.py` (`qa_approve_report_route`: non-blocking decision memory persist)
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` (4 new routes)
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `schemas/api/openapi.json` (contract authority markers refreshed)
+
+**Security review:**
+- All four delivery routes require `governance:read` or `governance:write` scope via `require_scopes()`; tenant resolution via `_resolve_caller_tenant()` (pattern recognized by plane registry AST checker).
+- `POST /trust-arc/rebuild` is governance/admin-only (`governance:write`); not customer-facing, not portal-facing.
+- Orchestrator is non-blocking: absent `FG_EVIDENCE_SIGNING_KEY_B64` → returns `{skipped: True}` without touching DB. Any unexpected exception is caught and logged; host workflows (bundle generation, QA approval) are never interrupted by trust arc failures.
+- All trust arc tables are append-only; no UPDATE or DELETE operations issued by the service layer.
+
+**Validation:**
+- `PYTHONPATH=. python tools/ci/check_db_dependency.py`: OK (no violations)
+- `PYTHONPATH=. python tools/ci/check_plane_registry.py`: OK
+- `make route-inventory-generate`: OK (4 new routes classified)
+- `make contract-authority-refresh`: OK
+- `make fg-fast`: OK

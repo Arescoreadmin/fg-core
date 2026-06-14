@@ -87,6 +87,7 @@ from api.governance_graph import router as governance_graph_router
 from api.governance_workflows import router as governance_workflows_router
 from api.connectors_msgraph_report import router as connectors_msgraph_report_router
 from api.field_assessment import router as field_assessment_router
+from api.trust_arc import router as trust_arc_router
 from api.portal import portal_router
 from api.entitlements import (
     router as entitlements_router,
@@ -663,6 +664,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(governance_graph_router)
     app.include_router(governance_workflows_router)
     app.include_router(field_assessment_router)
+    app.include_router(trust_arc_router)
     app.include_router(portal_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
@@ -1086,6 +1088,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(governance_graph_router)
     app.include_router(governance_workflows_router)
     app.include_router(field_assessment_router)
+    app.include_router(trust_arc_router)
     app.include_router(portal_router)
     app.include_router(connectors_msgraph_report_router)
     app.include_router(rag_retrieval_policy_router)

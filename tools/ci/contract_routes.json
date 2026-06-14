@@ -1832,6 +1832,30 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/trust-arc/certification",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/trust-arc/intelligence-snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/trust-arc/proof-package",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/trust-arc/rebuild",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/verification-bundle",
       "scopes": [],
       "source": "contract"
@@ -2743,7 +2767,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-14T02:26:04.182031+00:00",
+  "generated_at": "2026-06-14T18:34:42.642111+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

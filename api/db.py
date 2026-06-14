@@ -217,6 +217,7 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_ai_vendor_governance"
     )  # PR 4: AI vendor governance workflow engine
+    importlib.import_module("api.db_models_trust_arc")  # P0-6A: trust arc persistence
 
 
 def _get_base():

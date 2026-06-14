@@ -41440,6 +41440,246 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/trust-arc/certification": {
+      "get": {
+        "description": "Return the most recent trust certification for an engagement.\n\nCertification is deterministically derived from the composite trust and\nconfidence score (0.70\u00d7trust + 0.30\u00d7confidence). Levels: not_certified,\nbronze (\u226550), silver (\u226560), gold (\u226570), platinum (\u226580), enterprise (\u226590).\nValid for 90 days from generation.",
+        "operationId": "get_trust_certification_field_assessment_engagements__engagement_id__trust_arc_certification_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Trust Certification Field Assessment Engagements  Engagement Id  Trust Arc Certification Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest trust certification for an engagement",
+        "tags": [
+          "trust-arc"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/trust-arc/intelligence-snapshot": {
+      "get": {
+        "description": "Return the most recent trust intelligence snapshot for an engagement.\n\nThe snapshot contains the posture score, trend direction, risk level,\nconfidence metrics, and cryptographic proof of the trust state at the\ntime of generation.",
+        "operationId": "get_trust_intelligence_snapshot_field_assessment_engagements__engagement_id__trust_arc_intelligence_snapshot_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Trust Intelligence Snapshot Field Assessment Engagements  Engagement Id  Trust Arc Intelligence Snapshot Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest trust intelligence snapshot for an engagement",
+        "tags": [
+          "trust-arc"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/trust-arc/proof-package": {
+      "get": {
+        "description": "Return the most recent auditor proof package for an engagement.\n\nThe proof package is a cryptographically signed bundle containing\n8 sections: evidence, replay, graph, confidence, intelligence, ledger,\ndecisions, and historical records. Suitable for third-party verification\nand regulatory submission.",
+        "operationId": "get_auditor_proof_package_field_assessment_engagements__engagement_id__trust_arc_proof_package_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Auditor Proof Package Field Assessment Engagements  Engagement Id  Trust Arc Proof Package Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest auditor proof package for an engagement",
+        "tags": [
+          "trust-arc"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/trust-arc/rebuild": {
+      "post": {
+        "description": "Regenerate the trust intelligence snapshot, auditor proof package,\nand trust certification for an engagement.\n\nThis route is NOT customer-facing and NOT portal-facing. It is\ngovernance/admin-only, used for:\n  - Quarterly trust briefs\n  - Trust intelligence monitoring\n  - Continuous governance cycles\n  - On-demand trust posture refresh\n\nReturns the IDs of the newly created artifacts. Idempotent: each call\ncreates a new append-only record without invalidating prior records.",
+        "operationId": "rebuild_trust_arc_field_assessment_engagements__engagement_id__trust_arc_rebuild_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Rebuild Trust Arc Field Assessment Engagements  Engagement Id  Trust Arc Rebuild Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Regenerate trust arc artifacts for an engagement (internal/governance only)",
+        "tags": [
+          "trust-arc"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/verification-bundle": {
       "get": {
         "description": "Retrieve the latest verification bundle for an engagement.",

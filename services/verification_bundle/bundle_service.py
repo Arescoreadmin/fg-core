@@ -842,6 +842,23 @@ class VerificationBundleService:
             bundle_json=json.dumps(bundle_doc),
         )
         db.add(record)
+
+        try:
+            from services.trust_arc.orchestrator import generate_and_persist_trust_arc  # noqa: PLC0415
+
+            generate_and_persist_trust_arc(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+            )
+        except Exception:
+            import logging as _log  # noqa: PLC0415
+
+            _log.getLogger("frostgate.trust_arc").warning(
+                "trust_arc generation failed during bundle generation (non-blocking)",
+                exc_info=True,
+            )
+
         return record
 
     def get_latest_bundle(
