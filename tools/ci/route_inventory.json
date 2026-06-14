@@ -1237,7 +1237,8 @@
       "dependency_categories": [
         "auth",
         "db",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/entitlements.py",
       "method": "GET",
@@ -1249,13 +1250,14 @@
         "admin:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
         "db",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/entitlements.py",
       "method": "POST",
@@ -1267,13 +1269,14 @@
         "admin:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
         "db",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/entitlements.py",
       "method": "DELETE",
@@ -1285,7 +1288,7 @@
         "admin:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
@@ -9454,7 +9457,7 @@
     },
     {
       "dependency_categories": [
-        "db",
+        "auth",
         "rate",
         "tenant"
       ],
@@ -9463,8 +9466,10 @@
       "path": "/ui/entitlements",
       "plane": "ui",
       "plane_id": "ui",
-      "scoped": false,
-      "scopes": [],
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
       "source": "runtime-ast",
       "tenant_bound": true
     },
@@ -10181,7 +10186,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-14T02:26:04.171177+00:00",
+  "generated_at": "2026-06-14T03:24:49.010940+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

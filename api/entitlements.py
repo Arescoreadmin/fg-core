@@ -38,8 +38,8 @@ from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_bound_tenant, require_scopes
-from api.db import set_tenant_context
+from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
+from api.db import get_engine, set_tenant_context
 from api.db_models import TenantEntitlement
 from api.deps import get_db
 from api.security_audit import AuditEvent, EventType, Severity, get_auditor
@@ -486,9 +486,11 @@ router = APIRouter()
 )
 def list_tenant_entitlements(
     tenant_id: str,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """List all explicit capability grants for a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     records = _list_entitlements_for_tenant(db, tenant_id)
     tier = _get_tenant_tier(tenant_id)
     tier_caps = sorted(_tier_capabilities().get(tier, frozenset()))
@@ -516,6 +518,7 @@ def grant_tenant_entitlement(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Grant an explicit capability to a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     result = _grant_entitlement(
         db,
         tenant_id=tenant_id,
@@ -552,6 +555,7 @@ def revoke_tenant_entitlement(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Revoke an explicit capability grant from a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     result = _revoke_entitlement(db, tenant_id=tenant_id, capability=capability)
     from api.security_audit import audit_admin_action
 
@@ -566,12 +570,11 @@ def revoke_tenant_entitlement(
 
 @router.get(
     "/ui/entitlements",
-    dependencies=[Depends(require_bound_tenant)],
+    dependencies=[Depends(require_scopes("ui:read")), Depends(require_bound_tenant)],
     tags=["ui", "entitlements"],
 )
 def get_own_entitlements(
     request: Request,
-    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Return the calling tenant's effective capability set.
 
@@ -581,7 +584,10 @@ def get_own_entitlements(
     if not tenant_id:
         raise HTTPException(status_code=401, detail="Missing tenant context")
 
-    records = _list_entitlements_for_tenant(db, tenant_id)
+    engine = get_engine()
+    with Session(engine) as db:
+        records = _list_entitlements_for_tenant(db, tenant_id)
+
     tier = _get_tenant_tier(tenant_id)
     tier_caps = sorted(_tier_capabilities().get(tier, frozenset()))
     explicit_caps = {r["capability"] for r in records}

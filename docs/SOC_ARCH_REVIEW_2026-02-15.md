@@ -2174,7 +2174,15 @@ No capability-based commercial entitlement enforcement existed. Premium capabili
 - Admin routes require `attestation:admin` scope and pass `tenant_id` explicitly through `set_tenant_context()` before querying, working within RLS constraints.
 - No bypass, no UI-only gates — all enforcement is server-side.
 
+**Addendum — plane registry compliance (2026-06-14):**
+Following P0-5 commit, plane registry checker (`test_plane_registry_checker_passes`) identified 7 route violations. Fixed:
+- Admin routes (`GET/POST /admin/tenants/{tenant_id}/entitlements`, `DELETE .../entitlements/{capability}`): added `bind_tenant_id(request, tenant_id, ...)` call in function body to satisfy control-plane tenant-binding requirement (pattern from `api/admin.py`).
+- `GET /ui/entitlements`: added `require_scopes("ui:read")` dependency; moved DB access from `Depends(get_db)` to `get_engine()` inline (UI plane disallows `db` category; other UI routes use this pattern).
+- `GET /ui/entitlements/registry`: registered as `bootstrap` exception in plane registry (static public capability list for pre-auth feature discovery, same class as `/ui/csrf`, `/ui/scopes`, `/ui/token`).
+- Route inventory and plane registry snapshot regenerated; OpenAPI contract regenerated and authority markers refreshed.
+
 **Validation:**
 - 45 tests in `tests/security/test_entitlements.py`: all pass
 - `make route-inventory-generate`: OK (5 new routes classified)
-- `scripts/refresh_contract_authority.py`: OK (sha256=3c568ad2e3617e927e2680d85c8f03b6d2da5c698dad5fe90c71bc3b3dd11722)
+- `PYTHONPATH=. python tools/ci/check_plane_registry.py`: OK
+- `scripts/refresh_contract_authority.py`: OK (sha256=36d1305842b7d4fc95f0130a94065170295f5cb5695ab93cbe5a26ecf69c727b)

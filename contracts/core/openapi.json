@@ -50243,6 +50243,24 @@
       "get": {
         "description": "Return the calling tenant's effective capability set.\n\nUsed by the portal to display enabled / disabled features and upgrade prompts.",
         "operationId": "get_own_entitlements_ui_entitlements_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -50254,6 +50272,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Own Entitlements",

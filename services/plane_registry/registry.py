@@ -654,6 +654,12 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "bootstrap",
                 "Token bootstrap endpoint before tenant-bound flow.",
             ),
+            ex(
+                "GET",
+                "/ui/entitlements/registry",
+                "bootstrap",
+                "Capability registry: static list of all capabilities/namespaces. Public for feature-discovery pre-auth.",
+            ),
         ),
         global_routes=(
             ex("GET", "/ui/ai", "global_admin", "Global AI dashboard overview."),

@@ -952,6 +952,14 @@
           "method": "GET",
           "path": "/ui/token",
           "permanent": true
+        },
+        {
+          "class_name": "bootstrap",
+          "expires_at": "",
+          "justification": "Capability registry: static list of all capabilities/namespaces. Public for feature-discovery pre-auth.",
+          "method": "GET",
+          "path": "/ui/entitlements/registry",
+          "permanent": true
         }
       ],
       "docs_routes": [],
@@ -1094,7 +1102,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-14T02:26:04.178061+00:00",
+  "generated_at": "2026-06-14T03:24:49.017480+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
