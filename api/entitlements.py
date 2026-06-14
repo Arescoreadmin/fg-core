@@ -165,10 +165,10 @@ def _get_tenant_tier(tenant_id: str) -> str:
         from api.tenant_usage import SubscriptionTier, get_usage_tracker
 
         tracker = get_usage_tracker()
-        return tracker._tenant_tiers.get(tenant_id, SubscriptionTier.ENTERPRISE).value
+        return tracker._tenant_tiers.get(tenant_id, SubscriptionTier.FREE).value
     except Exception:
         log.warning("entitlements.tier_lookup_error tenant_id=%s", tenant_id)
-        return "enterprise"
+        return "free"
 
 
 # ---------------------------------------------------------------------------
@@ -367,14 +367,20 @@ def require_capability(capability: str):
 # ---------------------------------------------------------------------------
 
 
-def _list_entitlements_for_tenant(db: Session, tenant_id: str) -> list[dict[str, Any]]:
+def _list_entitlements_for_tenant(
+    db: Session, tenant_id: str, *, active_only: bool = False
+) -> list[dict[str, Any]]:
     set_tenant_context(db, tenant_id)
-    records = (
-        db.query(TenantEntitlement)
-        .filter(TenantEntitlement.tenant_id == tenant_id)
-        .order_by(TenantEntitlement.capability)
-        .all()
-    )
+    q = db.query(TenantEntitlement).filter(TenantEntitlement.tenant_id == tenant_id)
+    if active_only:
+        now = datetime.now(timezone.utc)
+        q = q.filter(
+            or_(
+                TenantEntitlement.expires_at.is_(None),
+                TenantEntitlement.expires_at > now,
+            )
+        )
+    records = q.order_by(TenantEntitlement.capability).all()
     return [
         {
             "id": r.id,
@@ -491,16 +497,17 @@ def list_tenant_entitlements(
 ) -> dict[str, Any]:
     """List all explicit capability grants for a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
-    records = _list_entitlements_for_tenant(db, tenant_id)
+    all_records = _list_entitlements_for_tenant(db, tenant_id)
+    active_records = _list_entitlements_for_tenant(db, tenant_id, active_only=True)
     tier = _get_tenant_tier(tenant_id)
     tier_caps = sorted(_tier_capabilities().get(tier, frozenset()))
     return {
         "tenant_id": tenant_id,
         "tier": tier,
         "tier_capabilities": tier_caps,
-        "explicit_grants": records,
+        "explicit_grants": all_records,
         "effective_capabilities": sorted(
-            {r["capability"] for r in records} | set(tier_caps)
+            {r["capability"] for r in active_records} | set(tier_caps)
         ),
         "enforcement_strict": ENFORCEMENT_STRICT,
     }
@@ -586,11 +593,11 @@ def get_own_entitlements(
 
     engine = get_engine()
     with Session(engine) as db:
-        records = _list_entitlements_for_tenant(db, tenant_id)
+        active_records = _list_entitlements_for_tenant(db, tenant_id, active_only=True)
 
     tier = _get_tenant_tier(tenant_id)
     tier_caps = sorted(_tier_capabilities().get(tier, frozenset()))
-    explicit_caps = {r["capability"] for r in records}
+    explicit_caps = {r["capability"] for r in active_records}
     effective = sorted(explicit_caps | set(tier_caps))
 
     all_caps = sorted(CAPABILITY_REGISTRY)

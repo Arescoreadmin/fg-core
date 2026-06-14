@@ -616,6 +616,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(config_control_router)
     app.include_router(billing_router)
     app.include_router(audit_router)
+    app.include_router(entitlements_router)
     app.include_router(compliance_router)
     app.include_router(compliance_cp_extension_router)
     app.include_router(enterprise_controls_router)
