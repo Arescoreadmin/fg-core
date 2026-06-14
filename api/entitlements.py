@@ -41,7 +41,6 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
 from api.db import get_engine, set_tenant_context
 from api.db_models import TenantEntitlement
-from api.deps import get_db
 from api.security_audit import AuditEvent, EventType, Severity, get_auditor
 
 log = logging.getLogger("frostgate.entitlements")
@@ -330,14 +329,15 @@ def require_capability(capability: str):
 
     def _dep(
         request: Request,
-        db: Session = Depends(get_db),
     ) -> None:
         tenant_id = getattr(getattr(request, "state", None), "tenant_id", None)
         if not tenant_id:
             auth = getattr(getattr(request, "state", None), "auth", None)
             tenant_id = getattr(auth, "tenant_id", None)
 
-        result = check_capability(db, tenant_id, capability)
+        engine = get_engine()
+        with Session(engine) as db:
+            result = check_capability(db, tenant_id, capability)
         _audit_entitlement_decision(request, result)
 
         if not result.allowed and ENFORCEMENT_STRICT:
@@ -493,12 +493,13 @@ router = APIRouter()
 def list_tenant_entitlements(
     tenant_id: str,
     request: Request,
-    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """List all explicit capability grants for a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
-    all_records = _list_entitlements_for_tenant(db, tenant_id)
-    active_records = _list_entitlements_for_tenant(db, tenant_id, active_only=True)
+    engine = get_engine()
+    with Session(engine) as db:
+        all_records = _list_entitlements_for_tenant(db, tenant_id)
+        active_records = _list_entitlements_for_tenant(db, tenant_id, active_only=True)
     tier = _get_tenant_tier(tenant_id)
     tier_caps = sorted(_tier_capabilities().get(tier, frozenset()))
     return {
@@ -522,18 +523,19 @@ def grant_tenant_entitlement(
     tenant_id: str,
     body: GrantEntitlementRequest,
     request: Request,
-    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Grant an explicit capability to a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
-    result = _grant_entitlement(
-        db,
-        tenant_id=tenant_id,
-        capability=body.capability,
-        granted_by=body.granted_by,
-        reason=body.reason,
-        expires_at=body.expires_at,
-    )
+    engine = get_engine()
+    with Session(engine) as db:
+        result = _grant_entitlement(
+            db,
+            tenant_id=tenant_id,
+            capability=body.capability,
+            granted_by=body.granted_by,
+            reason=body.reason,
+            expires_at=body.expires_at,
+        )
     from api.security_audit import audit_admin_action
 
     audit_admin_action(
@@ -559,11 +561,12 @@ def revoke_tenant_entitlement(
     tenant_id: str,
     capability: str,
     request: Request,
-    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Revoke an explicit capability grant from a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
-    result = _revoke_entitlement(db, tenant_id=tenant_id, capability=capability)
+    engine = get_engine()
+    with Session(engine) as db:
+        result = _revoke_entitlement(db, tenant_id=tenant_id, capability=capability)
     from api.security_audit import audit_admin_action
 
     audit_admin_action(

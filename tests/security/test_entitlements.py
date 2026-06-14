@@ -330,14 +330,19 @@ class TestRequireCapabilityAuditOnly:
         db = _make_db(entitlement_row=None)
         request = _make_request()
         dep = require_capability("report.export")
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=db)
+        mock_session.__exit__ = MagicMock(return_value=False)
 
         with (
+            patch("api.entitlements.get_engine"),
+            patch("api.entitlements.Session", return_value=mock_session),
             patch("api.entitlements.set_tenant_context"),
             patch("api.entitlements._get_tenant_tier", return_value="free"),
             patch("api.entitlements.ENFORCEMENT_STRICT", False),
             patch("api.entitlements._audit_entitlement_decision"),
         ):
-            dep(request=request, db=db)  # must not raise
+            dep(request=request)  # must not raise
 
     def test_granted_passes_through(self):
         from api.entitlements import require_capability
@@ -345,13 +350,18 @@ class TestRequireCapabilityAuditOnly:
         db = _make_db(entitlement_row=_make_entitlement("report.export"))
         request = _make_request()
         dep = require_capability("report.export")
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=db)
+        mock_session.__exit__ = MagicMock(return_value=False)
 
         with (
+            patch("api.entitlements.get_engine"),
+            patch("api.entitlements.Session", return_value=mock_session),
             patch("api.entitlements.set_tenant_context"),
             patch("api.entitlements.ENFORCEMENT_STRICT", False),
             patch("api.entitlements._audit_entitlement_decision"),
         ):
-            dep(request=request, db=db)  # no exception
+            dep(request=request)  # no exception
 
     def test_audit_event_generated_on_grant(self):
         from api.entitlements import require_capability
@@ -359,13 +369,18 @@ class TestRequireCapabilityAuditOnly:
         db = _make_db(entitlement_row=_make_entitlement("report.export"))
         request = _make_request()
         dep = require_capability("report.export")
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=db)
+        mock_session.__exit__ = MagicMock(return_value=False)
 
         with (
+            patch("api.entitlements.get_engine"),
+            patch("api.entitlements.Session", return_value=mock_session),
             patch("api.entitlements.set_tenant_context"),
             patch("api.entitlements.ENFORCEMENT_STRICT", False),
             patch("api.entitlements._audit_entitlement_decision") as mock_audit,
         ):
-            dep(request=request, db=db)
+            dep(request=request)
 
         mock_audit.assert_called_once()
         _, result = mock_audit.call_args[0]
@@ -378,14 +393,19 @@ class TestRequireCapabilityAuditOnly:
         db = _make_db(entitlement_row=None)
         request = _make_request()
         dep = require_capability("trust.intelligence")
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=db)
+        mock_session.__exit__ = MagicMock(return_value=False)
 
         with (
+            patch("api.entitlements.get_engine"),
+            patch("api.entitlements.Session", return_value=mock_session),
             patch("api.entitlements.set_tenant_context"),
             patch("api.entitlements._get_tenant_tier", return_value="free"),
             patch("api.entitlements.ENFORCEMENT_STRICT", False),
             patch("api.entitlements._audit_entitlement_decision") as mock_audit,
         ):
-            dep(request=request, db=db)  # no raise in audit-only mode
+            dep(request=request)  # no raise in audit-only mode
 
         mock_audit.assert_called_once()
         _, result = mock_audit.call_args[0]
@@ -407,15 +427,20 @@ class TestRequireCapabilityStrict:
         db = _make_db(entitlement_row=None)
         request = _make_request()
         dep = require_capability("trust.intelligence")
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=db)
+        mock_session.__exit__ = MagicMock(return_value=False)
 
         with (
+            patch("api.entitlements.get_engine"),
+            patch("api.entitlements.Session", return_value=mock_session),
             patch("api.entitlements.set_tenant_context"),
             patch("api.entitlements._get_tenant_tier", return_value="free"),
             patch("api.entitlements.ENFORCEMENT_STRICT", True),
             patch("api.entitlements._audit_entitlement_decision"),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                dep(request=request, db=db)
+                dep(request=request)
 
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail["code"] == "CAPABILITY_DENIED"
@@ -429,15 +454,20 @@ class TestRequireCapabilityStrict:
         db = _make_db(entitlement_row=None)
         request = _make_request()
         dep = require_capability("continuous.monitoring")
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=db)
+        mock_session.__exit__ = MagicMock(return_value=False)
 
         with (
+            patch("api.entitlements.get_engine"),
+            patch("api.entitlements.Session", return_value=mock_session),
             patch("api.entitlements.set_tenant_context"),
             patch("api.entitlements._get_tenant_tier", return_value="pro"),
             patch("api.entitlements.ENFORCEMENT_STRICT", True),
             patch("api.entitlements._audit_entitlement_decision"),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                dep(request=request, db=db)
+                dep(request=request)
 
         assert exc_info.value.detail["upgrade_required"] is True
 
@@ -447,13 +477,18 @@ class TestRequireCapabilityStrict:
         db = _make_db(entitlement_row=_make_entitlement("trust.certification"))
         request = _make_request()
         dep = require_capability("trust.certification")
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=db)
+        mock_session.__exit__ = MagicMock(return_value=False)
 
         with (
+            patch("api.entitlements.get_engine"),
+            patch("api.entitlements.Session", return_value=mock_session),
             patch("api.entitlements.set_tenant_context"),
             patch("api.entitlements.ENFORCEMENT_STRICT", True),
             patch("api.entitlements._audit_entitlement_decision"),
         ):
-            dep(request=request, db=db)  # no raise
+            dep(request=request)  # no raise
 
     def test_unknown_capability_raises_403_strict(self):
         from fastapi import HTTPException
@@ -463,13 +498,18 @@ class TestRequireCapabilityStrict:
         db = _make_db()
         request = _make_request()
         dep = require_capability("future.unknown.thing")
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=db)
+        mock_session.__exit__ = MagicMock(return_value=False)
 
         with (
+            patch("api.entitlements.get_engine"),
+            patch("api.entitlements.Session", return_value=mock_session),
             patch("api.entitlements.ENFORCEMENT_STRICT", True),
             patch("api.entitlements._audit_entitlement_decision"),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                dep(request=request, db=db)
+                dep(request=request)
 
         assert exc_info.value.status_code == 403
 

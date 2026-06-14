@@ -1236,7 +1236,6 @@
     {
       "dependency_categories": [
         "auth",
-        "db",
         "rate",
         "tenant"
       ],
@@ -1255,7 +1254,6 @@
     {
       "dependency_categories": [
         "auth",
-        "db",
         "rate",
         "tenant"
       ],
@@ -1274,7 +1272,6 @@
     {
       "dependency_categories": [
         "auth",
-        "db",
         "rate",
         "tenant"
       ],
@@ -10186,7 +10183,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-14T03:24:49.010940+00:00",
+  "generated_at": "2026-06-14T15:14:59.052910+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -2186,3 +2186,16 @@ Following P0-5 commit, plane registry checker (`test_plane_registry_checker_pass
 - `make route-inventory-generate`: OK (5 new routes classified)
 - `PYTHONPATH=. python tools/ci/check_plane_registry.py`: OK
 - `scripts/refresh_contract_authority.py`: OK (sha256=36d1305842b7d4fc95f0130a94065170295f5cb5695ab93cbe5a26ecf69c727b)
+
+**Addendum — check_db_dependency remediation (2026-06-14):**
+`tools/ci/check_db_dependency.py` CI tool bans `Depends(get_db)` on non-public routes (repo-wide policy: all non-public DB access must use `get_engine()` context manager inline). Three admin entitlement routes and the `require_capability()` inner dependency were flagged. Fixed:
+- Removed `db: Session = Depends(get_db)` from all three admin route handlers (`list_tenant_entitlements`, `grant_tenant_entitlement`, `revoke_tenant_entitlement`); replaced with `engine = get_engine(); with Session(engine) as db:` inline.
+- Removed `db: Session = Depends(get_db)` from `require_capability()._dep`; replaced with same inline pattern.
+- Removed `from api.deps import get_db` import entirely from `api/entitlements.py`.
+- Updated `tests/security/test_entitlements.py`: all 8 `dep(request=request, db=db)` call sites patched to `dep(request=request)` with `get_engine`/`Session` mocked via context-manager mock.
+- Route inventory regenerated (`make route-inventory-generate`): 3 admin routes updated from `dependency_categories: [auth, db, rate, tenant]` → `[auth, rate, tenant]`.
+
+**Validation:**
+- `python tools/ci/check_db_dependency.py`: OK (no violations)
+- 45 tests in `tests/security/test_entitlements.py`: all pass
+- `make route-inventory-generate`: OK
