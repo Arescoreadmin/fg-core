@@ -14682,3 +14682,33 @@ No policies relaxed. Application brought into compliance with migration 0110 RLS
 - 15 tests in `tests/security/test_assessment_tenant_isolation.py`: pass
 - 287 assessment-related tests: pass
 - `make fg-fast`: pass
+
+## 2026-06-13 — PR 437 P0-5: Commercial Entitlements, Revenue Authority & Trust Intelligence Monetization Layer
+
+### Scope
+New capability-based commercial entitlement enforcement layer. NOT billing or subscription management. Capability decisions are deterministic, auditable, fail-closed.
+
+### Changes
+- `migrations/postgres/0112_tenant_entitlements.sql`: new `tenant_entitlements` table with RLS (fail-closed pattern from 0110)
+- `api/entitlements.py`: `CAPABILITY_REGISTRY` (27 capabilities), `check_capability()`, `require_capability()` FastAPI dependency, `FG_ENTITLEMENT_ENFORCEMENT` env var, admin CRUD router
+- `api/db_models.py`: `TenantEntitlement` ORM model
+- `api/main.py`: entitlements router registered
+- `api/reports_engine.py`: 4 routes gated (`report.manifest`, `report.export` ×2, `report.replay`)
+- `api/audit.py`: 2 routes gated (`audit.export` ×2)
+- `api/attestation.py`: 2 routes gated (`verification.download` ×2)
+- `api/governance_report_manager.py`: 1 route gated (`trust.replay`)
+- `api/ui_forensics_console.py`: 1 route gated (`audit.forensics`)
+- `tools/ci/route_inventory.json` et al.: regenerated for 5 new entitlement routes
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md`: contract authority marker refreshed
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`: SOC-HIGH-005 addendum
+- `tests/security/test_entitlements.py`: 45 new tests
+
+### Security Impact
+No existing checks relaxed. `FG_ENTITLEMENT_ENFORCEMENT=false` (default) is audit-only — all existing users unaffected. Strict enforcement requires explicit opt-in. All gates are server-side; no UI-only gates.
+
+### Validation
+- 45 tests in `tests/security/test_entitlements.py`: pass
+- `make fg-fast`: pass
+- `make fg-security`: pass (955 passed, 1 skipped)
+- `make fg-contract`: pass
+- `bash codex_gates.sh`: pass

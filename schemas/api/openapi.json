@@ -10689,6 +10689,47 @@
         "title": "GovernanceReportResponse",
         "type": "object"
       },
+      "GrantEntitlementRequest": {
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "granted_by": {
+            "default": "admin",
+            "title": "Granted By",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "capability"
+        ],
+        "title": "GrantEntitlementRequest",
+        "type": "object"
+      },
       "GrantItem": {
         "properties": {
           "client_id": {
@@ -50196,6 +50237,54 @@
           }
         },
         "summary": "Status"
+      }
+    },
+    "/ui/entitlements": {
+      "get": {
+        "description": "Return the calling tenant's effective capability set.\n\nUsed by the portal to display enabled / disabled features and upgrade prompts.",
+        "operationId": "get_own_entitlements_ui_entitlements_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Own Entitlements Ui Entitlements Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Own Entitlements",
+        "tags": [
+          "ui",
+          "entitlements"
+        ]
+      }
+    },
+    "/ui/entitlements/registry": {
+      "get": {
+        "description": "Return the full capability registry. Public \u2014 no auth required.\n\nAllows portal to show upgrade states without a live API call per capability.",
+        "operationId": "get_capability_registry_ui_entitlements_registry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Capability Registry Ui Entitlements Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Capability Registry",
+        "tags": [
+          "ui",
+          "entitlements"
+        ]
       }
     },
     "/v1/status": {

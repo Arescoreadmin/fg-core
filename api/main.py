@@ -88,6 +88,7 @@ from api.governance_workflows import router as governance_workflows_router
 from api.connectors_msgraph_report import router as connectors_msgraph_report_router
 from api.field_assessment import router as field_assessment_router
 from api.portal import portal_router
+from api.entitlements import router as entitlements_router
 from api.reports_engine import router as reports_engine_router
 from api.signing import router as signing_router
 from api.stripe_webhooks import router as stripe_webhooks_router
@@ -1111,6 +1112,8 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
         app.include_router(roe_router)
     if governance_router is not None:
         app.include_router(governance_router)
+
+    app.include_router(entitlements_router)
 
     @app.get("/health/live")
     async def health_live() -> dict[str, str]:

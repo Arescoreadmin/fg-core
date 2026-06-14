@@ -2143,3 +2143,38 @@ Post-P0-4 audit identified two issues:
 - 26 tests in `tests/tools/test_core_rls.py`: all pass
 - 49 tests in `tests/test_report_jobs.py` + `tests/test_report_hardening.py`: all pass
 - `make fg-fast`: pass
+
+## 2026-06-13 — SOC-HIGH-005 — P0-5: Commercial Entitlements & Route Inventory Expansion
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH (new enforcement layer; `tools/ci/` route inventory updated)
+
+**Problem:**
+No capability-based commercial entitlement enforcement existed. Premium capabilities (`report.export`, `trust.intelligence`, `audit.forensics`, etc.) were gated only by RBAC scopes, with no product-level authority. Route inventory did not include the 5 new entitlement admin/UI routes.
+
+**Files changed:**
+- `migrations/postgres/0112_tenant_entitlements.sql` (new table + RLS)
+- `api/entitlements.py` (new module: capability registry, check, require_capability dependency, admin CRUD router)
+- `api/db_models.py` (TenantEntitlement ORM model)
+- `api/main.py` (entitlements router registered)
+- `api/reports_engine.py`, `api/audit.py`, `api/attestation.py`, `api/governance_report_manager.py`, `api/ui_forensics_console.py` (capability gates added)
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` (route inventory regenerated for 5 new routes)
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` (contract authority marker refreshed)
+- `tests/security/test_entitlements.py` (45 new tests)
+
+**Change description:**
+- `migrations/postgres/0112_tenant_entitlements.sql`: new `tenant_entitlements` table with explicit tenant capability grants; RLS using 0110 fail-closed pattern (`tenant_id IS NOT NULL AND current_setting('app.tenant_id', true) IS NOT NULL AND tenant_id = current_setting(...)`).
+- `api/entitlements.py`: `CAPABILITY_REGISTRY` (27 atomic capability strings across report, verification, trust, continuous, governance, audit namespaces); `check_capability()` with resolution order (explicit DB grant → tier fallback → deny); `require_capability()` FastAPI dependency emitting audit events; `FG_ENTITLEMENT_ENFORCEMENT` env var (false=audit-only default, true=strict 403s); admin CRUD routes under `/admin/tenants/{tenant_id}/entitlements`.
+- Route inventory: 5 new routes added (`GET/POST /admin/tenants/{tenant_id}/entitlements`, `DELETE /admin/tenants/{tenant_id}/entitlements/{capability}`, `GET /ui/entitlements`, `GET /ui/entitlements/registry`); inventory regenerated with `make route-inventory-generate`.
+
+**Security review:**
+- New `tenant_entitlements` table uses FORCE ROW LEVEL SECURITY with fail-closed pattern; no `SET SESSION AUTHORIZATION` or `BYPASSRLS` permitted.
+- `check_capability()` is fail-closed on DB error (returns `allowed=False, source="error"`).
+- `require_capability()` in audit-only mode (default) never raises HTTP 403 — it audits and passes through, preserving backward compatibility. Strict mode requires explicit opt-in via `FG_ENTITLEMENT_ENFORCEMENT=true`.
+- Tier fallback on DB lookup error defaults to "enterprise" (not "free") to prevent accidental access loss for existing tenants; explicit DB grants always take precedence.
+- Admin routes require `attestation:admin` scope and pass `tenant_id` explicitly through `set_tenant_context()` before querying, working within RLS constraints.
+- No bypass, no UI-only gates — all enforcement is server-side.
+
+**Validation:**
+- 45 tests in `tests/security/test_entitlements.py`: all pass
+- `make route-inventory-generate`: OK (5 new routes classified)
+- `scripts/refresh_contract_authority.py`: OK (sha256=3c568ad2e3617e927e2680d85c8f03b6d2da5c698dad5fe90c71bc3b3dd11722)

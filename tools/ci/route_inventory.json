@@ -1236,6 +1236,60 @@
     {
       "dependency_categories": [
         "auth",
+        "db",
+        "rate"
+      ],
+      "file": "api/entitlements.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/entitlements",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "db",
+        "rate"
+      ],
+      "file": "api/entitlements.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/entitlements",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "db",
+        "rate"
+      ],
+      "file": "api/entitlements.py",
+      "method": "DELETE",
+      "path": "/admin/tenants/{tenant_id}/entitlements/{capability}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate",
         "tenant"
       ],
@@ -9400,6 +9454,36 @@
     },
     {
       "dependency_categories": [
+        "db",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/entitlements.py",
+      "method": "GET",
+      "path": "/ui/entitlements",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "rate"
+      ],
+      "file": "api/entitlements.py",
+      "method": "GET",
+      "path": "/ui/entitlements/registry",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
         "auth",
         "rate",
         "tenant"
@@ -10097,7 +10181,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-13T02:14:13.316475+00:00",
+  "generated_at": "2026-06-14T02:26:04.171177+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

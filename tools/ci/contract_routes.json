@@ -2624,6 +2624,18 @@
     },
     {
       "method": "GET",
+      "path": "/ui/entitlements",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ui/entitlements/registry",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/v1/status",
       "scopes": [],
       "source": "contract"
@@ -2731,7 +2743,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-10T17:31:43.222824+00:00",
+  "generated_at": "2026-06-14T02:26:04.182031+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

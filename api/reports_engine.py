@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session
 
 from api.assessments import _resolve_caller_tenant, _question_score
 from api.auth_scopes.resolution import require_bound_tenant, require_scopes
+from api.entitlements import require_capability
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models import AssessmentRecord, OrgProfile, PromptVersion, ReportRecord
 from api.report_jobs import (
@@ -775,7 +776,10 @@ def get_report(
     }
 
 
-@router.get("/reports/{report_id}/manifest")
+@router.get(
+    "/reports/{report_id}/manifest",
+    dependencies=[Depends(require_capability("report.manifest"))],
+)
 def get_report_manifest(
     report_id: str,
     request: Request,
@@ -865,7 +869,10 @@ def _persist_report_signature(report: ReportRecord) -> None:
         )
 
 
-@router.get("/reports/{report_id}/exports/{export_format}")
+@router.get(
+    "/reports/{report_id}/exports/{export_format}",
+    dependencies=[Depends(require_capability("report.export"))],
+)
 def export_report_artifact(
     report_id: str,
     export_format: str,
@@ -1036,7 +1043,10 @@ def finalize_report(
     }
 
 
-@router.post("/reports/{report_id}/replay-verify")
+@router.post(
+    "/reports/{report_id}/replay-verify",
+    dependencies=[Depends(require_capability("report.replay"))],
+)
 def replay_verify_report(
     report_id: str,
     request: Request,
@@ -1173,7 +1183,10 @@ def regenerate_report(
     )
 
 
-@router.get("/reports/{report_id}/download")
+@router.get(
+    "/reports/{report_id}/download",
+    dependencies=[Depends(require_capability("report.export"))],
+)
 def download_report(
     report_id: str,
     request: Request,
