@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
 from api.deps import auth_ctx_db_session
+from api.entitlements import require_capability
 from api.error_contracts import api_error
 from api.db_models_trust_arc import (
     FaAuditorProofPackage,
@@ -154,7 +155,10 @@ def _cert_to_dict(row: FaTrustCertification) -> dict[str, Any]:
 
 @router.get(
     "/engagements/{engagement_id}/trust-arc/intelligence-snapshot",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[
+        Depends(require_scopes("governance:read")),
+        Depends(require_capability("trust.intelligence")),
+    ],
     summary="Latest trust intelligence snapshot for an engagement",
 )
 def get_trust_intelligence_snapshot(
@@ -199,7 +203,10 @@ def get_trust_intelligence_snapshot(
 
 @router.get(
     "/engagements/{engagement_id}/trust-arc/proof-package",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[
+        Depends(require_scopes("governance:read")),
+        Depends(require_capability("trust.proof_package")),
+    ],
     summary="Latest auditor proof package for an engagement",
 )
 def get_auditor_proof_package(
@@ -245,7 +252,10 @@ def get_auditor_proof_package(
 
 @router.get(
     "/engagements/{engagement_id}/trust-arc/certification",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[
+        Depends(require_scopes("governance:read")),
+        Depends(require_capability("trust.certification")),
+    ],
     summary="Latest trust certification for an engagement",
 )
 def get_trust_certification(
@@ -291,7 +301,10 @@ def get_trust_certification(
 
 @router.post(
     "/engagements/{engagement_id}/trust-arc/rebuild",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[
+        Depends(require_scopes("governance:write")),
+        Depends(require_capability("trust.intelligence")),
+    ],
     summary="Regenerate trust arc artifacts for an engagement (internal/governance only)",
     status_code=200,
 )
@@ -315,9 +328,21 @@ def rebuild_trust_arc(
     """
     tenant_id = _resolve_caller_tenant(request)
 
+    from services.field_assessment.models import EngagementNotFound  # noqa: PLC0415
+    from services.field_assessment.store import get_engagement  # noqa: PLC0415
     from services.trust_arc.orchestrator import (  # noqa: PLC0415
         generate_and_persist_trust_arc,
     )
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "ENGAGEMENT_NOT_FOUND", f"Engagement {engagement_id!r} not found."
+            ),
+        )
 
     result = generate_and_persist_trust_arc(
         db,
