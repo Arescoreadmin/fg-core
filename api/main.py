@@ -88,7 +88,7 @@ from api.governance_workflows import router as governance_workflows_router
 from api.connectors_msgraph_report import router as connectors_msgraph_report_router
 from api.field_assessment import router as field_assessment_router
 from api.portal import portal_router
-from api.entitlements import router as entitlements_router
+from api.entitlements import router as entitlements_router, ui_router as entitlements_ui_router
 from api.reports_engine import router as reports_engine_router
 from api.signing import router as signing_router
 from api.stripe_webhooks import router as stripe_webhooks_router
@@ -640,6 +640,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ui_compliance_dashboard_router)
         app.include_router(ui_ai_router)
         app.include_router(ui_ai_admin_router)
+        app.include_router(entitlements_ui_router)
         if _testing_control_tower_enabled():
             app.include_router(ui_testing_control_tower_router)
 
@@ -1115,6 +1116,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
         app.include_router(governance_router)
 
     app.include_router(entitlements_router)
+    app.include_router(entitlements_ui_router)
 
     @app.get("/health/live")
     async def health_live() -> dict[str, str]:

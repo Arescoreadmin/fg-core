@@ -479,10 +479,11 @@ class GrantEntitlementRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Router — admin routes + tenant self-service
+# Routers — admin routes (always mounted) + UI routes (dev/self-hosted only)
 # ---------------------------------------------------------------------------
 
 router = APIRouter()
+ui_router = APIRouter()
 
 
 @router.get(
@@ -578,7 +579,7 @@ def revoke_tenant_entitlement(
     return {"tenant_id": tenant_id, **result}
 
 
-@router.get(
+@ui_router.get(
     "/ui/entitlements",
     dependencies=[Depends(require_scopes("ui:read")), Depends(require_bound_tenant)],
     tags=["ui", "entitlements"],
@@ -617,7 +618,7 @@ def get_own_entitlements(
     }
 
 
-@router.get(
+@ui_router.get(
     "/ui/entitlements/registry",
     tags=["ui", "entitlements"],
 )
