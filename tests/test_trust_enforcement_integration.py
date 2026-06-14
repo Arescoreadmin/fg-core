@@ -1097,3 +1097,314 @@ class TestModeEscalation:
                 replay_result=broken,
                 mode=ProvenanceMode.STRICT,
             )
+
+
+# ---------------------------------------------------------------------------
+# derive_engagement_trust_inputs
+# ---------------------------------------------------------------------------
+
+
+class TestDeriveEngagementTrustInputs:
+    """Unit tests for derive_engagement_trust_inputs() — P0-6B."""
+
+    def test_no_provenance_returns_all_false(self, monkeypatch):
+        from services.field_assessment.trust_enforcement_adapter import (
+            derive_engagement_trust_inputs,
+        )
+
+        monkeypatch.setattr(
+            "services.field_assessment.trust_enforcement_adapter."
+            "list_evidence_provenance_for_engagement"
+            if False
+            else "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
+            lambda *a, **kw: [],
+            raising=False,
+        )
+
+        import unittest.mock as mock
+
+        with mock.patch(
+            "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
+            return_value=[],
+        ):
+            inputs = derive_engagement_trust_inputs(
+                object(), tenant_id=_T, engagement_id=_E
+            )
+
+        assert inputs.chain_valid is False
+        assert inputs.signature_valid is False
+        assert inputs.link_valid is False
+        assert inputs.replay_valid is False
+        assert inputs.tenant_valid is True
+        assert inputs.engagement_valid is True
+
+    def test_perfect_chain_returns_all_true(self, monkeypatch):
+        from services.field_assessment.trust_enforcement_adapter import (
+            derive_engagement_trust_inputs,
+        )
+        import unittest.mock as mock
+
+        fake_record = mock.MagicMock()
+        fake_record.id = "prov-abc"
+
+        perfect_result = _replay_result(chain_valid=True, score=100)
+
+        with (
+            mock.patch(
+                "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
+                return_value=[fake_record],
+            ),
+            mock.patch(
+                "services.field_assessment.trust_replay.verify_full_provenance_chain",
+                return_value=perfect_result,
+            ),
+        ):
+            inputs = derive_engagement_trust_inputs(
+                object(), tenant_id=_T, engagement_id=_E
+            )
+
+        assert inputs.chain_valid is True
+        assert inputs.signature_valid is True
+        assert inputs.link_valid is True
+        assert inputs.replay_valid is True
+        assert inputs.is_legacy is False
+
+    def test_broken_chain_returns_chain_false(self, monkeypatch):
+        from services.field_assessment.trust_enforcement_adapter import (
+            derive_engagement_trust_inputs,
+        )
+        import unittest.mock as mock
+
+        fake_record = mock.MagicMock()
+        fake_record.id = "prov-broken"
+
+        broken_result = _replay_result(
+            chain_valid=False,
+            score=0,
+            failed_nodes=[{"signature_status": "invalid_signature"}],
+        )
+
+        with (
+            mock.patch(
+                "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
+                return_value=[fake_record],
+            ),
+            mock.patch(
+                "services.field_assessment.trust_replay.verify_full_provenance_chain",
+                return_value=broken_result,
+            ),
+        ):
+            inputs = derive_engagement_trust_inputs(
+                object(), tenant_id=_T, engagement_id=_E
+            )
+
+        assert inputs.chain_valid is False
+        assert inputs.signature_valid is False
+        assert inputs.replay_valid is False
+
+    def test_exception_returns_all_false(self, monkeypatch):
+        from services.field_assessment.trust_enforcement_adapter import (
+            derive_engagement_trust_inputs,
+        )
+        import unittest.mock as mock
+
+        with mock.patch(
+            "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
+            side_effect=RuntimeError("db error"),
+        ):
+            inputs = derive_engagement_trust_inputs(
+                object(), tenant_id=_T, engagement_id=_E
+            )
+
+        assert inputs.chain_valid is False
+        assert inputs.signature_valid is False
+        assert inputs.link_valid is False
+        assert inputs.replay_valid is False
+
+    def test_legacy_score_50_sets_is_legacy(self, monkeypatch):
+        from services.field_assessment.trust_enforcement_adapter import (
+            derive_engagement_trust_inputs,
+        )
+        import unittest.mock as mock
+
+        fake_record = mock.MagicMock()
+        fake_record.id = "prov-legacy"
+
+        legacy_result = _replay_result(chain_valid=True, score=50)
+
+        with (
+            mock.patch(
+                "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
+                return_value=[fake_record],
+            ),
+            mock.patch(
+                "services.field_assessment.trust_replay.verify_full_provenance_chain",
+                return_value=legacy_result,
+            ),
+        ):
+            inputs = derive_engagement_trust_inputs(
+                object(), tenant_id=_T, engagement_id=_E
+            )
+
+        assert inputs.is_legacy is True
+        assert inputs.signature_valid is None
+        assert inputs.chain_valid is True
+
+    def test_two_independent_chains_and_combined(self, monkeypatch):
+        """A broken branch in a multi-chain engagement makes combined chain_valid=False."""
+        from services.field_assessment.trust_enforcement_adapter import (
+            derive_engagement_trust_inputs,
+        )
+        import unittest.mock as mock
+
+        # Two genesis records (no previous_hash) → two independent chain heads.
+        head_a = mock.MagicMock()
+        head_a.id = "prov-a"
+        head_a.event_hash = "hash-a"
+        head_a.previous_hash = None
+
+        head_b = mock.MagicMock()
+        head_b.id = "prov-b"
+        head_b.event_hash = "hash-b"
+        head_b.previous_hash = None
+
+        perfect = _replay_result(chain_valid=True, score=100)
+        broken = _replay_result(
+            chain_valid=False,
+            score=0,
+            failed_nodes=[{"signature_status": "invalid_signature"}],
+        )
+
+        def _replay(db, *, tenant_id, provenance_id):
+            return perfect if provenance_id == "prov-a" else broken
+
+        with (
+            mock.patch(
+                "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
+                return_value=[head_a, head_b],
+            ),
+            mock.patch(
+                "services.field_assessment.trust_replay.verify_full_provenance_chain",
+                side_effect=_replay,
+            ),
+        ):
+            inputs = derive_engagement_trust_inputs(
+                object(), tenant_id=_T, engagement_id=_E
+            )
+
+        assert inputs.chain_valid is False
+        assert inputs.signature_valid is False
+
+    def test_single_chain_with_amendment_only_head_replayed(self, monkeypatch):
+        """A chained amendment (previous_hash set) is detected as non-head."""
+        from services.field_assessment.trust_enforcement_adapter import (
+            derive_engagement_trust_inputs,
+        )
+        import unittest.mock as mock
+
+        genesis = mock.MagicMock()
+        genesis.id = "prov-genesis"
+        genesis.event_hash = "hash-genesis"
+        genesis.previous_hash = None
+
+        amendment = mock.MagicMock()
+        amendment.id = "prov-amendment"
+        amendment.event_hash = "hash-amendment"
+        amendment.previous_hash = "hash-genesis"  # points to genesis
+
+        perfect = _replay_result(chain_valid=True, score=100)
+        replay_calls: list[str] = []
+
+        def _replay(db, *, tenant_id, provenance_id):
+            replay_calls.append(provenance_id)
+            return perfect
+
+        with (
+            mock.patch(
+                "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
+                return_value=[amendment, genesis],
+            ),
+            mock.patch(
+                "services.field_assessment.trust_replay.verify_full_provenance_chain",
+                side_effect=_replay,
+            ),
+        ):
+            inputs = derive_engagement_trust_inputs(
+                object(), tenant_id=_T, engagement_id=_E
+            )
+
+        assert inputs.chain_valid is True
+        # Only the amendment (head) is replayed; genesis is not a head.
+        assert replay_calls == ["prov-amendment"]
+
+
+class TestAndTrustInputs:
+    """Unit tests for _and_trust_inputs() — P0-6B bot fix."""
+
+    def _make(self, **kwargs):
+        defaults = dict(
+            chain_valid=True,
+            signature_valid=True,
+            link_valid=True,
+            replay_valid=True,
+            tenant_valid=True,
+            engagement_valid=True,
+            is_legacy=False,
+        )
+        defaults.update(kwargs)
+        from services.field_assessment.trust_enforcement import TrustInputs  # noqa: PLC0415
+
+        return TrustInputs(**defaults)
+
+    def test_both_valid_stays_valid(self):
+        from services.field_assessment.trust_enforcement_adapter import (
+            _and_trust_inputs,
+        )
+
+        a = self._make()
+        b = self._make()
+        r = _and_trust_inputs(a, b)
+        assert r.chain_valid is True
+        assert r.signature_valid is True
+        assert r.is_legacy is False
+
+    def test_one_broken_chain_propagates(self):
+        from services.field_assessment.trust_enforcement_adapter import (
+            _and_trust_inputs,
+        )
+
+        a = self._make(chain_valid=True)
+        b = self._make(chain_valid=False, signature_valid=False)
+        r = _and_trust_inputs(a, b)
+        assert r.chain_valid is False
+        assert r.signature_valid is False
+
+    def test_sig_severity_false_over_none(self):
+        from services.field_assessment.trust_enforcement_adapter import (
+            _and_trust_inputs,
+        )
+
+        a = self._make(signature_valid=None, is_legacy=True)
+        b = self._make(signature_valid=False)
+        r = _and_trust_inputs(a, b)
+        assert r.signature_valid is False
+
+    def test_sig_severity_none_over_true(self):
+        from services.field_assessment.trust_enforcement_adapter import (
+            _and_trust_inputs,
+        )
+
+        a = self._make(signature_valid=None, is_legacy=True)
+        b = self._make(signature_valid=True)
+        r = _and_trust_inputs(a, b)
+        assert r.signature_valid is None
+
+    def test_is_legacy_propagates_from_either(self):
+        from services.field_assessment.trust_enforcement_adapter import (
+            _and_trust_inputs,
+        )
+
+        a = self._make(signature_valid=None, is_legacy=True)
+        b = self._make()
+        r = _and_trust_inputs(a, b)
+        assert r.is_legacy is True

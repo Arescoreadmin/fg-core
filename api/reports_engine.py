@@ -989,17 +989,26 @@ def finalize_report(
     if report.finalized_at is not None:
         raise HTTPException(status_code=409, detail="Report already finalized")
     from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+        derive_engagement_trust_inputs,
         enforce_report_finalization,
     )
     from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
         TrustEnforcementError,
     )
 
+    _trust = derive_engagement_trust_inputs(
+        db, tenant_id=report.tenant_id, engagement_id=report.assessment_id
+    )
     try:
         enforce_report_finalization(
             db,
             tenant_id=report.tenant_id,
             engagement_id=report.assessment_id,
+            chain_valid=_trust.chain_valid,
+            signature_valid=_trust.signature_valid,
+            link_valid=_trust.link_valid,
+            replay_valid=_trust.replay_valid,
+            is_legacy=_trust.is_legacy,
         )
     except TrustEnforcementError as _te:
         raise HTTPException(

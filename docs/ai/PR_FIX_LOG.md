@@ -14753,3 +14753,36 @@ Two bot-flagged findings fixed before merge:
 - `bash codex_gates.sh`: pass
 - `ruff check` + `ruff format --check`: clean
 - `mypy` (new files): no issues
+
+---
+
+## P0-6B — Trust Arc Enforcement Activation, Replay Validation & Authority Gates (2026-06-14)
+
+### Summary
+Replaced advisory/default trust behavior with real runtime derivation at the three primary governance workflow gates. No schema changes; no new routes. This is a behavioral change — enforcement now derives trust state from the engagement's live provenance chain.
+
+### Files changed
+- `services/field_assessment/trust_enforcement_adapter.py`: `derive_engagement_trust_inputs()` added (after `_trust_inputs_from_replay_result()`); fail-closed — no provenance or exception → all chain dimensions False
+- `api/reports_engine.py`: `enforce_report_finalization()` now passes `chain_valid`, `signature_valid`, `link_valid`, `replay_valid`, `is_legacy` from `derive_engagement_trust_inputs()`
+- `api/field_assessment.py` (QA approval): `enforce_evidence_approval()` now receives derived chain/link/replay; `signature_valid` still from report signature check
+- `api/field_assessment.py` (report export): `enforce_report_export()` same pattern as QA approval
+- `services/verification_bundle/bundle_service.py`: manifest extended with `trust_enforcement` section (chain_valid/signature_valid/link_valid/replay_valid/is_legacy before manifest_hash; derivation failure is non-blocking)
+- `tools/ci/check_trust_enforcement_inputs.py` (new): AST guardrail — verifies 3 call sites pass explicit chain_valid/link_valid/replay_valid; wired into `security-regression-gates`
+- `tests/test_trust_enforcement_integration.py`: 5 new tests for `derive_engagement_trust_inputs()` (no-provenance, perfect chain, broken chain, exception/fail-closed, legacy score-50)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`: P0-6B addendum
+- `ROADMAP.md`: P0-6B row added
+
+### Security Impact
+- Trust enforcement at finalization/QA-approval/export is now authoritative, not advisory
+- Engagements with no provenance chain get `chain_valid=False` (WARN mode logs, STRICT mode blocks)
+- `signature_valid` at QA/export still derived from report signature verification — unaffected
+- Fail-closed: any exception in `derive_engagement_trust_inputs()` returns all-False, not all-True
+- CI guardrail in `security-regression-gates` prevents regression to default-True call sites
+
+### Validation
+- `make fg-fast`: pass (398 passed, 2 skipped)
+- `make security-regression-gates`: pass (includes new `check_trust_enforcement_inputs.py`)
+- `make soc-review-sync`: pass
+- `python -m pytest tests/test_trust_enforcement_integration.py::TestDeriveEngagementTrustInputs`: 5 passed
+- `ruff check` + `ruff format --check`: clean
+- `mypy`: no issues

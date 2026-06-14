@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 457,
+    "contract_count": 461,
     "contract_only": [],
-    "runtime_count": 596,
+    "runtime_count": 600,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
@@ -152,7 +152,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "6aeac79e43b489099f468158ccf76ed685789c536021227f750a735a96c1e797",
+  "governance_fingerprint": "917988e67199cd5684ca7f88c9b04a7e1126eca54976b7173b7a9b45eb21841e",
   "planes": [
     {
       "compat": {
@@ -536,6 +536,9 @@
       "GET /field-assessment/engagements/{engagement_id}/scan-results",
       "GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
       "GET /field-assessment/engagements/{engagement_id}/summary",
+      "GET /field-assessment/engagements/{engagement_id}/trust-arc/certification",
+      "GET /field-assessment/engagements/{engagement_id}/trust-arc/intelligence-snapshot",
+      "GET /field-assessment/engagements/{engagement_id}/trust-arc/proof-package",
       "GET /field-assessment/engagements/{engagement_id}/verification-bundle",
       "GET /field-assessment/engagements/{engagement_id}/verification-bundle/download",
       "GET /field-assessment/engagements/{engagement_id}/verification-bundle/manifest",
@@ -740,6 +743,7 @@
       "POST /field-assessment/engagements/{engagement_id}/reports/{version}/verify",
       "POST /field-assessment/engagements/{engagement_id}/risk-acceptances",
       "POST /field-assessment/engagements/{engagement_id}/scan-results",
+      "POST /field-assessment/engagements/{engagement_id}/trust-arc/rebuild",
       "POST /field-assessment/engagements/{engagement_id}/verification-bundle/generate",
       "POST /governance/assets",
       "POST /governance/assets/{asset_id}/attestations",
