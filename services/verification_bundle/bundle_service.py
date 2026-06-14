@@ -766,6 +766,24 @@ class VerificationBundleService:
             },
         ]
 
+        try:
+            from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+                derive_engagement_trust_inputs,
+            )
+
+            _bt = derive_engagement_trust_inputs(
+                db, tenant_id=tenant_id, engagement_id=engagement_id
+            )
+            _trust_enforcement_section: dict = {
+                "chain_valid": _bt.chain_valid,
+                "signature_valid": _bt.signature_valid,
+                "link_valid": _bt.link_valid,
+                "replay_valid": _bt.replay_valid,
+                "is_legacy": _bt.is_legacy,
+            }
+        except Exception:
+            _trust_enforcement_section = {"error": "derivation_failed"}
+
         manifest = {
             "bundle_id": bundle_id,
             "engagement_id": engagement_id,
@@ -777,6 +795,7 @@ class VerificationBundleService:
             "components": component_summary,
             "regulatory_context": regulatory_context,
             "snapshot_validation": snapshot_validation_results,
+            "trust_enforcement": _trust_enforcement_section,
         }
         manifest_hash = _sha256_of(manifest)
 

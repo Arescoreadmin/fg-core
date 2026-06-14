@@ -149,6 +149,47 @@ def _trust_inputs_from_replay_result(result: dict[str, Any]) -> TrustInputs:
     )
 
 
+def derive_engagement_trust_inputs(
+    db: Any,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+) -> TrustInputs:
+    """Derive TrustInputs from the engagement's latest provenance chain.
+
+    Queries the most recent provenance record and replays the full chain.
+    Returns TrustInputs with all chain dimensions False if no chain exists
+    or verification fails — never defaults unknown trust dimensions to True.
+    """
+    from services.field_assessment.evidence_provenance import (  # noqa: PLC0415
+        list_evidence_provenance_for_engagement,
+    )
+    from services.field_assessment.trust_replay import (  # noqa: PLC0415
+        verify_full_provenance_chain,
+    )
+
+    _UNKNOWN = TrustInputs(
+        chain_valid=False,
+        signature_valid=False,
+        link_valid=False,
+        replay_valid=False,
+        tenant_valid=True,
+        engagement_valid=True,
+    )
+    try:
+        records = list_evidence_provenance_for_engagement(
+            db, tenant_id=tenant_id, engagement_id=engagement_id, limit=1, offset=0
+        )
+        if not records:
+            return _UNKNOWN
+        result = verify_full_provenance_chain(
+            db, tenant_id=tenant_id, provenance_id=records[0].id
+        )
+        return _trust_inputs_from_replay_result(result)
+    except Exception:
+        return _UNKNOWN
+
+
 # ---------------------------------------------------------------------------
 # Adapter functions
 # ---------------------------------------------------------------------------
