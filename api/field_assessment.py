@@ -7104,7 +7104,7 @@ def qa_approve_report_route(
             signature_valid=_sig_valid,
             link_valid=_trust.link_valid,
             replay_valid=_trust.replay_valid,
-            is_legacy=(_sig_valid is None),
+            is_legacy=(_trust.is_legacy or _sig_valid is None),
         )
     except TrustEnforcementError as _te:
         raise HTTPException(
@@ -8454,7 +8454,7 @@ def export_engagement_report_route(
             signature_valid=_sig_valid,
             link_valid=_trust.link_valid,
             replay_valid=_trust.replay_valid,
-            is_legacy=(_sig_valid is None),
+            is_legacy=(_trust.is_legacy or _sig_valid is None),
         )
     except TrustEnforcementError as _te:
         raise HTTPException(

@@ -51,6 +51,10 @@ def _find_calls(tree: ast.AST, fn_name: str) -> list[ast.Call]:
     return calls
 
 
+def _is_hardcoded_true(node: ast.expr) -> bool:
+    return isinstance(node, ast.Constant) and node.value is True
+
+
 def _check_site(file: str, fn_name: str, required: frozenset[str]) -> list[str]:
     path = REPO / file
     if not path.exists():
@@ -68,13 +72,24 @@ def _check_site(file: str, fn_name: str, required: frozenset[str]) -> list[str]:
 
     errors: list[str] = []
     for call in calls:
-        provided = {kw.arg for kw in call.keywords if kw.arg is not None}
-        missing = required - provided
+        kw_map = {kw.arg: kw.value for kw in call.keywords if kw.arg is not None}
+        lineno = call.lineno
+
+        missing = required - kw_map.keys()
         if missing:
-            lineno = call.lineno
             errors.append(
                 f"{file}:{lineno}: {fn_name}() missing explicit kwargs: "
                 + ", ".join(sorted(missing))
+            )
+
+        hardcoded = [
+            k for k in required if k in kw_map and _is_hardcoded_true(kw_map[k])
+        ]
+        if hardcoded:
+            errors.append(
+                f"{file}:{lineno}: {fn_name}() has hardcoded True for: "
+                + ", ".join(sorted(hardcoded))
+                + " — values must be derived from derive_engagement_trust_inputs()"
             )
     return errors
 

@@ -2231,18 +2231,21 @@ Activated dormant trust arc infrastructure (migrations 0108/0109 tables existed 
 Replaced advisory/default trust behavior with real runtime validation at the three primary governance workflow gates. All three enforcement call sites now derive `TrustInputs` from the engagement's live provenance chain instead of defaulting all dimensions to `True`.
 
 **Changes:**
-- `services/field_assessment/trust_enforcement_adapter.py`: Added `derive_engagement_trust_inputs(db, *, tenant_id, engagement_id) -> TrustInputs`. Queries `list_evidence_provenance_for_engagement(limit=1)` to get the most recent provenance record, then calls `verify_full_provenance_chain()` and maps the result through the existing `_trust_inputs_from_replay_result()`. If no provenance records exist or verification raises, returns `TrustInputs(chain_valid=False, signature_valid=False, link_valid=False, replay_valid=False)` — fail-closed, never defaults unknown trust dimensions to True.
+- `services/field_assessment/trust_enforcement_adapter.py`: Added `_and_trust_inputs()` (AND-combine two TrustInputs with severity ordering: False > None > True for signature_valid) and `derive_engagement_trust_inputs(db, *, tenant_id, engagement_id) -> TrustInputs`. Fetches all provenance records (limit=100) and identifies chain heads — records whose `event_hash` is not referenced as any other record's `previous_hash`. Replays each independent chain via `verify_full_provenance_chain()` and AND-combines results so any tampered or unsigned branch is visible under STRICT mode. Fail-closed: no chain or any exception returns all-False TrustInputs.
 - `api/reports_engine.py`: Report finalization calls `derive_engagement_trust_inputs()` and passes `chain_valid`, `signature_valid`, `link_valid`, `replay_valid`, `is_legacy` to `enforce_report_finalization()`.
 - `api/field_assessment.py` (QA approval): Calls `derive_engagement_trust_inputs()` for chain/link/replay; `signature_valid` from report signature check; passes all to `enforce_evidence_approval()`.
 - `api/field_assessment.py` (report export): Same pattern as QA approval — derives chain/link/replay from provenance, `signature_valid` from report signature, passes to `enforce_report_export()`.
 - `services/verification_bundle/bundle_service.py`: Added `trust_enforcement` section to the bundle manifest (before manifest_hash computation) containing the derived TrustInputs fields. Derivation failure is non-blocking; section contains `{"error": "derivation_failed"}` instead.
-- `tools/ci/check_trust_enforcement_inputs.py` (new): AST guardrail that verifies all three enforcement call sites pass explicit `chain_valid`, `link_valid`, `replay_valid` kwargs. Added to `security-regression-gates` CI target.
-- `tests/test_trust_enforcement_integration.py`: 5 new tests for `derive_engagement_trust_inputs()` covering no-provenance, perfect chain, broken chain, exception (fail-closed), and legacy score-50 cases.
+- `api/field_assessment.py` (QA approval, report export): `is_legacy` now uses `(_trust.is_legacy or _sig_valid is None)` — legacy provenance chain status propagates even when the report itself has a valid signature.
+- `tools/ci/check_trust_enforcement_inputs.py` (updated): AST guardrail verifies all three enforcement call sites pass explicit `chain_valid`, `link_valid`, `replay_valid` kwargs AND that those values are not hardcoded `True` constants. Added to `security-regression-gates` CI target.
+- `tests/test_trust_enforcement_integration.py`: 12 new tests covering `derive_engagement_trust_inputs()` (no-provenance, perfect chain, broken chain, exception/fail-closed, legacy score-50, multi-branch AND-combination, amendment-only-head detection) and `_and_trust_inputs()` (sig severity ordering, legacy propagation).
 
 **Security review:**
-- Trust enforcement is now derived from real provenance chain replay, not hardcoded defaults. Engagements with no provenance chain get `chain_valid=False`, which WARN mode logs and STRICT mode blocks.
-- `signature_valid` at QA/export call sites still comes from the report's own signature verification (unchanged) — the provenance chain contributes chain/link/replay validity only. This preserves signature-level control while adding chain-level enforcement.
-- `derive_engagement_trust_inputs()` is fail-closed: any exception (DB error, missing module) returns all-False TrustInputs, not all-True. The CI guardrail prevents regressions to default-True call sites.
+- Trust enforcement is now derived from real provenance chain replay across all independent evidence branches — not just the newest record. Engagements with any tampered branch get `chain_valid=False` under STRICT mode.
+- `is_legacy` at QA/export call sites is now `_trust.is_legacy OR (report_sig absent)` — legacy provenance chains cannot be masked by a valid report signature.
+- `signature_valid` at QA/export still comes from the report's own signature verification (unchanged) — the provenance chain contributes chain/link/replay validity only.
+- `derive_engagement_trust_inputs()` is fail-closed: no chain or any exception returns all-False TrustInputs, not all-True.
+- CI guardrail now rejects both missing kwargs and hardcoded `True` values — prevents the two most common regression patterns.
 
 **Validation:**
 - `PYTHONPATH=. python tools/ci/check_db_dependency.py`: OK (no violations)
