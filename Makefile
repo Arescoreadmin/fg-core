@@ -396,7 +396,7 @@ dos-hardening-check: _require-venv
 	prod-unsafe-config-check security-regression-gates soc-invariants enforcement-mode-matrix \
 	route-inventory-audit route-inventory-generate test-quality-gate soc-review-sync pr-base-mainline-check \
 	rebase-main-instructions audit-chain-verify audit-coverage-check compliance-chain-verify canonicalization-guard \
-	check-connectors-rls check_plane_registry check_plane_registry_runtime_app check-decision-roe \
+	check-connectors-rls check_plane_registry check_plane_registry_runtime_app check-decision-roe trust-enforcement-inputs \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate
@@ -488,6 +488,7 @@ security-regression-gates: venv
 	@$(PY) tools/ci/check_security_regression_gates.py
 	@$(PY) tools/ci/check_openapi_security_diff.py
 	@$(PY) tools/ci/check_artifact_policy.py
+	@$(PY) tools/ci/check_trust_enforcement_inputs.py
 
 soc-invariants: venv
 	@PYTHONPATH=. $(PY) tools/ci/check_soc_invariants.py
@@ -500,6 +501,9 @@ check-core-rls: venv
 
 enforcement-mode-matrix: venv
 	@$(PY) tools/ci/check_enforcement_mode_matrix.py
+
+trust-enforcement-inputs: venv
+	@$(PY) tools/ci/check_trust_enforcement_inputs.py
 
 route-inventory-generate: venv
 	@$(PY) tools/ci/check_route_inventory.py --write

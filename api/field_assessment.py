@@ -7064,6 +7064,7 @@ def qa_approve_report_route(
         )
 
     from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+        derive_engagement_trust_inputs,
         enforce_evidence_approval,
     )
     from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
@@ -7091,13 +7092,19 @@ def qa_approve_report_route(
             _sig_valid = verify_report(_canonical, _signature)
         except ReportSigningKeyError:
             _sig_valid = None
+    _trust = derive_engagement_trust_inputs(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
     try:
         enforce_evidence_approval(
             db,
             tenant_id=tenant_id,
             engagement_id=engagement_id,
+            chain_valid=_trust.chain_valid,
             signature_valid=_sig_valid,
-            is_legacy=(_sig_valid is None),
+            link_valid=_trust.link_valid,
+            replay_valid=_trust.replay_valid,
+            is_legacy=(_trust.is_legacy or _sig_valid is None),
         )
     except TrustEnforcementError as _te:
         raise HTTPException(
@@ -8407,6 +8414,7 @@ def export_engagement_report_route(
         )
 
     from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+        derive_engagement_trust_inputs,
         enforce_report_export,
     )
     from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
@@ -8434,13 +8442,19 @@ def export_engagement_report_route(
             _sig_valid = verify_report(_canonical, _signature)
         except ReportSigningKeyError:
             _sig_valid = None
+    _trust = derive_engagement_trust_inputs(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
     try:
         enforce_report_export(
             db,
             tenant_id=tenant_id,
             engagement_id=engagement_id,
+            chain_valid=_trust.chain_valid,
             signature_valid=_sig_valid,
-            is_legacy=(_sig_valid is None),
+            link_valid=_trust.link_valid,
+            replay_valid=_trust.replay_valid,
+            is_legacy=(_trust.is_legacy or _sig_valid is None),
         )
     except TrustEnforcementError as _te:
         raise HTTPException(

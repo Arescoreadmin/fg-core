@@ -149,6 +149,89 @@ def _trust_inputs_from_replay_result(result: dict[str, Any]) -> TrustInputs:
     )
 
 
+def _and_trust_inputs(a: TrustInputs, b: TrustInputs) -> TrustInputs:
+    """AND-combine two TrustInputs: result is valid only if both branches are valid.
+
+    signature_valid severity order: False > None > True.
+    """
+    if a.signature_valid is False or b.signature_valid is False:
+        sig: bool | None = False
+    elif a.signature_valid is None or b.signature_valid is None:
+        sig = None
+    else:
+        sig = True
+    return TrustInputs(
+        chain_valid=a.chain_valid and b.chain_valid,
+        signature_valid=sig,
+        link_valid=a.link_valid and b.link_valid,
+        replay_valid=a.replay_valid and b.replay_valid,
+        tenant_valid=a.tenant_valid and b.tenant_valid,
+        engagement_valid=a.engagement_valid and b.engagement_valid,
+        is_legacy=a.is_legacy or b.is_legacy,
+    )
+
+
+def derive_engagement_trust_inputs(
+    db: Any,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+) -> TrustInputs:
+    """Derive TrustInputs from all independent provenance chain heads.
+
+    Fetches all provenance records and identifies chain heads — records whose
+    event_hash is not referenced as any other record's previous_hash. Each
+    head is the tip of an independent evidence branch. All branches are
+    replayed and AND-combined so a tampered or unsigned branch in any
+    independent chain is visible under STRICT mode.
+
+    Returns all chain dimensions False if no chain exists or verification
+    fails — never defaults unknown trust dimensions to True.
+    """
+    from services.field_assessment.evidence_provenance import (  # noqa: PLC0415
+        list_evidence_provenance_for_engagement,
+    )
+    from services.field_assessment.trust_replay import (  # noqa: PLC0415
+        verify_full_provenance_chain,
+    )
+
+    _UNKNOWN = TrustInputs(
+        chain_valid=False,
+        signature_valid=False,
+        link_valid=False,
+        replay_valid=False,
+        tenant_valid=True,
+        engagement_valid=True,
+    )
+    try:
+        records = list_evidence_provenance_for_engagement(
+            db, tenant_id=tenant_id, engagement_id=engagement_id, limit=100, offset=0
+        )
+        if not records:
+            return _UNKNOWN
+
+        # Find chain heads: records whose event_hash is not referenced as
+        # previous_hash by any other record in this engagement. Each head
+        # is the tip of an independent evidence branch.
+        referenced = {r.previous_hash for r in records if r.previous_hash}
+        heads = [r for r in records if r.event_hash not in referenced]
+        if not heads:
+            heads = [records[0]]  # fallback: replay from most recent record
+
+        combined: TrustInputs | None = None
+        for head in heads:
+            result = verify_full_provenance_chain(
+                db, tenant_id=tenant_id, provenance_id=head.id
+            )
+            branch = _trust_inputs_from_replay_result(result)
+            combined = (
+                branch if combined is None else _and_trust_inputs(combined, branch)
+            )
+        return combined if combined is not None else _UNKNOWN
+    except Exception:
+        return _UNKNOWN
+
+
 # ---------------------------------------------------------------------------
 # Adapter functions
 # ---------------------------------------------------------------------------
