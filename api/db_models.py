@@ -3777,5 +3777,32 @@ class RiskAlertFired(Base):
     )
 
 
+class TenantEntitlement(Base):
+    """P0-5: Explicit capability grant for a tenant.
+
+    One row per (tenant_id, capability). External systems push grants here;
+    FrostGate enforces them. expires_at=None means the grant never expires.
+    """
+
+    __tablename__ = "tenant_entitlements"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "capability", name="uq_tenant_entitlements"),
+        Index("ix_tenant_entitlements_tenant", "tenant_id"),
+        Index("ix_tenant_entitlements_capability", "tenant_id", "capability"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    capability: Mapped[Any] = mapped_column(Text, nullable=False)
+    granted_by: Mapped[Any] = mapped_column(Text, nullable=False, default="system")
+    granted_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    reason: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
 # PR3 External AI Risk Register ORM registration for Base.metadata.create_all().
 import api.db_models_external_ai_risk  # noqa: F401,E402

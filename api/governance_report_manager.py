@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session
 
 from api.assessments import _resolve_caller_tenant, _get_assessment_or_404
 from api.auth_scopes.resolution import require_scopes
+from api.entitlements import require_capability
 from api.db_models_governance_report import GovernanceReportRecord
 from api.deps import auth_ctx_db_session
 from services.governance.timeline import TimelineStore
@@ -422,6 +423,7 @@ def get_governance_report(
 @router.get(
     "/{assessment_id}/governance-report/{report_id}/replay",
     response_model=ReplayResponse,
+    dependencies=[Depends(require_capability("trust.replay"))],
 )
 def replay_governance_report(
     assessment_id: str,
