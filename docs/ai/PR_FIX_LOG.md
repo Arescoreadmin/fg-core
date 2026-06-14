@@ -14712,3 +14712,44 @@ No existing checks relaxed. `FG_ENTITLEMENT_ENFORCEMENT=false` (default) is audi
 - `make fg-security`: pass (955 passed, 1 skipped)
 - `make fg-contract`: pass
 - `bash codex_gates.sh`: pass
+
+---
+
+## 2026-06-14 — PR 438 P0-6A: Trust Arc Persistence & Delivery Foundation
+
+### Scope
+Activated dormant trust arc infrastructure. Migrations 0108/0109 tables existed but had zero ORM models, zero production callers, zero delivery routes. This PR closes that gap without changing any existing behavior.
+
+### Changes
+- `api/db_models_trust_arc.py` (new): 4 append-only ORM models mirroring migrations 0108/0109 exactly (`FaTrustIntelligenceSnapshot`, `FaAuditorProofPackage`, `FaTrustCertification`, `FaTrustDecisionMemory`)
+- `services/trust_arc/__init__.py` (new): package marker
+- `services/trust_arc/orchestrator.py` (new): non-blocking orchestration — `generate_and_persist_trust_arc()` (snapshot→proof→cert) and `persist_decision_memory()`; absent `FG_EVIDENCE_SIGNING_KEY_B64` → `{skipped: True}`; caller owns DB transaction; no `db.commit()` inside
+- `api/trust_arc.py` (new): 4 delivery routes under `/field-assessment/engagements/{id}/trust-arc/` — `GET intelligence-snapshot` (`governance:read` + `trust.intelligence`), `GET proof-package` (`governance:read` + `trust.proof_package`), `GET certification` (`governance:read` + `trust.certification`), `POST rebuild` (`governance:write` + `trust.intelligence`, governance/admin-only, validates engagement exists before generating)
+- `api/main.py`: `trust_arc_router` registered in `build_app()` and `build_contract_app()`
+- `api/db.py`: `db_models_trust_arc` added to `_ensure_models_imported()`
+- `api/field_assessment.py`: `qa_approve_report_route` — decision memory persisted on QA approval (non-blocking try/except)
+- `services/verification_bundle/bundle_service.py`: trust arc generated on every bundle creation (non-blocking try/except)
+- `tools/ci/route_inventory.json` et al.: regenerated for 4 new routes
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `schemas/api/openapi.json`: contract authority markers refreshed
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`: P0-6A addendum (SOC-HIGH-002 compliance)
+- `ROADMAP.md`: P0-6A row added
+
+### Post-review fixes (same PR, second commit)
+Two bot-flagged findings fixed before merge:
+- **P1 — Entitlement bypass**: All 4 routes now require both governance scope AND the corresponding `trust.*` capability via `require_capability()`. Free/Starter/Pro tenants with `governance:read` cannot access premium trust artifacts under strict enforcement.
+- **P2 — Orphan records on invalid engagement**: `POST /rebuild` now validates the engagement exists (`get_engagement()` / `EngagementNotFound`) and returns 404 `ENGAGEMENT_NOT_FOUND` before generating any signed records.
+
+### Security Impact
+- No existing checks relaxed
+- Trust arc tables are append-only; no UPDATE/DELETE issued
+- Orchestrator is fail-closed on absent signing key; fail-open (non-blocking) on unexpected errors — host workflows never interrupted
+- All 4 routes are server-side gated by both scope and entitlement capability
+
+### Validation
+- `make fg-fast`: pass (398 passed, 2 skipped)
+- `make fg-security`: pass (955 passed, 1 skipped)
+- `python tools/ci/check_db_dependency.py`: pass
+- `python tools/ci/check_plane_registry.py`: pass
+- `bash codex_gates.sh`: pass
+- `ruff check` + `ruff format --check`: clean
+- `mypy` (new files): no issues

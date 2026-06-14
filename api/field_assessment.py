@@ -7151,6 +7151,25 @@ def qa_approve_report_route(
         decision_metadata={"qa_approved_by": display_name, "report_id": report_id},
     )
 
+    try:
+        from services.trust_arc.orchestrator import persist_decision_memory  # noqa: PLC0415
+
+        persist_decision_memory(
+            db,
+            decision_id=report_id,
+            decision_type="report_approved",
+            entity_type="human",
+            reasoning=[
+                f"Report QA-approved for client delivery by {display_name}",
+                body.decision_notes or "",
+            ],
+            supporting_evidence_ids=[report_id],
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+        )
+    except Exception:
+        log.warning("trust_arc decision memory failed (non-blocking)", exc_info=True)
+
     # Attempt auto-advance in_progress → delivered.
     # Gate evaluation runs *after* the db.flush() above so the qa-approval is
     # already visible to the readiness engine. Only advance when all gates pass.
