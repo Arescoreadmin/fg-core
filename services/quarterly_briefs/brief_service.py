@@ -656,6 +656,7 @@ def _persist_brief_and_sections(
     evidence_refs: list[str],
     decision_refs: list[str],
     bundle_refs: list[str],
+    parent_brief_id: str | None = None,
 ) -> dict[str, Any]:
     """Persist brief + sections + manifest.  Returns the assembled brief dict."""
     from api.db_models_qtb import FaQtbBrief, FaQtbBriefManifest, FaQtbBriefSection  # noqa: PLC0415
@@ -698,6 +699,7 @@ def _persist_brief_and_sections(
         generated_at=now,
         brief_hash=brief_hash_val,
         report_hash=rhash,
+        parent_brief_id=parent_brief_id,
         generation_version=_GENERATION_VERSION,
         authority_version=_AUTHORITY_VERSION,
         schema_version=_SCHEMA_VERSION,
@@ -774,6 +776,7 @@ def _persist_brief_and_sections(
         "generated_at": now,
         "brief_hash": brief_hash_val,
         "report_hash": rhash,
+        "parent_brief_id": parent_brief_id,
         "generation_version": _GENERATION_VERSION,
         "authority_version": _AUTHORITY_VERSION,
         "schema_version": _SCHEMA_VERSION,
@@ -806,6 +809,7 @@ def generate_quarterly_brief(
     year: int,
     quarter: int,
     generated_by: str = "system",
+    parent_brief_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate and persist a full Quarterly Trust Brief.
 
@@ -911,6 +915,7 @@ def generate_quarterly_brief(
             evidence_refs=[s.id for s in snapshots],
             decision_refs=[d.id for d in decisions],
             bundle_refs=[b.id for b in bundles],
+            parent_brief_id=parent_brief_id,
         )
     except Exception:
         log.exception(
@@ -931,6 +936,7 @@ def generate_board_brief(
     year: int,
     quarter: int,
     generated_by: str = "system",
+    parent_brief_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate and persist a Board-level Trust Brief.
 
@@ -1030,6 +1036,7 @@ def generate_board_brief(
             evidence_refs=[s.id for s in snapshots],
             decision_refs=[d.id for d in decisions],
             bundle_refs=[b.id for b in bundles],
+            parent_brief_id=parent_brief_id,
         )
     except Exception:
         log.exception(

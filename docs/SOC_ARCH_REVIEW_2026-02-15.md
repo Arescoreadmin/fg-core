@@ -2545,4 +2545,56 @@ they cannot copy years of append-only, cryptographically-anchored governance his
 - `make route-inventory-generate`: OK
 - `make contract-authority-refresh`: OK
 - `PYTHONPATH=. pytest tests/test_quarterly_briefs.py`: 75/75 passed
+
+---
+
+## P0-9 Improvements Addendum (2026-06-15)
+
+Three targeted additions to the QTB layer based on post-build review:
+
+### 1. Delivery Tracking
+
+Added `delivered_at`, `delivered_to`, `delivery_channel` columns to `fa_qtb_briefs` (migration 0114, `api/db_models_qtb.py`). These are mutable fields, set only when a brief transitions to `delivered` status.
+
+New route: `POST .../etcc/briefs/{brief_id}/deliver` — capability: `trust.report.delivery`; only allows `approved` briefs; sets the three delivery fields; transitions status to `delivered`; returns `delivered_at`, `delivered_to`, `delivery_channel`, `report_hash`.
+
+Valid channels: `portal | email | api | export`. Invalid channel returns 400. Non-approved brief returns 409.
+
+### 2. Regeneration Lineage
+
+Added nullable `parent_brief_id` column to `fa_qtb_briefs` (migration 0114, ORM, service, API). Propagated through `generate_quarterly_brief()` and `generate_board_brief()` service functions and both generate routes as an optional query param. Enables auditors to trace a regenerated brief back to its predecessor.
+
+### 3. Explainability Endpoint
+
+New route: `GET .../etcc/briefs/{brief_id}/explain` — capability: `trust.quarterly.briefs`. Returns `provenance` mapping every top-level metric to its authoritative source table and the exact record IDs from the stored manifest. No AI. No synthetic data. Pure lineage from `fa_qtb_brief_manifests`.
+
+Response shape:
+```json
+{
+  "provenance": {
+    "trust_score":           { "source": "fa_tim_trust_snapshots",   "snapshot_ids": [...] },
+    "risk_score":            { "source": "fa_tim_drift_events",       "event_ids": [...] },
+    "certification_status":  { "source": "fa_trust_certifications",   "certification_ids": [...] },
+    "governance_activity":   { "source": "fa_timeline_events",        "event_ids": [...] },
+    "decision_record":       { "source": "fa_trust_decision_memory",  "decision_ids": [...] },
+    "verification_bundles":  { "source": "fa_verification_bundles",   "bundle_ids": [...] }
+  },
+  "manifest_hash": "...",
+  "integrity": { "no_synthetic_data": true, ... }
+}
+```
+
+### Files Changed
+
+- `migrations/postgres/0114_quarterly_trust_briefs.sql` — 4 new columns on `fa_qtb_briefs` (`delivered_at`, `delivered_to`, `delivery_channel`, `parent_brief_id`)
+- `api/db_models_qtb.py` — 4 new `Mapped` fields on `FaQtbBrief`
+- `services/quarterly_briefs/brief_service.py` — `parent_brief_id` propagation through `_persist_brief_and_sections`, `generate_quarterly_brief`, `generate_board_brief`
+- `api/quarterly_briefs.py` — `_brief_to_dict` extended; 2 new routes (`deliver`, `explain`); `parent_brief_id` query param on generate routes
+- `tests/test_quarterly_briefs.py` — 8 new tests (lineage: 4, delivery fields: 4); 83/83 passed
+
+### Validation
+
+- `make route-inventory-generate`: OK (2 new routes registered)
+- `make contract-authority-refresh`: OK
+- `PYTHONPATH=. pytest tests/test_quarterly_briefs.py`: 83/83 passed
 EOFSOCDOC

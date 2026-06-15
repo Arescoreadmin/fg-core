@@ -855,3 +855,136 @@ class TestHistoricalReportingAccuracy:
         )
         assert board["trust_posture"]["score"] == 88
         assert board["strategic_direction"] == "improving"
+
+
+# ---------------------------------------------------------------------------
+# parent_brief_id lineage
+# ---------------------------------------------------------------------------
+
+
+class TestParentBriefIdLineage:
+    def _make_db_empty(self):
+        db = MagicMock()
+        execute = MagicMock()
+        db.execute.return_value = execute
+        execute.scalars.return_value.all.return_value = []
+        execute.scalar_one_or_none.return_value = None
+        execute.scalar.return_value = 0
+        return db
+
+    def test_parent_brief_id_propagated_to_quarterly_result(self):
+        db = self._make_db_empty()
+        result = generate_quarterly_brief(
+            db,
+            tenant_id="t1",
+            engagement_id="e1",
+            year=2026,
+            quarter=1,
+            parent_brief_id="parent-abc",
+        )
+        assert result["parent_brief_id"] == "parent-abc"
+
+    def test_parent_brief_id_propagated_to_board_result(self):
+        db = self._make_db_empty()
+        result = generate_board_brief(
+            db,
+            tenant_id="t1",
+            engagement_id="e1",
+            year=2026,
+            quarter=1,
+            parent_brief_id="parent-xyz",
+        )
+        assert result["parent_brief_id"] == "parent-xyz"
+
+    def test_parent_brief_id_defaults_to_none(self):
+        db = self._make_db_empty()
+        result = generate_quarterly_brief(
+            db, tenant_id="t1", engagement_id="e1", year=2026, quarter=1
+        )
+        assert result["parent_brief_id"] is None
+
+    def test_board_parent_brief_id_defaults_to_none(self):
+        db = self._make_db_empty()
+        result = generate_board_brief(
+            db, tenant_id="t1", engagement_id="e1", year=2026, quarter=1
+        )
+        assert result["parent_brief_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# Delivery tracking fields in _brief_to_dict
+# ---------------------------------------------------------------------------
+
+
+class TestDeliveryFields:
+    def _make_brief_row(self, **overrides):
+        row = MagicMock()
+        row.id = "brief-1"
+        row.tenant_id = "t1"
+        row.engagement_id = "e1"
+        row.report_type = "quarterly"
+        row.year = 2026
+        row.quarter = 1
+        row.period_start = "2026-01-01T00:00:00Z"
+        row.period_end = "2026-04-01T00:00:00Z"
+        row.status = "generated"
+        row.generated_by = "system"
+        row.generated_at = "2026-04-15T10:00:00Z"
+        row.reviewed_by = None
+        row.reviewed_at = None
+        row.approved_by = None
+        row.approved_at = None
+        row.brief_hash = "a" * 64
+        row.report_hash = "b" * 64
+        row.delivered_at = None
+        row.delivered_to = None
+        row.delivery_channel = None
+        row.parent_brief_id = None
+        row.generation_version = "qtb-1.0"
+        row.authority_version = "v1"
+        row.schema_version = "1.0"
+        for k, v in overrides.items():
+            setattr(row, k, v)
+        return row
+
+    def test_delivery_fields_present_in_dict_when_none(self):
+        from api.quarterly_briefs import _brief_to_dict
+
+        row = self._make_brief_row()
+        d = _brief_to_dict(row)
+        assert "delivered_at" in d
+        assert "delivered_to" in d
+        assert "delivery_channel" in d
+        assert d["delivered_at"] is None
+        assert d["delivered_to"] is None
+        assert d["delivery_channel"] is None
+
+    def test_parent_brief_id_present_in_dict_when_none(self):
+        from api.quarterly_briefs import _brief_to_dict
+
+        row = self._make_brief_row()
+        d = _brief_to_dict(row)
+        assert "parent_brief_id" in d
+        assert d["parent_brief_id"] is None
+
+    def test_delivery_fields_serialized_when_set(self):
+        from api.quarterly_briefs import _brief_to_dict
+
+        row = self._make_brief_row(
+            status="delivered",
+            delivered_at="2026-04-20T12:00:00Z",
+            delivered_to="board@example.com",
+            delivery_channel="email",
+        )
+        d = _brief_to_dict(row)
+        assert d["status"] == "delivered"
+        assert d["delivered_at"] == "2026-04-20T12:00:00Z"
+        assert d["delivered_to"] == "board@example.com"
+        assert d["delivery_channel"] == "email"
+
+    def test_parent_brief_id_serialized_when_set(self):
+        from api.quarterly_briefs import _brief_to_dict
+
+        row = self._make_brief_row(parent_brief_id="parent-brief-99")
+        d = _brief_to_dict(row)
+        assert d["parent_brief_id"] == "parent-brief-99"

@@ -55,6 +55,12 @@ class FaQtbBrief(Base):
     brief_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     report_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    delivered_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    delivered_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    delivery_channel: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    parent_brief_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     generation_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="qtb-1.0"
     )

@@ -38194,6 +38194,24 @@
             }
           },
           {
+            "description": "ID of the board report this regeneration supersedes",
+            "in": "query",
+            "name": "parent_brief_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ID of the board report this regeneration supersedes",
+              "title": "Parent Brief Id"
+            }
+          },
+          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -38454,6 +38472,24 @@
             }
           },
           {
+            "description": "ID of the brief this regeneration supersedes",
+            "in": "query",
+            "name": "parent_brief_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ID of the brief this regeneration supersedes",
+              "title": "Parent Brief Id"
+            }
+          },
+          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -38632,6 +38668,166 @@
           }
         },
         "summary": "Approve a reviewed trust brief (immutable after this point)",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/deliver": {
+      "post": {
+        "description": "Record delivery of an approved trust brief.\n\nOnly approved briefs may be delivered.  Sets delivered_at, delivered_to,\ndelivery_channel and transitions status to 'delivered'.\nThe actor is derived from the API key \u2014 no caller-supplied actor.",
+        "operationId": "deliver_brief_field_assessment_engagements__engagement_id__etcc_briefs__brief_id__deliver_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Recipient identifier (email, org, role)",
+            "in": "query",
+            "name": "delivered_to",
+            "required": true,
+            "schema": {
+              "description": "Recipient identifier (email, org, role)",
+              "title": "Delivered To",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Delivery channel: portal | email | api | export",
+            "in": "query",
+            "name": "delivery_channel",
+            "required": true,
+            "schema": {
+              "description": "Delivery channel: portal | email | api | export",
+              "title": "Delivery Channel",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Deliver Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Deliver Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark a trust brief as delivered to a recipient",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/explain": {
+      "get": {
+        "description": "Return metric-to-source provenance for a trust brief.\n\nMaps every top-level metric in the report back to the authoritative\nsource table and the exact record IDs that produced it.  No AI.\nNo summaries.  Pure data lineage from the persisted manifest.",
+        "operationId": "explain_brief_field_assessment_engagements__engagement_id__etcc_briefs__brief_id__explain_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Explain Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Explain Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explain the provenance of every metric in a trust brief",
         "tags": [
           "quarterly-trust-briefs"
         ]

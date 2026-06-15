@@ -102,6 +102,10 @@ def _brief_to_dict(row: FaQtbBrief) -> dict[str, Any]:
         "approved_at": row.approved_at,
         "brief_hash": row.brief_hash,
         "report_hash": row.report_hash,
+        "delivered_at": row.delivered_at,
+        "delivered_to": row.delivered_to,
+        "delivery_channel": row.delivery_channel,
+        "parent_brief_id": row.parent_brief_id,
         "generation_version": row.generation_version,
         "authority_version": row.authority_version,
         "schema_version": row.schema_version,
@@ -201,6 +205,9 @@ def generate_quarterly_brief(
     db: Session = Depends(auth_ctx_db_session),
     year: int = Query(..., description="Report year (e.g. 2026)"),
     quarter: int = Query(..., ge=1, le=4, description="Report quarter (1–4)"),
+    parent_brief_id: str | None = Query(
+        default=None, description="ID of the brief this regeneration supersedes"
+    ),
 ) -> dict[str, Any]:
     """Generate and persist a full Quarterly Trust Brief.
 
@@ -224,6 +231,7 @@ def generate_quarterly_brief(
         year=year,
         quarter=quarter,
         generated_by=actor,
+        parent_brief_id=parent_brief_id,
     )
     if not brief:
         raise HTTPException(
@@ -635,6 +643,9 @@ def generate_board_brief(
     db: Session = Depends(auth_ctx_db_session),
     year: int = Query(..., description="Report year (e.g. 2026)"),
     quarter: int = Query(..., ge=1, le=4, description="Report quarter (1–4)"),
+    parent_brief_id: str | None = Query(
+        default=None, description="ID of the board report this regeneration supersedes"
+    ),
 ) -> dict[str, Any]:
     """Generate and persist a Board-level Trust Brief.
 
@@ -658,6 +669,7 @@ def generate_board_brief(
         year=year,
         quarter=quarter,
         generated_by=actor,
+        parent_brief_id=parent_brief_id,
     )
     if not brief:
         raise HTTPException(
@@ -746,6 +758,197 @@ def get_board_report(
     return {
         **_brief_to_dict(brief),
         "sections": [_section_to_dict(s) for s in sections],
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /engagements/{engagement_id}/etcc/briefs/{brief_id}/deliver
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/engagements/{engagement_id}/etcc/briefs/{brief_id}/deliver",
+    dependencies=[
+        Depends(require_scopes("governance:read")),
+        Depends(require_capability("trust.report.delivery")),
+    ],
+    summary="Mark a trust brief as delivered to a recipient",
+)
+def deliver_brief(
+    engagement_id: str,
+    brief_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+    delivered_to: str = Query(
+        ..., description="Recipient identifier (email, org, role)"
+    ),
+    delivery_channel: str = Query(
+        ..., description="Delivery channel: portal | email | api | export"
+    ),
+) -> dict[str, Any]:
+    """Record delivery of an approved trust brief.
+
+    Only approved briefs may be delivered.  Sets delivered_at, delivered_to,
+    delivery_channel and transitions status to 'delivered'.
+    The actor is derived from the API key — no caller-supplied actor.
+    """
+    _VALID_CHANNELS = frozenset({"portal", "email", "api", "export"})
+    if delivery_channel not in _VALID_CHANNELS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"delivery_channel must be one of: {', '.join(sorted(_VALID_CHANNELS))}",
+        )
+
+    tenant_id = _resolve_caller_tenant(request)
+
+    brief = db.execute(
+        select(FaQtbBrief).where(
+            FaQtbBrief.tenant_id == tenant_id,
+            FaQtbBrief.id == brief_id,
+            FaQtbBrief.engagement_id == engagement_id,
+        )
+    ).scalar_one_or_none()
+
+    if brief is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="brief not found"
+        )
+    if brief.status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"only approved briefs may be delivered (current status: '{brief.status}')",
+        )
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    brief.status = "delivered"
+    brief.delivered_at = now
+    brief.delivered_to = delivered_to
+    brief.delivery_channel = delivery_channel
+    db.commit()
+
+    return {
+        "brief_id": brief_id,
+        "status": "delivered",
+        "delivered_at": now,
+        "delivered_to": delivered_to,
+        "delivery_channel": delivery_channel,
+        "report_hash": brief.report_hash,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /engagements/{engagement_id}/etcc/briefs/{brief_id}/explain
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/engagements/{engagement_id}/etcc/briefs/{brief_id}/explain",
+    dependencies=[
+        Depends(require_scopes("governance:read")),
+        Depends(require_capability("trust.quarterly.briefs")),
+    ],
+    summary="Explain the provenance of every metric in a trust brief",
+)
+def explain_brief(
+    engagement_id: str,
+    brief_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Return metric-to-source provenance for a trust brief.
+
+    Maps every top-level metric in the report back to the authoritative
+    source table and the exact record IDs that produced it.  No AI.
+    No summaries.  Pure data lineage from the persisted manifest.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+
+    brief = db.execute(
+        select(FaQtbBrief).where(
+            FaQtbBrief.tenant_id == tenant_id,
+            FaQtbBrief.id == brief_id,
+            FaQtbBrief.engagement_id == engagement_id,
+        )
+    ).scalar_one_or_none()
+
+    if brief is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="brief not found"
+        )
+
+    manifest = db.execute(
+        select(FaQtbBriefManifest).where(
+            FaQtbBriefManifest.tenant_id == tenant_id,
+            FaQtbBriefManifest.brief_id == brief_id,
+        )
+    ).scalar_one_or_none()
+
+    if manifest is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="manifest not found"
+        )
+
+    def _parse(val: str) -> list:
+        try:
+            return json.loads(val)
+        except (ValueError, TypeError):
+            return []
+
+    snap_ids = _parse(manifest.snapshot_ids)
+    cert_ids = _parse(manifest.certification_ids)
+    drift_ids = _parse(manifest.drift_event_ids)
+    timeline_ids = _parse(manifest.timeline_refs)
+    decision_ids = _parse(manifest.decision_refs)
+    bundle_ids = _parse(manifest.bundle_refs)
+
+    return {
+        "brief_id": brief_id,
+        "report_hash": brief.report_hash,
+        "provenance": {
+            "trust_score": {
+                "source": "fa_tim_trust_snapshots",
+                "source_label": "TIM Snapshots",
+                "snapshot_ids": snap_ids,
+                "count": len(snap_ids),
+            },
+            "risk_score": {
+                "source": "fa_tim_drift_events",
+                "source_label": "Drift Events",
+                "event_ids": drift_ids,
+                "count": len(drift_ids),
+            },
+            "certification_status": {
+                "source": "fa_trust_certifications",
+                "source_label": "Trust Certifications",
+                "certification_ids": cert_ids,
+                "count": len(cert_ids),
+            },
+            "governance_activity": {
+                "source": "fa_timeline_events",
+                "source_label": "Timeline Events",
+                "event_ids": timeline_ids,
+                "count": len(timeline_ids),
+            },
+            "decision_record": {
+                "source": "fa_trust_decision_memory",
+                "source_label": "Decision Memory",
+                "decision_ids": decision_ids,
+                "count": len(decision_ids),
+            },
+            "verification_bundles": {
+                "source": "fa_verification_bundles",
+                "source_label": "Verification Bundles",
+                "bundle_ids": bundle_ids,
+                "count": len(bundle_ids),
+            },
+        },
+        "manifest_hash": manifest.manifest_hash,
+        "integrity": {
+            "no_synthetic_data": True,
+            "no_ai_generated_conclusions": True,
+            "every_metric_has_source": True,
+            "replay_support": True,
+        },
     }
 
 

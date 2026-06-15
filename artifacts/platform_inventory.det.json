@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 483,
+    "contract_count": 496,
     "contract_only": [],
-    "runtime_count": 622,
+    "runtime_count": 635,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
@@ -152,7 +152,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "1202e93af601aae0a642ddbaf513887f9a8192f31964b779e11b7e2391cf9eb9",
+  "governance_fingerprint": "835cc778a874040d64b9ae1125dcb58aed118a528936e787644e680ca0576dd7",
   "planes": [
     {
       "compat": {
@@ -509,6 +509,13 @@
       "GET /field-assessment/engagements/{engagement_id}/drift-report",
       "GET /field-assessment/engagements/{engagement_id}/drift-report/correlation/{finding_id}",
       "GET /field-assessment/engagements/{engagement_id}/drift-velocity",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/board",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/board/{report_id}",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/briefs",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/explain",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/export",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/manifest",
       "GET /field-assessment/engagements/{engagement_id}/etcc/certification",
       "GET /field-assessment/engagements/{engagement_id}/etcc/certification/history",
       "GET /field-assessment/engagements/{engagement_id}/etcc/decisions",
@@ -561,6 +568,7 @@
       "GET /field-assessment/engagements/{engagement_id}/verification-bundle",
       "GET /field-assessment/engagements/{engagement_id}/verification-bundle/download",
       "GET /field-assessment/engagements/{engagement_id}/verification-bundle/manifest",
+      "GET /field-assessment/etcc/briefs/history",
       "GET /field-assessment/etcc/overview",
       "GET /field-assessment/interview-templates",
       "GET /field-assessment/reports/verify/{report_hash}",
@@ -749,6 +757,11 @@
       "POST /field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
       "POST /field-assessment/engagements/{engagement_id}/connector-schedules",
       "POST /field-assessment/engagements/{engagement_id}/document-analyses",
+      "POST /field-assessment/engagements/{engagement_id}/etcc/board/generate",
+      "POST /field-assessment/engagements/{engagement_id}/etcc/briefs/generate",
+      "POST /field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/approve",
+      "POST /field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/deliver",
+      "POST /field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/review",
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",
       "POST /field-assessment/engagements/{engagement_id}/exceptions",
       "POST /field-assessment/engagements/{engagement_id}/observations",

@@ -59,6 +59,14 @@ CREATE TABLE IF NOT EXISTS fa_qtb_briefs (
     brief_hash          TEXT,
     report_hash         TEXT,
 
+    -- Delivery tracking (mutable; set when brief is delivered)
+    delivered_at        TEXT,
+    delivered_to        TEXT,
+    delivery_channel    TEXT,      -- portal | email | api | export
+
+    -- Regeneration lineage (nullable; set when this brief replaces a prior one)
+    parent_brief_id     TEXT,
+
     -- Provenance
     generation_version  TEXT        NOT NULL DEFAULT 'qtb-1.0',
     authority_version   TEXT        NOT NULL DEFAULT 'v1',

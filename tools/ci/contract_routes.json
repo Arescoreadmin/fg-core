@@ -1585,6 +1585,18 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/deliver",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/explain",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/export",
       "scopes": [],
@@ -2965,7 +2977,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-15T19:49:25.803901+00:00",
+  "generated_at": "2026-06-15T20:34:50.705439+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
