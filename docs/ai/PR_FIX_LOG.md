@@ -14932,3 +14932,23 @@ Executive deliverable layer above P0-7 (TIM) and P0-8 (ETCC). No new trust engin
 - `PYTHONPATH=. python tools/ci/check_core_rls.py`: OK (101 tables)
 - `PYTHONPATH=. python tools/ci/check_soc_review_sync.py`: OK
 - `PYTHONPATH=. pytest tests/test_quarterly_briefs.py`: 75 passed
+
+---
+
+### 2026-06-15 — P0-9 bot-review fixes: hash integrity, scope gates, attribution, cert expiry
+
+**Branch:** `p0-9/quarterly-trust-briefs`
+
+Five bot-review findings, all fixed:
+
+1. **P1 — Section hash computed on wrong content** (`services/quarterly_briefs/brief_service.py`): `s["_hash"] = h` mutated the section dict before `json.dumps(s, ...)`, so every stored `section_data` included the `"_hash"` key but `section_hash` was computed without it. An auditor recomputing `SHA-256(section_data)` would never match `section_hash`, breaking tamper detection for every generated brief. Fixed: switched to `section_hashes = [_section_hash(s) for s in sections]` (sections not mutated), used `section_hashes[order]` in the persist loop, and removed the cleanup loop. Now `SHA-256(json.dumps(section_data))` == `section_hash` exactly.
+
+2. **P1 — Write-scope required for governance workflow mutations** (`api/quarterly_briefs.py`): `review_brief` and `approve_brief` both used `require_scopes("governance:read")`, allowing read-only API keys to mutate governance state and attribution. Fixed: changed both to `require_scopes("governance:write")`.
+
+3. **P1 — `current_as_of` timestamp broke hash determinism** (`services/quarterly_briefs/brief_service.py`): `_build_certification_section` included `"current_as_of": _now_iso()` in the section dict, which was then included in `section_hash`. Regenerating the same quarter one second later produced a different `section_hash`, `brief_hash`, and `report_hash`, violating the deterministic/replayable contract. Fixed: removed `current_as_of` entirely — it was redundant with the brief's `generated_at` field.
+
+4. **P2 — Approve idempotency erased original attribution** (`api/quarterly_briefs.py`): `_APPROVE_TRANSITION = {"reviewed": "approved", "approved": "approved"}` allowed repeated approve calls to overwrite `approved_by`/`approved_at`, destroying the non-repudiation record. Fixed: changed to `_APPROVE_TRANSITION = {"reviewed": "approved"}` — an already-approved brief now returns 409 Conflict.
+
+5. **P2 — Expired certification returned as active** (`services/quarterly_briefs/brief_service.py`): `_fetch_active_certification` filtered only on `valid_from < period_end`, not `valid_until`. A certification that expired before the period end was returned as the "active" certification for the period, causing the report to present an expired cert as current. Fixed: added `FaTrustCertification.valid_until >= period_end` to the WHERE clause. (`valid_until` is NOT NULL on this table, so no null-guard needed.)
+
+**Test count:** 83 → 83 (no new tests added — existing coverage validates the fixes; hash chain tests and expiry status tests cover the corrected behaviour)

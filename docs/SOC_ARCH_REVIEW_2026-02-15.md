@@ -2597,4 +2597,22 @@ Response shape:
 - `make route-inventory-generate`: OK (2 new routes registered)
 - `make contract-authority-refresh`: OK
 - `PYTHONPATH=. pytest tests/test_quarterly_briefs.py`: 83/83 passed
+
+---
+
+## P0-9 Bot-Review Fixes (2026-06-15)
+
+Five bot-review findings fixed after initial P0-9 merge:
+
+**P1 — Section hash computed on wrong content** (`brief_service.py`): `section_hash` was computed on the section dict before mutation, but `section_data` was serialized after mutating `s["_hash"] = h`, creating a permanent mismatch. Fixed: sections are no longer mutated — `section_hashes = [_section_hash(s) for s in sections]` and `section_hashes[order]` is used in the persist loop.
+
+**P1 — Write scope required for governance workflow mutations** (`api/quarterly_briefs.py`): `review_brief` and `approve_brief` used `governance:read`, allowing read-only keys to mutate governance state. Fixed: both now require `governance:write`.
+
+**P1 — Non-deterministic `current_as_of` in certification section hash** (`brief_service.py`): `_build_certification_section` included `current_as_of = _now_iso()` in the section dict, which was hashed. Same quarter regenerated 1 second later produced a different `report_hash`. Fixed: `current_as_of` removed from the section dict.
+
+**P2 — Approve idempotency overwrote original attribution** (`api/quarterly_briefs.py`): `_APPROVE_TRANSITION` accepted `approved → approved`, allowing repeated calls to overwrite `approved_by`/`approved_at`. Fixed: removed that transition entry; already-approved briefs now return 409.
+
+**P2 — Expired certification returned as active** (`brief_service.py`): `_fetch_active_certification` filtered only on `valid_from < period_end`, not `valid_until`. Fixed: added `valid_until >= period_end` to the WHERE clause.
+
+No new routes. No schema changes. No migration changes. Route inventory and topology updated to reflect CI artifact state.
 EOFSOCDOC

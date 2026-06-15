@@ -60,7 +60,7 @@ _VALID_STATUSES = frozenset(
     {"draft", "generated", "reviewed", "approved", "delivered", "archived"}
 )
 _REVIEW_TRANSITION = {"generated": "reviewed", "reviewed": "reviewed"}
-_APPROVE_TRANSITION = {"reviewed": "approved", "approved": "approved"}
+_APPROVE_TRANSITION = {"reviewed": "approved"}
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +341,7 @@ def get_brief(
 @router.post(
     "/engagements/{engagement_id}/etcc/briefs/{brief_id}/review",
     dependencies=[
-        Depends(require_scopes("governance:read")),
+        Depends(require_scopes("governance:write")),
         Depends(require_capability("trust.report.review")),
     ],
     summary="Mark a trust brief as reviewed",
@@ -400,7 +400,7 @@ def review_brief(
 @router.post(
     "/engagements/{engagement_id}/etcc/briefs/{brief_id}/approve",
     dependencies=[
-        Depends(require_scopes("governance:read")),
+        Depends(require_scopes("governance:write")),
         Depends(require_capability("trust.report.review")),
     ],
     summary="Approve a reviewed trust brief (immutable after this point)",

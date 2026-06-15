@@ -181,6 +181,7 @@ def _fetch_active_certification(
             FaTrustCertification.tenant_id == tenant_id,
             FaTrustCertification.engagement_id == engagement_id,
             FaTrustCertification.valid_from < period_end,
+            FaTrustCertification.valid_until >= period_end,
         )
         .order_by(FaTrustCertification.valid_from.desc())
         .limit(1)
@@ -397,7 +398,6 @@ def _build_certification_section(
     period_certs: list[Any], active_cert: Any
 ) -> dict[str, Any]:
     """Derive certification intelligence from Trust Arc certification records."""
-    now = _now_iso()
 
     def _expiry_status(valid_until: str | None) -> str:
         if not valid_until:
@@ -449,7 +449,6 @@ def _build_certification_section(
             }
             for c in period_certs
         ],
-        "current_as_of": now,
         "source_certification_ids": [c.id for c in period_certs]
         + ([active_cert.id] if active_cert and active_cert not in period_certs else []),
     }
@@ -664,13 +663,9 @@ def _persist_brief_and_sections(
     now = _now_iso()
     brief_id = _new_id()
 
-    # Compute hashes
-    section_hashes = []
-    for s in sections:
-        h = _section_hash(s)
-        s["_hash"] = h
-        section_hashes.append(h)
-
+    # Compute hashes — sections are not mutated so section_data serializes
+    # the exact same dict that was hashed (auditor-reproducible).
+    section_hashes = [_section_hash(s) for s in sections]
     brief_hash_val = _sha256(section_hashes)
 
     mhash = _manifest_hash(
@@ -725,7 +720,7 @@ def _persist_brief_and_sections(
                 + s.get("source_timeline_refs", [])
                 + s.get("source_decision_refs", [])
             ),
-            section_hash=s["_hash"],
+            section_hash=section_hashes[order],
             generated_at=now,
             schema_version=_SCHEMA_VERSION,
         )
@@ -757,10 +752,6 @@ def _persist_brief_and_sections(
     db.add(manifest_row)
 
     db.flush()
-
-    # Clean internal _hash key from section dicts before returning
-    for s in sections:
-        s.pop("_hash", None)
 
     return {
         "brief_id": brief_id,
