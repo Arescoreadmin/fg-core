@@ -41440,6 +41440,414 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/tim/certification-status": {
+      "get": {
+        "description": "Return the active trust certification and its validity status.\n\nIncludes days_remaining, expiry_status (valid/expiring_soon/expired),\nand the latest TIM snapshot certification fields for cross-reference.",
+        "operationId": "get_tim_certification_status_field_assessment_engagements__engagement_id__tim_certification_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Tim Certification Status Field Assessment Engagements  Engagement Id  Tim Certification Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Current trust certification with expiry metadata",
+        "tags": [
+          "trust-monitoring"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/tim/drift": {
+      "get": {
+        "description": "Return drift events for an engagement.\n\nDefaults to open events only.  Pass status_filter=all to include\nresolved events.  Ordered most-recent-first.  Max 500 per call.",
+        "operationId": "get_tim_drift_field_assessment_engagements__engagement_id__tim_drift_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status_filter",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "title": "Status Filter",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Tim Drift Field Assessment Engagements  Engagement Id  Tim Drift Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open drift events for an engagement",
+        "tags": [
+          "trust-monitoring"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/tim/drift/{event_id}/acknowledge": {
+      "post": {
+        "description": "Create an acknowledgement row for an existing drift event.\n\nAppend-only: the original event row is unchanged (DB trigger prevents\nUPDATE/DELETE).  This creates a new row with status='acknowledged'\nand links back via correlation_id.",
+        "operationId": "acknowledge_tim_drift_field_assessment_engagements__engagement_id__tim_drift__event_id__acknowledge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "title": "Actor Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Acknowledge Tim Drift Field Assessment Engagements  Engagement Id  Tim Drift  Event Id  Acknowledge Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Acknowledge a drift event (append-only governance audit trail)",
+        "tags": [
+          "trust-monitoring"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/tim/posture": {
+      "get": {
+        "description": "Return the most recent TIM trust posture snapshot for an engagement.\n\nIncludes posture score, certification state, drift direction, and\nopen drift event count.  Evaluated continuously on every trust arc\nactivation.",
+        "operationId": "get_tim_posture_field_assessment_engagements__engagement_id__tim_posture_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Tim Posture Field Assessment Engagements  Engagement Id  Tim Posture Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest TIM trust posture snapshot",
+        "tags": [
+          "trust-monitoring"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/tim/risks": {
+      "get": {
+        "description": "Return open high/critical drift events as an executive risk summary.\n\nOnly surfaces the most actionable signals: severity=high or critical,\nstatus=open.  Ordered by detected_at descending.",
+        "operationId": "get_tim_risks_field_assessment_engagements__engagement_id__tim_risks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Tim Risks Field Assessment Engagements  Engagement Id  Tim Risks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "High and critical trust drift risks",
+        "tags": [
+          "trust-monitoring"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/tim/timeline": {
+      "get": {
+        "description": "Return recent governance timeline events for trust monitoring.\n\nFiltered to source_type='trust_monitoring' events for this engagement.\nOrdered most-recent-first.  Max 200 events per call.",
+        "operationId": "get_tim_timeline_field_assessment_engagements__engagement_id__tim_timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Tim Timeline Field Assessment Engagements  Engagement Id  Tim Timeline Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Governance timeline events for TIM monitoring",
+        "tags": [
+          "trust-monitoring"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/trust-arc/certification": {
       "get": {
         "description": "Return the most recent trust certification for an engagement.\n\nCertification is deterministically derived from the composite trust and\nconfidence score (0.70\u00d7trust + 0.30\u00d7confidence). Levels: not_certified,\nbronze (\u226550), silver (\u226560), gold (\u226570), platinum (\u226580), enterprise (\u226590).\nValid for 90 days from generation.",

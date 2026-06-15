@@ -2253,3 +2253,48 @@ Replaced advisory/default trust behavior with real runtime validation at the thr
 - `make route-inventory-generate`: OK (4 new routes classified)
 - `make contract-authority-refresh`: OK
 - `make fg-fast`: OK
+
+**Addendum — P0-7 Trust Intelligence Monitoring (TIM) Foundation (2026-06-14):**
+Activated customer-visible continuous trust monitoring using the existing Trust Arc infrastructure (P0-6A/B). TIM observes, correlates, persists, and surfaces trust state over time. No new trust engines — all scores come from existing producers.
+
+**Migration:**
+- `migrations/postgres/0113_trust_intelligence_monitoring.sql`: Two new append-only tables — `fa_tim_trust_snapshots` (periodic trust posture aggregates, indexed by tenant+engagement+evaluated_at) and `fa_tim_drift_events` (deterministic rule-based drift detections, indexed by tenant+engagement+status+severity). Both: RLS using `app.tenant_id` GUC (pattern consistent with migrations 0108/0109/0111). Append-only triggers on both tables (BEFORE UPDATE/DELETE → raise exception). No UPDATE or DELETE permitted from service layer.
+
+**Service files:**
+- `services/trust_monitoring/__init__.py`: empty package marker.
+- `services/trust_monitoring/timeline_emitter.py`: Six non-blocking emit functions targeting the existing `governance_timeline_events` table (ORM: `TimelineEventRecord`). Sources: `trust_arc` (snapshot_generated, certification_issued, governance_decision_recorded), `verification_bundle` (bundle_generated), `trust_monitoring` (drift_detected, snapshot_evaluated). All errors logged and swallowed — timeline failures never interrupt host workflows.
+- `services/trust_monitoring/drift_service.py`: Seven deterministic drift rules — `score_degradation` (≥10→MEDIUM, ≥20→HIGH, ≥30→CRITICAL), `cert_expiration` (≤14d→LOW, ≤7d→MEDIUM, ≤3d→HIGH), `cert_expired` (CRITICAL), `evidence_staleness` (>30d→LOW, >60d→MEDIUM, >90d→HIGH; no evidence→LOW), `replay_failure` (failed→CRITICAL, no_chain→LOW), `missing_bundle` (>14d→LOW, >30d→MEDIUM), `consecutive_degradation` (3+ consecutive degrading snapshots→MEDIUM). Public `detect_and_persist_drift()` persists `FaTimDriftEvent` rows and emits `tim_drift_detected` timeline events. Non-blocking.
+- `services/trust_monitoring/snapshot_service.py`: `compute_and_persist_tim_snapshot()` queries the latest `FaTrustIntelligenceSnapshot`, `FaTrustCertification`, `FaEvidenceProvenance` (count), and `FaVerificationBundle` (last generated_at) to aggregate trust state into a `FaTimTrustSnapshot` row. Computes drift direction and score delta vs. the previous TIM snapshot. Non-blocking.
+- `services/trust_monitoring/monitoring_engine.py`: `evaluate_and_persist_tim()` orchestrates snapshot → drift detection → timeline emit in sequence. Single entry point for all TIM callers. Non-blocking.
+
+**API routes (`api/trust_monitoring.py`):**
+Five executive dashboard routes under `/field-assessment/engagements/{engagement_id}/tim/`:
+- `GET .../posture` — latest TIM trust snapshot.
+- `GET .../timeline` — governance timeline events (source_type=trust_monitoring), max 200, most-recent-first.
+- `GET .../drift` — open (or all) drift events, max 500.
+- `GET .../certification-status` — latest certification with expiry metadata and `expiry_status` (valid/expiring_soon/expired/not_certified).
+- `GET .../risks` — open high/critical drift events only.
+All routes: `governance:read` scope + `continuous.monitoring` capability (ENTERPRISE tier, already in capability registry).
+
+**Wiring:**
+- `api/main.py`: `trust_monitoring_router` imported and registered in both `build_app()` and `build_contract_app()`.
+- `api/db.py`: `api.db_models_tim` added to `_ensure_models_imported()`.
+- `services/trust_arc/orchestrator.py`: `_run_tim_evaluation()` called (non-blocking) at the end of `_run_trust_arc()` — TIM snapshot evaluated on every trust arc activation.
+- `services/verification_bundle/bundle_service.py`: `emit_verification_bundle_generated()` called (non-blocking) immediately after `db.add(record)` in `_build_and_persist_bundle()`.
+- `api/db_models_trust_arc.py`: Added three missing ORM models (`FaTrustIntelligenceLedger`, `FaDecisionReconstructionRecord`, `FaChainOfCustodyRecord`) for tables created in migrations 0108/0109 but previously without SQLAlchemy classes. Fixed `custody_metadata` column name (maps to SQL `metadata`) to avoid SQLAlchemy reserved-name conflict.
+- `api/db_models_tim.py`: Two new ORM models (`FaTimTrustSnapshot`, `FaTimDriftEvent`).
+- Route inventory, plane registry snapshot, contract routes, and topology hash regenerated; OpenAPI contract regenerated and authority markers refreshed.
+
+**Security review:**
+- All five TIM routes require `governance:read` scope and `continuous.monitoring` capability (ENTERPRISE). No customer route bypasses auth.
+- Tenant resolution via `_resolve_caller_tenant(request)` — same pattern as trust_arc.py.
+- TIM tables are append-only; no UPDATE or DELETE from service layer; enforced by DB triggers in migration 0113.
+- RLS on both TIM tables uses `app.tenant_id` GUC — consistent with all FA tables added since migration 0111.
+- All TIM service functions are non-blocking: any exception is caught, logged, and returns empty dict/list. TIM failures cannot interrupt trust arc activation, bundle generation, or any other host workflow.
+- Drift rules are fully deterministic — no AI, no ML, no external calls. Evidence for every detected event is stored in the `evidence` JSON column.
+- `actor_type` in drift events defaults to `"system"` and is extensible without schema changes.
+
+**Validation:**
+- `make route-inventory-generate`: OK (5 new TIM routes classified)
+- `make contract-authority-refresh`: OK
+- `make fg-fast`: OK (pending full run)

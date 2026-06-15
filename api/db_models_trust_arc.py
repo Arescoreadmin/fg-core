@@ -1,14 +1,19 @@
-"""SQLAlchemy ORM models for P0-6A Trust Arc persistence tables.
+"""SQLAlchemy ORM models for Trust Arc persistence tables.
 
 Mirrors migrations 0108 (trust intelligence + decision memory) and
 0109 (auditor proof + certification). Tables are append-only; no UPDATE
 or DELETE operations are issued by the service layer.
 
-Classes:
+Classes (P0-6A):
   FaTrustIntelligenceSnapshot  — fa_trust_intelligence_snapshots (0108)
   FaAuditorProofPackage        — fa_auditor_proof_packages (0109)
   FaTrustCertification         — fa_trust_certifications (0109)
   FaTrustDecisionMemory        — fa_trust_decision_memory (0108)
+
+Classes (P0-7 — previously table-only, no ORM):
+  FaTrustIntelligenceLedger      — fa_trust_intelligence_ledger (0108)
+  FaDecisionReconstructionRecord — fa_decision_reconstruction_records (0109)
+  FaChainOfCustodyRecord         — fa_chain_of_custody_records (0109)
 """
 
 from __future__ import annotations
@@ -158,6 +163,111 @@ class FaTrustDecisionMemory(Base):
     supporting_evidence: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
     authority_version: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+
+# ---------------------------------------------------------------------------
+# P0-7: ORM models for tables that existed in migrations 0108/0109
+# but had no SQLAlchemy class.
+# ---------------------------------------------------------------------------
+
+
+class FaTrustIntelligenceLedger(Base):
+    """Hash-chained tamper-evident ledger of trust intelligence snapshots.
+
+    Migration 0108. Append-only. Each entry chains to the previous via
+    previous_hash (genesis sentinel: '0' * 64). Enables ledger integrity
+    verification without replaying all snapshots.
+    """
+
+    __tablename__ = "fa_trust_intelligence_ledger"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_signature: Mapped[str] = mapped_column(Text, nullable=False)
+    signing_key_id: Mapped[str] = mapped_column(Text, nullable=False)
+    authority_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    posture_level: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unknown"
+    )
+    risk_level: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unknown"
+    )
+    posture_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    previous_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    ledger_entry_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    timestamp: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+
+class FaDecisionReconstructionRecord(Base):
+    """Legal defense decision reconstruction record.
+
+    Migration 0109. Append-only. Captures the full question-and-answer
+    reconstruction of a governance decision for legal/audit review.
+    """
+
+    __tablename__ = "fa_decision_reconstruction_records"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    reconstruction_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    total_decisions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    replay_valid: Mapped[bool] = mapped_column(nullable=False, default=False)
+    questions_answered: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    decision_reconstruction: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # JSON
+    evidence_chain: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    intelligence_chain: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    replay_validation: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    authority_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    generated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+
+class FaChainOfCustodyRecord(Base):
+    """Hash-linked chain of custody event record.
+
+    Migration 0109. Append-only. Tracks lifecycle events (evidence_created,
+    evidence_reviewed, evidence_approved, report_generated, report_exported,
+    trust_verified, package_generated) in a tamper-evident chain.
+
+    entity_type is extensible: human | reviewer | approver | agent |
+    agent_fleet | autonomous_workflow | autonomous_system | agi.
+    """
+
+    __tablename__ = "fa_chain_of_custody_records"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="human"
+    )
+    entity_id: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    custody_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    custody_metadata: Mapped[str | None] = mapped_column(
+        "metadata", Text, nullable=True
+    )  # JSON
+    authority_version: Mapped[str] = mapped_column(String(128), nullable=False)
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )

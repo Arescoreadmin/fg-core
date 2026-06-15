@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 461,
+    "contract_count": 466,
     "contract_only": [],
-    "runtime_count": 600,
+    "runtime_count": 605,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
@@ -152,7 +152,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "917988e67199cd5684ca7f88c9b04a7e1126eca54976b7173b7a9b45eb21841e",
+  "governance_fingerprint": "efcd733f3f4e01df4ce1907888c9461ab54c30a1aee1a0243207109de7cc8058",
   "planes": [
     {
       "compat": {
@@ -536,6 +536,11 @@
       "GET /field-assessment/engagements/{engagement_id}/scan-results",
       "GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
       "GET /field-assessment/engagements/{engagement_id}/summary",
+      "GET /field-assessment/engagements/{engagement_id}/tim/certification-status",
+      "GET /field-assessment/engagements/{engagement_id}/tim/drift",
+      "GET /field-assessment/engagements/{engagement_id}/tim/posture",
+      "GET /field-assessment/engagements/{engagement_id}/tim/risks",
+      "GET /field-assessment/engagements/{engagement_id}/tim/timeline",
       "GET /field-assessment/engagements/{engagement_id}/trust-arc/certification",
       "GET /field-assessment/engagements/{engagement_id}/trust-arc/intelligence-snapshot",
       "GET /field-assessment/engagements/{engagement_id}/trust-arc/proof-package",

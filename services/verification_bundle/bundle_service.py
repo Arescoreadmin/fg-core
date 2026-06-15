@@ -863,6 +863,28 @@ class VerificationBundleService:
         db.add(record)
 
         try:
+            from services.trust_monitoring.timeline_emitter import (  # noqa: PLC0415
+                emit_verification_bundle_generated,
+            )
+
+            emit_verification_bundle_generated(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                bundle_id=record.id,
+                verification_status=record.verification_status,
+                coverage_status=record.coverage_status,
+                occurred_at=record.generated_at,
+            )
+        except Exception:
+            import logging as _log  # noqa: PLC0415
+
+            _log.getLogger("frostgate.tim.timeline").warning(
+                "emit_verification_bundle_generated failed (non-blocking)",
+                exc_info=True,
+            )
+
+        try:
             from services.trust_arc.orchestrator import generate_and_persist_trust_arc  # noqa: PLC0415
 
             generate_and_persist_trust_arc(

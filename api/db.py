@@ -218,6 +218,9 @@ def _ensure_models_imported() -> None:
         "api.db_models_ai_vendor_governance"
     )  # PR 4: AI vendor governance workflow engine
     importlib.import_module("api.db_models_trust_arc")  # P0-6A: trust arc persistence
+    importlib.import_module(
+        "api.db_models_tim"
+    )  # P0-7: TIM trust snapshots + drift events
 
 
 def _get_base():

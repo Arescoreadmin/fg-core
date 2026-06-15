@@ -14786,3 +14786,46 @@ Replaced advisory/default trust behavior with real runtime derivation at the thr
 - `python -m pytest tests/test_trust_enforcement_integration.py::TestDeriveEngagementTrustInputs`: 5 passed
 - `ruff check` + `ruff format --check`: clean
 - `mypy`: no issues
+
+---
+
+## P0-7: Trust Intelligence Monitoring (TIM) Foundation (2026-06-14)
+
+### Summary
+Activated customer-visible continuous trust monitoring using existing Trust Arc infrastructure (P0-6A/B). No new trust engines — all scores from existing producers. TIM observes, correlates, persists, and surfaces trust state over time.
+
+### Files Created
+- `migrations/postgres/0113_trust_intelligence_monitoring.sql`: 2 append-only RLS tables — `fa_tim_trust_snapshots` (periodic posture aggregates) + `fa_tim_drift_events` (deterministic rule detections). RLS uses `app.tenant_id` GUC. Append-only triggers on both tables.
+- `api/db_models_tim.py`: `FaTimTrustSnapshot` + `FaTimDriftEvent` ORM models.
+- `services/trust_monitoring/__init__.py`: package marker.
+- `services/trust_monitoring/timeline_emitter.py`: 6 non-blocking emit functions targeting existing `governance_timeline_events` table (sources: trust_arc, verification_bundle, trust_monitoring).
+- `services/trust_monitoring/drift_service.py`: 7 deterministic drift rules: score_degradation (≥10→MED, ≥20→HIGH, ≥30→CRIT), cert_expiration (≤14d→LOW, ≤7d→MED, ≤3d→HIGH), cert_expired (CRIT), evidence_staleness (>30d→LOW, >60d→MED, >90d→HIGH; no evidence→LOW), replay_failure (failed→CRIT, no_chain→LOW), missing_bundle (>14d→LOW, >30d→MED), consecutive_degradation (3+ degrading→MED). `detect_and_persist_drift()` persists + emits. Non-blocking.
+- `services/trust_monitoring/snapshot_service.py`: `compute_and_persist_tim_snapshot()` aggregates FaTrustIntelligenceSnapshot + FaTrustCertification + FaEvidenceProvenance (count) + FaVerificationBundle (last generated_at) into FaTimTrustSnapshot. Computes drift direction/score vs. previous TIM snapshot. Non-blocking.
+- `services/trust_monitoring/monitoring_engine.py`: `evaluate_and_persist_tim()` orchestrates snapshot → drift → timeline in one call. Non-blocking.
+- `api/trust_monitoring.py`: 5 executive dashboard routes (governance:read + continuous.monitoring/ENTERPRISE): GET posture/timeline/drift/certification-status/risks.
+- `tests/test_trust_monitoring.py`: 40 unit tests (all 7 drift rule functions + detect_and_persist_drift surface + snapshot_service helpers).
+
+### Files Modified
+- `api/db_models_trust_arc.py`: Added 3 missing ORM models (`FaTrustIntelligenceLedger`, `FaDecisionReconstructionRecord`, `FaChainOfCustodyRecord`). Fixed `metadata` → `custody_metadata` with `mapped_column("metadata", ...)` to avoid SQLAlchemy reserved-name conflict.
+- `api/main.py`: `trust_monitoring_router` imported + registered in both `build_app()` and `build_contract_app()`.
+- `api/db.py`: `api.db_models_tim` added to `_ensure_models_imported()`.
+- `services/trust_arc/orchestrator.py`: `_run_tim_evaluation()` helper added; called non-blocking at end of `_run_trust_arc()` — TIM evaluated on every trust arc activation.
+- `services/verification_bundle/bundle_service.py`: `emit_verification_bundle_generated()` called (non-blocking) after `db.add(record)` in `_build_and_persist_bundle()`.
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`: P0-7 addendum.
+- `ROADMAP.md`: P0-7 row added.
+
+### Non-Obvious Design Decisions
+- **No new trust engines**: TIM only reads from existing tables. `snapshot_service.py` reads `FaTrustIntelligenceSnapshot` for score/level/risk — all computed by the existing trust intelligence authority.
+- **`replay_status` defaulted to `no_chain`** in snapshot_service: TIM doesn't re-run chain replay (too expensive inline); the replay_failure drift rule will fire on every engagement without a valid chain, which is the intended signal.
+- **`custody_metadata` column name**: SQLAlchemy's `DeclarativeBase` reserves `metadata` as a class attribute (the `MetaData` object). The SQL column is named `metadata` in the migration; the ORM attribute uses `mapped_column("metadata", ...)` to map to a different Python name.
+- **Timeline query in GET /tim/timeline** uses JSON path filter on `payload["engagement_id"]` — this requires the `governance_timeline_events.payload` column to be a JSONB type (not TEXT). Verified this is the case in the existing migration 0057.
+- **open_drift_count in snapshot** counts existing open drift events *before* the new drift detection run; the monitoring engine adds newly detected events to that count in the summary dict.
+
+### Validation
+- `make fg-fast`: pass (398 passed, 2 skipped)
+- `make fg-security`: pass (955 passed, 1 skipped)
+- `make fg-contract`: pass
+- `bash codex_gates.sh`: pass
+- `PYTHONPATH=. python tools/ci/check_route_inventory.py`: OK
+- `PYTHONPATH=. python tools/ci/check_soc_review_sync.py`: OK
+- `PYTHONPATH=. pytest tests/test_trust_monitoring.py`: 40 passed
