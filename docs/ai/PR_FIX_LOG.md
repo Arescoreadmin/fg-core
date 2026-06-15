@@ -14890,3 +14890,45 @@ Four bot-review findings on PR #441 resolved (1×P1, 3×P2).
 ### Non-Obvious Design Decisions
 - `max(id)` tie-breaker in `get_tenant_overview()` assumes ULIDs/sequential IDs (higher = later). For random UUIDs this would be arbitrary but still deterministic (exactly one row, just not guaranteed to be the physically last insert). For this schema ULIDs are used so the behavior is correct.
 - Drift report stats use 4 queries instead of loading all rows in Python: GROUP BY aggregates are index-only scans — far cheaper than a full row fetch for large engagement histories.
+
+---
+
+## P0-9: Quarterly Trust Briefs (QTB) (2026-06-15)
+
+### PR / Branch
+`p0-9/quarterly-trust-briefs`
+
+### Summary
+Executive deliverable layer above P0-7 (TIM) and P0-8 (ETCC). No new trust engines. Transforms continuous governance data into defensible quarterly briefs, board reports, and governance summaries with deterministic SHA-256 hash chains enabling auditor verification.
+
+### Files Created
+- `migrations/postgres/0114_quarterly_trust_briefs.sql`: 3 tables — `fa_qtb_briefs` (status-mutable brief record), `fa_qtb_brief_sections` (append-only content, triggers), `fa_qtb_brief_manifests` (append-only audit anchor, triggers). All RLS-enforced via `app.tenant_id` GUC.
+- `api/db_models_qtb.py`: `FaQtbBrief`, `FaQtbBriefSection`, `FaQtbBriefManifest` ORM models.
+- `services/quarterly_briefs/__init__.py`: package marker.
+- `services/quarterly_briefs/brief_service.py`: `generate_quarterly_brief()` (6-section: posture/drift/certification/governance/evidence/board_summary), `generate_board_brief()` (condensed: board_summary + evidence). Deterministic hash chain: `section_hash` → `brief_hash` → `manifest_hash` → `report_hash` (all SHA-256, sort_keys=True). Returns empty dict on error — caller commits.
+- `api/quarterly_briefs.py`: 11 routes under `/field-assessment/` prefix. POST generate/board-generate (201), GET list/get/manifest/export/board-list/board-get/history, POST review/approve. All require `governance:read`. Actor from `request.state.auth.key_prefix`.
+- `tests/test_quarterly_briefs.py`: 75 unit tests.
+
+### Files Modified
+- `api/entitlements.py`: 5 new capabilities in CAPABILITY_REGISTRY + ENTERPRISE tier: `trust.quarterly.briefs`, `trust.board.reporting`, `trust.report.export`, `trust.report.review`, `trust.report.delivery`.
+- `api/main.py`: `quarterly_briefs_router` imported + registered in both `build_app()` and `build_contract_app()`.
+- `api/db.py`: `api.db_models_qtb` added to `_ensure_models_imported()`.
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`: P0-9 addendum.
+- `ROADMAP.md`: P0-9 row added.
+
+### Non-Obvious Design Decisions
+- **`fa_qtb_briefs` is NOT append-only**: Status field progresses through the workflow (draft → generated → reviewed → approved → delivered → archived). Content integrity is protected by `brief_hash` (set at generation, never updated). Sections and manifest ARE append-only.
+- **Hash chain is reproducible**: `report_hash = SHA-256(brief_hash + ":" + manifest_hash)`. An auditor with access to the source data can independently verify the report by regenerating hashes from the manifest IDs.
+- **Board brief derives from same data as quarterly brief**: `generate_board_brief()` runs the same fetchers and section builders internally; it just only persists `board_summary` + `evidence` sections — avoiding code duplication while keeping the board report concise.
+- **Review/approve use actor from auth key prefix**: Same non-repudiation pattern as P0-7 acknowledge (not caller-supplied). Prevents impersonation in the approval workflow.
+- **11 routes use 5 granular capabilities**: Generation is separate from export (`trust.report.export`) and approval (`trust.report.review`) — anticipating that some customers will want generation-only access without approval authority.
+
+### Validation
+- `make fg-fast`: pass (398 passed, 2 skipped)
+- `make fg-security`: pass (955 passed, 1 skipped)
+- `make fg-contract`: pass
+- `bash codex_gates.sh`: pass
+- `PYTHONPATH=. python tools/ci/check_route_inventory.py`: OK
+- `PYTHONPATH=. python tools/ci/check_core_rls.py`: OK (101 tables)
+- `PYTHONPATH=. python tools/ci/check_soc_review_sync.py`: OK
+- `PYTHONPATH=. pytest tests/test_quarterly_briefs.py`: 75 passed

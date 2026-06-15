@@ -38084,6 +38084,778 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/etcc/board": {
+      "get": {
+        "description": "Return all board-type trust briefs for this engagement.",
+        "operationId": "list_board_reports_field_assessment_engagements__engagement_id__etcc_board_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Board Reports Field Assessment Engagements  Engagement Id  Etcc Board Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Board Trust Reports for an engagement (newest first)",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/board/generate": {
+      "post": {
+        "description": "Generate and persist a Board-level Trust Brief.\n\nCondenses full quarterly data into a strategic board-ready format.\nContains: board_summary + evidence appendix only.\n\nAll values sourced from the same authoritative P0-6/P0-7 data.\nNo additional trust engines.",
+        "operationId": "generate_board_brief_field_assessment_engagements__engagement_id__etcc_board_generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Report year (e.g. 2026)",
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "description": "Report year (e.g. 2026)",
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Report quarter (1\u20134)",
+            "in": "query",
+            "name": "quarter",
+            "required": true,
+            "schema": {
+              "description": "Report quarter (1\u20134)",
+              "maximum": 4,
+              "minimum": 1,
+              "title": "Quarter",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Generate Board Brief Field Assessment Engagements  Engagement Id  Etcc Board Generate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate a Board-level Trust Brief for an engagement",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/board/{report_id}": {
+      "get": {
+        "description": "Return a full board trust report with sections and manifest.",
+        "operationId": "get_board_report_field_assessment_engagements__engagement_id__etcc_board__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Board Report Field Assessment Engagements  Engagement Id  Etcc Board  Report Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get a Board Trust Report with all sections",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/briefs": {
+      "get": {
+        "description": "Return a paginated list of all trust briefs for this engagement.",
+        "operationId": "list_briefs_field_assessment_engagements__engagement_id__etcc_briefs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by report_type (quarterly | board | ...)",
+            "in": "query",
+            "name": "report_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by report_type (quarterly | board | ...)",
+              "title": "Report Type"
+            }
+          },
+          {
+            "description": "Filter by status",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Briefs Field Assessment Engagements  Engagement Id  Etcc Briefs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Quarterly Trust Briefs for an engagement (newest first)",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/briefs/generate": {
+      "post": {
+        "description": "Generate and persist a full Quarterly Trust Brief.\n\nAggregates 6 sections from existing P0-6/P0-7 data:\n  posture | drift | certification | governance | evidence | board_summary\n\nReturns the assembled brief with all sections and manifest summary.\nEvery metric traces to its authoritative source \u2014 no synthetic data.",
+        "operationId": "generate_quarterly_brief_field_assessment_engagements__engagement_id__etcc_briefs_generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Report year (e.g. 2026)",
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "description": "Report year (e.g. 2026)",
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Report quarter (1\u20134)",
+            "in": "query",
+            "name": "quarter",
+            "required": true,
+            "schema": {
+              "description": "Report quarter (1\u20134)",
+              "maximum": 4,
+              "minimum": 1,
+              "title": "Quarter",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Generate Quarterly Brief Field Assessment Engagements  Engagement Id  Etcc Briefs Generate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate a Quarterly Trust Brief for an engagement",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}": {
+      "get": {
+        "description": "Return a full trust brief with all sections and metadata.\n\nIncludes: posture, drift, certification, governance, evidence, board_summary\nsections in section_order.  Manifest hash verifies content integrity.",
+        "operationId": "get_brief_field_assessment_engagements__engagement_id__etcc_briefs__brief_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get a Quarterly Trust Brief with all sections",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/approve": {
+      "post": {
+        "description": "Transition a trust brief from 'reviewed' to 'approved'.\n\nApproved briefs are considered final deliverables.  Content is\nimmutable after approval \u2014 the report_hash ensures integrity.",
+        "operationId": "approve_brief_field_assessment_engagements__engagement_id__etcc_briefs__brief_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Approve Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Approve Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve a reviewed trust brief (immutable after this point)",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/export": {
+      "get": {
+        "description": "Export a trust brief in a portable format.\n\njson  \u2014 full brief + sections + manifest as a single JSON document.\nhtml  \u2014 HTML-formatted report suitable for board sharing (inline CSS).\n\nThe exported document is format-agnostic data from the same authoritative\nsource.  PDF generation is handled by downstream tooling from the HTML.",
+        "operationId": "export_brief_field_assessment_engagements__engagement_id__etcc_briefs__brief_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Export format: json | html",
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "description": "Export format: json | html",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Export Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Export Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export a trust brief as JSON or HTML",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/manifest": {
+      "get": {
+        "description": "Return the deterministic audit manifest for a trust brief.\n\nThe manifest contains every source ID referenced by the report \u2014\nenabling auditors and regulators to verify every metric traces back\nto authoritative platform data.\n\nmanifest_hash = SHA-256 of all source ID arrays.\nreport_hash   = SHA-256(brief_hash + manifest_hash).",
+        "operationId": "get_brief_manifest_field_assessment_engagements__engagement_id__etcc_briefs__brief_id__manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Brief Manifest Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Manifest Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get the deterministic audit manifest for a trust brief",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/review": {
+      "post": {
+        "description": "Transition a trust brief from 'generated' to 'reviewed'.\n\nThe actor is derived from the API key prefix \u2014 no caller-supplied actor.\nOnly status and reviewer fields are mutated; content is immutable.",
+        "operationId": "review_brief_field_assessment_engagements__engagement_id__etcc_briefs__brief_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Review Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Review Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark a trust brief as reviewed",
+        "tags": [
+          "quarterly-trust-briefs"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/etcc/certification": {
       "get": {
         "description": "Return the active trust certification with expiry status and ledger linkage.\n\nLinks to the trust intelligence ledger entry for auditor verification.",
@@ -43386,6 +44158,100 @@
         "summary": "Get Verification Bundle Manifest Route",
         "tags": [
           "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/etcc/briefs/history": {
+      "get": {
+        "description": "Return all trust briefs across all engagements for this tenant.\n\nOrdered by generated_at descending.  Enables a compliance team to\nview the full report delivery history in one call.",
+        "operationId": "get_brief_history_field_assessment_etcc_briefs_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "report_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Report Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Brief History Field Assessment Etcc Briefs History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tenant-level trust brief history across all engagements",
+        "tags": [
+          "quarterly-trust-briefs"
         ]
       }
     },
