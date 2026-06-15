@@ -267,11 +267,12 @@ def get_tenant_overview(
     from sqlalchemy import select, func  # noqa: PLC0415
 
     try:
-        # Subquery: latest evaluated_at per engagement
+        # Subquery: latest evaluated_at + max id (tie-breaker) per engagement
         latest_subq = (
             select(
                 FaTimTrustSnapshot.engagement_id,
                 func.max(FaTimTrustSnapshot.evaluated_at).label("max_eval"),
+                func.max(FaTimTrustSnapshot.id).label("max_id"),
             )
             .where(FaTimTrustSnapshot.tenant_id == tenant_id)
             .group_by(FaTimTrustSnapshot.engagement_id)
@@ -284,7 +285,8 @@ def get_tenant_overview(
                 .join(
                     latest_subq,
                     (FaTimTrustSnapshot.engagement_id == latest_subq.c.engagement_id)
-                    & (FaTimTrustSnapshot.evaluated_at == latest_subq.c.max_eval),
+                    & (FaTimTrustSnapshot.evaluated_at == latest_subq.c.max_eval)
+                    & (FaTimTrustSnapshot.id == latest_subq.c.max_id),
                 )
                 .where(FaTimTrustSnapshot.tenant_id == tenant_id)
                 .order_by(FaTimTrustSnapshot.posture_score.asc())

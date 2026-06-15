@@ -28,13 +28,14 @@ Routes (prefix: /field-assessment):
     GET  .../reports/risk                              — risk posture breakdown
 
 Capability gates:
-  trust.executive.dashboard  — posture, trends, overview, drilldowns
-  trust.risk                 — risks endpoint
-  trust.certification        — certification routes
-  continuous.monitoring      — monitoring health route
-  trust.timeline             — activity feed
-  trust.memory               — decision memory
-  trust.reporting            — all /reports/* routes
+  trust.executive.dashboard   — posture, trends, overview
+  trust.executive.drilldown   — drilldown/drift and drilldown/certification
+  trust.risk                  — risks endpoint
+  trust.certification         — certification routes
+  continuous.monitoring       — monitoring health route
+  trust.timeline              — activity feed
+  trust.memory                — decision memory
+  trust.reporting             — all /reports/* routes
 
 All routes require governance:read scope and ENTERPRISE tier.
 """
@@ -619,19 +620,29 @@ def get_etcc_monitoring(
         .limit(limit)
     ).all()
 
-    # Evaluation failures from timeline
+    # Evaluation failures from timeline: total count + limited detail list
+    _failure_where = [
+        TimelineEventRecord.tenant_id == tenant_id,
+        TimelineEventRecord.source_type == "trust_monitoring",
+        TimelineEventRecord.event_type == "tim_evaluation_failed",
+    ]
+    _failure_filter = (
+        TimelineEventRecord.payload["engagement_id"].as_string() == engagement_id
+    )
+    total_failure_count = (
+        db.execute(
+            select(func.count())
+            .select_from(TimelineEventRecord)
+            .where(*_failure_where)
+            .filter(_failure_filter)
+        ).scalar()
+        or 0
+    )
     failure_events = (
         db.execute(
             select(TimelineEventRecord)
-            .where(
-                TimelineEventRecord.tenant_id == tenant_id,
-                TimelineEventRecord.source_type == "trust_monitoring",
-                TimelineEventRecord.event_type == "tim_evaluation_failed",
-            )
-            .filter(
-                TimelineEventRecord.payload["engagement_id"].as_string()
-                == engagement_id
-            )
+            .where(*_failure_where)
+            .filter(_failure_filter)
             .order_by(TimelineEventRecord.occurred_at.desc())
             .limit(5)
         )
@@ -661,8 +672,8 @@ def get_etcc_monitoring(
             else None,
             "open_drift_count": latest_snap.open_drift_count if latest_snap else 0,
             "evidence_count": latest_snap.evidence_count if latest_snap else 0,
-            "evaluation_failure_count": len(failure_events),
-            "has_failures": len(failure_events) > 0,
+            "evaluation_failure_count": total_failure_count,
+            "has_failures": total_failure_count > 0,
         },
         "reconstruction": {
             "record_id": reconstruction.id if reconstruction else None,
@@ -703,6 +714,7 @@ def get_etcc_monitoring(
     "/engagements/{engagement_id}/etcc/timeline",
     dependencies=[
         Depends(require_scopes("governance:read")),
+        Depends(require_capability("trust.executive.dashboard")),
         Depends(require_capability("trust.timeline")),
     ],
     summary="Unified trust governance activity feed (filterable, chronological)",
@@ -853,7 +865,7 @@ def get_etcc_decisions(
     "/engagements/{engagement_id}/etcc/drilldown/drift/{event_id}",
     dependencies=[
         Depends(require_scopes("governance:read")),
-        Depends(require_capability("trust.executive.dashboard")),
+        Depends(require_capability("trust.executive.drilldown")),
     ],
     summary="Drilldown: drift event → evidence → linked TIM snapshot",
 )
@@ -932,7 +944,7 @@ def get_etcc_drilldown_drift(
     "/engagements/{engagement_id}/etcc/drilldown/certification/{cert_id}",
     dependencies=[
         Depends(require_scopes("governance:read")),
-        Depends(require_capability("trust.certification")),
+        Depends(require_capability("trust.executive.drilldown")),
     ],
     summary="Drilldown: certification → chain of custody → reconstruction record",
 )
@@ -1280,13 +1292,40 @@ def get_etcc_report_drift(
     tenant_id = _resolve_caller_tenant(request)
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    _base_where = [
+        FaTimDriftEvent.tenant_id == tenant_id,
+        FaTimDriftEvent.engagement_id == engagement_id,
+    ]
+
+    # Aggregate stats over the full dataset (not the paginated slice)
+    total_count = db.execute(select(func.count()).where(*_base_where)).scalar() or 0
+
+    rule_rows = db.execute(
+        select(FaTimDriftEvent.drift_rule, func.count().label("cnt"))
+        .where(*_base_where)
+        .group_by(FaTimDriftEvent.drift_rule)
+    ).all()
+    rule_counts = {r.drift_rule: r.cnt for r in rule_rows}
+
+    severity_rows = db.execute(
+        select(FaTimDriftEvent.severity, func.count().label("cnt"))
+        .where(*_base_where)
+        .group_by(FaTimDriftEvent.severity)
+    ).all()
+    severity_counts = {r.severity: r.cnt for r in severity_rows}
+
+    status_rows = db.execute(
+        select(FaTimDriftEvent.status, func.count().label("cnt"))
+        .where(*_base_where)
+        .group_by(FaTimDriftEvent.status)
+    ).all()
+    status_counts = {r.status: r.cnt for r in status_rows}
+
+    # Paginated event list (newest first)
     rows = (
         db.execute(
             select(FaTimDriftEvent)
-            .where(
-                FaTimDriftEvent.tenant_id == tenant_id,
-                FaTimDriftEvent.engagement_id == engagement_id,
-            )
+            .where(*_base_where)
             .order_by(FaTimDriftEvent.detected_at.desc())
             .limit(limit)
         )
@@ -1294,19 +1333,11 @@ def get_etcc_report_drift(
         .all()
     )
 
-    rule_counts: dict[str, int] = {}
-    severity_counts: dict[str, int] = {}
-    status_counts: dict[str, int] = {}
-    for e in rows:
-        rule_counts[e.drift_rule] = rule_counts.get(e.drift_rule, 0) + 1
-        severity_counts[e.severity] = severity_counts.get(e.severity, 0) + 1
-        status_counts[e.status] = status_counts.get(e.status, 0) + 1
-
     return {
         "report_type": "drift_history",
         "engagement_id": engagement_id,
         "generated_at": now_iso,
-        "total_events": len(rows),
+        "total_events": total_count,
         "by_rule": rule_counts,
         "by_severity": severity_counts,
         "by_status": status_counts,
