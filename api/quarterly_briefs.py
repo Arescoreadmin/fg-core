@@ -13,6 +13,8 @@ Routes (prefix: /field-assessment):
     POST .../etcc/briefs/{brief_id}/approve      — mark brief as approved
     GET  .../etcc/briefs/{brief_id}/manifest     — deterministic audit manifest
     GET  .../etcc/briefs/{brief_id}/export       — export (JSON or HTML)
+    POST .../etcc/briefs/{brief_id}/deliver      — record delivery to recipient
+    GET  .../etcc/briefs/{brief_id}/explain      — metric → source provenance map
     POST .../etcc/board/generate                 — generate board brief
     GET  .../etcc/board                          — list board reports
     GET  .../etcc/board/{report_id}              — get board report
@@ -21,11 +23,12 @@ Routes (prefix: /field-assessment):
     GET  /etcc/briefs/history                    — all briefs across all engagements
 
 Capability gates (all ENTERPRISE tier):
-  trust.quarterly.briefs   — generate, list, read briefs
-  trust.board.reporting    — generate, list, read board reports
-  trust.report.review      — review + approve workflow
-  trust.report.export      — export endpoint
-  trust.report.delivery    — tenant-level history
+  trust.quarterly.briefs    — generate, list, read briefs, manifest, export
+  trust.board.reporting     — generate, list, read board reports
+  trust.report.review       — review + approve workflow
+  trust.report.export       — export endpoint
+  trust.report.delivery     — deliver endpoint + tenant-level history
+  trust.executive.drilldown — explain endpoint (exposes internal source record IDs)
 
 All routes require governance:read scope.
 """
@@ -845,7 +848,7 @@ def deliver_brief(
     "/engagements/{engagement_id}/etcc/briefs/{brief_id}/explain",
     dependencies=[
         Depends(require_scopes("governance:read")),
-        Depends(require_capability("trust.quarterly.briefs")),
+        Depends(require_capability("trust.executive.drilldown")),
     ],
     summary="Explain the provenance of every metric in a trust brief",
 )
