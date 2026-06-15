@@ -46,6 +46,21 @@ def _signing_key_available() -> bool:
     return bool(os.environ.get("FG_EVIDENCE_SIGNING_KEY_B64", "").strip())
 
 
+def _run_tim_evaluation(db: Any, *, tenant_id: str, engagement_id: str) -> None:
+    try:
+        from services.trust_monitoring.monitoring_engine import (  # noqa: PLC0415
+            evaluate_and_persist_tim,
+        )
+
+        evaluate_and_persist_tim(db, tenant_id=tenant_id, engagement_id=engagement_id)
+    except Exception:
+        log.exception(
+            "trust_arc: TIM evaluation failed tenant=%s engagement=%s",
+            tenant_id,
+            engagement_id,
+        )
+
+
 def generate_and_persist_trust_arc(
     db: Session,
     *,
@@ -310,6 +325,8 @@ def _run_trust_arc(
             tenant_id,
             engagement_id,
         )
+
+    _run_tim_evaluation(db, tenant_id=tenant_id, engagement_id=engagement_id)
 
     return {
         _SKIPPED_KEY: False,
