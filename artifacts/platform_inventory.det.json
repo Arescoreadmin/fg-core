@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 468,
+    "contract_count": 483,
     "contract_only": [],
-    "runtime_count": 607,
+    "runtime_count": 622,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
@@ -152,7 +152,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "5e90b1b603c4e9f693e3f624ddce6f0a765bbdd38d0474188c0a94102afdeb98",
+  "governance_fingerprint": "1202e93af601aae0a642ddbaf513887f9a8192f31964b779e11b7e2391cf9eb9",
   "planes": [
     {
       "compat": {
@@ -509,6 +509,20 @@
       "GET /field-assessment/engagements/{engagement_id}/drift-report",
       "GET /field-assessment/engagements/{engagement_id}/drift-report/correlation/{finding_id}",
       "GET /field-assessment/engagements/{engagement_id}/drift-velocity",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/certification",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/certification/history",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/decisions",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/drilldown/certification/{cert_id}",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/drilldown/drift/{event_id}",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/monitoring",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/posture",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/reports/drift",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/reports/quarterly",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/reports/risk",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/reports/summary",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/risks",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/timeline",
+      "GET /field-assessment/engagements/{engagement_id}/etcc/trends",
       "GET /field-assessment/engagements/{engagement_id}/evidence-links",
       "GET /field-assessment/engagements/{engagement_id}/exceptions",
       "GET /field-assessment/engagements/{engagement_id}/exceptions/{exception_id}",
@@ -547,6 +561,7 @@
       "GET /field-assessment/engagements/{engagement_id}/verification-bundle",
       "GET /field-assessment/engagements/{engagement_id}/verification-bundle/download",
       "GET /field-assessment/engagements/{engagement_id}/verification-bundle/manifest",
+      "GET /field-assessment/etcc/overview",
       "GET /field-assessment/interview-templates",
       "GET /field-assessment/reports/verify/{report_hash}",
       "GET /governance/assets",
