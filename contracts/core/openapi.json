@@ -38084,6 +38084,1038 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/etcc/certification": {
+      "get": {
+        "description": "Return the active trust certification with expiry status and ledger linkage.\n\nLinks to the trust intelligence ledger entry for auditor verification.",
+        "operationId": "get_etcc_certification_field_assessment_engagements__engagement_id__etcc_certification_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Certification Field Assessment Engagements  Engagement Id  Etcc Certification Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Active trust certification with expiry metadata and evidence linkage",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/certification/history": {
+      "get": {
+        "description": "Return the full certification history for an engagement, newest first.\n\nEach row is an immutable certification record \u2014 never mutated, never deleted.",
+        "operationId": "get_etcc_certification_history_field_assessment_engagements__engagement_id__etcc_certification_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Certification History Field Assessment Engagements  Engagement Id  Etcc Certification History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Full trust certification history (append-only audit trail)",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/decisions": {
+      "get": {
+        "description": "Return trust decision memory records for an engagement.\n\nEach record contains decision reasoning, supporting intelligence, and\nsupporting evidence \u2014 enabling full auditability of every governance\ndecision without re-running analysis.\n\nentity_type values: human | agent | autonomous_system | agi\n(schema supports future governed entity types without code changes).",
+        "operationId": "get_etcc_decisions_field_assessment_engagements__engagement_id__etcc_decisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by entity_type (human, agent, autonomous_system, agi)",
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by entity_type (human, agent, autonomous_system, agi)",
+              "title": "Entity Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Decisions Field Assessment Engagements  Engagement Id  Etcc Decisions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trust decision memory \u2014 governance decisions with full reasoning",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/drilldown/certification/{cert_id}": {
+      "get": {
+        "description": "Full drilldown path for a trust certification.\n\nReturns the certification, associated ledger entry, latest chain of\ncustody record, and the decision reconstruction record.\n\n  Certification \u2192 Ledger Entry \u2192 Chain of Custody \u2192 Reconstruction",
+        "operationId": "get_etcc_drilldown_certification_field_assessment_engagements__engagement_id__etcc_drilldown_certification__cert_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "cert_id",
+            "required": true,
+            "schema": {
+              "title": "Cert Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Drilldown Certification Field Assessment Engagements  Engagement Id  Etcc Drilldown Certification  Cert Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Drilldown: certification \u2192 chain of custody \u2192 reconstruction record",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/drilldown/drift/{event_id}": {
+      "get": {
+        "description": "Full drilldown path for a drift event.\n\nReturns the drift event, its structured evidence, and the TIM trust\nsnapshot at the time of detection.  Enables the trace:\n\n  Risk \u2192 Drift Event \u2192 Evidence \u2192 Trust Snapshot \u2192 Certification",
+        "operationId": "get_etcc_drilldown_drift_field_assessment_engagements__engagement_id__etcc_drilldown_drift__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Drilldown Drift Field Assessment Engagements  Engagement Id  Etcc Drilldown Drift  Event Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Drilldown: drift event \u2192 evidence \u2192 linked TIM snapshot",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/monitoring": {
+      "get": {
+        "description": "Return TIM monitoring health for an engagement.\n\nIncludes last evaluation, replay status, evaluation failures from the\ngovernance timeline, and recent snapshot history.",
+        "operationId": "get_etcc_monitoring_field_assessment_engagements__engagement_id__etcc_monitoring_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Monitoring Field Assessment Engagements  Engagement Id  Etcc Monitoring Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "TIM monitoring health \u2014 last evaluation, failures, coverage",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/posture": {
+      "get": {
+        "description": "Return a single unified executive posture view for this engagement.\n\nAggregates: current trust posture, certification health, risk summary,\nmonitoring state, and 7d/30d/90d trend windows.  No synthesis \u2014 all\nvalues trace back to TIM snapshots, certifications, and drift events.",
+        "operationId": "get_etcc_posture_field_assessment_engagements__engagement_id__etcc_posture_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Posture Field Assessment Engagements  Engagement Id  Etcc Posture Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Full executive trust posture for an engagement",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/reports/drift": {
+      "get": {
+        "description": "Return the full drift event history with rule and severity statistics.\n\nCovers all drift events (open + resolved + acknowledged) for complete\naudit trail.  Rule breakdown shows which conditions fire most frequently.",
+        "operationId": "get_etcc_report_drift_field_assessment_engagements__engagement_id__etcc_reports_drift_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Report Drift Field Assessment Engagements  Engagement Id  Etcc Reports Drift Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Drift history report with rule breakdown and statistics",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/reports/quarterly": {
+      "get": {
+        "description": "Return a date-bounded trust summary for a calendar quarter.\n\nComputes: posture range (min/max/avg score), drift events generated,\ncertifications issued, and trend direction within the quarter window.\n\nThis API is the data foundation for P0-9 Quarterly Trust Briefs.",
+        "operationId": "get_etcc_report_quarterly_field_assessment_engagements__engagement_id__etcc_reports_quarterly_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Year (e.g. 2026)",
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "description": "Year (e.g. 2026)",
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Quarter (1\u20134)",
+            "in": "query",
+            "name": "quarter",
+            "required": true,
+            "schema": {
+              "description": "Quarter (1\u20134)",
+              "maximum": 4,
+              "minimum": 1,
+              "title": "Quarter",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Report Quarterly Field Assessment Engagements  Engagement Id  Etcc Reports Quarterly Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Quarterly trust summary (date-bounded \u2014 P0-9 foundation)",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/reports/risk": {
+      "get": {
+        "description": "Return a structured risk posture report for executive and board review.\n\nComputes: engagement_risk_score, severity breakdown, rule breakdown,\nand acknowledgement status across all open drift events.\n\nengagement_risk_score = sum of severity weights across open unacknowledged events.\nWeights: info=0, low=1, medium=3, high=7, critical=15.",
+        "operationId": "get_etcc_report_risk_field_assessment_engagements__engagement_id__etcc_reports_risk_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Report Risk Field Assessment Engagements  Engagement Id  Etcc Reports Risk Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Risk posture breakdown report",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/reports/summary": {
+      "get": {
+        "description": "Return a comprehensive executive trust summary.\n\nAggregates: posture, certification, risk rollup, trend windows, monitoring\nhealth, and drift rule breakdown.  Designed to answer board-level questions\nabout trust posture without requiring technical navigation.\n\nThis API becomes the data source for P0-9 Quarterly Trust Briefs.",
+        "operationId": "get_etcc_report_summary_field_assessment_engagements__engagement_id__etcc_reports_summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Report Summary Field Assessment Engagements  Engagement Id  Etcc Reports Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Executive trust summary report (P0-9 reporting foundation)",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/risks": {
+      "get": {
+        "description": "Return all open unacknowledged drift events plus an executive risk rollup.\n\nEvery event links to evidence and the TIM snapshot that triggered it,\nenabling full trace from risk \u2192 evidence without leaving the API.",
+        "operationId": "get_etcc_risks_field_assessment_engagements__engagement_id__etcc_risks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Minimum severity filter (info/low/medium/high/critical)",
+            "in": "query",
+            "name": "min_severity",
+            "required": false,
+            "schema": {
+              "default": "info",
+              "description": "Minimum severity filter (info/low/medium/high/critical)",
+              "title": "Min Severity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Risks Field Assessment Engagements  Engagement Id  Etcc Risks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Executive risk surface \u2014 all open drift events with risk rollup",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/timeline": {
+      "get": {
+        "description": "Return the governance timeline for an engagement.\n\nAnswers: What changed? When? Why? Who?\n\nSources: trust_arc, trust_monitoring, verification_bundle.\nActor types: human | agent | system | workflow \u2014 all supported by schema.\nFilter with source_type, event_type, or since for targeted drilldowns.",
+        "operationId": "get_etcc_timeline_field_assessment_engagements__engagement_id__etcc_timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by source_type (trust_arc, trust_monitoring, verification_bundle)",
+            "in": "query",
+            "name": "source_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by source_type (trust_arc, trust_monitoring, verification_bundle)",
+              "title": "Source Type"
+            }
+          },
+          {
+            "description": "Filter by event_type",
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by event_type",
+              "title": "Event Type"
+            }
+          },
+          {
+            "description": "ISO timestamp \u2014 return events after this date",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO timestamp \u2014 return events after this date",
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Timeline Field Assessment Engagements  Engagement Id  Etcc Timeline Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unified trust governance activity feed (filterable, chronological)",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/etcc/trends": {
+      "get": {
+        "description": "Return posture trend windows derived from TIM snapshot history.\n\nEach window reports: start_score, end_score, net_delta, direction,\nand data_points.  Direction: improving / stable / degrading /\nrapidly_degrading / insufficient_data.",
+        "operationId": "get_etcc_trends_field_assessment_engagements__engagement_id__etcc_trends_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Trends Field Assessment Engagements  Engagement Id  Etcc Trends Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trust trend windows (7d / 30d / 90d) from TIM snapshot history",
+        "tags": [
+          "executive-trust-command-center"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/evidence-links": {
       "get": {
         "operationId": "list_evidence_links_route_field_assessment_engagements__engagement_id__evidence_links_get",
@@ -42354,6 +43386,68 @@
         "summary": "Get Verification Bundle Manifest Route",
         "tags": [
           "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/etcc/overview": {
+      "get": {
+        "description": "Return the latest TIM posture snapshot for every engagement in the tenant.\n\nOrdered by posture_score ascending (lowest \u2014 most at-risk \u2014 first).\nEnables an executive to immediately see which engagements need attention.",
+        "operationId": "get_etcc_overview_field_assessment_etcc_overview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Etcc Overview Field Assessment Etcc Overview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tenant-level overview of all engagement trust postures",
+        "tags": [
+          "executive-trust-command-center"
         ]
       }
     },

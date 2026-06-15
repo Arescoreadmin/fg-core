@@ -5937,6 +5937,244 @@
         "auth",
         "tenant"
       ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/certification",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/certification/history",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/decisions",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/drilldown/certification/{cert_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/drilldown/drift/{event_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/monitoring",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/posture",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/reports/drift",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/reports/quarterly",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/reports/risk",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/reports/summary",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/risks",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/timeline",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/trends",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/field_assessment.py",
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/evidence-links",
@@ -6994,6 +7232,23 @@
       "file": "api/field_assessment.py",
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/verification-bundle/manifest",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/executive_trust.py",
+      "method": "GET",
+      "path": "/field-assessment/etcc/overview",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -10370,7 +10625,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-15T14:38:01.621999+00:00",
+  "generated_at": "2026-06-15T16:53:25.321890+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

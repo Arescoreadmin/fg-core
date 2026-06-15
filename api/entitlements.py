@@ -91,6 +91,11 @@ CAPABILITY_REGISTRY: frozenset[str] = frozenset(
         "continuous.trust_drift",
         "continuous.inventory_drift",
         "continuous.agent_drift",
+        # Executive Trust Command Center (P0-8)
+        "trust.executive.dashboard",
+        "trust.risk",
+        "trust.reporting",
+        "trust.executive.export",
         # Governance surfaces
         "governance.timeline",
         "governance.workflow",
@@ -146,6 +151,11 @@ def _tier_capabilities() -> dict[str, frozenset[str]]:
             "audit.forensics",
             "agent.governance",
             "workflow.governance",
+            # Executive Trust Command Center (P0-8)
+            "trust.executive.dashboard",
+            "trust.risk",
+            "trust.reporting",
+            "trust.executive.export",
         }
     )
     return {
