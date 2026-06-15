@@ -1544,6 +1544,78 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/board",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/board/generate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/board/{report_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/generate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/approve",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/deliver",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/explain",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/export",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/review",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/etcc/certification",
       "scopes": [],
       "source": "contract"
@@ -2001,6 +2073,12 @@
     {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/verification-bundle/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/etcc/briefs/history",
       "scopes": [],
       "source": "contract"
     },
@@ -2899,7 +2977,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-15T16:53:25.334321+00:00",
+  "generated_at": "2026-06-15T20:34:50.705439+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -97,6 +97,12 @@ CAPABILITY_REGISTRY: frozenset[str] = frozenset(
         "trust.risk",
         "trust.reporting",
         "trust.executive.export",
+        # Quarterly Trust Briefs (P0-9)
+        "trust.quarterly.briefs",
+        "trust.board.reporting",
+        "trust.report.export",
+        "trust.report.review",
+        "trust.report.delivery",
         # Governance surfaces
         "governance.timeline",
         "governance.workflow",
@@ -158,6 +164,12 @@ def _tier_capabilities() -> dict[str, frozenset[str]]:
             "trust.risk",
             "trust.reporting",
             "trust.executive.export",
+            # Quarterly Trust Briefs (P0-9)
+            "trust.quarterly.briefs",
+            "trust.board.reporting",
+            "trust.report.export",
+            "trust.report.review",
+            "trust.report.delivery",
         }
     )
     return {

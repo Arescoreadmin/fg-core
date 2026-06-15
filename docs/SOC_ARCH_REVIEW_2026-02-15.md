@@ -2405,3 +2405,214 @@ The moat is not the dashboard — it is the historical trust intelligence corpus
 - `make contract-authority-refresh`: OK
 - `make fg-fast`: OK
 - `PYTHONPATH=. python -m pytest tests/test_executive_trust.py`: 35/35 passed
+
+---
+
+## P0-9 Addendum — Quarterly Trust Briefs (QTB) (2026-06-15)
+
+### Strategic Context
+
+P0-9 builds the executive deliverable layer above P0-7 (TIM) and P0-8 (ETCC).
+No new trust engines.  All report data sourced from existing append-only tables.
+The purpose is to transform continuous governance data into defensible executive
+deliverables (quarterly briefs, board reports) that can be verified by auditors,
+boards, regulators, and legal counsel.
+
+### New Tables (migration 0114)
+
+**`fa_qtb_briefs`** — Main brief record.
+- Status-mutable workflow record: draft → generated → reviewed → approved → delivered → archived.
+- Content fields (brief_hash, report_hash) are set at generation time and not updated.
+- RLS: `tenant_id = current_setting('app.tenant_id', true)`.
+- Not append-only for status field (status transitions are additive, not destructive).
+
+**`fa_qtb_brief_sections`** — Immutable content sections.
+- Append-only (triggers on UPDATE and DELETE).
+- One row per section per brief: posture | drift | certification | governance | evidence | board_summary.
+- `section_data` (JSON) contains the full computed section.
+- `evidence_refs` (JSON array) links to source IDs.
+- `section_hash` = SHA-256(section_data JSON with sorted keys).
+
+**`fa_qtb_brief_manifests`** — Deterministic audit anchor.
+- Append-only (triggers on UPDATE and DELETE).
+- One manifest per brief (UNIQUE brief_id constraint).
+- Contains JSON arrays: snapshot_ids, certification_ids, drift_event_ids, timeline_refs, evidence_refs, decision_refs, bundle_refs.
+- `manifest_hash` = SHA-256 of all sorted source ID arrays.
+- `report_hash` = SHA-256(brief_hash + ":" + manifest_hash).
+- Enables auditor-reproducible verification: same source data → same hashes.
+
+### New Service (`services/quarterly_briefs/brief_service.py`)
+
+**Section builders (deterministic, pure-function):**
+- `_build_posture_section(snapshots)` — min/max/avg score, trend direction, replay distribution
+- `_build_drift_section(drift_events)` — risk score, by_rule, by_severity, top_rules, velocity
+- `_build_certification_section(period_certs, active_cert)` — level history, expiry status
+- `_build_governance_section(timeline_events, decisions)` — activity counts, actor type distribution
+- `_build_evidence_appendix(...)` — every source ID referenced; traceability flags
+- `_build_board_summary(...)` — condensed strategic view derived from other sections
+
+**Entry points:**
+- `generate_quarterly_brief(db, *, tenant_id, engagement_id, year, quarter, generated_by)` — full 6-section brief
+- `generate_board_brief(db, *, tenant_id, engagement_id, year, quarter, generated_by)` — board_summary + evidence only
+
+Both functions return the assembled brief dict on success, empty dict on error.
+Caller owns the DB session and commits after return.
+
+**Hash chain:**
+- `section_hash` = SHA-256(section_data, sort_keys=True)
+- `brief_hash` = SHA-256([section_hash, ...])
+- `manifest_hash` = SHA-256(sorted source ID arrays)
+- `report_hash` = SHA-256(brief_hash + ":" + manifest_hash)
+- Reproducible: same input data → same hashes → same report_hash.
+
+### New API (`api/quarterly_briefs.py`)
+
+11 routes under `/field-assessment/` prefix.  All require `governance:read`.
+
+Per-engagement (all under `/engagements/{id}/etcc/`):
+- `POST .../etcc/briefs/generate` — generate quarterly brief; capability: `trust.quarterly.briefs`; 201
+- `GET  .../etcc/briefs` — list briefs (filterable by type/status); capability: `trust.quarterly.briefs`
+- `GET  .../etcc/briefs/{brief_id}` — full brief + sections; capability: `trust.quarterly.briefs`
+- `POST .../etcc/briefs/{brief_id}/review` — transition to 'reviewed'; capability: `trust.report.review`
+- `POST .../etcc/briefs/{brief_id}/approve` — transition to 'approved'; capability: `trust.report.review`
+- `GET  .../etcc/briefs/{brief_id}/manifest` — deterministic audit manifest; capability: `trust.quarterly.briefs`
+- `GET  .../etcc/briefs/{brief_id}/export` — JSON or HTML export; capability: `trust.report.export`
+- `POST .../etcc/board/generate` — generate board brief; capability: `trust.board.reporting`; 201
+- `GET  .../etcc/board` — list board reports; capability: `trust.board.reporting`
+- `GET  .../etcc/board/{report_id}` — get board report; capability: `trust.board.reporting`
+
+Tenant-level:
+- `GET /etcc/briefs/history` — all briefs across all engagements; capability: `trust.report.delivery`
+
+### New Capabilities (5 added to CAPABILITY_REGISTRY + ENTERPRISE tier)
+
+- `trust.quarterly.briefs` — generate, list, read quarterly briefs and manifests
+- `trust.board.reporting` — generate, list, read board reports
+- `trust.report.export` — JSON/HTML export endpoint
+- `trust.report.review` — review + approve workflow
+- `trust.report.delivery` — tenant-level brief history (compliance team access)
+
+### Security Review
+
+- All 11 routes require `governance:read` scope and ENTERPRISE-tier capability gates.
+- Actor identity from `request.state.auth.key_prefix` (same as P0-7/P0-8) — not caller-supplied.
+- Status transitions enforce valid states: review only from 'generated'; approve only from 'reviewed'.
+- Tenant isolation on every DB query (`tenant_id` filter always applied).
+- No cross-tenant data visibility (same RLS + application-layer filtering as P0-7/P0-8).
+- No public or unauthenticated paths.
+- Export endpoint (`trust.report.export`) is gated separately from generation.
+- HTML export uses structured data — no server-side JS execution or external resource loading.
+
+### Governance Readiness
+
+- `generated_by` field supports: human | agent | system | workflow
+- Board and quarterly reports will include governance activity from all actor types
+- Schema version field on all 3 tables enables forward-compatible evolution
+- `replay_version` in manifest enables future replay engine integration without schema changes
+
+### AGI Readiness
+
+- `actor_type_distribution` in governance section already captures agent/autonomous_system/agi actors
+- Decision refs in manifests will include future AGI governance decisions without schema changes
+- No redesign needed for future `agent_trust` or `agi_governance` brief types — just new section builders
+
+### Moat Note
+
+The strategic asset is not the PDF — it is the historical governance intelligence corpus
+(TIM snapshots, drift history, certification lifecycle, decision memory, timeline records,
+verification bundles) that makes each brief defensible.  Competitors can copy the UI;
+they cannot copy years of append-only, cryptographically-anchored governance history.
+
+### Tests
+
+75 unit tests in `tests/test_quarterly_briefs.py` covering:
+- Period boundary computation (5 cases)
+- Hash determinism (8 cases: SHA-256, section_hash, manifest_hash, report_hash)
+- Posture section builder (8 cases)
+- Drift section builder (7 cases)
+- Certification section builder (5 cases)
+- Governance section builder (5 cases)
+- Board summary builder (7 cases)
+- Evidence appendix builder (5 cases)
+- generate_quarterly_brief empty state (7 cases)
+- generate_board_brief empty state (5 cases)
+- Manifest and hash validation (7 cases)
+- Evidence linkage (2 cases)
+- Historical reporting accuracy (4 cases)
+
+### Validation
+
+- `make route-inventory-generate`: OK
+- `make contract-authority-refresh`: OK
+- `PYTHONPATH=. pytest tests/test_quarterly_briefs.py`: 75/75 passed
+
+---
+
+## P0-9 Improvements Addendum (2026-06-15)
+
+Three targeted additions to the QTB layer based on post-build review:
+
+### 1. Delivery Tracking
+
+Added `delivered_at`, `delivered_to`, `delivery_channel` columns to `fa_qtb_briefs` (migration 0114, `api/db_models_qtb.py`). These are mutable fields, set only when a brief transitions to `delivered` status.
+
+New route: `POST .../etcc/briefs/{brief_id}/deliver` — capability: `trust.report.delivery`; only allows `approved` briefs; sets the three delivery fields; transitions status to `delivered`; returns `delivered_at`, `delivered_to`, `delivery_channel`, `report_hash`.
+
+Valid channels: `portal | email | api | export`. Invalid channel returns 400. Non-approved brief returns 409.
+
+### 2. Regeneration Lineage
+
+Added nullable `parent_brief_id` column to `fa_qtb_briefs` (migration 0114, ORM, service, API). Propagated through `generate_quarterly_brief()` and `generate_board_brief()` service functions and both generate routes as an optional query param. Enables auditors to trace a regenerated brief back to its predecessor.
+
+### 3. Explainability Endpoint
+
+New route: `GET .../etcc/briefs/{brief_id}/explain` — capability: `trust.quarterly.briefs`. Returns `provenance` mapping every top-level metric to its authoritative source table and the exact record IDs from the stored manifest. No AI. No synthetic data. Pure lineage from `fa_qtb_brief_manifests`.
+
+Response shape:
+```json
+{
+  "provenance": {
+    "trust_score":           { "source": "fa_tim_trust_snapshots",   "snapshot_ids": [...] },
+    "risk_score":            { "source": "fa_tim_drift_events",       "event_ids": [...] },
+    "certification_status":  { "source": "fa_trust_certifications",   "certification_ids": [...] },
+    "governance_activity":   { "source": "fa_timeline_events",        "event_ids": [...] },
+    "decision_record":       { "source": "fa_trust_decision_memory",  "decision_ids": [...] },
+    "verification_bundles":  { "source": "fa_verification_bundles",   "bundle_ids": [...] }
+  },
+  "manifest_hash": "...",
+  "integrity": { "no_synthetic_data": true, ... }
+}
+```
+
+### Files Changed
+
+- `migrations/postgres/0114_quarterly_trust_briefs.sql` — 4 new columns on `fa_qtb_briefs` (`delivered_at`, `delivered_to`, `delivery_channel`, `parent_brief_id`)
+- `api/db_models_qtb.py` — 4 new `Mapped` fields on `FaQtbBrief`
+- `services/quarterly_briefs/brief_service.py` — `parent_brief_id` propagation through `_persist_brief_and_sections`, `generate_quarterly_brief`, `generate_board_brief`
+- `api/quarterly_briefs.py` — `_brief_to_dict` extended; 2 new routes (`deliver`, `explain`); `parent_brief_id` query param on generate routes
+- `tests/test_quarterly_briefs.py` — 8 new tests (lineage: 4, delivery fields: 4); 83/83 passed
+
+### Validation
+
+- `make route-inventory-generate`: OK (2 new routes registered)
+- `make contract-authority-refresh`: OK
+- `PYTHONPATH=. pytest tests/test_quarterly_briefs.py`: 83/83 passed
+
+---
+
+## P0-9 Bot-Review Fixes (2026-06-15)
+
+Five bot-review findings fixed after initial P0-9 merge:
+
+**P1 — Section hash computed on wrong content** (`brief_service.py`): `section_hash` was computed on the section dict before mutation, but `section_data` was serialized after mutating `s["_hash"] = h`, creating a permanent mismatch. Fixed: sections are no longer mutated — `section_hashes = [_section_hash(s) for s in sections]` and `section_hashes[order]` is used in the persist loop.
+
+**P1 — Write scope required for governance workflow mutations** (`api/quarterly_briefs.py`): `review_brief` and `approve_brief` used `governance:read`, allowing read-only keys to mutate governance state. Fixed: both now require `governance:write`.
+
+**P1 — Non-deterministic `current_as_of` in certification section hash** (`brief_service.py`): `_build_certification_section` included `current_as_of = _now_iso()` in the section dict, which was hashed. Same quarter regenerated 1 second later produced a different `report_hash`. Fixed: `current_as_of` removed from the section dict.
+
+**P2 — Approve idempotency overwrote original attribution** (`api/quarterly_briefs.py`): `_APPROVE_TRANSITION` accepted `approved → approved`, allowing repeated calls to overwrite `approved_by`/`approved_at`. Fixed: removed that transition entry; already-approved briefs now return 409.
+
+**P2 — Expired certification returned as active** (`brief_service.py`): `_fetch_active_certification` filtered only on `valid_from < period_end`, not `valid_until`. Fixed: added `valid_until >= period_end` to the WHERE clause.
+
+No new routes. No schema changes. No migration changes. Route inventory and topology updated to reflect CI artifact state.
+EOFSOCDOC

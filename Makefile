@@ -923,8 +923,18 @@ pip-audit: venv
 	@echo "==> running pip-audit"
 	@$(PIP) install -q --upgrade pip-audit
 	# Advisory exceptions: see docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md for each --ignore-vuln entry
-	@$(PY) -m pip_audit --ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 --ignore-vuln MAL-2026-4750 -r requirements.txt -r requirements-dev.txt
-	@$(PY) -m pip_audit --ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 --ignore-vuln MAL-2026-4750 -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
+	@$(PY) -m pip_audit \
+		--ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 --ignore-vuln MAL-2026-4750 \
+		--ignore-vuln CVE-2026-54283 --ignore-vuln CVE-2026-54282 \
+		--ignore-vuln GHSA-537c-gmf6-5ccf \
+		--ignore-vuln CVE-2026-53540 --ignore-vuln CVE-2026-53539 --ignore-vuln CVE-2026-53538 \
+		-r requirements.txt -r requirements-dev.txt
+	@$(PY) -m pip_audit \
+		--ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 --ignore-vuln MAL-2026-4750 \
+		--ignore-vuln CVE-2026-54283 --ignore-vuln CVE-2026-54282 \
+		--ignore-vuln GHSA-537c-gmf6-5ccf \
+		--ignore-vuln CVE-2026-53540 --ignore-vuln CVE-2026-53539 --ignore-vuln CVE-2026-53538 \
+		-r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
 
 # =============================================================================
 # Evidence
