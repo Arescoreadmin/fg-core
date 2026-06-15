@@ -41604,15 +41604,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "actor_id",
-            "required": true,
-            "schema": {
-              "title": "Actor Id",
-              "type": "string"
-            }
-          },
-          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -41653,6 +41644,66 @@
           }
         },
         "summary": "Acknowledge a drift event (append-only governance audit trail)",
+        "tags": [
+          "trust-monitoring"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/tim/evaluate": {
+      "post": {
+        "description": "Run a TIM evaluation cycle immediately for this engagement.\n\nIntended for periodic schedulers so that time-based drift rules\n(cert expiration, evidence staleness, missing bundle) fire even\nwhen no trust arc activation has occurred.\n\nPersists a new TIM snapshot and any detected drift events within\nthe caller's session; commits on success.",
+        "operationId": "trigger_tim_evaluate_field_assessment_engagements__engagement_id__tim_evaluate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Trigger Tim Evaluate Field Assessment Engagements  Engagement Id  Tim Evaluate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger TIM evaluation on demand",
         "tags": [
           "trust-monitoring"
         ]

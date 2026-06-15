@@ -6805,6 +6805,23 @@
         "tenant"
       ],
       "file": "api/trust_monitoring.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/tim/evaluate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/trust_monitoring.py",
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/tim/posture",
       "plane": "control",
@@ -10353,7 +10370,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-15T14:14:16.494210+00:00",
+  "generated_at": "2026-06-15T14:38:01.621999+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

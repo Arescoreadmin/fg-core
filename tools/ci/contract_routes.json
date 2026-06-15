@@ -1849,6 +1849,12 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/tim/evaluate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/tim/posture",
       "scopes": [],
@@ -2803,7 +2809,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-15T14:14:16.506916+00:00",
+  "generated_at": "2026-06-15T14:38:01.634362+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

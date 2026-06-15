@@ -153,6 +153,28 @@ def _last_bundle_at(db: Any, *, tenant_id: str, engagement_id: str) -> str | Non
         return None
 
 
+def _derive_replay_status(db: Any, *, tenant_id: str, engagement_id: str) -> str:
+    """Return 'ok' | 'failed' | 'no_chain' from the latest decision reconstruction record."""
+    from api.db_models_trust_arc import FaDecisionReconstructionRecord  # noqa: PLC0415
+    from sqlalchemy import select  # noqa: PLC0415
+
+    try:
+        row = db.execute(
+            select(FaDecisionReconstructionRecord.replay_valid)
+            .where(
+                FaDecisionReconstructionRecord.tenant_id == tenant_id,
+                FaDecisionReconstructionRecord.engagement_id == engagement_id,
+            )
+            .order_by(FaDecisionReconstructionRecord.generated_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            return "no_chain"
+        return "ok" if row else "failed"
+    except Exception:
+        return "no_chain"
+
+
 def _last_bundle_id(db: Any, *, tenant_id: str, engagement_id: str) -> str | None:
     from api.db_models_verification_bundle import FaVerificationBundle  # noqa: PLC0415
     from sqlalchemy import select  # noqa: PLC0415
@@ -255,7 +277,9 @@ def compute_and_persist_tim_snapshot(
         posture_score = trust_snap.posture_score if trust_snap else 0
         posture_level = trust_snap.posture_level if trust_snap else "unknown"
         risk_level = trust_snap.risk_level if trust_snap else "unknown"
-        replay_status = "no_chain"
+        replay_status = _derive_replay_status(
+            db, tenant_id=tenant_id, engagement_id=engagement_id
+        )
 
         cert_level = cert.certification_level if cert else "not_certified"
         composite_score = cert.composite_score if cert else 0
@@ -326,7 +350,8 @@ def compute_and_persist_tim_snapshot(
             "last_bundle_id": bundle_id,
             "source_fingerprint": source_fp,
             "evaluated_at": now,
-            # passed downstream to drift_service
+            # passed downstream to drift_service / monitoring_engine
+            "_orm_record": record,
             "_previous_score": prev_score,
             "_cert_valid_until": cert_valid_until,
             "_cert_level": cert_level,

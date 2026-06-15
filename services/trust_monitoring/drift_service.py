@@ -63,6 +63,22 @@ _EVIDENCE_STALE_HIGH_DAYS = 90
 _BUNDLE_MISSING_LOW_DAYS = 14
 _BUNDLE_MISSING_MEDIUM_DAYS = 30
 
+# ---------------------------------------------------------------------------
+# Deduplication: persistent-state rules that should not fire again while an
+# open (unacknowledged) event for the same rule already exists.
+# score_degradation is excluded — each delta is a discrete point-in-time event.
+# ---------------------------------------------------------------------------
+_DEDUP_RULES: frozenset[str] = frozenset(
+    {
+        "cert_expiration",
+        "cert_expired",
+        "evidence_staleness",
+        "replay_failure",
+        "missing_bundle",
+        "consecutive_degradation",
+    }
+)
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -70,6 +86,37 @@ def _utc_now() -> datetime:
 
 def _drift_id() -> str:
     return uuid.uuid4().hex
+
+
+def _has_open_unacknowledged_event(
+    db: Any,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    drift_rule: str,
+) -> bool:
+    from api.db_models_tim import FaTimDriftEvent  # noqa: PLC0415
+    from sqlalchemy import func, select  # noqa: PLC0415
+
+    try:
+        ack_subq = select(FaTimDriftEvent.correlation_id).where(
+            FaTimDriftEvent.tenant_id == tenant_id,
+            FaTimDriftEvent.engagement_id == engagement_id,
+            FaTimDriftEvent.status == "acknowledged",
+            FaTimDriftEvent.correlation_id.isnot(None),
+        )
+        count = db.execute(
+            select(func.count()).where(
+                FaTimDriftEvent.tenant_id == tenant_id,
+                FaTimDriftEvent.engagement_id == engagement_id,
+                FaTimDriftEvent.drift_rule == drift_rule,
+                FaTimDriftEvent.status == "open",
+                ~FaTimDriftEvent.id.in_(ack_subq),
+            )
+        ).scalar()
+        return (count or 0) > 0
+    except Exception:
+        return False
 
 
 def _iso(dt: datetime) -> str:
@@ -390,6 +437,13 @@ def detect_and_persist_drift(
 
         persisted: list[dict[str, Any]] = []
         for event in detected:
+            if event["drift_rule"] in _DEDUP_RULES and _has_open_unacknowledged_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                drift_rule=event["drift_rule"],
+            ):
+                continue
             event_id = _drift_id()
             record = FaTimDriftEvent(
                 id=event_id,

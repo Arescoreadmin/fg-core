@@ -71,6 +71,10 @@ def evaluate_and_persist_tim(
 
         open_drift_count = snap["open_drift_count"] + len(drift_events)
 
+        orm_record = snap.get("_orm_record")
+        if orm_record is not None:
+            orm_record.open_drift_count = open_drift_count
+
         emit_tim_snapshot_evaluated(
             db,
             tenant_id=tenant_id,

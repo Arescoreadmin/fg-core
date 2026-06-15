@@ -2298,3 +2298,35 @@ All routes: `governance:read` scope + `continuous.monitoring` capability (ENTERP
 - `make route-inventory-generate`: OK (5 new TIM routes classified)
 - `make contract-authority-refresh`: OK
 - `make fg-fast`: OK (pending full run)
+
+---
+
+**Addendum — P0-7 TIM Bot-Review Fixes (2026-06-15):**
+Six P1/P2 security and correctness findings from chatgpt-codex-connector review addressed on the same branch.
+
+**Fix 1 (P1) — `replay_status` hardcoded to "no_chain":**
+`snapshot_service._derive_replay_status()` added — queries `FaDecisionReconstructionRecord.replay_valid` (latest per engagement). True→"ok", False→"failed", None→"no_chain". Hardcoded fallback removed.
+
+**Fix 2 (P1) — TIM only fires during trust-arc writes:**
+`POST /field-assessment/engagements/{engagement_id}/tim/evaluate` added to `api/trust_monitoring.py`. Scopes: `governance:write` + `continuous.monitoring`. Calls `evaluate_and_persist_tim()` and commits. Enables external schedulers to trigger time-based rules (cert expiration, evidence staleness, missing bundle) for idle engagements without requiring a trust-arc activation.
+
+**Fix 3 (P1) — Duplicate open drift events on every evaluation:**
+`drift_service._DEDUP_RULES` frozenset added (all rules except `score_degradation`). `_has_open_unacknowledged_event()` queries the DB before each persist — for rules in `_DEDUP_RULES`, if an open unacknowledged event for the same rule already exists for the engagement, the new event is skipped. `score_degradation` excluded (each delta is a discrete point-in-time measurement, not a persistent state).
+
+**Fix 4 (P1) — `acknowledged_by` from non-repudiable source:**
+`acknowledge_tim_drift()` previously accepted `actor_id` as a query parameter (caller-supplied, unverifiable). Parameter removed; `actor_id` now derived from `request.state.auth.key_prefix` — same pattern used across all FA write endpoints. Falls back to `"system"` if auth state is absent (should not occur for `governance:write`-gated routes).
+
+**Fix 5 (P2) — Acknowledged drift events still appear in `/risks`:**
+`get_tim_risks()` now applies the same acknowledged-exclusion subquery as `get_tim_drift()` — both the high/critical `rows` query and the `all_open_rows` query for `engagement_risk_score` exclude events that have a corresponding `status='acknowledged'` row via `correlation_id`.
+
+**Fix 6 (P2) — `open_drift_count` in persisted snapshot is pre-detection:**
+`snapshot_service.compute_and_persist_tim_snapshot()` now returns `"_orm_record": record` in its result dict. `monitoring_engine.evaluate_and_persist_tim()` updates `orm_record.open_drift_count` after drift detection completes, before the caller commits. Because the caller owns the transaction and no flush has occurred, this mutates the pending INSERT — not triggering the BEFORE UPDATE append-only trigger.
+
+**Route inventory changes (Fix 2):**
+- `POST /field-assessment/engagements/{engagement_id}/tim/evaluate` added — `governance:write` + `continuous.monitoring`.
+
+**No new tables, migrations, or schema changes.** Route inventory, plane registry snapshot, contract routes, and topology hash regenerated; OpenAPI contract and authority markers refreshed.
+
+**Validation:**
+- `make route-inventory-generate`: OK (1 new route added)
+- `make contract-authority-refresh`: OK

@@ -4,14 +4,17 @@ Executive dashboard routes for continuous trust monitoring.
 
 Routes (all under /field-assessment/engagements/{engagement_id}/tim/):
 
-  GET .../posture           — latest TIM trust snapshot (score, level, drift)
-  GET .../timeline          — governance timeline events (trust_monitoring source)
-  GET .../drift             — open drift events
-  GET .../certification-status — latest certification with expiry metadata
-  GET .../risks             — high+critical drift events as risk summary
+  GET  .../posture             — latest TIM trust snapshot (score, level, drift)
+  GET  .../timeline            — governance timeline events (trust_monitoring source)
+  GET  .../drift               — open drift events
+  GET  .../certification-status — latest certification with expiry metadata
+  GET  .../risks               — high+critical drift events as risk summary
+  POST .../evaluate            — trigger TIM evaluation on demand (for schedulers)
+  POST .../drift/{id}/acknowledge — acknowledge a drift event
 
 Scopes:
   governance:read  — all GET routes
+  governance:write — POST evaluate, POST acknowledge
   continuous.monitoring — capability gate (ENTERPRISE tier)
 """
 
@@ -23,7 +26,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -469,6 +472,13 @@ def get_tim_risks(
     """
     tenant_id = _resolve_caller_tenant(request)
 
+    _ack_subq = select(FaTimDriftEvent.correlation_id).where(
+        FaTimDriftEvent.tenant_id == tenant_id,
+        FaTimDriftEvent.engagement_id == engagement_id,
+        FaTimDriftEvent.status == "acknowledged",
+        FaTimDriftEvent.correlation_id.isnot(None),
+    )
+
     rows = (
         db.execute(
             select(FaTimDriftEvent)
@@ -477,6 +487,7 @@ def get_tim_risks(
                 FaTimDriftEvent.engagement_id == engagement_id,
                 FaTimDriftEvent.status == "open",
                 FaTimDriftEvent.severity.in_(["high", "critical"]),
+                ~FaTimDriftEvent.id.in_(_ack_subq),
             )
             .order_by(FaTimDriftEvent.detected_at.desc())
             .limit(100)
@@ -491,6 +502,7 @@ def get_tim_risks(
                 FaTimDriftEvent.tenant_id == tenant_id,
                 FaTimDriftEvent.engagement_id == engagement_id,
                 FaTimDriftEvent.status == "open",
+                ~FaTimDriftEvent.id.in_(_ack_subq),
             )
         )
         .scalars()
@@ -528,7 +540,6 @@ def acknowledge_tim_drift(
     event_id: str,
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
-    actor_id: str = Query(...),
 ) -> dict[str, Any]:
     """Create an acknowledgement row for an existing drift event.
 
@@ -537,6 +548,8 @@ def acknowledge_tim_drift(
     and links back via correlation_id.
     """
     tenant_id = _resolve_caller_tenant(request)
+    auth = getattr(getattr(request, "state", None), "auth", None)
+    actor_id = getattr(auth, "key_prefix", None) or "system"
 
     original = db.execute(
         select(FaTimDriftEvent).where(
@@ -572,3 +585,47 @@ def acknowledge_tim_drift(
     db.flush()
 
     return _drift_event_to_dict(new_row)
+
+
+# ---------------------------------------------------------------------------
+# POST /engagements/{engagement_id}/tim/evaluate
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/engagements/{engagement_id}/tim/evaluate",
+    dependencies=[
+        Depends(require_scopes("governance:write")),
+        Depends(require_capability(_CAPABILITY)),
+    ],
+    summary="Trigger TIM evaluation on demand",
+)
+def trigger_tim_evaluate(
+    engagement_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Run a TIM evaluation cycle immediately for this engagement.
+
+    Intended for periodic schedulers so that time-based drift rules
+    (cert expiration, evidence staleness, missing bundle) fire even
+    when no trust arc activation has occurred.
+
+    Persists a new TIM snapshot and any detected drift events within
+    the caller's session; commits on success.
+    """
+    from services.trust_monitoring.monitoring_engine import (  # noqa: PLC0415
+        evaluate_and_persist_tim,
+    )
+
+    tenant_id = _resolve_caller_tenant(request)
+    result = evaluate_and_persist_tim(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="TIM evaluation failed — check server logs",
+        )
+    db.commit()
+    return result
