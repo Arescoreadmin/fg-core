@@ -14829,3 +14829,64 @@ Activated customer-visible continuous trust monitoring using existing Trust Arc 
 - `PYTHONPATH=. python tools/ci/check_route_inventory.py`: OK
 - `PYTHONPATH=. python tools/ci/check_soc_review_sync.py`: OK
 - `PYTHONPATH=. pytest tests/test_trust_monitoring.py`: 40 passed
+
+---
+
+## P0-8: Executive Trust Command Center (ETCC) + P0-8 pre-merge fix
+
+### Date
+2026-06-15
+
+### PR / Branch
+`p0-8/executive-trust-command-center` (PR #441)
+
+### Summary
+Executive governance layer above TIM (P0-7) and Trust Arc (P0-6A/B). No new trust engines. 15 GET routes consuming existing append-only tables. 4 new ENTERPRISE capabilities. Pre-merge addition: `trust.executive.drilldown` capability separates evidence drilldown from dashboard view.
+
+### Files Changed
+- `api/entitlements.py`: 5 new capabilities added to CAPABILITY_REGISTRY and ENTERPRISE tier (`trust.executive.dashboard`, `trust.executive.drilldown`, `trust.risk`, `trust.reporting`, `trust.executive.export`).
+- `api/executive_trust.py`: 15 GET routes under `/field-assessment/etcc/` (tenant-level) and `/field-assessment/engagements/{id}/etcc/` (per-engagement). Drilldown routes gated on `trust.executive.drilldown`; all others on their respective capability.
+- `services/executive_trust/__init__.py`: empty package marker.
+- `services/executive_trust/posture_service.py`: `get_executive_posture()`, `get_tenant_overview()`, `_trend_windows()`.
+- `api/main.py`: `executive_trust_router` registered in both `build_app()` and `build_contract_app()`.
+- `tests/test_executive_trust.py`: 35 unit tests.
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`: P0-8 addendum.
+- `ROADMAP.md`: P0-8 row added.
+
+### Non-Obvious Design Decisions
+- **`trust.executive.drilldown` as separate capability**: Executive view (summary, posture) and evidence view (drilldown) often become separate SKUs. Separating now avoids entitlement migration pain when they split. The two drilldown routes (`/drilldown/drift/{id}`, `/drilldown/certification/{id}`) are the only routes gated on this capability.
+- **`/drilldown/certification/{id}` changed from `trust.certification` to `trust.executive.drilldown`**: Certification routes gate on `trust.certification` (which exists in BASE tier for some access patterns); the drilldown into chain of custody and reconstruction records is evidence-layer access that belongs behind the drilldown gate.
+- **Acknowledged-event exclusion applied in `/risks` and `/reports/risk`**: Same `correlation_id` subquery pattern from P0-7. Prevents acknowledged events from inflating `engagement_risk_score`.
+- **`/reports/quarterly` uses ISO boundary strings not Python date objects**: Avoids timezone edge cases in string-based evaluated_at columns; all TIM timestamps are stored as UTC ISO strings.
+- **`get_tenant_overview()` uses subquery for max(evaluated_at) per engagement**: Avoids N+1 query pattern; single query returns the latest snapshot per engagement across all engagements in the tenant.
+
+### Validation
+- `make fg-fast`: pass
+- `make fg-security`: pass (955 passed, 1 skipped)
+- `PYTHONPATH=. python tools/ci/check_route_inventory.py`: OK
+- `PYTHONPATH=. python tools/ci/check_core_rls.py`: OK (101 tables)
+- `PYTHONPATH=. python tools/ci/check_plane_registry.py`: OK
+- `PYTHONPATH=. python tools/ci/check_trust_enforcement_inputs.py`: OK
+- `PYTHONPATH=. pytest tests/test_executive_trust.py`: 35 passed
+
+---
+
+## P0-8 bot-review fixes: ETCC correctness (2026-06-15)
+
+### PR / Branch
+`p0-8/executive-trust-command-center` (PR #441)
+
+### Summary
+Four bot-review findings on PR #441 resolved (1×P1, 3×P2).
+
+### Files Changed
+- `api/executive_trust.py`:
+  - **Fix P1**: `GET .../etcc/timeline` now requires `trust.executive.dashboard` (ENTERPRISE) in addition to `trust.timeline` (BASE). Prevents PRO-tier tenants from accessing the ETCC timeline through the BASE-tier timeline capability.
+  - **Fix P2**: `get_etcc_report_drift()` — aggregate stats (`total_events`, `by_rule`, `by_severity`, `by_status`) now computed via separate GROUP BY queries over the full dataset before the `.limit(limit)` paginated event list. Stats are accurate regardless of table size.
+  - **Fix P2**: `get_etcc_monitoring()` — `evaluation_failure_count` / `has_failures` now use a separate `func.count()` query over all matching timeline events; the `.limit(5)` clause applies only to the `evaluation_failures` detail list.
+- `services/executive_trust/posture_service.py`:
+  - **Fix P2**: `get_tenant_overview()` subquery now includes `func.max(id).label("max_id")` as a tie-breaker; join condition extended to `& (FaTimTrustSnapshot.id == latest_subq.c.max_id)` — guarantees exactly one row per engagement even when two snapshots share the same `evaluated_at` second-precision timestamp.
+
+### Non-Obvious Design Decisions
+- `max(id)` tie-breaker in `get_tenant_overview()` assumes ULIDs/sequential IDs (higher = later). For random UUIDs this would be arbitrary but still deterministic (exactly one row, just not guaranteed to be the physically last insert). For this schema ULIDs are used so the behavior is correct.
+- Drift report stats use 4 queries instead of loading all rows in Python: GROUP BY aggregates are index-only scans — far cheaper than a full row fetch for large engagement histories.

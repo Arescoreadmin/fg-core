@@ -2330,3 +2330,78 @@ Six P1/P2 security and correctness findings from chatgpt-codex-connector review 
 **Validation:**
 - `make route-inventory-generate`: OK (1 new route added)
 - `make contract-authority-refresh`: OK
+
+---
+
+**Addendum — P0-8 Executive Trust Command Center (ETCC) (2026-06-15):**
+Executive governance layer above TIM (P0-7) and Trust Arc (P0-6A/B).  No new trust engines — all data from existing append-only tables.
+
+**Capability changes (`api/entitlements.py`):**
+Four new capabilities added to `CAPABILITY_REGISTRY` and `ENTERPRISE` tier:
+- `trust.executive.dashboard` — executive posture, trends, overview, drilldowns
+- `trust.risk` — risk surface with severity breakdown
+- `trust.reporting` — all /reports/* routes (P0-9 foundation)
+- `trust.executive.export` — reserved for future export (P0-9+)
+
+No existing capabilities modified.
+
+**New service (`services/executive_trust/posture_service.py`):**
+- `get_executive_posture(db, *, tenant_id, engagement_id)` — aggregates `FaTimTrustSnapshot` (latest), `FaTrustCertification` (latest), `FaTimDriftEvent` (open unacknowledged) into a unified executive posture dict.  Pure read.  Non-blocking.
+- `get_tenant_overview(db, *, tenant_id, limit)` — cross-engagement posture summary via subquery selecting max(evaluated_at) per engagement.  Ordered by posture_score ascending (most at-risk first).
+- `_trend_windows(db, ...)` — 7d/30d/90d windows from TIM snapshot history (same logic as trust_monitoring.py `_compute_trend_windows`).
+
+**New API file (`api/executive_trust.py`):**
+15 GET routes under `/field-assessment/` prefix.  All require `governance:read`.
+
+Tenant-level route:
+- `GET /etcc/overview` — all engagements at a glance; capability: `trust.executive.dashboard`
+
+Per-engagement routes (all under `/engagements/{id}/etcc/`):
+- `GET .../posture` — full executive posture (trust + certification + risk + monitoring + trends); capability: `trust.executive.dashboard`
+- `GET .../trends` — 7d/30d/90d trend windows; capability: `trust.executive.dashboard`
+- `GET .../risks` — all open unacknowledged drift events + risk rollup; capability: `trust.risk`; filterable by `min_severity`
+- `GET .../certification` — active cert with expiry status + ledger linkage; capability: `trust.certification`
+- `GET .../certification/history` — full cert history (append-only); capability: `trust.certification`
+- `GET .../monitoring` — TIM health (last evaluation, replay status, failure events, reconstruction); capability: `continuous.monitoring`
+- `GET .../timeline` — unified governance activity feed (all sources, filterable by source_type/event_type/since); capability: `trust.timeline`
+- `GET .../decisions` — trust decision memory (filterable by entity_type); capability: `trust.memory`
+- `GET .../drilldown/drift/{event_id}` — drift → evidence → source snapshot trace; capability: `trust.executive.dashboard`
+- `GET .../drilldown/certification/{cert_id}` — cert → ledger → chain of custody → reconstruction trace; capability: `trust.certification`
+- `GET .../reports/summary` — comprehensive executive summary (P0-9 foundation); capability: `trust.reporting`
+- `GET .../reports/quarterly` — date-bounded quarterly trust summary (year+quarter params); capability: `trust.reporting`
+- `GET .../reports/drift` — full drift history with rule/severity/status breakdown; capability: `trust.reporting`
+- `GET .../reports/risk` — risk posture with severity weights, acknowledged count; capability: `trust.reporting`
+
+**No new migrations, tables, or DB triggers.**  All data read from existing append-only tables.
+
+**Wiring:**
+- `executive_trust_router` imported and registered in both `build_app()` and `build_contract_app()` in `api/main.py`.
+
+**Security review:**
+- All 15 routes require `governance:read` scope and an ENTERPRISE-tier capability gate.  No public or unauthenticated paths added.
+- Tenant isolation via `_resolve_caller_tenant(request)` — same pattern as trust_monitoring.py and trust_arc.py.  Missing tenant → 401 before any DB query.
+- Acknowledged-event exclusion subquery applied consistently in `/risks` and `/reports/risk` — same `correlation_id` pattern as P0-7 `/drift` and `/risks`.
+- No write operations in any ETCC route.  No UPDATE, DELETE, or INSERT.
+- All drilldown routes validate engagement ownership (tenant_id filter on every query before returning data).
+- `trust.executive.export` capability reserved; no export routes implemented in P0-8 — prevents premature capability surface.
+
+**Governance readiness (Phase 9 compliance):**
+`actor_type` field already present in `fa_tim_drift_events` and `fa_governance_decisions`.  ETCC routes expose it in every event dict.  `entity_type` in `fa_trust_decision_memory` supports human/agent/autonomous_system/agi — filterable in `GET .../decisions`.  No schema changes required for autonomous governance.
+
+**AGI readiness (Phase 12 compliance):**
+All ETCC routes already return `entity_type` from decision memory and `actor_type` from drift events.  Future Agent Trust Posture and Agent Drift views can be added by filtering on `entity_type='agent'` without redesign.
+
+**Moat note (Phase 13):**
+The moat is not the dashboard — it is the historical trust intelligence corpus accumulating in append-only tables with cryptographic signatures and hash chains.  The longer FrostGate runs for a tenant, the deeper the `fa_trust_intelligence_ledger`, `fa_decision_reconstruction_records`, and `fa_chain_of_custody_records` become — making replay, audit, and legal defense increasingly difficult to replicate.
+
+**Route inventory changes:**
+15 new GET routes added under `/field-assessment/etcc/` and `/field-assessment/engagements/{id}/etcc/`.  All classified as `allowed_internal` (in ENTERPRISE contract, behind capability gates).
+
+**Tests:**
+35 unit tests in `tests/test_executive_trust.py` covering: `_cert_expiry_status` (6 cases), `_risk_weight` (6 cases), `_load_json` (4 cases), `get_executive_posture` empty state (5 cases), `get_executive_posture` with data (5 cases), `get_tenant_overview` (3 cases), quarterly period boundaries (4 cases), severity ordering (3 cases).  35/35 pass.
+
+**Validation:**
+- `make route-inventory-generate`: OK (15 new ETCC routes classified)
+- `make contract-authority-refresh`: OK
+- `make fg-fast`: OK
+- `PYTHONPATH=. python -m pytest tests/test_executive_trust.py`: 35/35 passed
