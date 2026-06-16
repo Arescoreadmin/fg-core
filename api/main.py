@@ -92,6 +92,7 @@ from api.trust_monitoring import router as trust_monitoring_router
 from api.executive_trust import router as executive_trust_router
 from api.quarterly_briefs import router as quarterly_briefs_router
 from api.clm import router as clm_router
+from api.control_tower import router as control_tower_router
 from api.portal import portal_router
 from api.entitlements import (
     router as entitlements_router,
@@ -673,6 +674,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(executive_trust_router)
     app.include_router(quarterly_briefs_router)
     app.include_router(clm_router)
+    app.include_router(control_tower_router)
     app.include_router(portal_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
@@ -1101,6 +1103,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(executive_trust_router)
     app.include_router(quarterly_briefs_router)
     app.include_router(clm_router)
+    app.include_router(control_tower_router)
     app.include_router(portal_router)
     app.include_router(connectors_msgraph_report_router)
     app.include_router(rag_retrieval_policy_router)

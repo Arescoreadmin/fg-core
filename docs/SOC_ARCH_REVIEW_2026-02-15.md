@@ -1,3 +1,25 @@
+## 2026-06-16 — P0-11: Continuous Governance Control Tower (CGCT) Route Addition
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new governance aggregation routes under `/control-tower`; no new auth subsystems, no privilege escalation, no new credential handling)
+
+**Changes:**
+- `api/control_tower.py` — 14 new GET/POST routes under `/control-tower/` prefix. All routes require `governance:read` or `governance:write` scope + ENTERPRISE capability gate. All routes are tenant-bound via `_resolve_caller_tenant()` / `auth_ctx_db_session`. No public or auth-exempt routes added.
+- `api/entitlements.py` — 10 new `controltower.*` capabilities added to `CAPABILITY_REGISTRY` and `_enterprise_extras`. No existing capabilities modified.
+- `tools/ci/route_inventory.json` — regenerated via `make route-inventory-generate` to reflect new routes.
+- `tools/ci/contract_routes.json`, `route_inventory_summary.json`, `topology.sha256`, `plane_registry_snapshot.json` — regenerated as side effects of inventory + contract regeneration.
+
+**Security invariants verified:**
+- All 14 new routes require `governance:read` or `governance:write` scope (enforced by `require_scopes`).
+- All routes require ENTERPRISE-tier capability (enforced by `require_capability`).
+- Tenant isolation enforced by `auth_ctx_db_session` + `_resolve_caller_tenant`.
+- No new public, bootstrap, or auth-exempt routes.
+- CGCT is read-only aggregate — no new write operations except `POST /posture/compute` (writes to `fg_cgct_posture_snapshots`, `fg_cgct_action_queue`; requires `governance:write` + `controltower.admin`).
+- No modifications to auth, middleware, or security subsystems.
+
+**No regressions:** Contract hash updated. Route inventory regenerated. All existing tests pass.
+
+---
+
 ## 2026-06-12 — P0: Quarantine Public Debug Route (`/_debug/routes`)
 
 **Reviewer:** Codex | **Classification:** SOC-P0 (auth bypass remediation; `/_debug` removed from public allowlist; enforcement code corrected)

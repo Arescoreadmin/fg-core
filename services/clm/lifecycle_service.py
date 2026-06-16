@@ -934,7 +934,9 @@ def get_lineage(
                 break
             if current.parent_cert_id in visited:
                 break  # circular guard
-            parent = _load_cert(current.parent_cert_id)  # tenant-scoped; may span engagements
+            parent = _load_cert(
+                current.parent_cert_id
+            )  # tenant-scoped; may span engagements
             if parent is None:
                 break
             visited.add(parent.id)

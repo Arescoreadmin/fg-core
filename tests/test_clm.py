@@ -280,7 +280,12 @@ class TestTransitionLifecycle:
         cert = _make_cert(lifecycle_status="draft")
         db = self._make_db(cert)
         result = transition_lifecycle(
-            db, cert_id="cert-001", tenant_id="t1", to_status="in_review", actor="alice"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            to_status="in_review",
+            actor="alice",
         )
         assert cert.lifecycle_status == "in_review"
         assert result["to_status"] == "in_review"
@@ -289,7 +294,11 @@ class TestTransitionLifecycle:
         cert = _make_cert(lifecycle_status="draft")
         db = self._make_db(cert)
         result = transition_lifecycle(
-            db, cert_id="cert-001", tenant_id="t1", to_status="in_review"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            to_status="in_review",
         )
         assert result["from_status"] == "draft"
 
@@ -297,7 +306,11 @@ class TestTransitionLifecycle:
         cert = _make_cert(lifecycle_status="in_review")
         db = self._make_db(cert)
         result = transition_lifecycle(
-            db, cert_id="cert-001", tenant_id="t1", to_status="pending_approval"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            to_status="pending_approval",
         )
         assert result["to_status"] == "pending_approval"
 
@@ -308,6 +321,7 @@ class TestTransitionLifecycle:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             to_status="in_review",
             actor="charlie",
         )
@@ -318,7 +332,11 @@ class TestTransitionLifecycle:
         db = self._make_db(cert)
         with pytest.raises(ValueError, match="Invalid transition"):
             transition_lifecycle(
-                db, cert_id="cert-001", tenant_id="t1", to_status="certified"
+                db,
+                cert_id="cert-001",
+                tenant_id="t1",
+                engagement_id="eng-001",
+                to_status="certified",
             )
 
     def test_archived_terminal_raises_value_error(self):
@@ -326,21 +344,33 @@ class TestTransitionLifecycle:
         db = self._make_db(cert)
         with pytest.raises(ValueError):
             transition_lifecycle(
-                db, cert_id="cert-001", tenant_id="t1", to_status="draft"
+                db,
+                cert_id="cert-001",
+                tenant_id="t1",
+                engagement_id="eng-001",
+                to_status="draft",
             )
 
     def test_cert_not_found_raises_value_error(self):
         db = _empty_db()
         with pytest.raises(ValueError, match="not found"):
             transition_lifecycle(
-                db, cert_id="missing", tenant_id="t1", to_status="in_review"
+                db,
+                cert_id="missing",
+                tenant_id="t1",
+                engagement_id="eng-001",
+                to_status="in_review",
             )
 
     def test_lifecycle_event_appended(self):
         cert = _make_cert(lifecycle_status="draft")
         db = self._make_db(cert)
         transition_lifecycle(
-            db, cert_id="cert-001", tenant_id="t1", to_status="in_review"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            to_status="in_review",
         )
         db.add.assert_called_once()
 
@@ -365,6 +395,7 @@ class TestAddReview:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             reviewer="alice",
             review_outcome="approved",
         )
@@ -378,6 +409,7 @@ class TestAddReview:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             reviewer="alice",
             review_outcome="rejected",
         )
@@ -390,6 +422,7 @@ class TestAddReview:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             reviewer="bob",
             review_outcome="approved",
         )
@@ -402,6 +435,7 @@ class TestAddReview:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             reviewer="alice",
             review_outcome="approved",
             notes="LGTM",
@@ -415,6 +449,7 @@ class TestAddReview:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             reviewer="alice",
             review_outcome="approved",
             evidence_refs=["e1", "e2"],
@@ -428,6 +463,7 @@ class TestAddReview:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             reviewer="alice",
             review_outcome="approved",
         )
@@ -439,6 +475,7 @@ class TestAddReview:
             db,
             cert_id="missing",
             tenant_id="t1",
+            engagement_id="eng-001",
             reviewer="alice",
             review_outcome="approved",
         )
@@ -451,6 +488,7 @@ class TestAddReview:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             reviewer="alice",
             review_outcome="approved",
         )
@@ -477,6 +515,7 @@ class TestAddAttestation:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             attestation_type="internal",
             attester="alice",
         )
@@ -491,6 +530,7 @@ class TestAddAttestation:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             attestation_type="auditor",
             attester="alice",
         )
@@ -504,6 +544,7 @@ class TestAddAttestation:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             attestation_type="internal",
             attester="alice",
             attestation_data=data,
@@ -517,6 +558,7 @@ class TestAddAttestation:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             attestation_type="executive",
             attester="ceo@example.com",
         )
@@ -529,6 +571,7 @@ class TestAddAttestation:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             attestation_type="agent",
             attester="agent-001",
             attester_type="agent",
@@ -541,6 +584,7 @@ class TestAddAttestation:
             db,
             cert_id="missing",
             tenant_id="t1",
+            engagement_id="eng-001",
             attestation_type="internal",
             attester="alice",
         )
@@ -555,6 +599,7 @@ class TestAddAttestation:
             db1,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             attestation_type="internal",
             attester="alice",
             attestation_data=data,
@@ -563,6 +608,7 @@ class TestAddAttestation:
             db2,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             attestation_type="internal",
             attester="alice",
             attestation_data=data,
@@ -576,6 +622,7 @@ class TestAddAttestation:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             attestation_type="internal",
             attester="alice",
         )
@@ -606,7 +653,11 @@ class TestInitiateRenewal:
         cert = _make_cert()
         db = self._db(cert)
         result = initiate_renewal(
-            db, cert_id="cert-001", tenant_id="t1", initiated_by="alice"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            initiated_by="alice",
         )
         assert "renewal_id" in result
         assert result["cert_id"] == "cert-001"
@@ -615,7 +666,11 @@ class TestInitiateRenewal:
         cert = _make_cert()
         db = self._db(cert)
         result = initiate_renewal(
-            db, cert_id="cert-001", tenant_id="t1", initiated_by="alice"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            initiated_by="alice",
         )
         assert "renewal_readiness" in result
         assert isinstance(result["renewal_readiness"], dict)
@@ -627,6 +682,7 @@ class TestInitiateRenewal:
             db,
             cert_id="cert-001",
             tenant_id="t1",
+            engagement_id="eng-001",
             renewal_type="emergency",
             initiated_by="alice",
         )
@@ -636,7 +692,11 @@ class TestInitiateRenewal:
         cert = _make_cert()
         db = self._db(cert)
         result = initiate_renewal(
-            db, cert_id="cert-001", tenant_id="t1", initiated_by="ops-agent"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            initiated_by="ops-agent",
         )
         assert result["initiated_by"] == "ops-agent"
 
@@ -647,7 +707,11 @@ class TestInitiateRenewal:
         cert = _make_cert(valid_until=future)
         db = self._db(cert)
         result = initiate_renewal(
-            db, cert_id="cert-001", tenant_id="t1", initiated_by="alice"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            initiated_by="alice",
         )
         days = result["renewal_readiness"]["days_until_expiry"]
         assert days is not None
@@ -656,7 +720,11 @@ class TestInitiateRenewal:
     def test_unknown_cert_returns_empty_dict(self):
         db = _empty_db()
         result = initiate_renewal(
-            db, cert_id="missing", tenant_id="t1", initiated_by="alice"
+            db,
+            cert_id="missing",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            initiated_by="alice",
         )
         assert result == {}
 
@@ -664,7 +732,11 @@ class TestInitiateRenewal:
         cert = _make_cert()
         db = self._db(cert)
         result = initiate_renewal(
-            db, cert_id="cert-001", tenant_id="t1", initiated_by="alice"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            initiated_by="alice",
         )
         assert result["renewal_status"] == "initiated"
 
@@ -674,7 +746,11 @@ class TestInitiateRenewal:
         db = self._db(cert, snapshots=[], drift_events=open_drift)
         # Renewal readiness includes open_drift_events
         result = initiate_renewal(
-            db, cert_id="cert-001", tenant_id="t1", initiated_by="alice"
+            db,
+            cert_id="cert-001",
+            tenant_id="t1",
+            engagement_id="eng-001",
+            initiated_by="alice",
         )
         assert "renewal_readiness" in result
 
@@ -702,7 +778,9 @@ class TestGetHealth:
     def test_returns_health_dict(self):
         cert = _make_cert()
         db = self._db(cert)
-        result = get_certification_health(db, cert_id="cert-001", tenant_id="t1")
+        result = get_certification_health(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         assert "cert_id" in result
         assert "lifecycle_status" in result
 
@@ -712,7 +790,9 @@ class TestGetHealth:
         )
         cert = _make_cert(valid_until=future)
         db = self._db(cert)
-        result = get_certification_health(db, cert_id="cert-001", tenant_id="t1")
+        result = get_certification_health(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["days_until_expiry"] is not None
         assert 25 <= result["days_until_expiry"] <= 35
 
@@ -722,7 +802,9 @@ class TestGetHealth:
         )
         cert = _make_cert(valid_until=future)
         db = self._db(cert)
-        result = get_certification_health(db, cert_id="cert-001", tenant_id="t1")
+        result = get_certification_health(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["renewal_recommended"] is True
 
     def test_renewal_recommended_false_when_far_future(self):
@@ -731,31 +813,41 @@ class TestGetHealth:
         )
         cert = _make_cert(valid_until=future)
         db = self._db(cert)
-        result = get_certification_health(db, cert_id="cert-001", tenant_id="t1")
+        result = get_certification_health(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["renewal_recommended"] is False
 
     def test_no_valid_until_days_expiry_is_none(self):
         cert = _make_cert(valid_until=None)
         db = self._db(cert)
-        result = get_certification_health(db, cert_id="cert-001", tenant_id="t1")
+        result = get_certification_health(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["days_until_expiry"] is None
 
     def test_avg_posture_computed_from_snaps(self):
         cert = _make_cert()
         snaps = [_snap(score=80, snap_id="s1"), _snap(score=60, snap_id="s2")]
         db = self._db(cert, snapshots=snaps)
-        result = get_certification_health(db, cert_id="cert-001", tenant_id="t1")
+        result = get_certification_health(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["avg_posture_score"] == 70.0
 
     def test_empty_snap_list_avg_posture_none(self):
         cert = _make_cert()
         db = self._db(cert, snapshots=[])
-        result = get_certification_health(db, cert_id="cert-001", tenant_id="t1")
+        result = get_certification_health(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["avg_posture_score"] is None
 
     def test_cert_not_found_returns_empty_dict(self):
         db = _empty_db()
-        result = get_certification_health(db, cert_id="missing", tenant_id="t1")
+        result = get_certification_health(
+            db, cert_id="missing", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result == {}
 
 
@@ -787,7 +879,9 @@ class TestGetLineage:
         ex = MagicMock()
         ex.scalar_one_or_none.return_value = cert
         db.execute.return_value = ex
-        result = get_lineage(db, cert_id="root", tenant_id="t1")
+        result = get_lineage(
+            db, cert_id="root", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["root"]["parent_cert_id"] is None
 
     def test_single_cert_chain_total_is_1(self):
@@ -796,13 +890,17 @@ class TestGetLineage:
         ex = MagicMock()
         ex.scalar_one_or_none.return_value = cert
         db.execute.return_value = ex
-        result = get_lineage(db, cert_id="cert-001", tenant_id="t1")
+        result = get_lineage(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["total"] == 1
         assert len(result["chain"]) == 1
 
     def test_cert_not_found_returns_empty_dict(self):
         db = _empty_db()
-        result = get_lineage(db, cert_id="missing", tenant_id="t1")
+        result = get_lineage(
+            db, cert_id="missing", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result == {}
 
     def test_chain_structure_present(self):
@@ -811,7 +909,9 @@ class TestGetLineage:
         ex = MagicMock()
         ex.scalar_one_or_none.return_value = cert
         db.execute.return_value = ex
-        result = get_lineage(db, cert_id="cert-001", tenant_id="t1")
+        result = get_lineage(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         assert "root" in result
         assert "chain" in result
         assert "total" in result
@@ -826,7 +926,9 @@ class TestGetLineage:
         ex = MagicMock()
         ex.scalar_one_or_none.return_value = cert
         db.execute.return_value = ex
-        result = get_lineage(db, cert_id="cert-001", tenant_id="t1")
+        result = get_lineage(
+            db, cert_id="cert-001", tenant_id="t1", engagement_id="eng-001"
+        )
         entry = result["chain"][0]
         assert entry["cert_name"] == "Root Cert"
         assert entry["lifecycle_status"] == "certified"
@@ -839,7 +941,9 @@ class TestGetLineage:
         ex.scalar_one_or_none.return_value = cert
         db.execute.return_value = ex
         # Should not raise or loop
-        result = get_lineage(db, cert_id="cert-self", tenant_id="t1")
+        result = get_lineage(
+            db, cert_id="cert-self", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["total"] >= 1
 
     def test_two_level_chain(self):
@@ -861,7 +965,9 @@ class TestGetLineage:
             return ex
 
         db.execute.side_effect = _execute
-        result = get_lineage(db, cert_id="child", tenant_id="t1")
+        result = get_lineage(
+            db, cert_id="child", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["total"] == 2
 
     def test_root_is_topmost_ancestor(self):
@@ -882,7 +988,9 @@ class TestGetLineage:
             return ex
 
         db.execute.side_effect = _execute
-        result = get_lineage(db, cert_id="child", tenant_id="t1")
+        result = get_lineage(
+            db, cert_id="child", tenant_id="t1", engagement_id="eng-001"
+        )
         assert result["root"]["cert_id"] == "parent"
 
 

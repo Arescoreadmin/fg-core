@@ -1208,7 +1208,91 @@
     },
     {
       "method": "GET",
+      "path": "/control-tower/actions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/authority-matrix",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/certifications",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/decisions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/drift",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/executive",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/graph",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/overview",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/posture",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-tower/posture/compute",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/risks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-tower/snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/timeline",
       "scopes": [],
       "source": "contract"
     },
@@ -3055,7 +3139,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-16T00:00:12.160571+00:00",
+  "generated_at": "2026-06-16T12:53:14.979442+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
