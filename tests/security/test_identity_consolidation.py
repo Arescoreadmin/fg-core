@@ -321,11 +321,114 @@ def _setup_client(tmp_path: Path, monkeypatch) -> tuple[TestClient, str, str]:
     return client, key_a, key_b
 
 
+def test_ad1_oidc_unbound_membership_hard_fails_403(tmp_path, monkeypatch):
+    """AD-1: OIDC actor with no bound tenant_users record → 403 MEMBERSHIP_NOT_FOUND.
+
+    An authenticated Auth0 JWT with no matching tenant_users row must be
+    denied. There is no legitimate "OIDC actor without membership" path —
+    service accounts use API keys.
+    """
+    from fastapi import HTTPException
+
+    from api.actor_context import ActorContext, roles_to_permissions
+    from api.auth_dispatch import _bind_membership
+
+    db = _make_db(tmp_path, monkeypatch, "ad1")
+    monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
+
+    actor = ActorContext(
+        subject="auth0|ghost-user",
+        email="ghost@example.com",
+        name="Ghost",
+        permissions=roles_to_permissions(["assessor"]),
+        roles=["assessor"],
+        auth_source="oidc_auth0",
+        tenant_id="tenant-a",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _bind_membership(actor, db)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "MEMBERSHIP_NOT_FOUND"
+    db.close()
+    reset_engine_cache()
+
+
+def test_ad2_oidc_inactive_membership_hard_fails_403(tmp_path, monkeypatch):
+    """AD-2: OIDC actor with active=False membership → 403 MEMBERSHIP_INACTIVE."""
+    from fastapi import HTTPException
+
+    from api.actor_context import ActorContext, roles_to_permissions
+    from api.auth_dispatch import _bind_membership
+
+    db = _make_db(tmp_path, monkeypatch, "ad2")
+    monkeypatch.setenv("FG_AUTH0_DOMAIN", "example.auth0.com")
+    _user(
+        db,
+        tenant_id="tenant-a",
+        subject="auth0|inactive-user",
+        issuer="https://example.auth0.com/",
+        active=False,
+    )
+
+    actor = ActorContext(
+        subject="auth0|inactive-user",
+        email="inactive@example.com",
+        name="Inactive",
+        permissions=roles_to_permissions(["assessor"]),
+        roles=["assessor"],
+        auth_source="oidc_auth0",
+        tenant_id="tenant-a",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _bind_membership(actor, db)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "MEMBERSHIP_INACTIVE"
+    db.close()
+    reset_engine_cache()
+
+
+def test_ad4_oidc_active_membership_populates_membership_id(tmp_path, monkeypatch):
+    """AD-4: OIDC actor with active bound membership → membership_id populated."""
+    from api.actor_context import ActorContext, roles_to_permissions
+    from api.auth_dispatch import _bind_membership
+
+    db = _make_db(tmp_path, monkeypatch, "ad4")
+    monkeypatch.setenv("FG_AUTH0_DOMAIN", "example.auth0.com")
+    user = _user(
+        db,
+        tenant_id="tenant-a",
+        subject="auth0|active-user",
+        issuer="https://example.auth0.com/",
+        active=True,
+    )
+
+    actor = ActorContext(
+        subject="auth0|active-user",
+        email="active@example.com",
+        name="Active",
+        permissions=roles_to_permissions(["assessor"]),
+        roles=["assessor"],
+        auth_source="oidc_auth0",
+        tenant_id="tenant-a",
+    )
+
+    result = _bind_membership(actor, db)
+
+    assert result.membership_id == user.id
+    assert result.auth_source == "oidc_auth0"
+    db.close()
+    reset_engine_cache()
+
+
 def test_ad3_api_key_actor_skips_membership_lookup(tmp_path, monkeypatch):
-    """AD-4: API key actors skip Auth0 membership lookup; no 403."""
+    """AD-3: API key actors bypass _bind_membership entirely; no tenant_users check."""
     client, key_a, _ = _setup_client(tmp_path, monkeypatch)
     resp = client.get("/compliance-cp/summary", headers={"X-API-Key": key_a})
-    # Tenant-A has no memberships but the API-key path doesn't check
+    # tenant-a has no memberships; API-key path never calls _bind_membership
     assert resp.status_code == 200
 
 

@@ -119,11 +119,15 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
 
     Looks up the bound membership record using the identity triple
     (provider=auth0, issuer, subject). Adds membership_id and enforces
-    deactivation: if active=False the membership is denied (403).
+    deactivation.
 
-    On any lookup failure the original actor is returned unchanged so that
-    misconfigured deployments do not lock everyone out. Deactivation failures
-    are the only hard-fail path.
+    Hard-fails 403 on MEMBERSHIP_NOT_FOUND: OIDC human actors must have a
+    bound tenant_users record. Service accounts use API keys and never reach
+    this function, so there is no legitimate "OIDC actor without membership"
+    case in normal operation.
+
+    Hard-fails 403 on MEMBERSHIP_INACTIVE: deactivated members are denied
+    immediately regardless of when their session was issued.
     """
     try:
         from services.identity_resolver import IdentityResolver, IdentityResolutionError
@@ -143,21 +147,16 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
                 tenant_id=actor.tenant_id,
             )
         except IdentityResolutionError as exc:
-            if exc.code == "MEMBERSHIP_NOT_FOUND":
-                # No bound record — may be a service account JWT; continue without binding
-                log.debug(
-                    "auth_dispatch.membership_unbound",
-                    extra={"subject_prefix": actor.subject[:16]},
-                )
-                return actor
-            # MEMBERSHIP_INACTIVE or similar — hard-fail
+            # Both MEMBERSHIP_NOT_FOUND and MEMBERSHIP_INACTIVE are hard denials.
+            # OIDC actors without a bound membership are not service accounts —
+            # service accounts authenticate via API keys, not Bearer JWTs.
             log.warning(
                 "auth_dispatch.membership_denied",
                 extra={"code": exc.code, "subject_prefix": actor.subject[:16]},
             )
             raise HTTPException(
                 status_code=403,
-                detail={"code": exc.code, "reason": "membership is not active"},
+                detail={"code": exc.code, "reason": str(exc)},
             )
 
         return ActorContext(
