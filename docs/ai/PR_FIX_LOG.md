@@ -6,6 +6,53 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-15 — P0-10: Certification Lifecycle Management (CLM)
+
+**Branch:** `p0-10/certification-lifecycle-management`
+
+#### New Files
+- `migrations/postgres/0115_clm_certification_lifecycle.sql` — 6 tables, RLS, indexes, append-only triggers
+- `api/db_models_clm.py` — 6 ORM classes (`FaClmCert`, `FaClmLifecycleEvent`, `FaClmCertReview`, `FaClmCertAttestation`, `FaClmCertRenewal`, `FaClmCertManifest`)
+- `services/clm/__init__.py` — empty package init
+- `services/clm/lifecycle_service.py` — 8 public functions (~470 lines)
+- `api/clm.py` — 13 routes under `/field-assessment/engagements/{eid}/certifications`
+- `tests/test_clm.py` — 100 tests across 13 classes
+
+#### Modified Files
+- `api/entitlements.py` — 9 new capabilities in `CAPABILITY_REGISTRY` + `_enterprise_extras`
+- `api/db.py` — `importlib.import_module("api.db_models_clm")` in `_ensure_models_imported()`
+- `api/main.py` — `clm_router` imported and registered in both `build_app()` + `build_contract_app()`
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — P0-10 addendum appended
+- `ROADMAP.md` — P0-10 row added
+
+#### Functions Implemented
+1. `create_certification()` — cert + manifest + lifecycle event; cert_hash + manifest_hash via SHA-256 over stable fields (no ephemeral timestamps)
+2. `transition_lifecycle()` — 11-state machine validated against `_VALID_TRANSITIONS`; raises ValueError on invalid
+3. `add_review()` — append review + lifecycle event; graceful empty dict on missing cert
+4. `add_attestation()` — attestation_hash = SHA-256(attestation_data); lifecycle event
+5. `initiate_renewal()` — renewal + readiness snapshot (days_until_expiry, avg_posture, open_drift_events)
+6. `get_certification_health()` — health scoring; `renewal_recommended=True` when ≤90 days or status=renewal_due/expired
+7. `get_lineage()` — walks `parent_cert_id` chain upward; max depth 50 with circular guard
+8. `compute_trust_impact()` — cert level weight: bronze=10/silver=20/gold=30/platinum=40/default=15
+
+#### Security Design
+- All 6 tables: `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` with `app.tenant_id` GUC
+- 5 append-only tables each have 2 `append_only_guard()` triggers (BEFORE UPDATE + BEFORE DELETE)
+- Cert and manifest hashes exclude ephemeral timestamps → deterministic across regenerations
+- Lifecycle transitions server-side validated; no client-controlled state injection
+- Platform data fetchers (`_fetch_recent_snapshots`, `_fetch_recent_drift_events`, etc.) all wrapped in try/except for graceful degradation
+
+#### Validation
+- `ruff format`: clean (4 files reformatted)
+- `ruff check`: clean (5 lint errors fixed)
+- `pytest tests/test_clm.py`: 100/100 passed
+- `make contract-authority-refresh`: OK
+- `make route-inventory-generate`: OK
+- `make soc-review-sync`: OK
+- `make fg-fast`: All checks passed! (398 tests, 242s)
+
+---
+
 ### 2026-06-12 — PR 1.9 Addendum: P1 Security Fixes (post-review)
 
 **Branch:** `pr/1.9-auditor-proof-authority`

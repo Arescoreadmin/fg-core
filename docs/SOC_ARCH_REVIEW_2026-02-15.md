@@ -2615,4 +2615,121 @@ Five bot-review findings fixed after initial P0-9 merge:
 **P2 — Expired certification returned as active** (`brief_service.py`): `_fetch_active_certification` filtered only on `valid_from < period_end`, not `valid_until`. Fixed: added `valid_until >= period_end` to the WHERE clause.
 
 No new routes. No schema changes. No migration changes. Route inventory and topology updated to reflect CI artifact state.
+
+---
+
+## P0-10 Addendum — Certification Lifecycle Management (CLM) (2026-06-15)
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new governance surface; no auth subsystem changes; no new credential handling; append-only audit tables; tenant-isolated RLS on all tables)
+
+### Summary
+
+P0-10 adds a full lifecycle management layer for certifications above the existing Trust Arc static cert records (`fa_trust_certifications`). It does not duplicate trust/monitoring engines — all health data sourced from existing P0-7 TIM tables.
+
+### New Migration (`migrations/postgres/0115_clm_certification_lifecycle.sql`)
+
+Six new tenant-scoped tables, all RLS-enforced (`ENABLE + FORCE ROW LEVEL SECURITY`), all scoped to `app.tenant_id` GUC:
+
+- **`fa_clm_certs`** — one row per managed cert; lifecycle_status mutable; 4 indexes
+- **`fa_clm_lifecycle_events`** — append-only; 2 append_only_guard() triggers (UPDATE + DELETE); 2 indexes
+- **`fa_clm_cert_reviews`** — append-only; 2 append_only_guard() triggers; 2 indexes
+- **`fa_clm_cert_attestations`** — append-only; 2 append_only_guard() triggers; 2 indexes
+- **`fa_clm_cert_renewals`** — append-only; 2 append_only_guard() triggers; 2 indexes
+- **`fa_clm_cert_manifests`** — append-only; `cert_id UNIQUE`; 2 append_only_guard() triggers; 2 indexes
+
+### New ORM (`api/db_models_clm.py`)
+
+Six classes mirroring the migration: `FaClmCert`, `FaClmLifecycleEvent`, `FaClmCertReview`, `FaClmCertAttestation`, `FaClmCertRenewal`, `FaClmCertManifest`. All use `Mapped[str]` / `mapped_column()` style consistent with P0-9.
+
+### New Service (`services/clm/lifecycle_service.py`)
+
+All functions return plain dicts; empty dict on fatal error; caller commits.
+
+- `create_certification()` — cert + manifest + lifecycle event; `cert_hash = SHA-256(stable cert fields)`, `manifest_hash = SHA-256(sorted source ID arrays)`
+- `transition_lifecycle()` — validates against `_VALID_TRANSITIONS` state machine; raises ValueError on invalid
+- `add_review()` — append review + lifecycle event
+- `add_attestation()` — append attestation with `attestation_hash = SHA-256(attestation_data)`; lifecycle event
+- `initiate_renewal()` — append renewal + readiness snapshot; lifecycle event
+- `get_certification_health()` — scoring from TIM snapshots + drift events; `renewal_recommended` flag
+- `get_lineage()` — walks `parent_cert_id` chain upward with 50-depth circular guard
+- `compute_trust_impact()` — cert level weight (bronze=10/silver=20/gold=30/platinum=40/default=15)
+
+### New API (`api/clm.py`)
+
+Router prefix `/field-assessment`, tag `certification-lifecycle`. 13 routes:
+
+- `POST /engagements/{eid}/certifications` — create; scope `governance:read`; capability `certification.read`; 201
+- `GET  /engagements/{eid}/certifications` — list (filter: lifecycle_status, cert_type, framework); capability `certification.read`
+- `GET  /engagements/{eid}/certifications/dashboard` — ETCC health summary; capability `certification.executive.view`
+- `GET  /engagements/{eid}/certifications/{cert_id}` — full detail; capability `certification.read`
+- `POST /engagements/{eid}/certifications/{cert_id}/transition` — lifecycle transition; scope `governance:write`; capability `certification.approve`
+- `POST /engagements/{eid}/certifications/{cert_id}/review` — add review; scope `governance:write`; capability `certification.review`; 201
+- `POST /engagements/{eid}/certifications/{cert_id}/attest` — add attestation; scope `governance:write`; capability `certification.attest`; 201
+- `POST /engagements/{eid}/certifications/{cert_id}/renew` — initiate renewal; scope `governance:write`; capability `certification.renew`; 201
+- `GET  /engagements/{eid}/certifications/{cert_id}/lineage` — parent chain; capability `certification.drilldown`
+- `GET  /engagements/{eid}/certifications/{cert_id}/health` — health score; capability `certification.read`
+- `GET  /engagements/{eid}/certifications/{cert_id}/impact` — trust impact; capability `certification.drilldown`
+- `GET  /engagements/{eid}/certifications/{cert_id}/manifest` — audit manifest; capability `certification.drilldown`
+- `GET  /engagements/{eid}/certifications/{cert_id}/history` — lifecycle event log; capability `certification.read`
+
+### New Capabilities (`api/entitlements.py`)
+
+9 new capabilities added to both `CAPABILITY_REGISTRY` and `_enterprise_extras`:
+`certification.read`, `certification.review`, `certification.attest`, `certification.approve`, `certification.renew`, `certification.revoke`, `certification.admin`, `certification.executive.view`, `certification.drilldown`
+
+### Security Invariants
+
+- All 6 tables have `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` with `app.tenant_id` GUC policy
+- All 5 append-only tables have `append_only_guard()` triggers for both `BEFORE UPDATE` and `BEFORE DELETE`
+- Cert hash and manifest hash exclude ephemeral timestamps (deterministic: same inputs → same hash)
+- Lifecycle state machine explicitly enumerated in `_VALID_TRANSITIONS`; invalid transitions raise `ValueError` (validated server-side)
+- Mutation routes require `governance:write` scope; read routes require `governance:read`
+- All platform data fetchers (TIM snapshots, drift, decisions, bundles, timeline) use `try/except` for graceful degradation — never raises on missing upstream data
+- No new trust/monitoring engines created
+- `clm_router` registered in both `build_app()` and `build_contract_app()`
+- `api.db_models_clm` imported in `api/db.py` `_ensure_models_imported()`
+
+### Files Changed
+
+- `migrations/postgres/0115_clm_certification_lifecycle.sql` — 6 new tables, RLS, indexes, append-only triggers
+- `api/db_models_clm.py` — 6 ORM classes
+- `services/clm/__init__.py` — empty package init
+- `services/clm/lifecycle_service.py` — 8 public functions
+- `api/clm.py` — 13 routes
+- `api/entitlements.py` — 9 new capabilities in CAPABILITY_REGISTRY + _enterprise_extras
+- `api/db.py` — `importlib.import_module("api.db_models_clm")` in `_ensure_models_imported()`
+- `api/main.py` — `clm_router` imported and registered in both app builders
+
+### Validation
+
+- `make route-inventory-generate`: OK (13 new routes registered)
+- `make contract-authority-refresh`: OK
+- `PYTHONPATH=. pytest tests/test_clm.py`: 100/100 passed
 EOFSOCDOC
+
+---
+
+## 2026-06-16 — P0-10 Bot-Review Fixes (CLM scope gate + engagement isolation)
+
+**Reviewer:** Codex | **Classification:** SOC-P1 (mutation scope gate tightened; cross-engagement data isolation enforced)
+
+**Problem 1 — Write scope missing on CLM create route (P2):**
+`POST /field-assessment/engagements/{eid}/certifications` was gated with `governance:read` + `certification.read`. A caller with read-only governance access could create CLM certification records and commit DB rows, violating the module's mutation contract and the field-assessment pattern where create routes require write scope.
+
+**Fix:** Changed dependencies to `governance:write` + `certification.admin`.
+
+**Problem 2 — Engagement isolation missing in service cert lookups (P2):**
+All service functions (`transition_lifecycle`, `add_review`, `add_attestation`, `initiate_renewal`, `get_certification_health`, `get_lineage`, `compute_trust_impact`) looked up certs by `cert_id + tenant_id` only. A request to engagement A with a cert ID belonging to engagement B (same tenant) could transition, review, attest, renew, or read health/impact for the wrong cert, mixing cross-engagement data.
+
+**Fix:** Added `engagement_id` parameter to all 7 service functions and added `FaClmCert.engagement_id == engagement_id` to each cert WHERE clause. All API call sites updated to pass `eid`. Exception: lineage ancestor traversal remains tenant-scoped only (parent certs legitimately span prior engagements); only the starting cert lookup is engagement-scoped.
+
+### Files Changed
+
+- `api/clm.py` — create route scope/capability updated; `engagement_id=eid` passed to all 6 service mutation/read calls
+- `services/clm/lifecycle_service.py` — `engagement_id` param added to 7 functions; WHERE clauses updated
+- `tools/ci/route_inventory.json` — regenerated after scope change on create route
+
+### Validation
+
+- `make route-inventory-generate`: OK
+- `make fg-fast`: All checks passed

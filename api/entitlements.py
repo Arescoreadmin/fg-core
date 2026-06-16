@@ -115,6 +115,16 @@ CAPABILITY_REGISTRY: frozenset[str] = frozenset(
         "audit.view",
         "audit.export",
         "audit.forensics",
+        # Certification Lifecycle Management (P0-10)
+        "certification.read",
+        "certification.review",
+        "certification.attest",
+        "certification.approve",
+        "certification.renew",
+        "certification.revoke",
+        "certification.admin",
+        "certification.executive.view",
+        "certification.drilldown",
     }
 )
 
@@ -170,6 +180,16 @@ def _tier_capabilities() -> dict[str, frozenset[str]]:
             "trust.report.export",
             "trust.report.review",
             "trust.report.delivery",
+            # Certification Lifecycle Management (P0-10)
+            "certification.read",
+            "certification.review",
+            "certification.attest",
+            "certification.approve",
+            "certification.renew",
+            "certification.revoke",
+            "certification.admin",
+            "certification.executive.view",
+            "certification.drilldown",
         }
     )
     return {
