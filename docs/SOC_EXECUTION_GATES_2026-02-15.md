@@ -4658,3 +4658,11 @@ was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding co
 SOC review outcome: approved design for validation. Admin Gateway auth/session/tenant/CSRF paths changed to make governed Admin Gateway sessions the only human tenant-session authority. Generic OIDC tenant and scope claims are stripped, raw provider tokens are removed from sessions, non-governed sessions fail tenant authorization closed, and invitation callback JSON cannot self-assert a verified identity. The default provider adapter fails callback validation closed.
 
 The new short-lived auth-state table stores only state digests and validated metadata, uses expiry and replay constraints, and is covered by forced tenant RLS. Identity transition events use the append-only PR 1 hash chain and safe payload allowlist. Console tenant query override behavior was removed. Focused security regressions cover wrong tenant, email, provider, issuer, connection, organization, non-human identity type, replay, unbound session, audit secret exclusion, and server-authoritative Console tenant resolution.
+
+
+## 2026-06-16 — P0-12: Cryptographic Federation Token Signing Enforcement
+
+Critical-path files changed:
+- `api/auth_federation.py`
+
+SOC review outcome: approved. `api/auth_federation.py` updated to use `FederationService.validate_token()` with full RS256/JWKS-backed cryptographic verification replacing the prior unsigned base64-decode path. Token validation now enforces: RS256 algorithm allowlist (alg=none and HS256 rejected pre-JWKS), JWKS key resolution with single-rotation retry on kid miss, `jwt.decode()` with `issuer`, `audience`, `leeway`, and `options={"require": ["sub","exp","iss","aud"]}`, post-verify tenant_id/tid claim enforcement, and structured audit logging on accept and reject. `FederationValidationError` typed exception propagates error_code to the 401/403 response body. Tenant isolation enforced: `principal.tenant_id` must equal the API-key-bound tenant or the request is rejected 403. New `tests/security/test_federation_signing.py` covers 6 positive and 15 negative paths with locally generated RSA keys and no live network calls.
