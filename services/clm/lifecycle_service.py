@@ -429,6 +429,7 @@ def transition_lifecycle(
     *,
     cert_id: str,
     tenant_id: str,
+    engagement_id: str,
     to_status: str,
     actor: str = "system",
     actor_type: str = "human",
@@ -447,6 +448,7 @@ def transition_lifecycle(
         select(FaClmCert).where(
             FaClmCert.id == cert_id,
             FaClmCert.tenant_id == tenant_id,
+            FaClmCert.engagement_id == engagement_id,
         )
     ).scalar_one_or_none()
 
@@ -499,6 +501,7 @@ def add_review(
     *,
     cert_id: str,
     tenant_id: str,
+    engagement_id: str,
     reviewer: str,
     reviewer_type: str = "human",
     review_outcome: str,
@@ -522,6 +525,7 @@ def add_review(
             select(FaClmCert).where(
                 FaClmCert.id == cert_id,
                 FaClmCert.tenant_id == tenant_id,
+                FaClmCert.engagement_id == engagement_id,
             )
         ).scalar_one_or_none()
         if cert is None:
@@ -586,6 +590,7 @@ def add_attestation(
     *,
     cert_id: str,
     tenant_id: str,
+    engagement_id: str,
     attestation_type: str,
     attester: str,
     attester_type: str = "human",
@@ -608,6 +613,7 @@ def add_attestation(
             select(FaClmCert).where(
                 FaClmCert.id == cert_id,
                 FaClmCert.tenant_id == tenant_id,
+                FaClmCert.engagement_id == engagement_id,
             )
         ).scalar_one_or_none()
         if cert is None:
@@ -674,6 +680,7 @@ def initiate_renewal(
     *,
     cert_id: str,
     tenant_id: str,
+    engagement_id: str,
     renewal_type: str = "routine",
     initiated_by: str = "system",
 ) -> dict[str, Any]:
@@ -695,6 +702,7 @@ def initiate_renewal(
             select(FaClmCert).where(
                 FaClmCert.id == cert_id,
                 FaClmCert.tenant_id == tenant_id,
+                FaClmCert.engagement_id == engagement_id,
             )
         ).scalar_one_or_none()
         if cert is None:
@@ -795,6 +803,7 @@ def get_certification_health(
     *,
     cert_id: str,
     tenant_id: str,
+    engagement_id: str,
 ) -> dict[str, Any]:
     """Compute health summary for a certification.
 
@@ -810,6 +819,7 @@ def get_certification_health(
             select(FaClmCert).where(
                 FaClmCert.id == cert_id,
                 FaClmCert.tenant_id == tenant_id,
+                FaClmCert.engagement_id == engagement_id,
             )
         ).scalar_one_or_none()
         if cert is None:
@@ -874,23 +884,27 @@ def get_lineage(
     *,
     cert_id: str,
     tenant_id: str,
+    engagement_id: str,
 ) -> dict[str, Any]:
     """Walk parent chain and family tree for a certification.
 
     Returns {"root": {...}, "chain": [...], "total": int}
     Returns empty dict if cert not found.
+    The starting cert is scoped to engagement_id; ancestor traversal is
+    tenant-scoped only (parent certs may belong to prior engagements).
     """
     try:
         from api.db_models_clm import FaClmCert  # noqa: PLC0415
         from sqlalchemy import select  # noqa: PLC0415
 
-        def _load_cert(cid: str) -> Any:
-            return db.execute(
-                select(FaClmCert).where(
-                    FaClmCert.id == cid,
-                    FaClmCert.tenant_id == tenant_id,
-                )
-            ).scalar_one_or_none()
+        def _load_cert(cid: str, eid: str | None = None) -> Any:
+            q = select(FaClmCert).where(
+                FaClmCert.id == cid,
+                FaClmCert.tenant_id == tenant_id,
+            )
+            if eid is not None:
+                q = q.where(FaClmCert.engagement_id == eid)
+            return db.execute(q).scalar_one_or_none()
 
         def _cert_summary(c: Any) -> dict[str, Any]:
             return {
@@ -906,7 +920,7 @@ def get_lineage(
                 "created_at": c.created_at,
             }
 
-        start_cert = _load_cert(cert_id)
+        start_cert = _load_cert(cert_id, eid=engagement_id)
         if start_cert is None:
             return {}
 
@@ -920,7 +934,7 @@ def get_lineage(
                 break
             if current.parent_cert_id in visited:
                 break  # circular guard
-            parent = _load_cert(current.parent_cert_id)
+            parent = _load_cert(current.parent_cert_id)  # tenant-scoped; may span engagements
             if parent is None:
                 break
             visited.add(parent.id)
@@ -965,6 +979,7 @@ def compute_trust_impact(
             select(FaClmCert).where(
                 FaClmCert.id == cert_id,
                 FaClmCert.tenant_id == tenant_id,
+                FaClmCert.engagement_id == engagement_id,
             )
         ).scalar_one_or_none()
         if cert is None:

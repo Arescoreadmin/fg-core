@@ -2706,3 +2706,30 @@ Router prefix `/field-assessment`, tag `certification-lifecycle`. 13 routes:
 - `make contract-authority-refresh`: OK
 - `PYTHONPATH=. pytest tests/test_clm.py`: 100/100 passed
 EOFSOCDOC
+
+---
+
+## 2026-06-16 — P0-10 Bot-Review Fixes (CLM scope gate + engagement isolation)
+
+**Reviewer:** Codex | **Classification:** SOC-P1 (mutation scope gate tightened; cross-engagement data isolation enforced)
+
+**Problem 1 — Write scope missing on CLM create route (P2):**
+`POST /field-assessment/engagements/{eid}/certifications` was gated with `governance:read` + `certification.read`. A caller with read-only governance access could create CLM certification records and commit DB rows, violating the module's mutation contract and the field-assessment pattern where create routes require write scope.
+
+**Fix:** Changed dependencies to `governance:write` + `certification.admin`.
+
+**Problem 2 — Engagement isolation missing in service cert lookups (P2):**
+All service functions (`transition_lifecycle`, `add_review`, `add_attestation`, `initiate_renewal`, `get_certification_health`, `get_lineage`, `compute_trust_impact`) looked up certs by `cert_id + tenant_id` only. A request to engagement A with a cert ID belonging to engagement B (same tenant) could transition, review, attest, renew, or read health/impact for the wrong cert, mixing cross-engagement data.
+
+**Fix:** Added `engagement_id` parameter to all 7 service functions and added `FaClmCert.engagement_id == engagement_id` to each cert WHERE clause. All API call sites updated to pass `eid`. Exception: lineage ancestor traversal remains tenant-scoped only (parent certs legitimately span prior engagements); only the starting cert lookup is engagement-scoped.
+
+### Files Changed
+
+- `api/clm.py` — create route scope/capability updated; `engagement_id=eid` passed to all 6 service mutation/read calls
+- `services/clm/lifecycle_service.py` — `engagement_id` param added to 7 functions; WHERE clauses updated
+- `tools/ci/route_inventory.json` — regenerated after scope change on create route
+
+### Validation
+
+- `make route-inventory-generate`: OK
+- `make fg-fast`: All checks passed

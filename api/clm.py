@@ -129,8 +129,8 @@ def _parse_json_list(val: str) -> list:
     "/engagements/{eid}/certifications",
     status_code=status.HTTP_201_CREATED,
     dependencies=[
-        Depends(require_scopes("governance:read")),
-        Depends(require_capability("certification.read")),
+        Depends(require_scopes("governance:write")),
+        Depends(require_capability("certification.admin")),
     ],
 )
 def create_certification_route(
@@ -343,6 +343,7 @@ def transition_certification_route(
             db,
             cert_id=cert_id,
             tenant_id=tenant_id,
+            engagement_id=eid,
             to_status=to_status,
             actor=actor,
             notes=notes,
@@ -383,6 +384,7 @@ def add_review_route(
         db,
         cert_id=cert_id,
         tenant_id=tenant_id,
+        engagement_id=eid,
         reviewer=actor,
         reviewer_type=reviewer_type,
         review_outcome=review_outcome,
@@ -429,6 +431,7 @@ def add_attestation_route(
         db,
         cert_id=cert_id,
         tenant_id=tenant_id,
+        engagement_id=eid,
         attestation_type=attestation_type,
         attester=actor,
         attester_type=attester_type,
@@ -467,6 +470,7 @@ def initiate_renewal_route(
         db,
         cert_id=cert_id,
         tenant_id=tenant_id,
+        engagement_id=eid,
         renewal_type=renewal_type,
         initiated_by=actor,
     )
@@ -496,7 +500,7 @@ def get_lineage_route(
 
     tenant_id = _resolve_caller_tenant(request)
 
-    result = get_lineage(db, cert_id=cert_id, tenant_id=tenant_id)
+    result = get_lineage(db, cert_id=cert_id, tenant_id=tenant_id, engagement_id=eid)
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="cert not found"
@@ -521,7 +525,9 @@ def get_health_route(
 
     tenant_id = _resolve_caller_tenant(request)
 
-    result = get_certification_health(db, cert_id=cert_id, tenant_id=tenant_id)
+    result = get_certification_health(
+        db, cert_id=cert_id, tenant_id=tenant_id, engagement_id=eid
+    )
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="cert not found"
