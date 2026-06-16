@@ -125,6 +125,17 @@ CAPABILITY_REGISTRY: frozenset[str] = frozenset(
         "certification.admin",
         "certification.executive.view",
         "certification.drilldown",
+        # Continuous Governance Control Tower (P0-11)
+        "controltower.read",
+        "controltower.executive",
+        "controltower.risk",
+        "controltower.certification",
+        "controltower.evidence",
+        "controltower.timeline",
+        "controltower.decisions",
+        "controltower.drift",
+        "controltower.operations",
+        "controltower.admin",
     }
 )
 
@@ -190,6 +201,17 @@ def _tier_capabilities() -> dict[str, frozenset[str]]:
             "certification.admin",
             "certification.executive.view",
             "certification.drilldown",
+            # Continuous Governance Control Tower (P0-11)
+            "controltower.read",
+            "controltower.executive",
+            "controltower.risk",
+            "controltower.certification",
+            "controltower.evidence",
+            "controltower.timeline",
+            "controltower.decisions",
+            "controltower.drift",
+            "controltower.operations",
+            "controltower.admin",
         }
     )
     return {

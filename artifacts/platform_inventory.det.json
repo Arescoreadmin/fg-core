@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 496,
+    "contract_count": 509,
     "contract_only": [],
-    "runtime_count": 635,
+    "runtime_count": 648,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
@@ -152,7 +152,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "835cc778a874040d64b9ae1125dcb58aed118a528936e787644e680ca0576dd7",
+  "governance_fingerprint": "5d3d21e89c410381301c382095a71bed082334aba8df4ab0ac841112ac3d99f7",
   "planes": [
     {
       "compat": {
@@ -497,6 +497,14 @@
       "GET /enterprise-controls/crosswalk",
       "GET /enterprise-controls/frameworks",
       "GET /field-assessment/engagements",
+      "GET /field-assessment/engagements/{eid}/certifications",
+      "GET /field-assessment/engagements/{eid}/certifications/dashboard",
+      "GET /field-assessment/engagements/{eid}/certifications/{cert_id}",
+      "GET /field-assessment/engagements/{eid}/certifications/{cert_id}/health",
+      "GET /field-assessment/engagements/{eid}/certifications/{cert_id}/history",
+      "GET /field-assessment/engagements/{eid}/certifications/{cert_id}/impact",
+      "GET /field-assessment/engagements/{eid}/certifications/{cert_id}/lineage",
+      "GET /field-assessment/engagements/{eid}/certifications/{cert_id}/manifest",
       "GET /field-assessment/engagements/{engagement_id}",
       "GET /field-assessment/engagements/{engagement_id}/ai-vendor-governance",
       "GET /field-assessment/engagements/{engagement_id}/ai-vendor-governance/decisions",
@@ -738,6 +746,11 @@
       "POST /exceptions/requests",
       "POST /exceptions/requests/{request_id}/approve",
       "POST /field-assessment/engagements",
+      "POST /field-assessment/engagements/{eid}/certifications",
+      "POST /field-assessment/engagements/{eid}/certifications/{cert_id}/attest",
+      "POST /field-assessment/engagements/{eid}/certifications/{cert_id}/renew",
+      "POST /field-assessment/engagements/{eid}/certifications/{cert_id}/review",
+      "POST /field-assessment/engagements/{eid}/certifications/{cert_id}/transition",
       "POST /field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}/transition",
       "POST /field-assessment/engagements/{engagement_id}/artifacts",
       "POST /field-assessment/engagements/{engagement_id}/baseline",

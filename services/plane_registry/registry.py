@@ -708,6 +708,8 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ),
         ),
     ),
+    # P0-11 CGCT routes live under /control-tower, already owned by the
+    # control plane above. No separate PlaneDef required.
 ]
 
 
