@@ -35,7 +35,7 @@ def _generate_keypair():
 
 
 def _make_jwks(public_key: object, kid: str = "test-key-1") -> dict[str, Any]:
-    jwk_dict = json.loads(RSAAlgorithm.to_jwk(public_key))  # type: ignore[arg-type]
+    jwk_dict = json.loads(RSAAlgorithm.to_jwk(public_key))  # type: ignore[call-overload]
     jwk_dict["kid"] = kid
     jwk_dict["use"] = "sig"
     return {"keys": [jwk_dict]}
