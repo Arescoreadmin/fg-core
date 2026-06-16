@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 509,
+    "contract_count": 523,
     "contract_only": [],
-    "runtime_count": 648,
+    "runtime_count": 662,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
@@ -152,7 +152,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "5d3d21e89c410381301c382095a71bed082334aba8df4ab0ac841112ac3d99f7",
+  "governance_fingerprint": "65ae7a48312ca2e02329738aba4f7eb7761e34d0de77c9748813ca1a1d43eae9",
   "planes": [
     {
       "compat": {
@@ -489,7 +489,20 @@
       "GET /control-plane/v2/playbooks",
       "GET /control-plane/v2/policy/pins",
       "GET /control-plane/v2/terminal/allowlist",
+      "GET /control-tower/actions",
+      "GET /control-tower/authority-matrix",
+      "GET /control-tower/certifications",
+      "GET /control-tower/decisions",
+      "GET /control-tower/drift",
+      "GET /control-tower/evidence",
+      "GET /control-tower/executive",
+      "GET /control-tower/graph",
+      "GET /control-tower/health",
+      "GET /control-tower/overview",
+      "GET /control-tower/posture",
+      "GET /control-tower/risks",
       "GET /control-tower/snapshot",
+      "GET /control-tower/timeline",
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
@@ -739,6 +752,7 @@
       "POST /control-plane/v2/policy/stage",
       "POST /control-plane/v2/terminal/breakglass",
       "POST /control-plane/v2/terminal/execute",
+      "POST /control-tower/posture/compute",
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",

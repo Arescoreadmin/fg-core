@@ -33776,10 +33776,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Actions Route Control Tower Actions Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -33827,10 +33824,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Authority Matrix Route Control Tower Authority Matrix Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -33894,10 +33888,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Certifications Route Control Tower Certifications Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -33973,10 +33964,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Decisions Route Control Tower Decisions Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34040,10 +34028,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Drift Route Control Tower Drift Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34107,10 +34092,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Evidence Route Control Tower Evidence Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34174,10 +34156,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Executive Route Control Tower Executive Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34225,10 +34204,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Graph Route Control Tower Graph Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34292,10 +34268,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Health Route Control Tower Health Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34359,10 +34332,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Overview Route Control Tower Overview Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34426,10 +34396,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Posture Route Control Tower Posture Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34503,10 +34470,7 @@
           "201": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Compute Posture Route Control Tower Posture Compute Post",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34570,10 +34534,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Risks Route Control Tower Risks Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34712,10 +34673,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Get Timeline Route Control Tower Timeline Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"

@@ -37,9 +37,9 @@ Capability gates (all ENTERPRISE tier):
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
@@ -92,9 +92,8 @@ def get_posture_route(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return latest computed governance posture snapshot."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.posture import get_latest_posture  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -125,9 +124,8 @@ def compute_posture_route(
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
     actor_type: str = Query(default="system"),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Compute and persist governance posture + action queue."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.action_queue import compute_actions, store_actions  # noqa: PLC0415
     from services.cgct.posture import compute_posture  # noqa: PLC0415
 
@@ -162,9 +160,8 @@ def get_health_route(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return governance health summary."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.posture import get_latest_posture  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -193,9 +190,8 @@ def get_actions_route(
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return open action queue items."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
     eid = engagement_id or ""
@@ -254,9 +250,8 @@ def get_drift_route(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return drift aggregation from TIM."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import aggregate_drift  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -276,9 +271,8 @@ def get_risks_route(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return risk rollup from TIM trust snapshots."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import aggregate_risk  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -298,9 +292,8 @@ def get_evidence_route(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return evidence coverage from verification bundles."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import aggregate_evidence  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -321,9 +314,8 @@ def get_timeline_route(
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return governance timeline events."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import aggregate_timeline  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -344,9 +336,8 @@ def get_decisions_route(
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return governance decisions from decision ledger."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import aggregate_decisions  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -368,9 +359,8 @@ def get_certifications_route(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return certification state from CLM."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import aggregate_certifications  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -390,9 +380,8 @@ def get_executive_route(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return 30-second executive governance summary."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import get_executive_view  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -412,9 +401,8 @@ def get_overview_route(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
     engagement_id: str | None = Query(default=None),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return full governance overview combining all aggregations."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import (  # noqa: PLC0415
         aggregate_certifications,
         aggregate_drift,
@@ -452,9 +440,8 @@ def get_overview_route(
 def get_graph_route(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return governance graph nodes and edges."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import get_governance_graph  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
@@ -471,9 +458,8 @@ def get_graph_route(
 )
 def get_authority_matrix_route(
     request: Request,
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Return static authority matrix documenting all governance sources."""
-    from fastapi.responses import JSONResponse  # noqa: PLC0415
     from services.cgct.aggregators import get_authority_matrix  # noqa: PLC0415
 
     tenant_id = _resolve_caller_tenant(request)
