@@ -280,3 +280,29 @@ exceptions:
       authority for all governance decisions per H14 design.
     approval_date: "2026-06-03"
     approved_by: EmpireOverloard
+
+  - id: EXC-PORTAL-003
+    function_name: portal_identity_login
+    file: api/portal.py
+    reason: >
+      Pure identity verification endpoint called by the portal BFF during Auth0
+      OIDC login. Validates the Auth0 JWT and resolves tenant_users membership but
+      makes no database writes. The session event is captured by the admin gateway's
+      tenant_identity_audit_events table when the portal BFF issues the signed session
+      cookie. No engagement_id is available at this layer (pre-session), so
+      audit_atomicity_svc.emit() cannot be called. A dedicated identity login audit
+      path (using tenant-scoped identity_audit_events, not engagement-scoped events)
+      is planned as part of the full P1 audit wiring sprint.
+    owner: identity-team
+    expiration_date: "2026-12-01"
+    approval_reference: P1-identity-consolidation
+    jira_ticket: null
+    business_justification: >
+      Verification-only endpoint: no DB writes, no state change. Auth0 JWT validation
+      failure causes a hard 401 with no session; membership resolution failure causes
+      403/404. Identity session events are captured upstream (admin gateway) and
+      downstream (portal BFF session cookie). Engagement-scoped audit is architecturally
+      inappropriate here; a tenant-scoped identity audit event (P1 audit wiring sprint)
+      is the correct long-term solution.
+    approval_date: "2026-06-16"
+    approved_by: jcosat

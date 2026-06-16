@@ -14182,6 +14182,20 @@
         "title": "PortalGrantResponse",
         "type": "object"
       },
+      "PortalIdentityLoginBody": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token"
+        ],
+        "title": "PortalIdentityLoginBody",
+        "type": "object"
+      },
       "PortalMeResponse": {
         "properties": {
           "client_id": {
@@ -53574,6 +53588,64 @@
           }
         },
         "summary": "Revoke Portal Grant",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/portal/identity/login": {
+      "post": {
+        "description": "Exchange a verified Auth0 access_token for portal user membership info.\n\nCalled by the portal OIDC callback route after Auth0 code exchange. The\nendpoint:\n  1. Validates the JWT via Auth0 JWKS (RS256, full signature + exp check).\n  2. Resolves the identity triple (provider=auth0, issuer, sub) against\n     tenant_users using IdentityResolver.\n  3. Enforces deactivation: active=False \u2192 403 membership_inactive.\n  4. Returns user info for the portal to create a signed session cookie.\n\nReturns:\n    200 \u2014 {user_id, email, display_name, role, tenant_id, membership_id}\n    401 \u2014 invalid or expired token\n    403 \u2014 membership inactive / revoked\n    404 \u2014 no bound membership found",
+        "operationId": "portal_identity_login_portal_identity_login_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalIdentityLoginBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Auth0 identity and resolve portal membership",
         "tags": [
           "portal"
         ]

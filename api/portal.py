@@ -9,6 +9,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
@@ -21,6 +22,8 @@ from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
 from services.field_assessment.audit import audit_atomicity_svc
 from services.portal_grant_service import portal_grant_svc
+from services.identity_resolver import IdentityResolver, IdentityResolutionError
+from api.identity_providers.auth0 import validate_auth0_token
 
 log = logging.getLogger("frostgate.api.portal")
 
@@ -416,3 +419,83 @@ def _grant_type_to_role(grant_type: str) -> str:
     if grant_type and grant_type.startswith(prefix):
         return grant_type[len(prefix) :]
     return "general"
+
+
+# ---------------------------------------------------------------------------
+# Named-user portal identity login (P1 — Auth0 OIDC for portal workforce users)
+# ---------------------------------------------------------------------------
+
+
+class PortalIdentityLoginBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    access_token: str
+
+
+@portal_router.post(
+    "/identity/login",
+    summary="Verify Auth0 identity and resolve portal membership",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def portal_identity_login(
+    body: PortalIdentityLoginBody,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+):
+    """Exchange a verified Auth0 access_token for portal user membership info.
+
+    Called by the portal OIDC callback route after Auth0 code exchange. The
+    endpoint:
+      1. Validates the JWT via Auth0 JWKS (RS256, full signature + exp check).
+      2. Resolves the identity triple (provider=auth0, issuer, sub) against
+         tenant_users using IdentityResolver.
+      3. Enforces deactivation: active=False → 403 membership_inactive.
+      4. Returns user info for the portal to create a signed session cookie.
+
+    Returns:
+        200 — {user_id, email, display_name, role, tenant_id, membership_id}
+        401 — invalid or expired token
+        403 — membership inactive / revoked
+        404 — no bound membership found
+    """
+    tenant_id = require_bound_tenant(request)
+
+    # 1. Validate JWT
+    try:
+        actor = validate_auth0_token(body.access_token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "invalid_token", "reason": str(exc)},
+        )
+
+    # 2 + 3. Resolve membership and enforce deactivation
+    domain = (os.getenv("FG_AUTH0_DOMAIN") or "").strip().rstrip("/")
+    issuer = f"https://{domain}/" if domain else (actor.tenant_id or "")
+    resolver = IdentityResolver()
+    try:
+        principal = resolver.resolve_or_deny(
+            db,
+            provider="auth0",
+            issuer=issuer,
+            subject=actor.subject,
+            tenant_id=tenant_id,
+        )
+    except IdentityResolutionError as exc:
+        if exc.code == "MEMBERSHIP_NOT_FOUND":
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "membership_not_found"},
+            )
+        raise HTTPException(
+            status_code=403,
+            detail={"error": exc.code.lower(), "reason": exc.reason},
+        )
+
+    return {
+        "user_id": principal.membership_id,
+        "email": principal.email,
+        "display_name": principal.display_name or principal.email,
+        "role": principal.roles[0] if principal.roles else "viewer",
+        "tenant_id": principal.tenant_id,
+        "membership_id": principal.membership_id,
+    }
