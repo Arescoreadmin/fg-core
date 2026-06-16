@@ -6,6 +6,25 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-16 — P0-12: Federation token signing enforcement
+
+**Branch:** `feat/p0-12-federation-signing`
+
+Resolved P0 critical security finding "Unsigned federation token acceptance". Root cause: `FederationService.validate_token()` only base64-decoded the JWT payload — no cryptographic signature verification, no algorithm check, no claim validation.
+
+**Fix:** Full rewrite of `services/federation_extension/service.py`:
+- `alg` header extracted and checked against `FEDERATION_ALLOWED_ALGORITHMS = frozenset({"RS256"})` before any JWKS lookup — rejects alg=none and HS256
+- JWKS fetched from `FG_FEDERATION_JWKS_URL` (required); kid resolved; one cache refresh on miss
+- `jwt.decode()` called with `algorithms=["RS256"]`, issuer, audience, `require=[sub, exp, iss, aud]`, `leeway=FEDERATION_CLOCK_SKEW_SECONDS` (default 60s)
+- Post-verification: sub non-empty, tenant_id (or tid) required
+- Audit log: `federation.token_accepted` on success, `federation.token_rejected` (warning) on every failure
+- New types: `FederationValidationError(error_code, reason)` and `FederationPrincipal(subject, issuer, tenant_id, groups, raw_claims)`
+- `api/auth_federation.py` updated to use new types
+
+**Tests:** 21 tests in `tests/security/test_federation_signing.py` — 6 positive (RS256 valid, groups, clock skew, tid fallback, kid miss+refresh, aud list) and 15 negative (alg=none, HS256, tampered payload, missing exp, missing sub, expired, nbf, wrong issuer, wrong audience, missing aud, unknown kid, unauthorized key, missing iss, missing tenant, unconfigured). Local RSA keys — no live network.
+
+---
+
 ### 2026-06-16 — P0-11 bot-review fixes: model registration, drift predicate, action count, timeline scope
 
 **Branch:** `feat/p0-11-control-tower`
