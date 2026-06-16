@@ -72,6 +72,10 @@ class JWKSCache:
             raise ValueError(
                 f"jwks_fetch_failed:{exc.code}:{sanitize_url_for_log(url)}"
             ) from exc
+        except urllib.error.URLError as exc:
+            raise ValueError(
+                f"jwks_fetch_failed:transport:{sanitize_url_for_log(url)}"
+            ) from exc
 
         self._doc = payload
         self._exp = now + ttl_seconds
