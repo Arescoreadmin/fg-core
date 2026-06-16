@@ -708,23 +708,8 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ),
         ),
     ),
-    # P0-11: Continuous Governance Control Tower (CGCT)
-    # Routes live under /control-tower (shared with control plane).
-    # Registered here as a logical plane for discovery and documentation.
-    PlaneDef(
-        plane_id="cgct",
-        route_prefixes=("/control-tower",),
-        allowed_dependency_categories=("auth", "tenant", "db", "rate"),
-        required_make_targets=("control-plane-check",),
-        required_ci_gates=COMMON_GATES,
-        maturity_tag="production-grade",
-        required_route_invariants=("auth", "scoped", "tenant_bound"),
-        auth_class=AuthClass(
-            required_scope_prefixes=("governance:",),
-            require_any_scope=True,
-            tenant_binding_required=True,
-        ),
-    ),
+    # P0-11 CGCT routes live under /control-tower, already owned by the
+    # control plane above. No separate PlaneDef required.
 ]
 
 

@@ -20,6 +20,18 @@
 
 ---
 
+## 2026-06-16 — P0-11 fix: remove duplicate cgct plane from plane registry
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (plane registry config only; no route changes, no auth changes)
+
+**Changes:**
+- `services/plane_registry/registry.py` — removed `cgct` PlaneDef. The CGCT routes (`/control-tower/*`) are already owned by the existing `control` plane. Duplicate plane registration caused the `control-plane-check` CI gate to fail with multi-plane ownership conflicts on all 14 `/control-tower/` routes.
+- `tools/ci/plane_registry_snapshot.json`, `route_inventory.json`, `route_inventory_summary.json`, `topology.sha256` — regenerated to reflect the removal.
+
+**Security invariants unchanged:** No routes added, removed, or modified. Auth scopes, capability gates, and tenant isolation are unchanged. The `control` plane already owned `/control-tower` — this removal resolves the registry conflict without changing any runtime behaviour.
+
+---
+
 ## 2026-06-12 — P0: Quarantine Public Debug Route (`/_debug/routes`)
 
 **Reviewer:** Codex | **Classification:** SOC-P0 (auth bypass remediation; `/_debug` removed from public allowlist; enforcement code corrected)
