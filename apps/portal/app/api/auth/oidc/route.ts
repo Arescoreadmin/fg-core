@@ -19,6 +19,7 @@ function getConfig() {
     domain: process.env.PORTAL_AUTH0_DOMAIN || '',
     clientId: process.env.PORTAL_AUTH0_CLIENT_ID || '',
     callbackUrl: process.env.PORTAL_AUTH0_CALLBACK_URL || '',
+    audience: process.env.PORTAL_AUTH0_AUDIENCE || process.env.FG_AUTH0_AUDIENCE || '',
   };
 }
 
@@ -30,7 +31,7 @@ function toBase64Url(buf: ArrayBuffer): string {
 }
 
 export async function GET(req: NextRequest) {
-  const { domain, clientId, callbackUrl } = getConfig();
+  const { domain, clientId, callbackUrl, audience } = getConfig();
 
   if (!domain || !clientId || !callbackUrl) {
     return NextResponse.json(
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest) {
 
   const returnTo = req.nextUrl.searchParams.get('returnTo') || '/';
 
-  const params = new URLSearchParams({
+  const paramsObj: Record<string, string> = {
     response_type: 'code',
     client_id: clientId,
     redirect_uri: callbackUrl,
@@ -64,7 +65,14 @@ export async function GET(req: NextRequest) {
     state,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
-  });
+  };
+  // audience is required when Auth0 is configured to mint API JWTs (not just OIDC tokens).
+  // Without it, Auth0 returns an opaque token that validate_auth0_token() rejects as
+  // invalid_audience. PORTAL_AUTH0_AUDIENCE takes precedence; falls back to FG_AUTH0_AUDIENCE.
+  if (audience) {
+    paramsObj['audience'] = audience;
+  }
+  const params = new URLSearchParams(paramsObj);
 
   const authUrl = `https://${domain}/authorize?${params}`;
 
