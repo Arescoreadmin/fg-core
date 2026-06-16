@@ -6,6 +6,36 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-16 — P1: Enterprise Identity Consolidation (Auth0 OIDC + tenant_users enforcement)
+
+**Branch:** `feat/p1-auth0-identity-consolidation`  **PR:** #446
+
+**Root cause:** Auth0 was authentication-only. No enforcement that an authenticated token corresponded to an active `tenant_users` membership. Admin gateway OIDC client never verified JWT signatures (base64-decode only). Portal workforce users used shared secrets (C7 grant model) with no human identity linkage.
+
+**Fixes:**
+
+`services/identity_resolver/` (new): stateless service mapping `(provider, issuer, subject)` → `IdentityPrincipal` via raw SQL against `tenant_users` (binding_status='bound'). `resolve_or_deny()` raises typed `IdentityResolutionError(MEMBERSHIP_NOT_FOUND | MEMBERSHIP_INACTIVE)`.
+
+`api/auth_dispatch.py` — `_bind_membership()`: runs after Auth0 JWT validation for every `oidc_auth0` actor. `MEMBERSHIP_NOT_FOUND` → hard 403 (no passthrough — OIDC actors with no bound membership are not service accounts; service accounts use API keys). `MEMBERSHIP_INACTIVE` → hard 403. Active membership → `ActorContext.membership_id` populated.
+
+`api/actor_context.py`: added `membership_id: Optional[str] = None` for downstream audit propagation.
+
+`admin_gateway/auth/oidc.py`: replaced `parse_id_token_claims()` (base64-decode, no sig check) with `verify_id_token()` backed by JWKS RS256/ES256 full verification. `create_session_from_tokens()` calls `IdentityResolver`; `tenant_governed=True` only on active bound membership; `MEMBERSHIP_INACTIVE` → hard `ValueError`.
+
+`admin_gateway/auth/dependencies.py`: `require_governed_session()` FastAPI dependency — HTTP 403 `SESSION_NOT_GOVERNED` for ungoverned sessions; logs with `user_id`, `tenant_id`, `membership_id`.
+
+`api/portal.py`: `POST /portal/identity/login` — validates Auth0 JWT, resolves `tenant_users` membership, returns user info for portal BFF to issue session cookie. `EXC-PORTAL-003` exception added to `tools/ci/audit_exceptions.yaml` (pure verification, no DB writes, engagement scope inapplicable).
+
+`apps/portal/app/api/auth/oidc/route.ts` + `callback/route.ts`: PKCE Auth0 flow using Web Crypto API (no new npm dependencies). `fg_oidc_state` cookie (httpOnly, 10 min). Audience parameter included when `PORTAL_AUTH0_AUDIENCE` or `FG_AUTH0_AUDIENCE` is set — required for Auth0 API JWT issuance.
+
+`admin_gateway/identity/audit.py`: 3 new identity session denial event types added to `IDENTITY_AUDIT_EVENTS`.
+
+**Known gap (P1.1 follow-up):** Portal named OIDC users can authenticate but cannot access `/field-assessment/engagements/…` routes — the portal scope middleware (`api/middleware/portal_scope.py`) requires `X-FG-Portal-Session` (C7 grant session ID), which OIDC sessions don't produce. Proxy sets `X-FG-User-ID`/`X-FG-User-Email` but core doesn't accept these for engagement access yet. Fix: extend portal scope middleware to accept named-user sessions via membership check, or issue a core session during OIDC callback.
+
+**Tests:** 29 tests in `tests/security/test_identity_consolidation.py` — IR-1–11 (IdentityResolver), AD-1–4 (membership binding including MEMBERSHIP_NOT_FOUND hard 403), CS-1–2 (require_governed_session), PL-1–5 (portal identity login), DE-1–2 (deactivation), AU-1–3 (audit event registry). Security test suite: 1424 passed.
+
+---
+
 ### 2026-06-16 — P0-12: Federation token signing enforcement
 
 **Branch:** `feat/p0-12-federation-signing`

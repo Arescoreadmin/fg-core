@@ -4666,3 +4666,21 @@ Critical-path files changed:
 - `api/auth_federation.py`
 
 SOC review outcome: approved. `api/auth_federation.py` updated to use `FederationService.validate_token()` with full RS256/JWKS-backed cryptographic verification replacing the prior unsigned base64-decode path. Token validation now enforces: RS256 algorithm allowlist (alg=none and HS256 rejected pre-JWKS), JWKS key resolution with single-rotation retry on kid miss, `jwt.decode()` with `issuer`, `audience`, `leeway`, and `options={"require": ["sub","exp","iss","aud"]}`, post-verify tenant_id/tid claim enforcement, and structured audit logging on accept and reject. `FederationValidationError` typed exception propagates error_code to the 401/403 response body. Tenant isolation enforced: `principal.tenant_id` must equal the API-key-bound tenant or the request is rejected 403. New `tests/security/test_federation_signing.py` covers 6 positive and 15 negative paths with locally generated RSA keys and no live network calls.
+
+
+## 2026-06-16 — P1: Enterprise Identity Consolidation (Auth0 OIDC + Membership Enforcement)
+
+Critical-path files changed:
+- `admin_gateway/auth/dependencies.py`
+- `admin_gateway/auth/oidc.py`
+- `api/auth_dispatch.py`
+
+SOC review outcome: approved. Three auth/session critical-path files updated as part of the P1 Enterprise Identity Consolidation milestone.
+
+`admin_gateway/auth/oidc.py`: Replaced insecure `parse_id_token_claims()` (base64-decode only, no signature verification) with `verify_id_token()` backed by JWKS RS256/ES256 validation. `create_session_from_tokens()` extended to call `IdentityResolver.resolve_or_deny()` when a database session is supplied; sets `tenant_governed=True` only after active bound membership is confirmed. MEMBERSHIP_INACTIVE → hard ValueError (deny); MEMBERSHIP_NOT_FOUND → ungoverned session (callers gate further access).
+
+`admin_gateway/auth/dependencies.py`: Added `require_governed_session()` FastAPI dependency. Enforces `session.tenant_governed=True` on any route requiring active human tenant membership. Ungoverned sessions (pre-membership logins, dev bypass) receive HTTP 403 SESSION_NOT_GOVERNED with structured error body. Logs denied access with user_id, tenant_id, and membership_id.
+
+`api/auth_dispatch.py`: Added `_bind_membership()` function that runs after Auth0 JWT validation in `get_actor_context()`. Calls `IdentityResolver.resolve_or_deny()` against `tenant_users`. MEMBERSHIP_NOT_FOUND → actor continues without membership_id (service account path). MEMBERSHIP_INACTIVE → HTTP 403 immediately. Successful resolution populates `ActorContext.membership_id` for downstream audit propagation.
+
+Additional non-critical-path files added: `services/identity_resolver/` (new shared service), `api/portal.py` (new `/portal/identity/login` endpoint), portal OIDC TypeScript routes, `admin_gateway/identity/audit.py` (new event types), `tests/security/test_identity_consolidation.py` (26 security tests).

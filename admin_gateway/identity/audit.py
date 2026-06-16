@@ -41,6 +41,10 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "auth0.identity_bound",
         "auth0.session_issued",
         "auth0.session_rejected",
+        # Session lifecycle — emitted by OIDC login flow
+        "tenant.identity_session.denied.membership_missing",
+        "tenant.identity_session.denied.membership_inactive",
+        "tenant.identity_session.denied.non_governed",
     }
 )
 INVITATION_TRANSITIONS = {

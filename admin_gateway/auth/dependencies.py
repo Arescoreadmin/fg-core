@@ -170,3 +170,34 @@ async def require_admin(
             detail="Admin access required",
         )
     return session
+
+
+async def require_governed_session(
+    session: Session = Depends(get_current_session),
+) -> Session:
+    """Require a tenant-governed session (active tenant membership verified).
+
+    A governed session is created only after the OIDC callback resolves an
+    active bound membership in tenant_users. Ungoverned sessions (e.g. from
+    dev bypass or pre-membership logins) are denied.
+
+    Raises:
+        HTTPException 403: SESSION_NOT_GOVERNED — no active membership bound
+    """
+    if not session.tenant_governed:
+        log.warning(
+            "governed_session_required",
+            extra={
+                "user_id": session.user_id,
+                "tenant_id": session.tenant_id,
+                "membership_id": session.membership_id,
+            },
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "SESSION_NOT_GOVERNED",
+                "message": "Active tenant membership is required for this operation.",
+            },
+        )
+    return session

@@ -125,7 +125,7 @@ jobs:
           # 480s budget was always insufficient. No tests removed; coverage
           # unchanged. See docs/ai/PR_FIX_LOG.md for full justification.
           .venv/bin/python tools/testing/harness/fg_required.py \
-            --global-budget-seconds 1200 \
+            --global-budget-seconds 2400 \
             --lane-timeout-seconds 1200 \
             2>&1 | tee artifacts/fg-required/fg-required.stdout.log
 

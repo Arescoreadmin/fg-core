@@ -9694,6 +9694,23 @@
     },
     {
       "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal.py",
+      "method": "POST",
+      "path": "/portal/identity/login",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
         "auth"
       ],
       "file": "api/portal.py",
@@ -11305,7 +11322,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-16T14:42:00.048246+00:00",
+  "generated_at": "2026-06-16T22:04:00.582850+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

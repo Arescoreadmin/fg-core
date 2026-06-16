@@ -35,6 +35,7 @@ Example usage:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
@@ -113,6 +114,71 @@ def _try_api_key_actor(request: Request, conn: Session) -> Optional[ActorContext
     return extract_api_key_actor(request, conn)
 
 
+def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
+    """Augment a JWT ActorContext with tenant_users membership_id.
+
+    Looks up the bound membership record using the identity triple
+    (provider=auth0, issuer, subject). Adds membership_id and enforces
+    deactivation.
+
+    Hard-fails 403 on MEMBERSHIP_NOT_FOUND: OIDC human actors must have a
+    bound tenant_users record. Service accounts use API keys and never reach
+    this function, so there is no legitimate "OIDC actor without membership"
+    case in normal operation.
+
+    Hard-fails 403 on MEMBERSHIP_INACTIVE: deactivated members are denied
+    immediately regardless of when their session was issued.
+    """
+    try:
+        from services.identity_resolver import IdentityResolver, IdentityResolutionError
+
+        domain = (os.getenv("FG_AUTH0_DOMAIN") or "").strip().rstrip("/")
+        if not domain or not actor.subject:
+            return actor
+
+        issuer = f"https://{domain}/"
+        resolver = IdentityResolver()
+        try:
+            principal = resolver.resolve_or_deny(
+                conn,
+                provider="auth0",
+                issuer=issuer,
+                subject=actor.subject,
+                tenant_id=actor.tenant_id,
+            )
+        except IdentityResolutionError as exc:
+            # Both MEMBERSHIP_NOT_FOUND and MEMBERSHIP_INACTIVE are hard denials.
+            # OIDC actors without a bound membership are not service accounts —
+            # service accounts authenticate via API keys, not Bearer JWTs.
+            log.warning(
+                "auth_dispatch.membership_denied",
+                extra={"code": exc.code, "subject_prefix": actor.subject[:16]},
+            )
+            raise HTTPException(
+                status_code=403,
+                detail={"code": exc.code, "reason": str(exc)},
+            )
+
+        return ActorContext(
+            subject=actor.subject,
+            email=actor.email,
+            name=actor.name,
+            permissions=actor.permissions,
+            roles=actor.roles,
+            auth_source=actor.auth_source,
+            tenant_id=principal.tenant_id,
+            membership_id=principal.membership_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.warning(
+            "auth_dispatch.membership_lookup_error",
+            extra={"exc": str(exc)},
+        )
+        return actor
+
+
 # ---------------------------------------------------------------------------
 # FastAPI dependencies
 # ---------------------------------------------------------------------------
@@ -146,6 +212,9 @@ def get_actor_context(
     if bearer.lower().startswith("bearer "):
         actor = _try_jwt_actor(request)
         if actor:
+            # Bind membership_id and enforce deactivation for Auth0 JWT actors
+            if actor.auth_source == "oidc_auth0":
+                actor = _bind_membership(actor, conn)
             return actor
         # _try_jwt_actor raises HTTPException on invalid token; if it returns
         # None the bearer was empty — fall through to API key auth
