@@ -297,12 +297,13 @@ def aggregate_timeline(
         from api.db_models_timeline import TimelineEventRecord  # noqa: PLC0415
         from sqlalchemy import select  # noqa: PLC0415
 
+        # Do not filter by source_id == engagement_id — many emitters (TIM, CLM,
+        # verification bundles) store the authority record id as source_id and
+        # place engagement_id in the payload. A tenant-scoped query returns the
+        # complete unified timeline across all governance sources.
         q = (
             select(TimelineEventRecord)
-            .where(
-                TimelineEventRecord.tenant_id == tenant_id,
-                TimelineEventRecord.source_id == engagement_id,
-            )
+            .where(TimelineEventRecord.tenant_id == tenant_id)
             .order_by(TimelineEventRecord.occurred_at.desc())
             .limit(limit)
         )
@@ -428,18 +429,14 @@ def get_executive_view(
 
     try:
         from api.db_models_cgct import FaCgctActionItem  # noqa: PLC0415
-        from sqlalchemy import select  # noqa: PLC0415
+        from sqlalchemy import func, select  # noqa: PLC0415
 
-        action_q = (
-            select(FaCgctActionItem)
-            .where(
-                FaCgctActionItem.tenant_id == tenant_id,
-                FaCgctActionItem.engagement_id == engagement_id,
-                FaCgctActionItem.status == "open",
-            )
-            .limit(1)
+        action_q = select(func.count()).select_from(FaCgctActionItem).where(
+            FaCgctActionItem.tenant_id == tenant_id,
+            FaCgctActionItem.engagement_id == engagement_id,
+            FaCgctActionItem.status == "open",
         )
-        open_action_count = len(db.execute(action_q).scalars().all())
+        open_action_count = db.execute(action_q).scalar() or 0
     except Exception:
         open_action_count = 0
 

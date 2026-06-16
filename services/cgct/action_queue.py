@@ -93,6 +93,7 @@ def _tim_drift_actions(db: Any, *, tenant_id: str, engagement_id: str) -> list[d
         q = select(FaTimDriftEvent).where(
             FaTimDriftEvent.tenant_id == tenant_id,
             FaTimDriftEvent.engagement_id == engagement_id,
+            FaTimDriftEvent.status == "open",
             FaTimDriftEvent.resolved_at.is_(None),
         )
         events = db.execute(q).scalars().all()

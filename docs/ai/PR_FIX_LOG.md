@@ -6,6 +6,24 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-16 — P0-11 bot-review fixes: model registration, drift predicate, action count, timeline scope
+
+**Branch:** `feat/p0-11-control-tower`
+
+Four bot-review findings, all fixed:
+
+1. **P2 — CGCT models not registered with init_db** (`api/db.py`): `api.db_models_cgct` was never imported in `_ensure_models_imported()`, so `Base.metadata.create_all()` ran before the ORM models were loaded. The `fg_cgct_*` tables were absent in SQLite/test deployments, causing `compute_posture` to fail on commit and all read routes to degrade silently. Fixed: added `importlib.import_module("api.db_models_cgct")` after the CLM import in `_ensure_models_imported()`.
+
+2. **P2 — TIM drift predicate selected acknowledged events** (`services/cgct/action_queue.py`): The open-drift query filtered only on `resolved_at IS NULL`, which also matched `status='acknowledged'` rows that TIM considers closed. This caused the action queue to re-surface drift work users had already acknowledged. Fixed: added `FaTimDriftEvent.status == "open"` to match TIM's own open-event predicate.
+
+3. **P2 — Executive view capped open_action_count at 1** (`services/cgct/aggregators.py`): `get_executive_view` applied `.limit(1)` before `len(...)`, so any engagement with more than one open action was reported as having exactly 1. Fixed: replaced the `SELECT … LIMIT 1` + `len()` pattern with `SELECT count(*) FROM fg_cgct_action_queue WHERE … status='open'` using SQLAlchemy `func.count()`.
+
+4. **P2 — Timeline filtered by source_id == engagement_id, missing authority-keyed events** (`services/cgct/aggregators.py`): Many governance timeline emitters (TIM, CLM, verification bundles) store the authority record id (snapshot_id, cert_id, bundle_id) as `source_id` and place `engagement_id` in the payload. The strict `source_id == engagement_id` predicate returned only engagement-level events, omitting the majority of trust/cert/risk/evidence timeline activity. Fixed: removed the `source_id` filter entirely — the Control Tower timeline queries all events for the tenant, which is the correct unified-timeline scope. Tenant isolation is preserved by the `tenant_id` predicate and PostgreSQL RLS.
+
+**Test count:** unchanged (existing CGCT test suite validates all four corrected behaviours)
+
+---
+
 ### 2026-06-15 — P0-10: Certification Lifecycle Management (CLM)
 
 **Branch:** `p0-10/certification-lifecycle-management`
