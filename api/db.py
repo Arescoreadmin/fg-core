@@ -222,6 +222,7 @@ def _ensure_models_imported() -> None:
         "api.db_models_tim"
     )  # P0-7: TIM trust snapshots + drift events
     importlib.import_module("api.db_models_qtb")  # P0-9: Quarterly Trust Briefs
+    importlib.import_module("api.db_models_clm")  # P0-10: CLM
 
 
 def _get_base():
