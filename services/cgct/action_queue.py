@@ -187,7 +187,9 @@ def compute_actions(
     actions.extend(
         _tim_drift_actions(db, tenant_id=tenant_id, engagement_id=engagement_id)
     )
-    actions.extend(_bundle_actions(db, tenant_id=tenant_id, engagement_id=engagement_id))
+    actions.extend(
+        _bundle_actions(db, tenant_id=tenant_id, engagement_id=engagement_id)
+    )
     return actions
 
 

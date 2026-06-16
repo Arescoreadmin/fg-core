@@ -423,7 +423,9 @@ def get_executive_view(
     try:
         from services.cgct.posture import get_latest_posture  # noqa: PLC0415
 
-        posture = get_latest_posture(db, tenant_id=tenant_id, engagement_id=engagement_id)
+        posture = get_latest_posture(
+            db, tenant_id=tenant_id, engagement_id=engagement_id
+        )
     except Exception:
         posture = None
 
@@ -431,10 +433,14 @@ def get_executive_view(
         from api.db_models_cgct import FaCgctActionItem  # noqa: PLC0415
         from sqlalchemy import func, select  # noqa: PLC0415
 
-        action_q = select(func.count()).select_from(FaCgctActionItem).where(
-            FaCgctActionItem.tenant_id == tenant_id,
-            FaCgctActionItem.engagement_id == engagement_id,
-            FaCgctActionItem.status == "open",
+        action_q = (
+            select(func.count())
+            .select_from(FaCgctActionItem)
+            .where(
+                FaCgctActionItem.tenant_id == tenant_id,
+                FaCgctActionItem.engagement_id == engagement_id,
+                FaCgctActionItem.status == "open",
+            )
         )
         open_action_count = db.execute(action_q).scalar() or 0
     except Exception:
