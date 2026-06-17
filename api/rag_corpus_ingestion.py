@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes, verify_api_key
 from api.deps import tenant_db_required
+from api.entitlements import require_capability
 from api.rag.docx_extractor import (
     DOCX_ERR_EMPTY_EXTRACT,
     DOCX_ERR_EMBEDDED_VBA,
@@ -151,6 +152,7 @@ router = APIRouter(
     dependencies=[
         Depends(verify_api_key),
         Depends(require_scopes("governance:write")),
+        Depends(require_capability("ai.document_ingestion")),
     ],
 )
 

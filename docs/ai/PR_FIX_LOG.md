@@ -15126,3 +15126,58 @@ Resolution order in `check_capability()` (fully backward-compatible):
 `api/db_models.py` — 6 new ORM models: `TenantSubscription`, `PolicyBundle`, `Capability`, `PolicyBundleCapability`, `TenantCapabilityAssignment`, `TenantBundleAssignment`.
 
 **Tests:** 16 tests in `tests/security/test_capability_framework.py` — CAP-1–5 (bundle resolution, missing bundle, empty bundle, cross-tenant isolation, unknown capability), CAP-6–9 (cache TTL, invalidation on assign, invalidation on unassign, determinism), CAP-10–12 (direct capability assignment, bundle+direct union, bundle removal), CAP-13–15 (tier fallback still works, explicit entitlement takes precedence, RBAC independence from capability), CAP-16 (seeder idempotency).
+
+---
+
+### 2026-06-17 — P1.3: Capability Enforcement Engine
+
+**Branch:** `feat/p1-3-capability-enforcement`
+
+**Purpose:** Wires capability enforcement fail-closed. `require_capability(cap)` is now a FastAPI dependency that raises HTTP 403 on denial when `FG_ENTITLEMENT_ENFORCEMENT=true` (default). Prerequisite graph validated at startup. AI routes gated by capability.
+
+**Architecture:**
+
+`require_capability(capability)` enforcement flow:
+1. Resolve `tenant_id` from request actor context
+2. Check capability against `resolve_tenant_capabilities(db, tenant_id)` — covers explicit grant, bundle assignment, and tier fallback
+3. If granted: check all transitive prerequisites via `get_required_capabilities(capability)` — deny if any dep missing
+4. If denied and `FG_ENTITLEMENT_ENFORCEMENT=true`: raise HTTP 403 with structured body `{"code": "CAPABILITY_DENIED", "capability": ..., "reason": ..., "missing_dependency": ..., "upgrade_required": ...}`
+5. Audit all decisions (check/granted/denied/dep_failure/unknown) + record 6 Prometheus metrics
+
+**New files:**
+
+`services/capability_enforcement/graph.py` — 10-edge `DEPENDENCY_GRAPH`; `get_required_capabilities(cap) → list[str]` (BFS transitive, self excluded); `detect_cycles() → list[list[str]]` (DFS); `validate_graph()` raises `ValueError` on cycles or dangling references.
+
+`services/capability_enforcement/__init__.py` — re-exports `DEPENDENCY_GRAPH`, `detect_cycles`, `get_required_capabilities`, `validate_graph`.
+
+`tests/security/test_capability_enforcement.py` — 30 tests (CAPE-1 through CAPE-16).
+
+**Files changed:**
+
+`api/security_audit.py` — 5 new `EventType` enum values: `CAPABILITY_CHECK`, `CAPABILITY_GRANTED`, `CAPABILITY_DENIED`, `CAPABILITY_DEPENDENCY_FAILURE`, `CAPABILITY_UNKNOWN`.
+
+`api/observability/metrics.py` — 6 new Prometheus counters: `frostgate_capability_checks_total` `[capability, result]`, `frostgate_capability_grants_total` `[capability, source]`, `frostgate_capability_denials_total` `[capability, reason]`, `frostgate_capability_dependency_failures_total` `[capability, missing_dep]`, `frostgate_capability_cache_hits_total`, `frostgate_capability_cache_misses_total`. No `tenant_id` label (cardinality + privacy).
+
+`api/entitlements.py` — `require_capability()` upgraded: dep chain check added, strict mode enforced, all audit events + metrics emitted. `ENFORCEMENT_STRICT` default changed from `False` to `True` (env `FG_ENTITLEMENT_ENFORCEMENT`). Dynamic flag read at call time to support monkeypatch overrides.
+
+`api/ui_ai_console.py` — 4 AI routes gated: `GET /ui/ai`, `GET /ui/ai/experience`, `GET /ui/ai/usage` → `require_capability("ai.workspace")`; `POST /ui/ai/chat` → `require_capability("ai.chat")`.
+
+`api/main.py` — lifespan calls `validate_graph()` after bundle seeder; logs and re-raises on invalid graph in production.
+
+`services/capability_bundles/resolver.py` — cache hit/miss metrics added (lazy import, try/except).
+
+`migrations/postgres/0118_capability_bundles.sql` — 3 additive columns on `capabilities` (`billing_category`, `launch_stage`, `visibility`); new `capability_dependencies` table; new `capability_meter_mappings` table.
+
+`api/db_models.py` — 3 new fields on `Capability` model; new `CapabilityDependency` model; new `CapabilityMeterMapping` model.
+
+`services/capability_bundles/seeder.py` — `_CAP_META` extended to 5-field dicts; `_CAP_DEPENDENCIES` (10 edges seeded); `_CAP_METERS` (9 mappings seeded); `seed_bundle_catalog` steps 3+4 added.
+
+`tests/conftest.py` — `build_app` fixture sets `FG_ENTITLEMENT_ENFORCEMENT=false` + monkeypatches `ENFORCEMENT_STRICT=False` so integration tests not testing capability enforcement are not blocked.
+
+`tests/security/test_ai_audit_enrichment.py` — `_setup_client` helper sets `FG_ENTITLEMENT_ENFORCEMENT=false` (same rationale as conftest).
+
+`tests/test_attestation_signing.py` — `client` fixture sets `FG_ENTITLEMENT_ENFORCEMENT=false`. The `POST /evidence/bundles` route has `require_capability("verification.download")` from a prior PR; with P1.3 changing `ENFORCEMENT_STRICT` default to True, the tests were newly blocked by enforcement. These tests cover attestation signing behavior, not capability enforcement.
+
+`docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC-HIGH-002 entry added for `api/security_audit.py` change.
+
+**Tests:** 30 tests in `tests/security/test_capability_enforcement.py` — CAPE-1–4 (portal grant/deny, AI grant/deny), CAPE-5–7 (governance grant, MSP grant, dep enforcement: ai.rag requires ai.workspace), CAPE-8 (unknown capability denied), CAPE-9–10 (cache hit/miss), CAPE-11 (cross-tenant isolation), CAPE-12 (audit event types), CAPE-13 (cycle detection startup), CAPE-14 (fail-closed on resolver error), CAPE-15 (dep failure audit), CAPE-16 (enforcement off = audit-only).

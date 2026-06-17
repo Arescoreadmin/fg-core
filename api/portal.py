@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db_models_portal import PortalGrant, PortalGrantSession
 from api.deps import auth_ctx_db_session
+from api.entitlements import require_capability
 from api.error_contracts import api_error
 from services.field_assessment.audit import audit_atomicity_svc
 from services.portal_grant_service import portal_grant_svc
@@ -134,7 +135,10 @@ class PortalMeResponse(BaseModel):
     "/me",
     response_model=PortalMeResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[
+        Depends(require_scopes("governance:read")),
+        Depends(require_capability("portal.access")),
+    ],
 )
 def portal_me(
     request: Request,
@@ -205,7 +209,10 @@ class RevokeSessionResponse(BaseModel):
     "/sessions/{session_id}",
     response_model=RevokeSessionResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[
+        Depends(require_scopes("governance:read")),
+        Depends(require_capability("portal.access")),
+    ],
 )
 def portal_revoke_session(
     session_id: str,
@@ -250,7 +257,10 @@ class ListGrantsResponse(BaseModel):
     "/grants",
     response_model=ListGrantsResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[
+        Depends(require_scopes("governance:write")),
+        Depends(require_capability("portal.remediation")),
+    ],
 )
 def list_portal_grants(
     request: Request,
@@ -307,7 +317,10 @@ class CreateGrantResponse(BaseModel):
     "/grants",
     response_model=CreateGrantResponse,
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[
+        Depends(require_scopes("governance:write")),
+        Depends(require_capability("portal.remediation")),
+    ],
 )
 def create_portal_grant(
     body: CreateGrantRequest,
@@ -375,7 +388,10 @@ class RevokeGrantResponse(BaseModel):
     "/grants/{grant_id}",
     response_model=RevokeGrantResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[
+        Depends(require_scopes("governance:write")),
+        Depends(require_capability("portal.remediation")),
+    ],
 )
 def revoke_portal_grant(
     grant_id: str,

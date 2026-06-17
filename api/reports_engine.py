@@ -646,7 +646,10 @@ class RegenerateReportResponse(BaseModel):
 
 
 @router.post(
-    "/reports/generate", response_model=GenerateReportResponse, status_code=202
+    "/reports/generate",
+    response_model=GenerateReportResponse,
+    status_code=202,
+    dependencies=[Depends(require_capability("reports.executive"))],
 )
 def generate_report(
     body: GenerateReportRequest,
@@ -718,7 +721,10 @@ def generate_report(
     return GenerateReportResponse(report_id=report_id, status="pending")
 
 
-@router.get("/reports/{report_id}")
+@router.get(
+    "/reports/{report_id}",
+    dependencies=[Depends(require_capability("reports.executive"))],
+)
 def get_report(
     report_id: str,
     request: Request,
@@ -970,7 +976,10 @@ def export_report_artifact(
     )
 
 
-@router.post("/reports/{report_id}/finalize")
+@router.post(
+    "/reports/{report_id}/finalize",
+    dependencies=[Depends(require_capability("reports.executive"))],
+)
 def finalize_report(
     report_id: str,
     body: FinalizeReportRequest,

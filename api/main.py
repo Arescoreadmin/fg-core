@@ -346,6 +346,16 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         except Exception as exc:
             log.warning("Bundle catalog seed failed (non-fatal): %s", exc)
 
+        try:
+            from services.capability_enforcement import validate_graph
+
+            validate_graph()
+            log.info("capability_enforcement.graph_validated")
+        except ValueError as exc:
+            log.error("capability_enforcement.invalid_graph error=%s", exc)
+            if is_production or is_strict_env_required():
+                raise
+
         from services.embeddings.startup import (
             is_retrieval_enabled,
             startup_retrieval_service,

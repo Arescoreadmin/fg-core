@@ -61,10 +61,9 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-# When True, require_capability() raises 403 on denial.
-# When False (default), it audits and logs but allows through — permissive
-# deployment mode until entitlements are provisioned in production.
-ENFORCEMENT_STRICT = _env_bool("FG_ENTITLEMENT_ENFORCEMENT", False)
+# P1.3: enforcement is strict (fail-closed) by default.
+# Set FG_ENTITLEMENT_ENFORCEMENT=false only in local dev / migration windows.
+ENFORCEMENT_STRICT = _env_bool("FG_ENTITLEMENT_ENFORCEMENT", True)
 
 # ---------------------------------------------------------------------------
 # Capability registry — explicit enumeration, no wildcards
@@ -411,6 +410,8 @@ def check_capability(
 def _audit_entitlement_decision(
     request: Request | None,
     result: EntitlementResult,
+    *,
+    dep_failure: str | None = None,
 ) -> None:
     try:
         tenant_id = result.tenant_id or None
@@ -418,27 +419,80 @@ def _audit_entitlement_decision(
         path_str = str(path) if path else None
         method = getattr(request, "method", None)
 
+        if result.source == "registry_miss":
+            event_type = EventType.CAPABILITY_UNKNOWN
+        elif dep_failure is not None:
+            event_type = EventType.CAPABILITY_DEPENDENCY_FAILURE
+        elif result.allowed:
+            event_type = EventType.CAPABILITY_GRANTED
+        else:
+            event_type = EventType.CAPABILITY_DENIED
+
         get_auditor().log_event(
             AuditEvent(
-                event_type=EventType.ADMIN_ACTION,
+                event_type=event_type,
                 success=result.allowed,
                 severity=Severity.INFO if result.allowed else Severity.WARNING,
                 tenant_id=tenant_id,
                 request_path=path_str,
                 request_method=method,
-                reason="entitlement_check",
+                reason="capability_check",
                 details={
-                    "action": "entitlement_check",
                     "capability": result.capability,
                     "decision": "granted" if result.allowed else "denied",
                     "source": result.source,
                     "tier": result.tier,
                     "denial_reason": result.reason if not result.allowed else None,
+                    "missing_dependency": dep_failure,
                 },
             )
         )
     except Exception:
         log.exception("entitlements.audit_error capability=%s", result.capability)
+
+    # Record Prometheus metrics (non-fatal)
+    try:
+        from api.observability.metrics import (
+            CAPABILITY_CHECKS_TOTAL,
+            CAPABILITY_DENIALS_TOTAL,
+            CAPABILITY_DEPENDENCY_FAILURES_TOTAL,
+            CAPABILITY_GRANTS_TOTAL,
+        )
+
+        if dep_failure is not None:
+            CAPABILITY_CHECKS_TOTAL.labels(
+                capability=result.capability, result="dep_failure"
+            ).inc()
+            CAPABILITY_DENIALS_TOTAL.labels(
+                capability=result.capability, reason="dep_failure"
+            ).inc()
+            CAPABILITY_DEPENDENCY_FAILURES_TOTAL.labels(
+                capability=result.capability, missing_dep=dep_failure
+            ).inc()
+        elif result.source == "registry_miss":
+            CAPABILITY_CHECKS_TOTAL.labels(
+                capability=result.capability, result="unknown"
+            ).inc()
+            CAPABILITY_DENIALS_TOTAL.labels(
+                capability=result.capability, reason="unknown"
+            ).inc()
+        elif result.allowed:
+            CAPABILITY_CHECKS_TOTAL.labels(
+                capability=result.capability, result="granted"
+            ).inc()
+            CAPABILITY_GRANTS_TOTAL.labels(
+                capability=result.capability, source=result.source
+            ).inc()
+        else:
+            reason = "no_tenant" if result.source == "no_tenant" else "missing"
+            CAPABILITY_CHECKS_TOTAL.labels(
+                capability=result.capability, result="denied"
+            ).inc()
+            CAPABILITY_DENIALS_TOTAL.labels(
+                capability=result.capability, reason=reason
+            ).inc()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -449,16 +503,17 @@ def _audit_entitlement_decision(
 def require_capability(capability: str):
     """FastAPI dependency that enforces a capability entitlement.
 
-    When FG_ENTITLEMENT_ENFORCEMENT=true: raises HTTP 403 if denied.
-    When FG_ENTITLEMENT_ENFORCEMENT=false (default): audits and logs only.
+    Enforcement is fail-closed by default (P1.3). Set FG_ENTITLEMENT_ENFORCEMENT=false
+    for audit-only mode during dev or migration windows.
+
+    Also enforces the transitive dependency chain — e.g. requiring ai.rag will also
+    verify ai.workspace is present.
 
     Usage:
-        @router.get("/...", dependencies=[Depends(require_capability("report.export"))])
+        @router.get("/...", dependencies=[Depends(require_capability("ai.chat"))])
     """
 
-    def _dep(
-        request: Request,
-    ) -> None:
+    def _dep(request: Request) -> None:
         tenant_id = getattr(getattr(request, "state", None), "tenant_id", None)
         if not tenant_id:
             auth = getattr(getattr(request, "state", None), "auth", None)
@@ -467,16 +522,61 @@ def require_capability(capability: str):
         engine = get_engine()
         with Session(engine) as db:
             result = check_capability(db, tenant_id, capability)
-        _audit_entitlement_decision(request, result)
 
-        if not result.allowed and ENFORCEMENT_STRICT:
+        # --- dependency chain check ---
+        dep_failure: str | None = None
+        if result.allowed:
+            try:
+                from services.capability_enforcement.graph import (
+                    get_required_capabilities,
+                )
+
+                required_deps = get_required_capabilities(capability)
+                if required_deps and tenant_id:
+                    with Session(engine) as db_dep:
+                        for dep in required_deps:
+                            dep_result = check_capability(db_dep, tenant_id, dep)
+                            if not dep_result.allowed:
+                                result = EntitlementResult(
+                                    allowed=False,
+                                    capability=capability,
+                                    tenant_id=tenant_id,
+                                    source="dep_failure",
+                                    tier=result.tier,
+                                    reason=f"missing_dependency:{dep}",
+                                )
+                                dep_failure = dep
+                                break
+            except Exception:
+                log.exception(
+                    "entitlements.dep_check_error tenant_id=%s capability=%s",
+                    tenant_id,
+                    capability,
+                )
+                # Fail closed on dep-check errors
+                result = EntitlementResult(
+                    allowed=False,
+                    capability=capability,
+                    tenant_id=tenant_id or "",
+                    source="error",
+                    tier="unknown",
+                    reason="dep_check_error",
+                )
+
+        _audit_entitlement_decision(request, result, dep_failure=dep_failure)
+
+        # Read enforcement flag at call time. Falls back to module-level constant
+        # (which tests can patch directly) so both patch() and monkeypatch.setenv work.
+        strict = _env_bool("FG_ENTITLEMENT_ENFORCEMENT", ENFORCEMENT_STRICT)
+        if not result.allowed and strict:
             raise HTTPException(
                 status_code=403,
                 detail={
                     "code": "CAPABILITY_DENIED",
                     "capability": capability,
                     "reason": result.reason,
-                    "upgrade_required": result.source == "tier",
+                    "missing_dependency": dep_failure,
+                    "upgrade_required": result.source in ("tier", "dep_failure"),
                 },
             )
 
