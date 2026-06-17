@@ -25,7 +25,10 @@ from admin_gateway.identity.policy import (
     IdentityPolicyError,
     require_identity_configured,
 )
-from admin_gateway.auth.dependencies import get_current_session, require_governed_session
+from admin_gateway.auth.dependencies import (
+    get_current_session,
+    require_governed_session,
+)
 from admin_gateway.auth.csrf import CSRFProtection
 from admin_gateway.auth.session import Session, SessionManager
 from admin_gateway.identity.invitation_flow import (
@@ -342,7 +345,9 @@ def bind(
 
 
 @router.get("/session/current")
-async def current_session(session: Session = Depends(require_governed_session)) -> dict[str, Any]:
+async def current_session(
+    session: Session = Depends(require_governed_session),
+) -> dict[str, Any]:
     if not session.tenant_id or session.binding_status != "bound":
         raise HTTPException(
             status_code=401,
