@@ -64,8 +64,8 @@ _BUNDLE_CAPS_SQL = text(
     JOIN   capabilities c ON c.id = pbc.capability_id
     JOIN   policy_bundles pb ON pb.id = tba.bundle_id
     WHERE  tba.tenant_id = :tenant_id
-      AND  pb.active = 1
-      AND  c.active = 1
+      AND  pb.active = TRUE
+      AND  c.active = TRUE
       AND  (tba.expires_at IS NULL OR tba.expires_at > :now)
     """
 )
@@ -76,7 +76,7 @@ _DIRECT_CAPS_SQL = text(
     FROM   tenant_capability_assignments tca
     JOIN   capabilities c ON c.id = tca.capability_id
     WHERE  tca.tenant_id = :tenant_id
-      AND  c.active = 1
+      AND  c.active = TRUE
       AND  (tca.expires_at IS NULL OR tca.expires_at > :now)
     """
 )
