@@ -325,7 +325,9 @@ def test_mv9_portal_scope_named_user_allowed_on_version_match(tmp_path, monkeypa
     user = _user(db, subject="auth0|mv9", membership_version=2, tenant_id="tenant-a")
 
     monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
-    api_key = os.environ.get("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
+    api_key = os.environ.get(
+        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
+    )
     db.commit()
 
     app = build_app()
@@ -359,7 +361,9 @@ def test_mv10_portal_scope_named_user_denied_on_version_mismatch(tmp_path, monke
     user = _user(db, subject="auth0|mv10", membership_version=3, tenant_id="tenant-a")
 
     monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
-    api_key = os.environ.get("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
+    api_key = os.environ.get(
+        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
+    )
     db.commit()
 
     app = build_app()
@@ -400,7 +404,9 @@ def test_mv11_portal_scope_named_user_denied_on_inactive(tmp_path, monkeypatch):
     )
 
     monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
-    api_key = os.environ.get("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
+    api_key = os.environ.get(
+        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
+    )
     db.commit()
 
     app = build_app()

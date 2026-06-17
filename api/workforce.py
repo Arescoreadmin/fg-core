@@ -319,7 +319,10 @@ def update_user(
     if payload.active is not None or payload.role is not None:
         try:
             membership_version_svc.bump_version(
-                db, membership_id=user_id, tenant_id=tenant_id, reason="workforce_update"
+                db,
+                membership_id=user_id,
+                tenant_id=tenant_id,
+                reason="workforce_update",
             )
         except ValueError:
             pass  # row deleted between SELECT and UPDATE; safe to ignore
