@@ -4704,3 +4704,25 @@ SOC review outcome: approved. Four auth/session critical-path files updated as p
 `api/middleware/portal_scope.py`: Added named-user engagement access path (P1.1). When `X-FG-Membership-ID` and `X-FG-Membership-Version` headers are present, middleware queries `tenant_users` directly and validates version match + active status. Mismatch → 403 SESSION_REVOKED_VERSION_MISMATCH. Inactive → 403 MEMBERSHIP_INACTIVE. Falls through to grant-based path (C7) when membership headers are absent.
 
 Additional non-critical-path changes: `services/identity_resolver/versioning.py` (new `MembershipVersionService`), `services/identity_resolver/service.py` (membership_version in IdentityPrincipal), `api/portal.py` (membership_version in /portal/identity/login response), portal TypeScript (membershipVersion in SessionUser, OIDC callback, proxy headers), `admin_gateway/identity/audit.py` (7 new event types), `migrations/postgres/0117_membership_version.sql`, `api/db_models.py` (TenantUser.membership_version), `tests/security/test_membership_versioning.py` (15 security tests).
+
+## 2026-06-17 — P1.2: Tenant Policy Bundles + Capability Framework
+
+**Classification:** Additive commercial control plane. No auth/session paths changed. New capability resolution step inserted between existing explicit-grant and tier-fallback checks. Fully backward-compatible: existing `TenantEntitlement` rows and tier defaults continue to resolve identically.
+
+**Critical-path files changed (tools/ci/ — route inventory regenerated):**
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated due to 5 new admin routes for bundle management
+
+**SOC review outcome:** approved. No auth, session, middleware, or OPA policy files changed. The `tools/ci/` files triggered SOC-HIGH-002 solely because the route inventory was regenerated.
+
+New admin routes added (all require `admin:write` scope, tenant-isolated):
+- `GET /admin/bundles` — list all policy bundles in the catalog
+- `GET /admin/tenants/{tid}/bundles` — list bundles assigned to a tenant
+- `POST /admin/tenants/{tid}/bundles` — assign a bundle to a tenant (calls `invalidate_cache`)
+- `DELETE /admin/tenants/{tid}/bundles/{key}` — remove a bundle assignment (calls `invalidate_cache`)
+- `POST /admin/tenants/{tid}/subscriptions` — create a tenant subscription record
+
+New capability resolution step 3 in `check_capability()`: queries `tenant_bundle_assignments → policy_bundle_capabilities → capabilities` UNION `tenant_capability_assignments → capabilities` (TTL-cached, default 300s). Steps 1 (registry miss), 2 (explicit TenantEntitlement), and 4 (tier fallback) are unchanged.
+
+No cross-tenant data access. Cache keys are scoped to `tenant_id`. `invalidate_cache(tenant_id)` called synchronously on any mutation.
+
+Additional non-critical-path changes: `migrations/postgres/0118_capability_bundles.sql` (6 new tables), `api/db_models.py` (6 new ORM models), `services/capability_bundles/` (new package: resolver + seeder), `api/entitlements.py` (27 new capability key strings, resolution step 3), `tests/security/test_capability_framework.py` (16 security tests CAP-1–CAP-16).

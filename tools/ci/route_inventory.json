@@ -325,6 +325,23 @@
     {
       "dependency_categories": [
         "auth",
+        "rate"
+      ],
+      "file": "api/entitlements.py",
+      "method": "GET",
+      "path": "/admin/bundles",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate",
         "tenant"
       ],
@@ -1241,6 +1258,60 @@
       ],
       "file": "api/entitlements.py",
       "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/bundles",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/entitlements.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/bundles",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/entitlements.py",
+      "method": "DELETE",
+      "path": "/admin/tenants/{tenant_id}/bundles/{bundle_key}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/entitlements.py",
+      "method": "GET",
       "path": "/admin/tenants/{tenant_id}/entitlements",
       "plane": "control",
       "plane_id": "control",
@@ -1296,6 +1367,24 @@
       "file": "api/admin.py",
       "method": "PUT",
       "path": "/admin/tenants/{tenant_id}/quota",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/entitlements.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/subscriptions",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -11322,7 +11411,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-16T22:04:00.582850+00:00",
+  "generated_at": "2026-06-17T13:28:46.365267+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

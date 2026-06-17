@@ -40,7 +40,11 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
 from api.db import get_engine, set_tenant_context
-from api.db_models import TenantEntitlement
+from api.db_models import (
+    PolicyBundle,
+    TenantBundleAssignment,
+    TenantEntitlement,
+)
 from api.security_audit import AuditEvent, EventType, Severity, get_auditor
 
 log = logging.getLogger("frostgate.entitlements")
@@ -136,6 +140,42 @@ CAPABILITY_REGISTRY: frozenset[str] = frozenset(
         "controltower.drift",
         "controltower.operations",
         "controltower.admin",
+        # P1.2: Portal capabilities
+        "portal.access",
+        "portal.remediation",
+        "portal.ai",
+        "portal.rag",
+        # P1.2: AI capabilities
+        "ai.workspace",
+        "ai.chat",
+        "ai.rag",
+        "ai.document_ingestion",
+        "ai.agent_builder",
+        "ai.multi_agent",
+        "ai.private_models",
+        "ai.fine_tuning",
+        "ai.governance",
+        "ai.compliance_assistant",
+        "ai.executive_advisor",
+        # P1.2: API access
+        "api.access",
+        # P1.2: Identity capabilities
+        "identity.sso",
+        "identity.scim",
+        # P1.2: Report bundles
+        "reports.executive",
+        "reports.regulatory",
+        # P1.2: Tenant capabilities
+        "tenant.multi_region",
+        # P1.2: MSP capabilities
+        "msp.multi_tenant",
+        "msp.white_label",
+        # P1.2: Government capabilities
+        "government.fedramp",
+        "government.cjis",
+        "government.itar",
+        "government.airgap",
+        "government.private_llm",
     }
 )
 
@@ -266,7 +306,8 @@ def check_capability(
     Resolution order:
       1. Capability must exist in CAPABILITY_REGISTRY — else deny.
       2. Explicit grant in tenant_entitlements DB table (honours expiry).
-      3. Tier-based default from TIER_CAPABILITIES.
+      3. Bundle/capability assignment via resolve_tenant_capabilities() (P1.2).
+      4. Tier-based default from TIER_CAPABILITIES (backward compat).
     """
     if capability not in CAPABILITY_REGISTRY:
         return EntitlementResult(
@@ -325,6 +366,28 @@ def check_capability(
             tier="unknown",
             reason="entitlement_db_error",
         )
+
+    # --- bundle/capability assignment (P1.2) ---
+    try:
+        from services.capability_bundles.resolver import resolve_tenant_capabilities
+
+        bundle_caps = resolve_tenant_capabilities(db, tenant_id)
+        if capability in bundle_caps:
+            return EntitlementResult(
+                allowed=True,
+                capability=capability,
+                tenant_id=tenant_id,
+                source="bundle",
+                tier=_get_tenant_tier(tenant_id),
+                reason="bundle_grant",
+            )
+    except Exception:
+        log.exception(
+            "entitlements.bundle_error tenant_id=%s capability=%s",
+            tenant_id,
+            capability,
+        )
+        # Non-fatal: fall through to tier default
 
     # --- tier fallback ---
     tier = _get_tenant_tier(tenant_id)
@@ -696,4 +759,292 @@ def get_capability_registry() -> dict[str, Any]:
     return {
         "capabilities": sorted(CAPABILITY_REGISTRY),
         "namespaces": sorted({c.split(".")[0] for c in CAPABILITY_REGISTRY}),
+    }
+
+
+# ---------------------------------------------------------------------------
+# P1.2: Bundle management admin routes
+# ---------------------------------------------------------------------------
+
+
+class AssignBundleRequest(BaseModel):
+    bundle_key: str
+    assigned_by: str = "admin"
+    expires_at: datetime | None = None
+    subscription_id: str | None = None
+
+
+class CreateSubscriptionRequest(BaseModel):
+    subscription_type: str
+    status: str = "active"
+    expires_at: datetime | None = None
+
+
+def _list_all_bundles(db: Session) -> list[dict[str, Any]]:
+    """Return all active policy bundles with their capability keys."""
+    from api.db_models import Capability, PolicyBundleCapability
+
+    bundles = db.query(PolicyBundle).filter(PolicyBundle.active.is_(True)).all()
+    result = []
+    for b in bundles:
+        cap_ids = [
+            r.capability_id
+            for r in db.query(PolicyBundleCapability)
+            .filter(PolicyBundleCapability.bundle_id == b.id)
+            .all()
+        ]
+        caps = (
+            db.query(Capability.capability_key).filter(Capability.id.in_(cap_ids)).all()
+        )
+        result.append(
+            {
+                "id": b.id,
+                "bundle_key": b.bundle_key,
+                "bundle_name": b.bundle_name,
+                "bundle_version": b.bundle_version,
+                "capabilities": sorted(c[0] for c in caps),
+            }
+        )
+    return result
+
+
+def _list_tenant_bundles(db: Session, tenant_id: str) -> list[dict[str, Any]]:
+    """Return bundles assigned to a specific tenant."""
+    assignments = (
+        db.query(TenantBundleAssignment)
+        .filter(TenantBundleAssignment.tenant_id == tenant_id)
+        .all()
+    )
+    result = []
+    for a in assignments:
+        bundle = db.query(PolicyBundle).filter(PolicyBundle.id == a.bundle_id).first()
+        result.append(
+            {
+                "id": a.id,
+                "bundle_key": bundle.bundle_key if bundle else None,
+                "bundle_name": bundle.bundle_name if bundle else None,
+                "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
+                "expires_at": a.expires_at.isoformat() if a.expires_at else None,
+                "assigned_by": a.assigned_by,
+                "subscription_id": a.subscription_id,
+            }
+        )
+    return result
+
+
+@router.get(
+    "/admin/bundles",
+    dependencies=[Depends(require_scopes("admin:read"))],
+    tags=["admin", "bundles"],
+)
+def list_all_bundles(request: Request) -> dict[str, Any]:
+    """List all available policy bundles with their capabilities."""
+    engine = get_engine()
+    with Session(engine) as db:
+        bundles = _list_all_bundles(db)
+    return {"bundles": bundles, "count": len(bundles)}
+
+
+@router.get(
+    "/admin/tenants/{tenant_id}/bundles",
+    dependencies=[Depends(require_scopes("admin:read"))],
+    tags=["admin", "bundles"],
+)
+def list_tenant_bundles(tenant_id: str, request: Request) -> dict[str, Any]:
+    """List all bundle assignments for a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    with Session(engine) as db:
+        assignments = _list_tenant_bundles(db, tenant_id)
+    return {"tenant_id": tenant_id, "bundles": assignments, "count": len(assignments)}
+
+
+@router.post(
+    "/admin/tenants/{tenant_id}/bundles",
+    dependencies=[Depends(require_scopes("admin:write"))],
+    tags=["admin", "bundles"],
+)
+def assign_bundle_to_tenant(
+    tenant_id: str,
+    body: AssignBundleRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Assign a policy bundle to a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    with Session(engine) as db:
+        bundle = (
+            db.query(PolicyBundle)
+            .filter(PolicyBundle.bundle_key == body.bundle_key)
+            .first()
+        )
+        if bundle is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "UNKNOWN_BUNDLE",
+                    "bundle_key": body.bundle_key,
+                },
+            )
+        existing = (
+            db.query(TenantBundleAssignment)
+            .filter(
+                TenantBundleAssignment.tenant_id == tenant_id,
+                TenantBundleAssignment.bundle_id == bundle.id,
+            )
+            .first()
+        )
+        if existing is not None:
+            existing.assigned_by = body.assigned_by
+            existing.expires_at = body.expires_at
+            existing.subscription_id = body.subscription_id
+            db.commit()
+            assignment_id = existing.id
+            created = False
+        else:
+            assignment = TenantBundleAssignment(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                bundle_id=bundle.id,
+                assigned_by=body.assigned_by,
+                expires_at=body.expires_at,
+                subscription_id=body.subscription_id,
+            )
+            db.add(assignment)
+            db.commit()
+            assignment_id = assignment.id
+            created = True
+
+    # Invalidate cache for this tenant
+    try:
+        from services.capability_bundles.resolver import invalidate_cache
+
+        invalidate_cache(tenant_id)
+    except Exception:
+        pass
+
+    from api.security_audit import audit_admin_action
+
+    audit_admin_action(
+        action="bundle_assigned",
+        tenant_id=tenant_id,
+        request=request,
+        details={
+            "bundle_key": body.bundle_key,
+            "assigned_by": body.assigned_by,
+            "expires_at": body.expires_at.isoformat() if body.expires_at else None,
+        },
+    )
+    return {
+        "tenant_id": tenant_id,
+        "bundle_key": body.bundle_key,
+        "assignment_id": assignment_id,
+        "created": created,
+    }
+
+
+@router.delete(
+    "/admin/tenants/{tenant_id}/bundles/{bundle_key}",
+    dependencies=[Depends(require_scopes("admin:write"))],
+    tags=["admin", "bundles"],
+)
+def remove_bundle_from_tenant(
+    tenant_id: str,
+    bundle_key: str,
+    request: Request,
+) -> dict[str, Any]:
+    """Remove a policy bundle assignment from a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    with Session(engine) as db:
+        bundle = (
+            db.query(PolicyBundle).filter(PolicyBundle.bundle_key == bundle_key).first()
+        )
+        if bundle is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "UNKNOWN_BUNDLE", "bundle_key": bundle_key},
+            )
+        assignment = (
+            db.query(TenantBundleAssignment)
+            .filter(
+                TenantBundleAssignment.tenant_id == tenant_id,
+                TenantBundleAssignment.bundle_id == bundle.id,
+            )
+            .first()
+        )
+        if assignment is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "BUNDLE_NOT_ASSIGNED",
+                    "tenant_id": tenant_id,
+                    "bundle_key": bundle_key,
+                },
+            )
+        db.delete(assignment)
+        db.commit()
+
+    # Invalidate cache
+    try:
+        from services.capability_bundles.resolver import invalidate_cache
+
+        invalidate_cache(tenant_id)
+    except Exception:
+        pass
+
+    from api.security_audit import audit_admin_action
+
+    audit_admin_action(
+        action="bundle_removed",
+        tenant_id=tenant_id,
+        request=request,
+        details={"bundle_key": bundle_key},
+    )
+    return {"tenant_id": tenant_id, "bundle_key": bundle_key, "removed": True}
+
+
+@router.post(
+    "/admin/tenants/{tenant_id}/subscriptions",
+    dependencies=[Depends(require_scopes("admin:write"))],
+    tags=["admin", "subscriptions"],
+)
+def create_tenant_subscription(
+    tenant_id: str,
+    body: CreateSubscriptionRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Create a subscription record for a tenant."""
+    from api.db_models import TenantSubscription
+
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    with Session(engine) as db:
+        sub = TenantSubscription(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            subscription_type=body.subscription_type,
+            status=body.status,
+            expires_at=body.expires_at,
+        )
+        db.add(sub)
+        db.commit()
+        sub_id = sub.id
+
+    from api.security_audit import audit_admin_action
+
+    audit_admin_action(
+        action="subscription_changed",
+        tenant_id=tenant_id,
+        request=request,
+        details={
+            "subscription_type": body.subscription_type,
+            "status": body.status,
+        },
+    )
+    return {
+        "tenant_id": tenant_id,
+        "subscription_id": sub_id,
+        "subscription_type": body.subscription_type,
+        "status": body.status,
     }

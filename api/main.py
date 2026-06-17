@@ -23,7 +23,7 @@ from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
 )
-from api.db import _ensure_api_keys_sqlite, get_engine, init_db
+from api.db import _ensure_api_keys_sqlite, get_engine, get_sessionmaker, init_db
 from api.attestation import router as attestation_router
 from api.audit import router as audit_router
 from api.auth_federation import router as auth_federation_router
@@ -334,6 +334,17 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             log.exception("DB init failed")
             if is_production or is_strict_env_required():
                 raise
+
+        try:
+            from services.capability_bundles import seed_bundle_catalog
+
+            _seed_db = get_sessionmaker()()
+            try:
+                seed_bundle_catalog(_seed_db)
+            finally:
+                _seed_db.close()
+        except Exception as exc:
+            log.warning("Bundle catalog seed failed (non-fatal): %s", exc)
 
         from services.embeddings.startup import (
             is_retrieval_enabled,

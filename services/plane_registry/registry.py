@@ -147,6 +147,13 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ),
             ex(
                 "GET",
+                "/admin/bundles",
+                "global_admin",
+                "Bundle catalog listing is global platform operator metadata — "
+                "lists all policy bundles, not tenant-scoped.",
+            ),
+            ex(
+                "GET",
                 "/admin/tenants/{tenant_id}",
                 "global_admin",
                 "Tenant inspection is global platform operator metadata.",

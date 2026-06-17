@@ -15094,3 +15094,35 @@ No post-merge bot fixes — recorded at implementation time.
 - `admin_gateway/identity/audit.py` — 7 new versioning event types
 
 **Test count:** 1020 → 1035 (15 new MV tests in tests/security/test_membership_versioning.py)
+
+---
+
+### 2026-06-17 — P1.2: Tenant Policy Bundles + Capability Framework
+
+**Branch:** `feat/p1-2-capability-framework`  **PR:** #448
+
+**Purpose:** Commercial control plane for capability-gated access. Extends the flat `CAPABILITY_REGISTRY` + `TenantEntitlement` model with DB-backed policy bundles, tenant subscriptions, and structured resolution order, enabling per-tenant capability sets without per-capability entitlement rows.
+
+**Architecture:**
+
+Resolution order in `check_capability()` (fully backward-compatible):
+1. Registry miss → False
+2. Explicit `TenantEntitlement` grant → True (unchanged)
+3. **New (P1.2):** Bundle/capability assignment — `resolve_tenant_capabilities(db, tenant_id)` returns `frozenset[str]` from bundle-linked capabilities + direct tenant capability assignments
+4. Tier fallback → unchanged
+
+**New files (high-risk):**
+
+`migrations/postgres/0118_capability_bundles.sql` — 6 tables: `tenant_subscriptions`, `policy_bundles`, `capabilities`, `policy_bundle_capabilities`, `tenant_capability_assignments`, `tenant_bundle_assignments`. All with proper FK constraints, `unique_together` indices, and `updated_at` triggers.
+
+`services/capability_bundles/resolver.py` — `resolve_tenant_capabilities(db, tenant_id) → frozenset[str]`: joins `tenant_bundle_assignments → policy_bundle_capabilities → capabilities` UNION `tenant_capability_assignments → capabilities`. TTL-cached in-process (`FG_CAPABILITY_CACHE_TTL_SECONDS`, default 300s). `invalidate_cache(tenant_id)` called by mutation routes.
+
+`services/capability_bundles/seeder.py` — `seed_bundle_catalog(db)`: idempotent upsert of 7 canonical bundles (`starter`, `professional`, `enterprise`, `enterprise_plus`, `government`, `msp`, `ai_advanced`).
+
+**Files changed (high-risk):**
+
+`api/entitlements.py` — 27 new capability keys added to `CAPABILITY_REGISTRY`: `portal.*` (3), `ai.*` (11), `api.access`, `identity.*` (3), `reports.*` (3), `tenant.multi_region`, `msp.*` (2), `government.*` (5). New resolution step 3 in `check_capability()`. 5 new admin routes: `GET /admin/bundles`, `GET/POST /admin/tenants/{tid}/bundles`, `DELETE /admin/tenants/{tid}/bundles/{key}`, `POST /admin/tenants/{tid}/subscriptions`.
+
+`api/db_models.py` — 6 new ORM models: `TenantSubscription`, `PolicyBundle`, `Capability`, `PolicyBundleCapability`, `TenantCapabilityAssignment`, `TenantBundleAssignment`.
+
+**Tests:** 16 tests in `tests/security/test_capability_framework.py` — CAP-1–5 (bundle resolution, missing bundle, empty bundle, cross-tenant isolation, unknown capability), CAP-6–9 (cache TTL, invalidation on assign, invalidation on unassign, determinism), CAP-10–12 (direct capability assignment, bundle+direct union, bundle removal), CAP-13–15 (tier fallback still works, explicit entitlement takes precedence, RBAC independence from capability), CAP-16 (seeder idempotency).

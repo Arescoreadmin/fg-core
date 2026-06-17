@@ -422,6 +422,14 @@
         {
           "class_name": "global_admin",
           "expires_at": "",
+          "justification": "Bundle catalog listing is global platform operator metadata — lists all policy bundles, not tenant-scoped.",
+          "method": "GET",
+          "path": "/admin/bundles",
+          "permanent": true
+        },
+        {
+          "class_name": "global_admin",
+          "expires_at": "",
           "justification": "Tenant inspection is global platform operator metadata.",
           "method": "GET",
           "path": "/admin/tenants/{tenant_id}",
@@ -1102,7 +1110,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-16T22:04:00.590710+00:00",
+  "generated_at": "2026-06-17T14:16:28.858422+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
