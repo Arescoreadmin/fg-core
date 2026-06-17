@@ -12,7 +12,13 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from api.db_models import Capability, PolicyBundle, PolicyBundleCapability
+from api.db_models import (
+    Capability,
+    CapabilityDependency,
+    CapabilityMeterMapping,
+    PolicyBundle,
+    PolicyBundleCapability,
+)
 
 log = logging.getLogger("frostgate.capability_bundles.seeder")
 
@@ -106,49 +112,85 @@ BUNDLE_CATALOG: dict[str, dict] = {
 }
 
 # ---------------------------------------------------------------------------
-# Capability metadata (name + category for DB catalog)
+# Capability metadata
+# Fields: name, category, billing_category, launch_stage, visibility
+#   launch_stage: 'alpha'|'beta'|'ga'|'deprecated'
+#   visibility:   'public'|'internal'|'hidden'
 # ---------------------------------------------------------------------------
 
-_CAP_META: dict[str, tuple[str, str]] = {
+_CAP_META: dict[str, dict] = {
     # portal.*
-    "portal.access": ("Portal Access", "portal"),
-    "portal.remediation": ("Portal Remediation", "portal"),
-    "portal.ai": ("Portal AI", "portal"),
-    "portal.rag": ("Portal RAG", "portal"),
+    "portal.access":      {"name": "Portal Access",      "category": "portal",     "billing_category": "portal",     "launch_stage": "ga",   "visibility": "public"},
+    "portal.remediation": {"name": "Portal Remediation", "category": "portal",     "billing_category": "portal",     "launch_stage": "ga",   "visibility": "public"},
+    "portal.ai":          {"name": "Portal AI",          "category": "portal",     "billing_category": "ai",         "launch_stage": "ga",   "visibility": "public"},
+    "portal.rag":         {"name": "Portal RAG",         "category": "portal",     "billing_category": "ai",         "launch_stage": "beta", "visibility": "public"},
     # ai.*
-    "ai.workspace": ("AI Workspace", "ai"),
-    "ai.chat": ("AI Chat", "ai"),
-    "ai.rag": ("AI RAG", "ai"),
-    "ai.document_ingestion": ("AI Document Ingestion", "ai"),
-    "ai.agent_builder": ("AI Agent Builder", "ai"),
-    "ai.multi_agent": ("AI Multi-Agent", "ai"),
-    "ai.private_models": ("AI Private Models", "ai"),
-    "ai.fine_tuning": ("AI Fine Tuning", "ai"),
-    "ai.governance": ("AI Governance", "ai"),
-    "ai.compliance_assistant": ("AI Compliance Assistant", "ai"),
-    "ai.executive_advisor": ("AI Executive Advisor", "ai"),
+    "ai.workspace":            {"name": "AI Workspace",            "category": "ai", "billing_category": "ai", "launch_stage": "ga",   "visibility": "public"},
+    "ai.chat":                 {"name": "AI Chat",                 "category": "ai", "billing_category": "ai", "launch_stage": "ga",   "visibility": "public"},
+    "ai.rag":                  {"name": "AI RAG",                  "category": "ai", "billing_category": "ai", "launch_stage": "ga",   "visibility": "public"},
+    "ai.document_ingestion":   {"name": "AI Document Ingestion",   "category": "ai", "billing_category": "ai", "launch_stage": "ga",   "visibility": "public"},
+    "ai.agent_builder":        {"name": "AI Agent Builder",        "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
+    "ai.multi_agent":          {"name": "AI Multi-Agent",          "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
+    "ai.private_models":       {"name": "AI Private Models",       "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "hidden"},
+    "ai.fine_tuning":          {"name": "AI Fine Tuning",          "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "hidden"},
+    "ai.governance":           {"name": "AI Governance",           "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
+    "ai.compliance_assistant": {"name": "AI Compliance Assistant", "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
+    "ai.executive_advisor":    {"name": "AI Executive Advisor",    "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
     # api.*
-    "api.access": ("API Access", "api"),
+    "api.access": {"name": "API Access", "category": "api", "billing_category": "api", "launch_stage": "ga", "visibility": "public"},
     # identity.*
-    "identity.sso": ("Identity SSO", "identity"),
-    "identity.scim": ("Identity SCIM", "identity"),
+    "identity.sso":  {"name": "Identity SSO",  "category": "identity", "billing_category": "identity", "launch_stage": "ga", "visibility": "public"},
+    "identity.scim": {"name": "Identity SCIM", "category": "identity", "billing_category": "identity", "launch_stage": "ga", "visibility": "public"},
     # reports.*
-    "reports.executive": ("Executive Reports", "reports"),
-    "reports.regulatory": ("Regulatory Reports", "reports"),
+    "reports.executive":  {"name": "Executive Reports",  "category": "reports", "billing_category": "reports", "launch_stage": "ga", "visibility": "public"},
+    "reports.regulatory": {"name": "Regulatory Reports", "category": "reports", "billing_category": "reports", "launch_stage": "ga", "visibility": "public"},
     # tenant.*
-    "tenant.multi_region": ("Tenant Multi-Region", "tenant"),
+    "tenant.multi_region": {"name": "Tenant Multi-Region", "category": "tenant", "billing_category": "tenant", "launch_stage": "beta", "visibility": "public"},
     # msp.*
-    "msp.multi_tenant": ("MSP Multi-Tenant", "msp"),
-    "msp.white_label": ("MSP White Label", "msp"),
+    "msp.multi_tenant": {"name": "MSP Multi-Tenant", "category": "msp", "billing_category": "msp", "launch_stage": "ga", "visibility": "public"},
+    "msp.white_label":  {"name": "MSP White Label",  "category": "msp", "billing_category": "msp", "launch_stage": "ga", "visibility": "public"},
     # government.*
-    "government.fedramp": ("Government FedRAMP", "government"),
-    "government.cjis": ("Government CJIS", "government"),
-    "government.itar": ("Government ITAR", "government"),
-    "government.airgap": ("Government Air Gap", "government"),
-    "government.private_llm": ("Government Private LLM", "government"),
-    # existing capabilities referenced by bundles
-    "audit.view": ("Audit View", "audit"),
-    "audit.export": ("Audit Export", "audit"),
+    "government.fedramp":      {"name": "Government FedRAMP",      "category": "government", "billing_category": "government", "launch_stage": "ga",   "visibility": "public"},
+    "government.cjis":         {"name": "Government CJIS",         "category": "government", "billing_category": "government", "launch_stage": "ga",   "visibility": "public"},
+    "government.itar":         {"name": "Government ITAR",         "category": "government", "billing_category": "government", "launch_stage": "beta", "visibility": "hidden"},
+    "government.airgap":       {"name": "Government Air Gap",      "category": "government", "billing_category": "government", "launch_stage": "beta", "visibility": "hidden"},
+    "government.private_llm":  {"name": "Government Private LLM",  "category": "government", "billing_category": "government", "launch_stage": "beta", "visibility": "hidden"},
+    # audit.*
+    "audit.view":   {"name": "Audit View",   "category": "audit", "billing_category": None, "launch_stage": "ga", "visibility": "public"},
+    "audit.export": {"name": "Audit Export", "category": "audit", "billing_category": None, "launch_stage": "ga", "visibility": "public"},
+}
+
+# ---------------------------------------------------------------------------
+# Capability dependency graph (capability_id → [requires_id, ...])
+# ---------------------------------------------------------------------------
+
+_CAP_DEPENDENCIES: dict[str, list[str]] = {
+    "portal.ai":               ["ai.workspace"],
+    "portal.rag":              ["ai.rag"],
+    "ai.rag":                  ["ai.workspace"],
+    "ai.document_ingestion":   ["ai.workspace"],
+    "ai.agent_builder":        ["ai.workspace"],
+    "ai.multi_agent":          ["ai.agent_builder"],
+    "ai.governance":           ["ai.workspace"],
+    "ai.compliance_assistant": ["ai.workspace"],
+    "ai.executive_advisor":    ["ai.workspace"],
+    "identity.scim":           ["identity.sso"],
+}
+
+# ---------------------------------------------------------------------------
+# Meter mappings (capability_key → [meter_key, ...])
+# ---------------------------------------------------------------------------
+
+_CAP_METERS: dict[str, list[str]] = {
+    "ai.chat":                 ["token_meter"],
+    "ai.rag":                  ["token_meter"],
+    "ai.document_ingestion":   ["document_meter"],
+    "ai.agent_builder":        ["token_meter"],
+    "ai.multi_agent":          ["token_meter"],
+    "ai.fine_tuning":          ["token_meter"],
+    "ai.compliance_assistant": ["token_meter"],
+    "ai.executive_advisor":    ["token_meter"],
+    "ai.governance":           ["token_meter"],
 }
 
 
@@ -158,7 +200,7 @@ def seed_bundle_catalog(db: Session) -> None:
     Idempotent — existing rows are not modified.
     """
     # 1. Ensure all capability rows exist
-    for cap_key, (cap_name, cap_category) in _CAP_META.items():
+    for cap_key, meta in _CAP_META.items():
         existing = (
             db.query(Capability).filter(Capability.capability_key == cap_key).first()
         )
@@ -167,8 +209,11 @@ def seed_bundle_catalog(db: Session) -> None:
                 Capability(
                     id=str(uuid.uuid4()),
                     capability_key=cap_key,
-                    capability_name=cap_name,
-                    capability_category=cap_category,
+                    capability_name=meta["name"],
+                    capability_category=meta["category"],
+                    billing_category=meta.get("billing_category"),
+                    launch_stage=meta.get("launch_stage", "ga"),
+                    visibility=meta.get("visibility", "public"),
                     active=True,
                 )
             )
@@ -219,5 +264,70 @@ def seed_bundle_catalog(db: Session) -> None:
                     )
                 )
 
+    db.flush()
+
+    # 3. Ensure capability dependency rows exist
+    for cap_key, requires_keys in _CAP_DEPENDENCIES.items():
+        cap_row = (
+            db.query(Capability).filter(Capability.capability_key == cap_key).first()
+        )
+        if cap_row is None:
+            continue
+        for req_key in requires_keys:
+            req_row = (
+                db.query(Capability).filter(Capability.capability_key == req_key).first()
+            )
+            if req_row is None:
+                log.warning("seeder.missing_dep_target cap=%s requires=%s", cap_key, req_key)
+                continue
+            existing = (
+                db.query(CapabilityDependency)
+                .filter(
+                    CapabilityDependency.capability_id == cap_row.id,
+                    CapabilityDependency.requires_id == req_row.id,
+                )
+                .first()
+            )
+            if existing is None:
+                db.add(
+                    CapabilityDependency(
+                        capability_id=cap_row.id,
+                        requires_id=req_row.id,
+                    )
+                )
+
+    db.flush()
+
+    # 4. Ensure capability meter mapping rows exist
+    for cap_key, meter_keys in _CAP_METERS.items():
+        cap_row = (
+            db.query(Capability).filter(Capability.capability_key == cap_key).first()
+        )
+        if cap_row is None:
+            continue
+        for meter_key in meter_keys:
+            existing = (
+                db.query(CapabilityMeterMapping)
+                .filter(
+                    CapabilityMeterMapping.capability_id == cap_row.id,
+                    CapabilityMeterMapping.meter_key == meter_key,
+                )
+                .first()
+            )
+            if existing is None:
+                db.add(
+                    CapabilityMeterMapping(
+                        id=str(uuid.uuid4()),
+                        capability_id=cap_row.id,
+                        meter_key=meter_key,
+                    )
+                )
+
     db.commit()
-    log.info("capability_bundles.seeded bundles=%d", len(BUNDLE_CATALOG))
+    log.info(
+        "capability_bundles.seeded bundles=%d caps=%d deps=%d meters=%d",
+        len(BUNDLE_CATALOG),
+        len(_CAP_META),
+        sum(len(v) for v in _CAP_DEPENDENCIES.values()),
+        sum(len(v) for v in _CAP_METERS.values()),
+    )
