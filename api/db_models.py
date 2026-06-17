@@ -3808,5 +3808,131 @@ class TenantEntitlement(Base):
     reason: Mapped[Any] = mapped_column(Text, nullable=True)
 
 
+# ---------------------------------------------------------------------------
+# P1.2: Tenant Policy Bundles + Capability Framework
+# ---------------------------------------------------------------------------
+
+
+class TenantSubscription(Base):
+    """P1.2: Commercial subscription record for a tenant."""
+
+    __tablename__ = "tenant_subscriptions"
+    __table_args__ = (
+        Index("idx_tenant_subs_tenant", "tenant_id"),
+        Index("idx_tenant_subs_status", "tenant_id", "status"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    subscription_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    status: Mapped[Any] = mapped_column(Text, nullable=False, default="active")
+    effective_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class PolicyBundle(Base):
+    """P1.2: Named capability bundle (portal_only, enterprise, government, msp, …)."""
+
+    __tablename__ = "policy_bundles"
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    bundle_key: Mapped[Any] = mapped_column(Text, nullable=False, unique=True)
+    bundle_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    bundle_version: Mapped[Any] = mapped_column(Text, nullable=False, default="1.0")
+    active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    description: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class Capability(Base):
+    """P1.2: DB catalog of capability strings — mirrors CAPABILITY_REGISTRY."""
+
+    __tablename__ = "capabilities"
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    capability_key: Mapped[Any] = mapped_column(Text, nullable=False, unique=True)
+    capability_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    capability_category: Mapped[Any] = mapped_column(Text, nullable=False)
+    description: Mapped[Any] = mapped_column(Text, nullable=True)
+    active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class PolicyBundleCapability(Base):
+    """P1.2: Many-to-many join — which capabilities belong to a bundle."""
+
+    __tablename__ = "policy_bundle_capabilities"
+
+    bundle_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("policy_bundles.id", ondelete="CASCADE"), primary_key=True
+    )
+    capability_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("capabilities.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class TenantCapabilityAssignment(Base):
+    """P1.2: Direct capability grant to a tenant (source = manual/trial/promotion/marketplace)."""
+
+    __tablename__ = "tenant_capability_assignments"
+    __table_args__ = (
+        Index("idx_tca_tenant", "tenant_id"),
+        Index("idx_tca_tenant_cap", "tenant_id", "capability_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    capability_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("capabilities.id"), nullable=False
+    )
+    source: Mapped[Any] = mapped_column(Text, nullable=False)
+    assigned_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    notes: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class TenantBundleAssignment(Base):
+    """P1.2: Which bundles a tenant has been assigned."""
+
+    __tablename__ = "tenant_bundle_assignments"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "bundle_id", name="uq_tenant_bundle_assignments"),
+        Index("idx_tba_tenant", "tenant_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    bundle_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("policy_bundles.id"), nullable=False
+    )
+    subscription_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("tenant_subscriptions.id"), nullable=True
+    )
+    assigned_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_by: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
 # PR3 External AI Risk Register ORM registration for Base.metadata.create_all().
 import api.db_models_external_ai_risk  # noqa: F401,E402

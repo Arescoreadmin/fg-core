@@ -3170,6 +3170,47 @@
         "title": "AssetVersionResponse",
         "type": "object"
       },
+      "AssignBundleRequest": {
+        "properties": {
+          "assigned_by": {
+            "default": "admin",
+            "title": "Assigned By",
+            "type": "string"
+          },
+          "bundle_key": {
+            "title": "Bundle Key",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "subscription_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Id"
+          }
+        },
+        "required": [
+          "bundle_key"
+        ],
+        "title": "AssignBundleRequest",
+        "type": "object"
+      },
       "AssignEnvironmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6085,6 +6126,36 @@
           "scoring_schema_version"
         ],
         "title": "CreateScoringContractRequest",
+        "type": "object"
+      },
+      "CreateSubscriptionRequest": {
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "subscription_type": {
+            "title": "Subscription Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subscription_type"
+        ],
+        "title": "CreateSubscriptionRequest",
         "type": "object"
       },
       "CreateWorkflowBody": {
