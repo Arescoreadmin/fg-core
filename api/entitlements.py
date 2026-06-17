@@ -530,26 +530,23 @@ def require_capability(capability: str):
                 from services.capability_enforcement.graph import (
                     get_required_capabilities,
                 )
-                from services.capability_bundles.resolver import (
-                    resolve_tenant_capabilities,
-                )
 
                 required_deps = get_required_capabilities(capability)
                 if required_deps and tenant_id:
-                    with Session(engine) as db2:
-                        tenant_caps = resolve_tenant_capabilities(db2, tenant_id)
-                    for dep in required_deps:
-                        if dep not in tenant_caps:
-                            result = EntitlementResult(
-                                allowed=False,
-                                capability=capability,
-                                tenant_id=tenant_id,
-                                source="dep_failure",
-                                tier=result.tier,
-                                reason=f"missing_dependency:{dep}",
-                            )
-                            dep_failure = dep
-                            break
+                    with Session(engine) as db_dep:
+                        for dep in required_deps:
+                            dep_result = check_capability(db_dep, tenant_id, dep)
+                            if not dep_result.allowed:
+                                result = EntitlementResult(
+                                    allowed=False,
+                                    capability=capability,
+                                    tenant_id=tenant_id,
+                                    source="dep_failure",
+                                    tier=result.tier,
+                                    reason=f"missing_dependency:{dep}",
+                                )
+                                dep_failure = dep
+                                break
             except Exception:
                 log.exception(
                     "entitlements.dep_check_error tenant_id=%s capability=%s",

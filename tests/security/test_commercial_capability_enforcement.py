@@ -35,6 +35,7 @@ from api.db_models import (
     PolicyBundle,
     PolicyBundleCapability,
     TenantBundleAssignment,
+    TenantEntitlement,
 )
 from api.entitlements import CAPABILITY_REGISTRY, check_capability
 from api.security_audit import EventType
@@ -391,6 +392,40 @@ class TestCOMM9RagDependencyEnforcement:
 
         result = check_capability(db, tid, "ai.rag")
         assert result.allowed is True
+
+    def test_dep_check_recognizes_explicit_grant(self, tmp_path, monkeypatch):
+        # Regression: dep check must use check_capability() not resolve_tenant_capabilities(),
+        # so explicit TenantEntitlement grants (and tier grants) are visible.
+        _make_db(tmp_path, monkeypatch, "comm9c")
+        tid = "tenant-comm9c"
+        session = get_sessionmaker()()
+        # ai.rag granted via bundle; ai.workspace granted via explicit TenantEntitlement only
+        bundle = _make_bundle(session, bundle_key="rag_only_c", capabilities=["ai.rag"])
+        _assign_bundle(session, tenant_id=tid, bundle_id=bundle.id)
+        session.add(
+            TenantEntitlement(
+                tenant_id=tid,
+                capability="ai.workspace",
+                granted_by="test",
+            )
+        )
+        session.commit()
+        session.close()
+        invalidate_cache(tid)
+
+        req = MagicMock()
+        req.state.tenant_id = tid
+        req.state.auth = MagicMock()
+        req.state.auth.tenant_id = tid
+        req.state.auth.key_name = "test"
+
+        from api.entitlements import require_capability
+
+        with patch("api.entitlements.ENFORCEMENT_STRICT", True):
+            monkeypatch.setenv("FG_ENTITLEMENT_ENFORCEMENT", "true")
+            dep_fn = require_capability("ai.rag")
+            # Must NOT raise — ai.workspace is explicitly granted
+            dep_fn(request=req)
 
 
 # ---------------------------------------------------------------------------
