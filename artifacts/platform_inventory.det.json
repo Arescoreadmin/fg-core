@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 523,
+    "contract_count": 524,
     "contract_only": [],
-    "runtime_count": 662,
+    "runtime_count": 663,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
@@ -152,7 +152,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "65ae7a48312ca2e02329738aba4f7eb7761e34d0de77c9748813ca1a1d43eae9",
+  "governance_fingerprint": "b3afcdb99de0c3737e6f203fb936ec3c1acdc1525001cd9775245c42efd234d6",
   "planes": [
     {
       "compat": {
@@ -827,6 +827,7 @@
       "POST /internal/connectors/{connector_id}/ingest",
       "POST /portal/authenticate",
       "POST /portal/grants",
+      "POST /portal/identity/login",
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",
       "PUT /admin/agent/version-floor",

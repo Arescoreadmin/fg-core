@@ -117,6 +117,7 @@ export async function GET(req: NextRequest) {
     role: string;
     tenant_id: string;
     membership_id: string;
+    membership_version: number;
   };
   try {
     const identityResp = await fetch(`${cfg.coreApiUrl}/portal/identity/login`, {
@@ -146,6 +147,7 @@ export async function GET(req: NextRequest) {
     email: userInfo.email,
     displayName: userInfo.display_name,
     role: userInfo.role,
+    membershipVersion: userInfo.membership_version ?? 0,
   };
 
   const sessionToken = await createUserSessionToken(sessionUser);

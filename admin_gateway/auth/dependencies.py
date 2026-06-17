@@ -9,6 +9,8 @@ import logging
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_gateway.auth.config import AuthConfig, get_auth_config
 from admin_gateway.auth.csrf import CSRFProtection
@@ -16,6 +18,7 @@ from admin_gateway.auth.dev_bypass import get_dev_bypass_session
 from admin_gateway.auth.scopes import Scope, has_scope
 from admin_gateway.auth.session import Session, SessionManager
 from admin_gateway.auth.tenant import TenantContext, validate_tenant_access
+from admin_gateway.db.session import get_db
 
 log = logging.getLogger("admin-gateway.auth")
 
@@ -172,17 +175,29 @@ async def require_admin(
     return session
 
 
+_VERSION_CHECK_SQL = text(
+    "SELECT membership_version FROM tenant_users "
+    "WHERE id = :mid AND tenant_id = :tid LIMIT 1"
+)
+
+
 async def require_governed_session(
     session: Session = Depends(get_current_session),
+    db: Optional[AsyncSession] = Depends(get_db),
 ) -> Session:
-    """Require a tenant-governed session (active tenant membership verified).
+    """Require a tenant-governed session with current membership_version.
 
     A governed session is created only after the OIDC callback resolves an
     active bound membership in tenant_users. Ungoverned sessions (e.g. from
     dev bypass or pre-membership logins) are denied.
 
+    For governed sessions the membership_version embedded at issuance is
+    validated against the live DB value — a mismatch means the membership
+    was changed (deactivated, role-changed, etc.) since the session was issued.
+
     Raises:
         HTTPException 403: SESSION_NOT_GOVERNED — no active membership bound
+        HTTPException 401: SESSION_REVOKED — membership_version mismatch
     """
     if not session.tenant_governed:
         log.warning(
@@ -200,4 +215,33 @@ async def require_governed_session(
                 "message": "Active tenant membership is required for this operation.",
             },
         )
+
+    if isinstance(db, AsyncSession) and session.membership_id and session.tenant_id:
+        row = (
+            await db.execute(
+                _VERSION_CHECK_SQL,
+                {"mid": session.membership_id, "tid": session.tenant_id},
+            )
+        ).one_or_none()
+
+        current_version = int(row.membership_version) if row else None
+        session_version = session.membership_version
+
+        if current_version is None or session_version != current_version:
+            log.warning(
+                "governed_session.version_mismatch",
+                extra={
+                    "membership_id": session.membership_id,
+                    "session_version": session_version,
+                    "current_version": current_version,
+                },
+            )
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "code": "SESSION_REVOKED",
+                    "message": "Session revoked: membership has changed. Please log in again.",
+                },
+            )
+
     return session
