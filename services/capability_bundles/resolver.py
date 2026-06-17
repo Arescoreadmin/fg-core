@@ -14,7 +14,6 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -104,11 +103,11 @@ def resolve_tenant_capabilities(db: Session, tenant_id: str) -> frozenset[str]:
     try:
         now_iso = _utcnow_iso()
 
-        bundle_rows: list[Any] = db.execute(
+        bundle_rows = db.execute(
             _BUNDLE_CAPS_SQL, {"tenant_id": tenant_id, "now": now_iso}
         ).fetchall()
 
-        direct_rows: list[Any] = db.execute(
+        direct_rows = db.execute(
             _DIRECT_CAPS_SQL, {"tenant_id": tenant_id, "now": now_iso}
         ).fetchall()
 
