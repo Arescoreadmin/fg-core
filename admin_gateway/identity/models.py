@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, String
+from sqlalchemy import JSON, Boolean, BigInteger, DateTime, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -135,6 +135,9 @@ class TenantUser(IdentityBase):
     email: Mapped[str] = mapped_column(String(256))
     role: Mapped[str] = mapped_column(String(32))
     active: Mapped[bool] = mapped_column(Boolean)
+    membership_version: Mapped[int] = mapped_column(
+        BigInteger, default=1, nullable=False
+    )
     identity_type: Mapped[str] = mapped_column(String(32))
     identity_provider: Mapped[str | None] = mapped_column(String(64))
     identity_provider_record_id: Mapped[str | None] = mapped_column(String(128))

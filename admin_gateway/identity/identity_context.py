@@ -22,6 +22,7 @@ class AuthenticatedIdentity:
 class TenantSessionContext:
     tenant_id: str
     membership_id: str
+    membership_version: int
     user_id: str
     email: str
     identity_provider: str

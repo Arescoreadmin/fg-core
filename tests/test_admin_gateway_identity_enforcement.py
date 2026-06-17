@@ -50,7 +50,10 @@ def db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     path = str(tmp_path / "gateway-identity.db")
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_SQLITE_PATH", path)
-    monkeypatch.setenv("AG_SQLITE_PATH", str(tmp_path / "admin.db"))
+    # Admin Gateway governed-session validation must read the same identity DB
+    # used by this test fixture; otherwise the async dependency points at an
+    # empty admin DB and tenant_users is missing.
+    monkeypatch.setenv("AG_SQLITE_PATH", path)
     monkeypatch.setenv("FG_SESSION_SECRET", "identity-test-session-secret")
     monkeypatch.delenv("FG_DEV_AUTH_BYPASS", raising=False)
     reset_engine_cache()

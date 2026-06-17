@@ -507,7 +507,7 @@ def bind_identity(
         membership_version_svc,
     )  # lazy: services/ not in admin_gateway Docker image
 
-    membership_version_svc.bump_version(
+    membership.membership_version = membership_version_svc.bump_version(
         db, membership_id=membership.id, tenant_id=tenant_id, reason="identity_bound"
     )
     try:

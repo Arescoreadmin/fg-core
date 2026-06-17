@@ -42,6 +42,7 @@ def build_tenant_session_context(membership: TenantUser) -> TenantSessionContext
     return TenantSessionContext(
         tenant_id=membership.tenant_id,
         membership_id=membership.id,
+        membership_version=int(getattr(membership, "membership_version", 1) or 1),
         user_id=membership.id,
         email=membership.identity_email or membership.email,
         identity_provider=cast(str, membership.identity_provider),
@@ -64,6 +65,7 @@ def issue_tenant_session(
         claims={"tenant_id": context.tenant_id, "roles": [context.role]},
         tenant_id=context.tenant_id,
         membership_id=context.membership_id,
+        membership_version=context.membership_version,
         identity_provider=context.identity_provider,
         identity_issuer=context.identity_issuer,
         identity_subject=context.identity_subject,
