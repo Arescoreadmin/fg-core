@@ -6,6 +6,7 @@ export interface SessionUser {
   email: string;
   displayName: string;
   role: string;
+  membershipVersion: number;
 }
 
 async function getKey(): Promise<CryptoKey | null> {
@@ -135,6 +136,7 @@ export async function getSessionUser(token: string | undefined): Promise<Session
       email: parsed.email,
       displayName: parsed.displayName ?? parsed.email,
       role: parsed.role ?? 'user',
+      membershipVersion: typeof parsed.membershipVersion === 'number' ? parsed.membershipVersion : 0,
     };
   } catch {
     return null;

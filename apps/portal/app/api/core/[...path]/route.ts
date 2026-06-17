@@ -186,6 +186,10 @@ async function proxyToCore(
   if (sessionUser) {
     headers.set('X-FG-User-ID', sessionUser.userId);
     headers.set('X-FG-User-Email', sessionUser.email);
+    if (sessionUser.membershipVersion > 0) {
+      headers.set('X-FG-Membership-ID', sessionUser.userId);
+      headers.set('X-FG-Membership-Version', String(sessionUser.membershipVersion));
+    }
   }
 
   const contentType = request.headers.get('content-type');

@@ -60,6 +60,7 @@ class IdentityPrincipal:
     roles: list[str] = field(default_factory=list)
     status: str = "active"
     trust_level: str = "bound"
+    membership_version: int = 1
 
 
 _RESOLVE_SQL = text(
@@ -75,7 +76,8 @@ _RESOLVE_SQL = text(
         identity_issuer,
         identity_subject,
         identity_email,
-        identity_binding_status
+        identity_binding_status,
+        membership_version
     FROM tenant_users
     WHERE identity_binding_status = :binding_status
       AND identity_provider       = :provider
@@ -142,6 +144,7 @@ class IdentityResolver:
             roles=[str(row.role)] if row.role else [],
             status=status,
             trust_level=str(row.identity_binding_status or "unbound"),
+            membership_version=int(row.membership_version or 1),
         )
 
     def resolve_or_deny(

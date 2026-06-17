@@ -45,6 +45,14 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.identity_session.denied.membership_missing",
         "tenant.identity_session.denied.membership_inactive",
         "tenant.identity_session.denied.non_governed",
+        # Membership versioning — emitted on authorization-affecting field changes
+        "tenant.membership.version_changed",
+        "tenant.membership.deactivated",
+        "tenant.membership.reactivated",
+        "tenant.membership.role_changed",
+        "tenant.membership.binding_changed",
+        "tenant.membership.risk_state_changed",
+        "tenant.identity_session.denied.version_mismatch",
     }
 )
 INVITATION_TRANSITIONS = {
@@ -104,6 +112,9 @@ def emit_identity_audit_event(
     safe_keys = {
         "invitation_status",
         "membership_binding_status",
+        "membership_version",
+        "previous_version",
+        "reason",
         "role",
         "session_status",
     }

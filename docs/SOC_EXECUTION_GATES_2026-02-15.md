@@ -4684,3 +4684,23 @@ SOC review outcome: approved. Three auth/session critical-path files updated as 
 `api/auth_dispatch.py`: Added `_bind_membership()` function that runs after Auth0 JWT validation in `get_actor_context()`. Calls `IdentityResolver.resolve_or_deny()` against `tenant_users`. MEMBERSHIP_NOT_FOUND → actor continues without membership_id (service account path). MEMBERSHIP_INACTIVE → HTTP 403 immediately. Successful resolution populates `ActorContext.membership_id` for downstream audit propagation.
 
 Additional non-critical-path files added: `services/identity_resolver/` (new shared service), `api/portal.py` (new `/portal/identity/login` endpoint), portal OIDC TypeScript routes, `admin_gateway/identity/audit.py` (new event types), `tests/security/test_identity_consolidation.py` (26 security tests).
+
+## 2026-06-16 — P1.1: Membership Versioning + Immediate Session Revocation
+
+Critical-path files changed:
+- `admin_gateway/auth/dependencies.py`
+- `admin_gateway/auth/oidc.py`
+- `admin_gateway/auth/session.py`
+- `api/middleware/portal_scope.py`
+
+SOC review outcome: approved. Four auth/session critical-path files updated as part of P1.1 Membership Versioning milestone. Adds deterministic, blocklist-free session revocation: every authorization-affecting change to `tenant_users` increments `membership_version`; sessions embed the version at issuance; a mismatch on any governed request is an immediate hard deny.
+
+`admin_gateway/auth/session.py`: Added `membership_version: int = 0` field to `Session` dataclass. Updated `to_dict()`, `from_dict()`, and `create_session()` to serialize/deserialize the field. Sessions without a version (legacy/pre-P1.1) have version=0.
+
+`admin_gateway/auth/oidc.py`: `create_session_from_tokens()` now reads `principal.membership_version` from the resolved `IdentityPrincipal` and embeds it in the issued `Session`. Governed sessions always carry the live DB version at issuance.
+
+`admin_gateway/auth/dependencies.py`: `require_governed_session()` extended with async DB version check. When `membership_id` and `tenant_id` are present, queries `tenant_users.membership_version` and compares against `session.membership_version`. Mismatch → HTTP 401 SESSION_REVOKED. DB injection uses FastAPI `Depends(get_db)`; direct calls (test path) receive `Depends` wrapper object which is detected via `isinstance(db, AsyncSession)` and skip the check for backward compat.
+
+`api/middleware/portal_scope.py`: Added named-user engagement access path (P1.1). When `X-FG-Membership-ID` and `X-FG-Membership-Version` headers are present, middleware queries `tenant_users` directly and validates version match + active status. Mismatch → 403 SESSION_REVOKED_VERSION_MISMATCH. Inactive → 403 MEMBERSHIP_INACTIVE. Falls through to grant-based path (C7) when membership headers are absent.
+
+Additional non-critical-path changes: `services/identity_resolver/versioning.py` (new `MembershipVersionService`), `services/identity_resolver/service.py` (membership_version in IdentityPrincipal), `api/portal.py` (membership_version in /portal/identity/login response), portal TypeScript (membershipVersion in SessionUser, OIDC callback, proxy headers), `admin_gateway/identity/audit.py` (7 new event types), `migrations/postgres/0117_membership_version.sql`, `api/db_models.py` (TenantUser.membership_version), `tests/security/test_membership_versioning.py` (15 security tests).

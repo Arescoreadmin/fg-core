@@ -47,6 +47,7 @@ class Session:
     claims: dict[str, Any] = field(default_factory=dict)
     tenant_id: Optional[str] = None
     membership_id: Optional[str] = None
+    membership_version: int = 0
     identity_provider: Optional[str] = None
     identity_issuer: Optional[str] = None
     identity_subject: Optional[str] = None
@@ -85,6 +86,7 @@ class Session:
             "claims": self.claims,
             "tenant_id": self.tenant_id,
             "membership_id": self.membership_id,
+            "membership_version": self.membership_version,
             "identity_provider": self.identity_provider,
             "identity_issuer": self.identity_issuer,
             "identity_subject": self.identity_subject,
@@ -108,6 +110,7 @@ class Session:
             claims=data.get("claims", {}),
             tenant_id=data.get("tenant_id"),
             membership_id=data.get("membership_id"),
+            membership_version=int(data.get("membership_version", 0)),
             identity_provider=data.get("identity_provider"),
             identity_issuer=data.get("identity_issuer"),
             identity_subject=data.get("identity_subject"),
@@ -239,6 +242,7 @@ class SessionManager:
         claims: Optional[dict[str, Any]] = None,
         tenant_id: Optional[str] = None,
         membership_id: Optional[str] = None,
+        membership_version: int = 0,
         identity_provider: Optional[str] = None,
         identity_issuer: Optional[str] = None,
         identity_subject: Optional[str] = None,
@@ -270,6 +274,7 @@ class SessionManager:
             claims=claims or {},
             tenant_id=tenant_id,
             membership_id=membership_id,
+            membership_version=membership_version,
             identity_provider=identity_provider,
             identity_issuer=identity_issuer,
             identity_subject=identity_subject,
