@@ -123,6 +123,14 @@ def build_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(
             "FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
         )
+        # P1.3: capability enforcement is strict by default; integration tests
+        # that test non-capability behaviour use audit-only mode so they are not
+        # blocked by capability checks. Capability enforcement correctness is
+        # covered by tests/security/test_capability_enforcement.py.
+        monkeypatch.setenv("FG_ENTITLEMENT_ENFORCEMENT", "false")
+        import api.entitlements as _ent
+
+        monkeypatch.setattr(_ent, "ENFORCEMENT_STRICT", False)
 
         loaded = _load_app_modules()
         if loaded is None:

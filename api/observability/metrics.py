@@ -189,3 +189,42 @@ INGESTION_QUEUE_DEPTH = Gauge(
     "frostgate_ingestion_queue_depth",
     "Current ingestion queue depth (pending documents)",
 )
+
+# ---------------------------------------------------------------------------
+# P1.3: Capability enforcement metrics
+# No tenant_id label — high cardinality; no sensitive data in telemetry.
+# ---------------------------------------------------------------------------
+
+CAPABILITY_CHECKS_TOTAL = Counter(
+    "frostgate_capability_checks_total",
+    "Total capability enforcement checks by capability and result",
+    ["capability", "result"],  # result: granted | denied | dep_failure | unknown
+)
+
+CAPABILITY_GRANTS_TOTAL = Counter(
+    "frostgate_capability_grants_total",
+    "Total capability checks that resolved to granted, by capability and grant source",
+    ["capability", "source"],  # source: explicit | bundle | tier
+)
+
+CAPABILITY_DENIALS_TOTAL = Counter(
+    "frostgate_capability_denials_total",
+    "Total capability checks that resolved to denied, by capability and denial reason",
+    ["capability", "reason"],  # reason: missing | dep_failure | unknown | no_tenant
+)
+
+CAPABILITY_DEPENDENCY_FAILURES_TOTAL = Counter(
+    "frostgate_capability_dependency_failures_total",
+    "Capability checks denied because a prerequisite capability was missing",
+    ["capability", "missing_dep"],
+)
+
+CAPABILITY_CACHE_HITS_TOTAL = Counter(
+    "frostgate_capability_cache_hits_total",
+    "Capability resolver cache hits (tenant capability set served from TTL cache)",
+)
+
+CAPABILITY_CACHE_MISSES_TOTAL = Counter(
+    "frostgate_capability_cache_misses_total",
+    "Capability resolver cache misses (tenant capability set fetched from DB)",
+)

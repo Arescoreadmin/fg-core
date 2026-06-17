@@ -10,8 +10,9 @@
   "governance": {
     "contract_count": 524,
     "contract_only": [],
-    "runtime_count": 663,
+    "runtime_count": 668,
     "runtime_only": [
+      "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -19,6 +20,7 @@
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/agent/version-floor",
       "GET /admin/audit/search",
+      "GET /admin/bundles",
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
       "GET /admin/devices",
@@ -50,6 +52,7 @@
       "GET /admin/system/health",
       "GET /admin/tenants",
       "GET /admin/tenants/{tenant_id}",
+      "GET /admin/tenants/{tenant_id}/bundles",
       "GET /admin/tenants/{tenant_id}/entitlements",
       "GET /admin/tenants/{tenant_id}/usage",
       "GET /admin/usage/all",
@@ -131,7 +134,9 @@
       "POST /admin/keys/{key_prefix}/rotate",
       "POST /admin/tenants",
       "POST /admin/tenants/{tenant_id}/activate",
+      "POST /admin/tenants/{tenant_id}/bundles",
       "POST /admin/tenants/{tenant_id}/entitlements",
+      "POST /admin/tenants/{tenant_id}/subscriptions",
       "POST /admin/tenants/{tenant_id}/suspend",
       "POST /control/testing/runs/register",
       "POST /dev/emit",
@@ -152,7 +157,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "b3afcdb99de0c3737e6f203fb936ec3c1acdc1525001cd9775245c42efd234d6",
+  "governance_fingerprint": "0b3f38ad26bae982f88c59a11e8ac86dde25a3b29e98f720cafa48b5c5935fe1",
   "planes": [
     {
       "compat": {
@@ -362,6 +367,7 @@
       "POST /roe/evaluate"
     ],
     "control": [
+      "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "DELETE /control-plane/v2/delegation/{delegation_id}",
       "DELETE /field-assessment/engagements/{engagement_id}/observations/{observation_id}",
@@ -375,6 +381,7 @@
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/agent/version-floor",
       "GET /admin/audit/search",
+      "GET /admin/bundles",
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
       "GET /admin/devices",
@@ -406,6 +413,7 @@
       "GET /admin/system/health",
       "GET /admin/tenants",
       "GET /admin/tenants/{tenant_id}",
+      "GET /admin/tenants/{tenant_id}/bundles",
       "GET /admin/tenants/{tenant_id}/entitlements",
       "GET /admin/tenants/{tenant_id}/usage",
       "GET /admin/usage/all",
@@ -683,7 +691,9 @@
       "POST /admin/keys/{key_prefix}/rotate",
       "POST /admin/tenants",
       "POST /admin/tenants/{tenant_id}/activate",
+      "POST /admin/tenants/{tenant_id}/bundles",
       "POST /admin/tenants/{tenant_id}/entitlements",
+      "POST /admin/tenants/{tenant_id}/subscriptions",
       "POST /admin/tenants/{tenant_id}/suspend",
       "POST /breakglass/sessions",
       "POST /compliance-cp/evidence/ingest",

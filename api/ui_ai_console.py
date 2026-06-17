@@ -20,6 +20,7 @@ from api.db_models_field_assessment import FaEngagement, FaNormalizedFinding
 from services.field_assessment.playbooks import get_playbook
 
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
+from api.entitlements import require_capability
 from api.config.env import is_production_env
 from api.rag_retrieval_policy_store import rag_rules_from_db
 from api.config_versioning import canonicalize_config, hash_config
@@ -1054,7 +1055,13 @@ def _record_usage(
     db.commit()
 
 
-@router.get("/ai", dependencies=[Depends(require_scopes("ui:read"))])
+@router.get(
+    "/ai",
+    dependencies=[
+        Depends(require_scopes("ui:read")),
+        Depends(require_capability("ai.workspace")),
+    ],
+)
 def ui_ai_page() -> Response:
     html = """
 <!doctype html><html><head><meta charset='utf-8'><title>Enterprise AI Console</title></head>
@@ -1083,7 +1090,13 @@ def ui_ai_page() -> Response:
     return Response(content=html, media_type="text/html")
 
 
-@router.get("/ai/experience", dependencies=[Depends(require_scopes("ui:read"))])
+@router.get(
+    "/ai/experience",
+    dependencies=[
+        Depends(require_scopes("ui:read")),
+        Depends(require_capability("ai.workspace")),
+    ],
+)
 def ai_experience(
     request: Request,
     response: Response,
@@ -1132,7 +1145,13 @@ def ai_experience(
     }
 
 
-@router.get("/ai/usage", dependencies=[Depends(require_scopes("ui:read", "ai:chat"))])
+@router.get(
+    "/ai/usage",
+    dependencies=[
+        Depends(require_scopes("ui:read", "ai:chat")),
+        Depends(require_capability("ai.workspace")),
+    ],
+)
 def ai_usage(
     request: Request, db: Session = Depends(tenant_db_required)
 ) -> dict[str, Any]:
@@ -1150,7 +1169,13 @@ def ai_usage(
     return {"tenant_id": tenant_id, "items": [dict(r) for r in rows]}
 
 
-@router.post("/ai/chat", dependencies=[Depends(require_scopes("ui:read", "ai:chat"))])
+@router.post(
+    "/ai/chat",
+    dependencies=[
+        Depends(require_scopes("ui:read", "ai:chat")),
+        Depends(require_capability("ai.chat")),
+    ],
+)
 def ai_chat(
     payload: AIChatRequest,
     request: Request,

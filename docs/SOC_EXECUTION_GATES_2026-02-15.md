@@ -4726,3 +4726,24 @@ New capability resolution step 3 in `check_capability()`: queries `tenant_bundle
 No cross-tenant data access. Cache keys are scoped to `tenant_id`. `invalidate_cache(tenant_id)` called synchronously on any mutation.
 
 Additional non-critical-path changes: `migrations/postgres/0118_capability_bundles.sql` (6 new tables), `api/db_models.py` (6 new ORM models), `services/capability_bundles/` (new package: resolver + seeder), `api/entitlements.py` (27 new capability key strings, resolution step 3), `tests/security/test_capability_framework.py` (16 security tests CAP-1–CAP-16).
+
+## 2026-06-17 — P1.3: Capability Enforcement Engine
+
+**Classification:** Additive enforcement layer on top of P1.2 capability resolution. `require_capability()` now fails closed (HTTP 403) on denial when `FG_ENTITLEMENT_ENFORCEMENT=true`. Dependency graph validation at startup. No auth, session, or OPA policy files changed.
+
+**Critical-path file changed:**
+- `api/security_audit.py` — 5 new `EventType` enum values for capability lifecycle events
+
+**SOC review outcome:** approved. `api/security_audit.py` change is purely additive: 5 new `EventType` enum members appended (`CAPABILITY_CHECK`, `CAPABILITY_GRANTED`, `CAPABILITY_DENIED`, `CAPABILITY_DEPENDENCY_FAILURE`, `CAPABILITY_UNKNOWN`). No existing enum values removed or renamed. No auth, session, middleware, or OPA policy files changed.
+
+`api/entitlements.py`: `require_capability()` upgraded to fail closed. Dependency chain enforcement added via BFS transitive resolution (`get_required_capabilities()`). Dynamic enforcement flag read at call time (`_env_bool("FG_ENTITLEMENT_ENFORCEMENT", ENFORCEMENT_STRICT)`) so integration tests can override via env var without module reimport. All six Prometheus metrics recorded on each enforcement decision.
+
+`services/capability_enforcement/graph.py` (new): 10-edge prerequisite graph (`DEPENDENCY_GRAPH`), BFS transitive resolver (`get_required_capabilities`), DFS cycle detector (`detect_cycles`), startup validator (`validate_graph` — raises `ValueError` on cycles or dangling references).
+
+`api/main.py`: Startup calls `validate_graph()` after bundle seeder; logs and re-raises on invalid graph in production.
+
+`api/observability/metrics.py`: 6 new Prometheus counters — `frostgate_capability_checks_total`, `frostgate_capability_grants_total`, `frostgate_capability_denials_total`, `frostgate_capability_dependency_failures_total`, `frostgate_capability_cache_hits_total`, `frostgate_capability_cache_misses_total`. No `tenant_id` label (cardinality + no sensitive data in telemetry).
+
+AI routes gated: `GET /ui/ai`, `GET /ui/ai/experience`, `GET /ui/ai/usage` → `require_capability("ai.workspace")`; `POST /ui/ai/chat` → `require_capability("ai.chat")`.
+
+Additional non-critical-path changes: `services/capability_enforcement/` (new package), `services/capability_bundles/resolver.py` (cache hit/miss metrics), `tests/security/test_capability_enforcement.py` (30 security tests CAPE-1–CAPE-16), `tests/conftest.py` (integration test fixture sets enforcement to audit-only).
