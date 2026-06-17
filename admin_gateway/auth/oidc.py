@@ -488,6 +488,7 @@ class OIDCClient:
 
         # Membership resolution — requires db; no governed session without it
         membership_id: Optional[str] = None
+        membership_version: int = 0
         resolved_tenant: Optional[str] = tenant_id or claims.get("tenant_id") or None
         role: Optional[str] = None
         binding_status: Optional[str] = None
@@ -512,6 +513,7 @@ class OIDCClient:
                     )
                     tenant_governed = True
                     membership_id = principal.membership_id
+                    membership_version = principal.membership_version
                     resolved_tenant = principal.tenant_id
                     role = principal.roles[0] if principal.roles else None
                     binding_status = principal.trust_level
@@ -549,6 +551,7 @@ class OIDCClient:
             claims=claims,
             tenant_id=resolved_tenant,
             membership_id=membership_id,
+            membership_version=membership_version,
             identity_provider="auth0",
             identity_issuer=self.config.oidc_issuer,
             identity_subject=user_id,

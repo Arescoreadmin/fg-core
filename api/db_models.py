@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -3619,6 +3620,9 @@ class TenantUser(Base):
     )
     last_identity_login_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    membership_version: Mapped[Any] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default=text("1")
     )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow

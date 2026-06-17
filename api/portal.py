@@ -498,4 +498,5 @@ def portal_identity_login(
         "role": principal.roles[0] if principal.roles else "viewer",
         "tenant_id": principal.tenant_id,
         "membership_id": principal.membership_id,
+        "membership_version": principal.membership_version,
     }

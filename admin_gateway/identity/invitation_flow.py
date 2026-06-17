@@ -503,6 +503,13 @@ def bind_identity(
     membership.identity_provider_record_id = invitation.required_provider_record_id
     membership.identity_binding_status = "bound"
     membership.identity_bound_at = membership.last_identity_login_at = _now()
+    from services.identity_resolver import (
+        membership_version_svc,
+    )  # lazy: services/ not in admin_gateway Docker image
+
+    membership_version_svc.bump_version(
+        db, membership_id=membership.id, tenant_id=tenant_id, reason="identity_bound"
+    )
     try:
         db.flush()
     except IntegrityError as exc:

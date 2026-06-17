@@ -31,6 +31,7 @@ COPY --from=builder /install /usr/local
 
 # Copy application code
 COPY --chown=app:app admin_gateway/ ./admin_gateway/
+COPY --chown=app:app services/ ./services/
 COPY contracts/ ./contracts/
 
 # Set Python path

@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
     email: user.email,
     displayName: user.display_name,
     role: user.role,
+    membershipVersion: 0,
   };
 
   const sessionToken = await createUserSessionToken(sessionUser);

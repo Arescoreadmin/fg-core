@@ -15066,3 +15066,31 @@ Five bot-review findings, all fixed:
 5. **P2 — Expired certification returned as active** (`services/quarterly_briefs/brief_service.py`): `_fetch_active_certification` filtered only on `valid_from < period_end`, not `valid_until`. A certification that expired before the period end was returned as the "active" certification for the period, causing the report to present an expired cert as current. Fixed: added `FaTrustCertification.valid_until >= period_end` to the WHERE clause. (`valid_until` is NOT NULL on this table, so no null-guard needed.)
 
 **Test count:** 83 → 83 (no new tests added — existing coverage validates the fixes; hash chain tests and expiry status tests cover the corrected behaviour)
+
+---
+
+### 2026-06-16 — P1.1: Membership Versioning + Immediate Session Revocation
+
+**Branch:** `feat/p1-1-membership-versioning`
+
+No post-merge bot fixes — recorded at implementation time.
+
+**Architecture decision:** No blocklist, no sweep jobs. `membership_version BIGINT NOT NULL DEFAULT 1` is added to `tenant_users`. Every authorization-affecting change (active, role, binding, trust level, risk state) increments it via `MembershipVersionService.bump_version()`. Sessions embed the version at issuance. A version mismatch on any governed request is an immediate hard deny (SESSION_REVOKED / SESSION_REVOKED_VERSION_MISMATCH).
+
+**Files changed (high-risk):**
+- `admin_gateway/auth/session.py` — added `membership_version: int = 0` field; updated to_dict/from_dict/create_session
+- `admin_gateway/auth/oidc.py` — embeds `principal.membership_version` in issued Session
+- `admin_gateway/auth/dependencies.py` — `require_governed_session()` extended with async DB version check; guard is `isinstance(db, AsyncSession)` to remain testable when called directly (FastAPI DI skipped)
+- `api/middleware/portal_scope.py` — new named-user engagement path: validates `X-FG-Membership-ID` + `X-FG-Membership-Version` headers against `tenant_users`; fixes proxy/core session gap (portal OIDC users can now access engagement routes)
+
+**Files changed (non-critical-path):**
+- `services/identity_resolver/versioning.py` — new `MembershipVersionService` (single authoritative bumper)
+- `services/identity_resolver/service.py` — `membership_version` in `IdentityPrincipal` and `_RESOLVE_SQL`
+- `api/db_models.py` + `migrations/postgres/0117_membership_version.sql` — schema addition
+- `api/portal.py` — `/portal/identity/login` returns `membership_version`
+- `apps/portal/lib/session.ts` — `membershipVersion: number` in `SessionUser`
+- `apps/portal/app/api/auth/oidc/callback/route.ts` — embeds `membershipVersion` in portal session cookie
+- `apps/portal/app/api/core/[...path]/route.ts` — sends `X-FG-Membership-ID` and `X-FG-Membership-Version` for named users
+- `admin_gateway/identity/audit.py` — 7 new versioning event types
+
+**Test count:** 1020 → 1035 (15 new MV tests in tests/security/test_membership_versioning.py)
