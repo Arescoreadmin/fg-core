@@ -89,3 +89,40 @@ CREATE TABLE IF NOT EXISTS tenant_bundle_assignments (
 );
 CREATE INDEX IF NOT EXISTS idx_tba_tenant
     ON tenant_bundle_assignments (tenant_id);
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security
+-- All three tenant-scoped tables require RLS (non-FA tables with tenant_id).
+-- policy_bundles / capabilities / policy_bundle_capabilities are global
+-- catalog tables (no tenant_id) and are intentionally excluded.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE tenant_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_subscriptions FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_subscriptions_tenant_isolation ON tenant_subscriptions;
+CREATE POLICY tenant_subscriptions_tenant_isolation
+    ON tenant_subscriptions
+    USING (
+        current_setting('app.tenant_id', true) IS NOT NULL
+        AND tenant_id = current_setting('app.tenant_id', true)
+    );
+
+ALTER TABLE tenant_capability_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_capability_assignments FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_capability_assignments_tenant_isolation ON tenant_capability_assignments;
+CREATE POLICY tenant_capability_assignments_tenant_isolation
+    ON tenant_capability_assignments
+    USING (
+        current_setting('app.tenant_id', true) IS NOT NULL
+        AND tenant_id = current_setting('app.tenant_id', true)
+    );
+
+ALTER TABLE tenant_bundle_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_bundle_assignments FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_bundle_assignments_tenant_isolation ON tenant_bundle_assignments;
+CREATE POLICY tenant_bundle_assignments_tenant_isolation
+    ON tenant_bundle_assignments
+    USING (
+        current_setting('app.tenant_id', true) IS NOT NULL
+        AND tenant_id = current_setting('app.tenant_id', true)
+    );
