@@ -447,6 +447,7 @@ def test_cs1_governed_session_passes():
         user_id="user-1",
         tenant_id="tenant-a",
         membership_id="mem-1",
+        membership_version=1,  # post-P1.1: 0 = pre-versioning sentinel, denied
         tenant_governed=True,
     )
 

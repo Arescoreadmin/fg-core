@@ -176,7 +176,8 @@ async def require_admin(
 
 
 _VERSION_CHECK_SQL = text(
-    "SELECT membership_version FROM tenant_users "
+    "SELECT membership_version, active, identity_binding_status "
+    "FROM tenant_users "
     "WHERE id = :mid AND tenant_id = :tid LIMIT 1"
 )
 
@@ -216,6 +217,22 @@ async def require_governed_session(
             },
         )
 
+    # Governed sessions issued before P1.1 carry membership_version=0 (sentinel).
+    # Deny them explicitly — they were issued without version binding and cannot
+    # be retroactively validated. Forces re-authentication after deployment.
+    if session.membership_version == 0:
+        log.warning(
+            "governed_session.no_version",
+            extra={"user_id": session.user_id, "membership_id": session.membership_id},
+        )
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "SESSION_REVOKED",
+                "message": "Session issued before membership versioning. Please log in again.",
+            },
+        )
+
     if isinstance(db, AsyncSession) and session.membership_id and session.tenant_id:
         row = (
             await db.execute(
@@ -224,16 +241,26 @@ async def require_governed_session(
             )
         ).one_or_none()
 
-        current_version = int(row.membership_version) if row else None
-        session_version = session.membership_version
+        if row is None:
+            log.warning(
+                "governed_session.membership_missing",
+                extra={"membership_id": session.membership_id},
+            )
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "code": "SESSION_REVOKED",
+                    "message": "Membership record not found. Please log in again.",
+                },
+            )
 
-        if current_version is None or session_version != current_version:
+        if int(row.membership_version) != session.membership_version:
             log.warning(
                 "governed_session.version_mismatch",
                 extra={
                     "membership_id": session.membership_id,
-                    "session_version": session_version,
-                    "current_version": current_version,
+                    "session_version": session.membership_version,
+                    "current_version": int(row.membership_version),
                 },
             )
             raise HTTPException(
@@ -241,6 +268,24 @@ async def require_governed_session(
                 detail={
                     "code": "SESSION_REVOKED",
                     "message": "Session revoked: membership has changed. Please log in again.",
+                },
+            )
+
+        if not row.active:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "MEMBERSHIP_INACTIVE",
+                    "message": "Membership is deactivated.",
+                },
+            )
+
+        if row.identity_binding_status != "bound":
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "MEMBERSHIP_NOT_BOUND",
+                    "message": "Membership identity binding is not active.",
                 },
             )
 

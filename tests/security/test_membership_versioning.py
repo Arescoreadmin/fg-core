@@ -15,11 +15,12 @@ Test matrix (15 tests):
     MV-7  Session.to_dict() serializes membership_version
     MV-8  Session.from_dict() round-trips membership_version
 
-  Portal scope named-user path (MV-9 through MV-12):
-    MV-9  portal_scope: named-user allowed when version matches
+  Portal scope named-user path (MV-9 through MV-12, MV-16):
+    MV-9  portal_scope: named-user allowed when version matches (global key)
     MV-10 portal_scope: named-user denied SESSION_REVOKED_VERSION_MISMATCH on stale version
     MV-11 portal_scope: named-user denied MEMBERSHIP_INACTIVE when active=False
     MV-12 portal_scope: falls back to PORTAL_SESSION_REQUIRED when no membership headers
+    MV-16 portal_scope: named-user denied PORTAL_AUTH_INVALID with tenant-scoped key
 
   Core API /portal/identity/login (MV-13 through MV-14):
     MV-13 /portal/identity/login response includes membership_version field
@@ -31,6 +32,7 @@ Test matrix (15 tests):
 
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -318,12 +320,12 @@ def test_mv8_session_from_dict_restores_membership_version():
 
 
 def test_mv9_portal_scope_named_user_allowed_on_version_match(tmp_path, monkeypatch):
-    """MV-9: PortalClientScopeMiddleware passes named-user request when version matches."""
+    """MV-9: PortalClientScopeMiddleware passes named-user request when version matches (global key)."""
     db = _make_db(tmp_path, monkeypatch, "mv9")
     user = _user(db, subject="auth0|mv9", membership_version=2, tenant_id="tenant-a")
 
     monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
-    api_key = mint_key("governance:read", tenant_id="tenant-a")
+    api_key = os.environ.get("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
     db.commit()
 
     app = build_app()
@@ -357,7 +359,7 @@ def test_mv10_portal_scope_named_user_denied_on_version_mismatch(tmp_path, monke
     user = _user(db, subject="auth0|mv10", membership_version=3, tenant_id="tenant-a")
 
     monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
-    api_key = mint_key("governance:read", tenant_id="tenant-a")
+    api_key = os.environ.get("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
     db.commit()
 
     app = build_app()
@@ -398,7 +400,7 @@ def test_mv11_portal_scope_named_user_denied_on_inactive(tmp_path, monkeypatch):
     )
 
     monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
-    api_key = mint_key("governance:read", tenant_id="tenant-a")
+    api_key = os.environ.get("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
     db.commit()
 
     app = build_app()
@@ -535,6 +537,45 @@ def test_mv14_portal_identity_login_version_matches_db(tmp_path, monkeypatch):
 
     assert resp.status_code == 200
     assert resp.json()["membership_version"] == 2
+
+    db.close()
+    reset_engine_cache()
+
+
+# ---------------------------------------------------------------------------
+# MV-16: portal_scope named-user denied when using tenant-scoped key
+# ---------------------------------------------------------------------------
+
+
+def test_mv16_portal_scope_named_user_denied_with_tenant_key(tmp_path, monkeypatch):
+    """MV-16: PortalClientScopeMiddleware rejects named-user path with tenant-scoped API key.
+
+    Only the global service account key may assert X-FG-Membership-* identity.
+    """
+    db = _make_db(tmp_path, monkeypatch, "mv16")
+    user = _user(db, subject="auth0|mv16", membership_version=1, tenant_id="tenant-a")
+
+    monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
+    # Tenant-scoped key — NOT the global service account key
+    api_key = mint_key("governance:read", tenant_id="tenant-a")
+    db.commit()
+
+    app = build_app()
+    client = TestClient(app, raise_server_exceptions=False)
+
+    resp = client.get(
+        "/field-assessment/engagements/eng-999",
+        headers={
+            "X-API-Key": api_key,
+            "X-Tenant-ID": "tenant-a",
+            "X-Portal-Source": "client-portal",
+            "X-FG-Membership-ID": user.id,
+            "X-FG-Membership-Version": "1",
+        },
+    )
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body["code"] == "PORTAL_AUTH_INVALID"
 
     db.close()
     reset_engine_cache()

@@ -85,7 +85,17 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
         ).strip()
 
         if membership_id and membership_version_raw:
-            # Named-user path (P1.1): OIDC portal user with membership versioning
+            # Named-user path (P1.1): OIDC portal user with membership versioning.
+            # X-FG-Membership-* is an internal BFF-to-core protocol. Only the portal
+            # BFF service account (global API key) may assert named-user identity;
+            # tenant-scoped API keys cannot activate this path.
+            # TODO: replace with portal:proxy scope for fine-grained enforcement.
+            auth = getattr(getattr(request, "state", None), "auth", None)
+            if getattr(auth, "reason", None) != "global_key":
+                return _json_403(
+                    "Named-user portal access requires service account authentication",
+                    "PORTAL_AUTH_INVALID",
+                )
             try:
                 session_version = int(membership_version_raw)
             except ValueError:
