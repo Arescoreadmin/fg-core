@@ -49,35 +49,8 @@ CREATE TABLE IF NOT EXISTS capabilities (
     capability_name     TEXT NOT NULL,
     capability_category TEXT NOT NULL,
     description         TEXT,
-    active              BOOLEAN NOT NULL DEFAULT TRUE,
-    -- billing_category: groups capabilities for invoice line-items (e.g. 'ai', 'portal')
-    billing_category    TEXT,
-    -- launch_stage: 'alpha'|'beta'|'ga'|'deprecated'
-    launch_stage        TEXT NOT NULL DEFAULT 'ga',
-    -- visibility: 'public'|'internal'|'hidden'
-    visibility          TEXT NOT NULL DEFAULT 'public'
+    active              BOOLEAN NOT NULL DEFAULT TRUE
 );
-
--- capability_dependencies: soft prerequisite graph (enforced by resolver/admin, not DB FK loop)
--- capability_id requires requires_id to also be granted before it is usable.
-CREATE TABLE IF NOT EXISTS capability_dependencies (
-    capability_id   TEXT NOT NULL REFERENCES capabilities(id) ON DELETE CASCADE,
-    requires_id     TEXT NOT NULL REFERENCES capabilities(id) ON DELETE CASCADE,
-    PRIMARY KEY (capability_id, requires_id)
-);
-CREATE INDEX IF NOT EXISTS idx_cap_deps_capability
-    ON capability_dependencies (capability_id);
-
--- capability_meter_mappings: maps a capability to a billing meter key
--- One capability can map to multiple meters (e.g. token_meter + document_meter).
-CREATE TABLE IF NOT EXISTS capability_meter_mappings (
-    id              TEXT PRIMARY KEY,
-    capability_id   TEXT NOT NULL REFERENCES capabilities(id) ON DELETE CASCADE,
-    meter_key       TEXT NOT NULL,
-    UNIQUE (capability_id, meter_key)
-);
-CREATE INDEX IF NOT EXISTS idx_cap_meters_capability
-    ON capability_meter_mappings (capability_id);
 
 -- policy_bundle_capabilities: many-to-many join between bundles and capabilities
 CREATE TABLE IF NOT EXISTS policy_bundle_capabilities (
@@ -116,40 +89,3 @@ CREATE TABLE IF NOT EXISTS tenant_bundle_assignments (
 );
 CREATE INDEX IF NOT EXISTS idx_tba_tenant
     ON tenant_bundle_assignments (tenant_id);
-
--- ---------------------------------------------------------------------------
--- Row Level Security
--- All three tenant-scoped tables require RLS (non-FA tables with tenant_id).
--- policy_bundles / capabilities / policy_bundle_capabilities are global
--- catalog tables (no tenant_id) and are intentionally excluded.
--- ---------------------------------------------------------------------------
-
-ALTER TABLE tenant_subscriptions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tenant_subscriptions FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_subscriptions_tenant_isolation ON tenant_subscriptions;
-CREATE POLICY tenant_subscriptions_tenant_isolation
-    ON tenant_subscriptions
-    USING (
-        current_setting('app.tenant_id', true) IS NOT NULL
-        AND tenant_id = current_setting('app.tenant_id', true)
-    );
-
-ALTER TABLE tenant_capability_assignments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tenant_capability_assignments FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_capability_assignments_tenant_isolation ON tenant_capability_assignments;
-CREATE POLICY tenant_capability_assignments_tenant_isolation
-    ON tenant_capability_assignments
-    USING (
-        current_setting('app.tenant_id', true) IS NOT NULL
-        AND tenant_id = current_setting('app.tenant_id', true)
-    );
-
-ALTER TABLE tenant_bundle_assignments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tenant_bundle_assignments FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_bundle_assignments_tenant_isolation ON tenant_bundle_assignments;
-CREATE POLICY tenant_bundle_assignments_tenant_isolation
-    ON tenant_bundle_assignments
-    USING (
-        current_setting('app.tenant_id', true) IS NOT NULL
-        AND tenant_id = current_setting('app.tenant_id', true)
-    );

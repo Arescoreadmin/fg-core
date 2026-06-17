@@ -3868,40 +3868,6 @@ class Capability(Base):
     capability_category: Mapped[Any] = mapped_column(Text, nullable=False)
     description: Mapped[Any] = mapped_column(Text, nullable=True)
     active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
-    billing_category: Mapped[Any] = mapped_column(Text, nullable=True)
-    launch_stage: Mapped[Any] = mapped_column(Text, nullable=False, default="ga")
-    visibility: Mapped[Any] = mapped_column(Text, nullable=False, default="public")
-
-
-class CapabilityDependency(Base):
-    """P1.2: Soft prerequisite graph — capability_id requires requires_id."""
-
-    __tablename__ = "capability_dependencies"
-
-    capability_id: Mapped[Any] = mapped_column(
-        Text, ForeignKey("capabilities.id", ondelete="CASCADE"), primary_key=True
-    )
-    requires_id: Mapped[Any] = mapped_column(
-        Text, ForeignKey("capabilities.id", ondelete="CASCADE"), primary_key=True
-    )
-
-
-class CapabilityMeterMapping(Base):
-    """P1.2: Maps a capability to a billing meter key for future usage-based billing."""
-
-    __tablename__ = "capability_meter_mappings"
-    __table_args__ = (
-        Index("idx_cap_meters_capability", "capability_id"),
-        UniqueConstraint("capability_id", "meter_key"),
-    )
-
-    id: Mapped[Any] = mapped_column(
-        Text, primary_key=True, default=lambda: str(uuid.uuid4())
-    )
-    capability_id: Mapped[Any] = mapped_column(
-        Text, ForeignKey("capabilities.id", ondelete="CASCADE"), nullable=False
-    )
-    meter_key: Mapped[Any] = mapped_column(Text, nullable=False)
 
 
 class PolicyBundleCapability(Base):
@@ -3970,9 +3936,3 @@ class TenantBundleAssignment(Base):
 
 # PR3 External AI Risk Register ORM registration for Base.metadata.create_all().
 import api.db_models_external_ai_risk  # noqa: F401,E402
-
-# P1.4 Subscription Assignment Engine ORM registration.
-import api.db_models_subscriptions  # noqa: F401,E402
-
-# P1.5 Billing Integration Layer ORM registration.
-import api.db_models_billing  # noqa: F401,E402

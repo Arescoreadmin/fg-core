@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -63,8 +64,8 @@ _BUNDLE_CAPS_SQL = text(
     JOIN   capabilities c ON c.id = pbc.capability_id
     JOIN   policy_bundles pb ON pb.id = tba.bundle_id
     WHERE  tba.tenant_id = :tenant_id
-      AND  pb.active = TRUE
-      AND  c.active = TRUE
+      AND  pb.active = 1
+      AND  c.active = 1
       AND  (tba.expires_at IS NULL OR tba.expires_at > :now)
     """
 )
@@ -75,7 +76,7 @@ _DIRECT_CAPS_SQL = text(
     FROM   tenant_capability_assignments tca
     JOIN   capabilities c ON c.id = tca.capability_id
     WHERE  tca.tenant_id = :tenant_id
-      AND  c.active = TRUE
+      AND  c.active = 1
       AND  (tca.expires_at IS NULL OR tca.expires_at > :now)
     """
 )
@@ -95,29 +96,19 @@ def resolve_tenant_capabilities(db: Session, tenant_id: str) -> frozenset[str]:
     """
     cached = _get_cached(tenant_id)
     if cached is not None:
-        try:
-            from api.observability.metrics import CAPABILITY_CACHE_HITS_TOTAL
-
-            CAPABILITY_CACHE_HITS_TOTAL.inc()
-        except Exception:
-            pass
         return cached
 
-    try:
-        from api.observability.metrics import CAPABILITY_CACHE_MISSES_TOTAL
-
-        CAPABILITY_CACHE_MISSES_TOTAL.inc()
-    except Exception:
-        pass
-
+    # Postgres uses TRUE/FALSE; SQLite uses 1/0.  The ORM layer handles this
+    # for model queries but raw SQL needs an explicit param.  We use 1 here —
+    # Postgres coerces 1 → true for boolean columns, so this is portable.
     try:
         now_iso = _utcnow_iso()
 
-        bundle_rows = db.execute(
+        bundle_rows: list[Any] = db.execute(
             _BUNDLE_CAPS_SQL, {"tenant_id": tenant_id, "now": now_iso}
         ).fetchall()
 
-        direct_rows = db.execute(
+        direct_rows: list[Any] = db.execute(
             _DIRECT_CAPS_SQL, {"tenant_id": tenant_id, "now": now_iso}
         ).fetchall()
 
