@@ -27,6 +27,7 @@ from admin_gateway.identity.policy import (
 )
 from admin_gateway.identity.identity_context import AuthenticatedIdentity
 from admin_gateway.identity.provider_adapter import ProviderAdapter
+from services.identity_resolver import membership_version_svc
 
 
 class IdentityFlowError(ValueError):
@@ -503,6 +504,9 @@ def bind_identity(
     membership.identity_provider_record_id = invitation.required_provider_record_id
     membership.identity_binding_status = "bound"
     membership.identity_bound_at = membership.last_identity_login_at = _now()
+    membership_version_svc.bump_version(
+        db, membership_id=membership.id, tenant_id=tenant_id, reason="identity_bound"
+    )
     try:
         db.flush()
     except IntegrityError as exc:

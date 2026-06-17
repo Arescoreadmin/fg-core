@@ -26,6 +26,7 @@ from api.db_models_identity import TenantIdentityConfig
 from api.deps import tenant_db_required
 from api.error_contracts import api_error
 from api.identity.store import TenantIdentityStore, emit_identity_audit_event
+from services.identity_resolver import membership_version_svc
 
 _log = logging.getLogger(__name__)
 _store = TenantIdentityStore()
@@ -315,6 +316,13 @@ def update_user(
         ),
         params,
     )
+    if payload.active is not None or payload.role is not None:
+        try:
+            membership_version_svc.bump_version(
+                db, membership_id=user_id, tenant_id=tenant_id, reason="workforce_update"
+            )
+        except ValueError:
+            pass  # row deleted between SELECT and UPDATE; safe to ignore
     db.commit()
     return {"ok": True, "user_id": user_id}
 
