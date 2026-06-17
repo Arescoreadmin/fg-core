@@ -238,6 +238,7 @@ def _get_report_or_404(
     "/{assessment_id}/governance-report",
     status_code=201,
     response_model=GovernanceReportResponse,
+    dependencies=[Depends(require_capability("reports.regulatory"))],
 )
 def generate_governance_report(
     assessment_id: str,
@@ -388,6 +389,7 @@ def generate_governance_report(
 @router.get(
     "/{assessment_id}/governance-report/{report_id}",
     response_model=GovernanceReportResponse,
+    dependencies=[Depends(require_capability("reports.regulatory"))],
 )
 def get_governance_report(
     assessment_id: str,
@@ -522,6 +524,7 @@ def replay_governance_report(
 
 @router.get(
     "/{assessment_id}/governance-report/{report_id}/export/html",
+    dependencies=[Depends(require_capability("reports.regulatory"))],
 )
 def export_governance_report_html(
     assessment_id: str,
@@ -568,6 +571,7 @@ def export_governance_report_html(
 
 @router.get(
     "/{assessment_id}/governance-report/{report_id}/export/manifest",
+    dependencies=[Depends(require_capability("reports.regulatory"))],
 )
 def export_governance_report_manifest(
     assessment_id: str,
