@@ -641,7 +641,8 @@
           "decisions:",
           "defend:",
           "stats:",
-          "admin:"
+          "admin:",
+          "billing:"
         ],
         "tenant_binding_required": true
       },
@@ -1151,7 +1152,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-18T16:00:29.169307+00:00",
+  "generated_at": "2026-06-18T16:29:54.167569+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

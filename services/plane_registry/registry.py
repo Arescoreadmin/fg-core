@@ -274,6 +274,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "defend:",
                 "stats:",
                 "admin:",
+                "billing:",
             ),
             require_any_scope=True,
             tenant_binding_required=True,
