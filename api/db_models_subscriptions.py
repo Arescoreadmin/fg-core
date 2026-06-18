@@ -11,6 +11,7 @@ Auto-registered via the import at the bottom of api/db_models.py.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -43,28 +44,28 @@ class SubscriptionContract(Base):
         Index("idx_sub_contracts_tenant_status", "tenant_id", "status"),
     )
 
-    id: Mapped[str] = mapped_column(
+    id: Mapped[Any] = mapped_column(
         Text, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[str] = mapped_column(Text, nullable=False)
-    contract_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    contract_ref: Mapped[Any] = mapped_column(Text, nullable=False)
     # metadata-driven package code — no hardcoded SKU names
-    sku_package: Mapped[str] = mapped_column(Text, nullable=False)
-    sku_metadata: Mapped[dict] = mapped_column(
+    sku_package: Mapped[Any] = mapped_column(Text, nullable=False)
+    sku_metadata: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=dict, server_default="{}"
     )
     # draft | active | suspended | canceled | expired
-    status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")
-    starts_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
-    ends_at: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_by: Mapped[str] = mapped_column(Text, nullable=False, default="system")
-    created_at: Mapped[str] = mapped_column(
+    status: Mapped[Any] = mapped_column(Text, nullable=False, default="draft")
+    starts_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False, default="system")
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
-    updated_at: Mapped[str] = mapped_column(
+    updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[Any] = mapped_column(Text, nullable=True)
 
 
 class SubscriptionItem(Base):
@@ -81,36 +82,36 @@ class SubscriptionItem(Base):
         Index("idx_sub_items_tenant_status", "tenant_id", "status"),
     )
 
-    id: Mapped[str] = mapped_column(
+    id: Mapped[Any] = mapped_column(
         Text, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    contract_id: Mapped[str] = mapped_column(
+    contract_id: Mapped[Any] = mapped_column(
         Text, ForeignKey("subscription_contracts.id"), nullable=False
     )
-    tenant_id: Mapped[str] = mapped_column(Text, nullable=False)
-    bundle_id: Mapped[str] = mapped_column(
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    bundle_id: Mapped[Any] = mapped_column(
         Text, ForeignKey("policy_bundles.id"), nullable=False
     )
     # metadata-driven SKU code for this line item
-    sku_code: Mapped[str] = mapped_column(Text, nullable=False)
+    sku_code: Mapped[Any] = mapped_column(Text, nullable=False)
     # meter_code wires to future usage-based billing — no billing logic here
-    meter_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meter_code: Mapped[Any] = mapped_column(Text, nullable=True)
     # active | suspended | canceled | expired
-    status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
-    starts_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
-    ends_at: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[Any] = mapped_column(Text, nullable=False, default="active")
+    starts_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
     # MSP parent subscription — inherited rights design point (not full impl)
-    parent_item_id: Mapped[str | None] = mapped_column(
+    parent_item_id: Mapped[Any] = mapped_column(
         Text, ForeignKey("subscription_items.id"), nullable=True
     )
     # FK to the synced TenantBundleAssignment created by the engine
-    bundle_assignment_id: Mapped[str | None] = mapped_column(
+    bundle_assignment_id: Mapped[Any] = mapped_column(
         Text, ForeignKey("tenant_bundle_assignments.id"), nullable=True
     )
-    created_at: Mapped[str] = mapped_column(
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
-    updated_at: Mapped[str] = mapped_column(
+    updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
 
@@ -132,25 +133,25 @@ class SubscriptionEventLedger(Base):
         Index("idx_sub_event_ledger_tenant", "tenant_id"),
     )
 
-    id: Mapped[str] = mapped_column(
+    id: Mapped[Any] = mapped_column(
         Text, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    subscription_item_id: Mapped[str] = mapped_column(
+    subscription_item_id: Mapped[Any] = mapped_column(
         Text, ForeignKey("subscription_items.id"), nullable=False
     )
-    tenant_id: Mapped[str] = mapped_column(Text, nullable=False)
-    event_type: Mapped[str] = mapped_column(Text, nullable=False)
-    event_at: Mapped[str] = mapped_column(
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    event_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    event_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
-    actor: Mapped[str] = mapped_column(Text, nullable=False, default="system")
-    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata_json: Mapped[dict] = mapped_column(
+    actor: Mapped[Any] = mapped_column(Text, nullable=False, default="system")
+    reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=dict, server_default="{}"
     )
     # SHA-256 hash chain — GENESIS for the first entry, prev entry_hash thereafter
-    prev_hash: Mapped[str] = mapped_column(Text, nullable=False, default="GENESIS")
-    entry_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    prev_hash: Mapped[Any] = mapped_column(Text, nullable=False, default="GENESIS")
+    entry_hash: Mapped[Any] = mapped_column(Text, nullable=False, unique=True)
 
 
 event.listen(SubscriptionEventLedger, "before_update", _raise_immutable)
