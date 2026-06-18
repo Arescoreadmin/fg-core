@@ -336,6 +336,7 @@ def update_meter(meter_code: str, body: UpdateUsageMeterRequest) -> UsageMeterRe
 @router.post(
     "/billing/usage/events",
     response_model=UsageEventResponse,
+    dependencies=[Depends(require_scopes("billing:write"))],
 )
 async def record_usage_event(
     body: RecordUsageEventRequest,

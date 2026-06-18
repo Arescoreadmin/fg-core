@@ -4772,3 +4772,13 @@ Additional non-critical-path changes: `api/db_models_subscriptions.py` (3 new OR
 Additional non-critical-path changes: `api/db_models_billing.py` (5 new ORM models), `services/billing/` (new package: engine, provider ABC, Stripe impl, metering, reconciliation, Pydantic schemas), `api/billing_v2.py` (15-route FastAPI router), `api/observability/metrics.py` (8 new Prometheus counters, no `tenant_id` label), `api/db_models.py` (P1.5 ORM registration import), `api/main.py` (billing_v2_router registered in both app builders), `contracts/core/openapi.json` + `schemas/api/openapi.json` + `BLUEPRINT_STAGED.md` + `CONTRACT.md` (contract authority markers updated), `tests/test_billing_engine.py` (36 tests BILL-1–BILL-35).
 
 `services/plane_registry/registry.py`: 5 additive entries — `POST /billing/webhooks/stripe` registered as `auth_exempt` in data plane (HMAC-verified); `POST /billing/usage/events` registered as `auth_exempt` (tenant-bound); `POST|GET|PATCH /admin/billing/meters` registered as `global_admin` in control plane (meter catalog is global, not tenant-scoped). No existing entries removed or modified.
+
+## 2026-06-18 — P1.5: Route scope lint fixes (follow-up)
+
+**Classification:** Security hardening follow-up to P1.5 billing layer. No new routes or ORM changes.
+
+**Critical-path files changed:**
+- `api/security/public_paths.py` — added `/billing/webhooks/stripe` to `PUBLIC_PATHS_EXACT`. This is consistent with the existing `/ingest/assessment/webhooks/stripe` pattern: endpoint is HMAC-verified via Stripe signature header; no JWT/API-key auth applies.
+- `tools/ci/route_inventory.json` — regenerated to reflect `POST /billing/usage/events` now has `billing:write` scope dependency and `auth` dependency category.
+
+**SOC review outcome:** approved. `POST /billing/webhooks/stripe` is correctly public (Stripe signature verification substitutes for scope auth; 400 on bad sig, 503 if secret unconfigured). `POST /billing/usage/events` gains explicit `billing:write` scope requirement, making the auth contract machine-readable and satisfying the route-scope lint gate. These are narrowing changes: webhook was already HMAC-gated; usage events now require an explicit scope on top of tenant binding. No auth logic weakened. No cross-tenant data access changes.

@@ -27,6 +27,7 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/agent/log/anchor",
     "/agent/config",
     "/ingest/assessment/webhooks/stripe",
+    "/billing/webhooks/stripe",
     # Single-use invite-token exchange: no prior auth exists; token IS the credential.
     # Tenant binding is enforced via tenant_db_required + DB lookup on the token itself.
     "/workforce/users/accept-invite",

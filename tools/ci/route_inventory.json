@@ -2704,6 +2704,7 @@
     },
     {
       "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/billing_v2.py",
@@ -2711,8 +2712,10 @@
       "path": "/billing/usage/events",
       "plane": "data",
       "plane_id": "data",
-      "scoped": false,
-      "scopes": [],
+      "scoped": true,
+      "scopes": [
+        "billing:write"
+      ],
       "source": "runtime-ast",
       "tenant_bound": true
     },
@@ -11847,7 +11850,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-18T14:44:29.142216+00:00",
+  "generated_at": "2026-06-18T16:00:29.160959+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
