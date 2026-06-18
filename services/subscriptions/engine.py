@@ -42,7 +42,9 @@ from services.subscriptions.models import (
 
 log = logging.getLogger("frostgate.subscriptions.engine")
 
-_VALID_CONTRACT_STATUSES = frozenset({"draft", "active", "suspended", "canceled", "expired"})
+_VALID_CONTRACT_STATUSES = frozenset(
+    {"draft", "active", "suspended", "canceled", "expired"}
+)
 _VALID_ITEM_STATUSES = frozenset({"active", "suspended", "canceled", "expired"})
 
 # ---------------------------------------------------------------------------
@@ -398,7 +400,12 @@ class SubscriptionEngine:
 
         # Write ledger event
         _append_ledger_event(
-            db, item.id, tenant_id, "created", actor, None,
+            db,
+            item.id,
+            tenant_id,
+            "created",
+            actor,
+            None,
             {"sku_code": sku_code, "bundle_id": bundle_id, "status": status},
         )
 
@@ -482,7 +489,12 @@ class SubscriptionEngine:
         # Write ledger event
         event_type = "reactivated" if status == "active" else status
         _append_ledger_event(
-            db, item.id, tenant_id, event_type, actor, reason,
+            db,
+            item.id,
+            tenant_id,
+            event_type,
+            actor,
+            reason,
             {"from_status": prev_status, "to_status": status},
         )
 
@@ -587,7 +599,10 @@ class SubscriptionEngine:
                 ResolutionLayer(
                     layer="explicit_grant",
                     result="granted",
-                    detail={"entitlement_id": explicit.id, "granted_by": explicit.granted_by},
+                    detail={
+                        "entitlement_id": explicit.id,
+                        "granted_by": explicit.granted_by,
+                    },
                 )
             )
             dep_checks = self._check_dependencies(db, tenant_id, capability)
@@ -620,7 +635,9 @@ class SubscriptionEngine:
                 tenant_id=tenant_id,
                 capability=capability,
                 decision="granted",
-                source="subscription" if sub_detail.get("via_subscription") else "bundle",
+                source="subscription"
+                if sub_detail.get("via_subscription")
+                else "bundle",
                 resolution_chain=chain,
                 dependency_checks=dep_checks,
             )
@@ -647,7 +664,9 @@ class SubscriptionEngine:
                 dependency_checks=dep_checks,
             )
         chain.append(
-            ResolutionLayer(layer="tier_default", result="denied", detail={"tier": tier})
+            ResolutionLayer(
+                layer="tier_default", result="denied", detail={"tier": tier}
+            )
         )
 
         return ExplainCapabilityResponse(
@@ -680,9 +699,7 @@ class SubscriptionEngine:
         from api.db_models import Capability, PolicyBundleCapability
 
         cap_row = (
-            db.query(Capability)
-            .filter(Capability.capability_key == capability)
-            .first()
+            db.query(Capability).filter(Capability.capability_key == capability).first()
         )
         if cap_row is None:
             return {}

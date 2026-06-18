@@ -1,4 +1,5 @@
 """services/subscriptions/models.py — Pydantic schemas for the Subscription Assignment Engine (P1.4)."""
+
 from __future__ import annotations
 
 from datetime import datetime
