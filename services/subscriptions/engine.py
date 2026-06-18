@@ -209,13 +209,13 @@ def _sync_bundle_assignment(
     else:
         # Deactivate: expire immediately
         if item.bundle_assignment_id:
-            assignment = (
+            to_expire = (
                 db.query(TenantBundleAssignment)
                 .filter(TenantBundleAssignment.id == item.bundle_assignment_id)
                 .first()
             )
-            if assignment is not None:
-                assignment.expires_at = now
+            if to_expire is not None:
+                to_expire.expires_at = now
                 db.flush()
         return None
 
