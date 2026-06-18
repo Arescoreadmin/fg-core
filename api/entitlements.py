@@ -169,6 +169,8 @@ CAPABILITY_REGISTRY: frozenset[str] = frozenset(
         # P1.2: MSP capabilities
         "msp.multi_tenant",
         "msp.white_label",
+        "msp.cross_tenant_reporting",
+        "msp.tenant_switching",
         # P1.2: Government capabilities
         "government.fedramp",
         "government.cjis",

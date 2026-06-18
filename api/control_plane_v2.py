@@ -47,6 +47,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
+from api.entitlements import require_capability
 from api.deps import auth_ctx_db_session
 from api.ratelimit import MemoryRateLimiter
 from services.cp_commands import (
@@ -1242,7 +1243,10 @@ class DelegationRevokeRequest(BaseModel):
 
 @router.post(
     "/control-plane/v2/delegation",
-    dependencies=[Depends(require_scopes("control-plane:msp:admin"))],
+    dependencies=[
+        Depends(require_scopes("control-plane:msp:admin")),
+        Depends(require_capability("msp.multi_tenant")),
+    ],
     summary="Create MSP delegation record (Phase 4)",
     status_code=201,
 )
@@ -1295,7 +1299,10 @@ def create_delegation(
 
 @router.delete(
     "/control-plane/v2/delegation/{delegation_id}",
-    dependencies=[Depends(require_scopes("control-plane:msp:admin"))],
+    dependencies=[
+        Depends(require_scopes("control-plane:msp:admin")),
+        Depends(require_capability("msp.multi_tenant")),
+    ],
     summary="Revoke an MSP delegation record (Phase 4)",
 )
 def revoke_delegation(
@@ -1344,7 +1351,10 @@ def revoke_delegation(
 
 @router.get(
     "/control-plane/v2/delegation",
-    dependencies=[Depends(require_scopes("control-plane:msp:read"))],
+    dependencies=[
+        Depends(require_scopes("control-plane:msp:read")),
+        Depends(require_capability("msp.cross_tenant_reporting")),
+    ],
     summary="List MSP delegation records (Phase 4)",
 )
 def list_delegations(

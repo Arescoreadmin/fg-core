@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.auth_scopes import require_bound_tenant, require_scopes
+from api.entitlements import require_capability
 from services.federation_extension import FederationService
 from services.federation_extension.service import FederationValidationError
 
@@ -12,7 +13,10 @@ service = FederationService()
 
 @router.post(
     "/auth/federation/validate",
-    dependencies=[Depends(require_scopes("admin:write"))],
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_capability("identity.sso")),
+    ],
 )
 def validate_federated_identity(request: Request) -> dict[str, object]:
     bound_tenant = require_bound_tenant(request)
