@@ -15181,3 +15181,59 @@ Resolution order in `check_capability()` (fully backward-compatible):
 `docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC-HIGH-002 entry added for `api/security_audit.py` change.
 
 **Tests:** 30 tests in `tests/security/test_capability_enforcement.py` — CAPE-1–4 (portal grant/deny, AI grant/deny), CAPE-5–7 (governance grant, MSP grant, dep enforcement: ai.rag requires ai.workspace), CAPE-8 (unknown capability denied), CAPE-9–10 (cache hit/miss), CAPE-11 (cross-tenant isolation), CAPE-12 (audit event types), CAPE-13 (cycle detection startup), CAPE-14 (fail-closed on resolver error), CAPE-15 (dep failure audit), CAPE-16 (enforcement off = audit-only).
+
+---
+
+### 2026-06-17 — P1.3C: Commercial Capability Enforcement
+
+**Branch:** `feat/p1-3c-commercial-capability-enforcement`  **PR:** #449
+
+**Purpose:** Gate commercial product surfaces (portal, RAG, reports) with `require_capability()`. Fix dep check bug: `resolve_tenant_capabilities()` on a fresh session missed explicit `TenantEntitlement` grants and tier grants; replaced with per-dep `check_capability()` calls.
+
+**Bot review fix (post-merge):** Dependency capability checks inside `require_capability()` were calling `resolve_tenant_capabilities(db2, tenant_id)` on a fresh session without `set_tenant_context`, missing RLS-isolated data. Replaced with `check_capability(db_dep, tenant_id, dep)` per dependency, which calls `set_tenant_context` and includes all grant sources.
+
+**Files changed:**
+
+`api/entitlements.py` — dep check replaced: `for dep in required_deps: check_capability(db_dep, tenant_id, dep)` instead of `resolve_tenant_capabilities(db2, ...)`.
+
+`api/portal.py` — `portal.access` gated on `GET /portal/me`, `DELETE /portal/sessions/{id}`; `portal.remediation` gated on `GET/POST/DELETE /portal/grants`.
+
+`api/rag_corpus_ingestion.py` — router-level `ai.document_ingestion` gate.
+
+`api/rag_corpus_console.py` — router-level `ai.rag` gate.
+
+`api/governance_report_manager.py` — `reports.regulatory` on 4 governance report routes.
+
+`api/reports_engine.py` — `reports.executive` on generate/get/finalize routes.
+
+**New files:**
+
+`tests/security/test_commercial_capability_enforcement.py` — 37 tests (COMM-1 through COMM-16 + regression COMM-9 class). Covers portal, RAG, reports, dep chain, cross-tenant isolation, audit, metrics, fail-closed, unknown capability, route inventory.
+
+---
+
+### 2026-06-18 — P1.3D: Enterprise Capability Enforcement
+
+**Branch:** `feat/p1-3d-enterprise-capability-enforcement`  **PR:** #450
+
+**Purpose:** Gate identity (SSO/SCIM), federation, workforce, and MSP delegation surfaces. Add `msp.cross_tenant_reporting` and `msp.tenant_switching` to `CAPABILITY_REGISTRY` with `→ msp.multi_tenant` dependency chains.
+
+**Files changed:**
+
+`api/entitlements.py` — added `msp.cross_tenant_reporting` and `msp.tenant_switching` to `CAPABILITY_REGISTRY`.
+
+`services/capability_enforcement/graph.py` — added `msp.cross_tenant_reporting → msp.multi_tenant` and `msp.tenant_switching → msp.multi_tenant` dependency edges.
+
+`api/admin_identity.py` — `require_capability("identity.sso")` added to `GET/PUT /admin/identity/tenants/{id}/config` and `GET /admin/identity/tenants/{id}/readiness`.
+
+`api/auth_federation.py` — `require_capability("identity.sso")` added to `POST /auth/federation/validate`. SOC-LOW entry added to `docs/SOC_ARCH_REVIEW_2026-02-15.md`.
+
+`api/workforce.py` — `require_capability("identity.scim")` added to `POST /workforce/users` and `PATCH /workforce/users/{user_id}`.
+
+`api/control_plane_v2.py` — `require_capability("msp.multi_tenant")` added to `POST/DELETE /control-plane/v2/delegation`; `require_capability("msp.cross_tenant_reporting")` added to `GET /control-plane/v2/delegation`.
+
+`tests/test_enterprise_extensions.py` — `_setup_client` now grants `identity.sso` to both test tenants; P1.3D added the capability gate on `/auth/federation/validate`, which fired 403 before the route's bearer check returned 401.
+
+**New files:**
+
+`tests/security/test_enterprise_capability_enforcement.py` — 28 tests (ENT-1 through ENT-28). Covers SSO config/readiness/federation (granted/denied), SCIM user create/update (granted/denied), dep chain failures (scim→sso, cross_tenant_reporting→multi_tenant, tenant_switching→multi_tenant), government capability registry assertions, cross-tenant MSP isolation, and route inventory checks for all 9 gated routes.
