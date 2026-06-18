@@ -586,9 +586,7 @@ def test_rem_10_missing_assessment_rejected(
 # ---------------------------------------------------------------------------
 
 
-def test_rem_11_audit_event_on_create(
-    client: TestClient, db_session: Session
-) -> None:
+def test_rem_11_audit_event_on_create(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     resp = client.post(
         "/remediation/tasks",
@@ -622,9 +620,7 @@ def test_rem_11_audit_event_on_create(
 # ---------------------------------------------------------------------------
 
 
-def test_rem_12_audit_event_on_update(
-    client: TestClient, db_session: Session
-) -> None:
+def test_rem_12_audit_event_on_update(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     task_id = client.post(
         "/remediation/tasks",
@@ -656,9 +652,7 @@ def test_rem_12_audit_event_on_update(
 # ---------------------------------------------------------------------------
 
 
-def test_rem_13_audit_event_on_close(
-    client: TestClient, db_session: Session
-) -> None:
+def test_rem_13_audit_event_on_close(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     task_id = client.post(
         "/remediation/tasks",
@@ -690,9 +684,7 @@ def test_rem_13_audit_event_on_close(
 # ---------------------------------------------------------------------------
 
 
-def test_rem_14_audit_event_on_delete(
-    client: TestClient, db_session: Session
-) -> None:
+def test_rem_14_audit_event_on_delete(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     task_id = client.post(
         "/remediation/tasks",
@@ -722,11 +714,15 @@ def test_rem_14_audit_event_on_delete(
 
     # Task row is gone but audit event is preserved
     task_row = (
-        db.query(RemediationTask).filter(RemediationTask.id == task_id).first()
-    ) if False else None  # session already closed; check via fresh session
+        (db.query(RemediationTask).filter(RemediationTask.id == task_id).first())
+        if False
+        else None
+    )  # session already closed; check via fresh session
     engine_obj = get_engine()
     with Session(engine_obj) as db2:
-        task_row = db2.query(RemediationTask).filter(RemediationTask.id == task_id).first()
+        task_row = (
+            db2.query(RemediationTask).filter(RemediationTask.id == task_id).first()
+        )
     assert task_row is None
 
 
@@ -1032,7 +1028,10 @@ def test_rem_20_full_lifecycle_audit_reconstruction(
     ).json()["id"]
 
     # Update
-    client.patch(f"/remediation/tasks/{task_id}", json={"title": "Lifecycle updated", "priority": "critical"})
+    client.patch(
+        f"/remediation/tasks/{task_id}",
+        json={"title": "Lifecycle updated", "priority": "critical"},
+    )
 
     # Close
     client.post(f"/remediation/tasks/{task_id}/close")
@@ -1084,7 +1083,9 @@ def test_rem_20_deleted_task_audit_trail_persists(
         },
     ).json()["id"]
 
-    client.patch(f"/remediation/tasks/{task_id}", json={"title": "Updated before delete"})
+    client.patch(
+        f"/remediation/tasks/{task_id}", json={"title": "Updated before delete"}
+    )
     client.delete(f"/remediation/tasks/{task_id}")
 
     engine_obj = get_engine()
@@ -1095,7 +1096,9 @@ def test_rem_20_deleted_task_audit_trail_persists(
             .order_by(RemediationTaskAudit.event_at)
             .all()
         )
-        task_row = db.query(RemediationTask).filter(RemediationTask.id == task_id).first()
+        task_row = (
+            db.query(RemediationTask).filter(RemediationTask.id == task_id).first()
+        )
 
     assert task_row is None  # task is gone
     assert len(events) == 3  # create, update, delete events all preserved
