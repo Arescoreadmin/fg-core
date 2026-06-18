@@ -316,3 +316,32 @@ BILLING_RECONCILIATION_FAILURES_TOTAL = Counter(
     "Total individual reconciliation item failures",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 13.1: Remediation Management metrics
+# No tenant_id labels — high cardinality.
+# ---------------------------------------------------------------------------
+
+REMEDIATION_TASKS_CREATED_TOTAL = Counter(
+    "frostgate_remediation_tasks_created_total",
+    "Total remediation tasks created",
+    [],
+)
+
+REMEDIATION_TASKS_CLOSED_TOTAL = Counter(
+    "frostgate_remediation_tasks_closed_total",
+    "Total remediation tasks closed",
+    [],
+)
+
+REMEDIATION_TASK_UPDATES_TOTAL = Counter(
+    "frostgate_remediation_task_updates_total",
+    "Total remediation task update operations",
+    [],
+)
+
+REMEDIATION_TASK_DENIALS_TOTAL = Counter(
+    "frostgate_remediation_task_denials_total",
+    "Total remediation task operations denied (reference violations, tenant violations)",
+    [],
+)

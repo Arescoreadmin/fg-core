@@ -224,6 +224,7 @@ def _ensure_models_imported() -> None:
     importlib.import_module("api.db_models_qtb")  # P0-9: Quarterly Trust Briefs
     importlib.import_module("api.db_models_clm")  # P0-10: CLM
     importlib.import_module("api.db_models_cgct")  # P0-11: CGCT Control Tower
+    importlib.import_module("api.db_models_remediation")  # PR 13.1: Remediation Management
 
 
 def _get_base():
