@@ -10514,8 +10514,8 @@
       "file": "api/remediation.py",
       "method": "GET",
       "path": "/remediation/tasks",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -10531,8 +10531,8 @@
       "file": "api/remediation.py",
       "method": "POST",
       "path": "/remediation/tasks",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -10548,8 +10548,8 @@
       "file": "api/remediation.py",
       "method": "DELETE",
       "path": "/remediation/tasks/{task_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -10565,8 +10565,8 @@
       "file": "api/remediation.py",
       "method": "GET",
       "path": "/remediation/tasks/{task_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -10582,8 +10582,8 @@
       "file": "api/remediation.py",
       "method": "PATCH",
       "path": "/remediation/tasks/{task_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -10599,8 +10599,8 @@
       "file": "api/remediation.py",
       "method": "GET",
       "path": "/remediation/tasks/{task_id}/allowed-transitions",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -10616,8 +10616,8 @@
       "file": "api/remediation.py",
       "method": "POST",
       "path": "/remediation/tasks/{task_id}/close",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -10633,8 +10633,8 @@
       "file": "api/remediation.py",
       "method": "POST",
       "path": "/remediation/tasks/{task_id}/transition",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11986,7 +11986,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-18T22:51:33.110911+00:00",
+  "generated_at": "2026-06-18T23:45:36.489561+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

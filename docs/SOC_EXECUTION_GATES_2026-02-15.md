@@ -1,3 +1,16 @@
+## 2026-06-18 — PR 13.2 fix: Register /remediation prefix in plane registry — 0 new routes, CI gate fix
+
+**Classification:** CI maintenance only. No product logic changes. Adds `/remediation` to the `control` plane's `route_prefixes` in `services/plane_registry/registry.py` so that the 8 remediation routes shipped in PR 13.2 satisfy the plane ownership check (`check_plane_registry: plane registry check: OK`). The routes themselves are unchanged. All scopes, tenant isolation, and auth invariants are identical to what was reviewed in the PR 13.2 SOC entry below.
+
+**SOC review:**
+- `services/plane_registry/registry.py` — added `"/remediation"` to the `control` plane's `route_prefixes` tuple. Remediation routes use `governance:` scope prefix, which is already declared as a valid scope prefix for the `control` plane (`auth_class.required_scope_prefixes`). No new ownership, no new auth surface.
+- `make route-inventory-generate` re-ran to update `tools/ci/plane_registry_snapshot.json`, `tools/ci/plane_registry_snapshot.sha256`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, and `tools/ci/topology.sha256`.
+
+**Validation evidence:**
+- `make check_plane_registry` — plane registry check: OK (no unexpected-route gaps).
+- `make route-inventory-audit` — route inventory: OK.
+- `make soc-review-sync` — OK after this entry.
+
 ## 2026-06-18 — PR 13.2: Remediation Status Workflow Engine — 2 new routes + state machine extension
 
 **Classification:** Additive extension of the PR 13.1 remediation governance surface. No auth logic changes. Both new routes require existing `governance:write` / `governance:read` scopes. No new planes. DB schema change is additive-only (nullable `reason` column; no existing rows affected). No secrets stored.
