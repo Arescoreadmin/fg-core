@@ -21,7 +21,6 @@ from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
 from services.remediation.engine import RemediationEngine
 from services.remediation.schemas import (
-    AuditEventResponse,
     CreateTaskRequest,
     RemediationConflict,
     RemediationNotFound,
