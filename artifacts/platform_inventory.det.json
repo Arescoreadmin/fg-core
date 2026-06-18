@@ -6,19 +6,11 @@
     "contracts/artifacts/evidence_runs_response.schema.json",
     "contracts/artifacts/plane_registry_response.schema.json"
   ],
-  "gaps": [
-    {
-      "details": [
-        "/subscriptions/explain-capability"
-      ],
-      "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
-      "type": "unexpected_route_prefixes"
-    }
-  ],
+  "gaps": [],
   "governance": {
-    "contract_count": 525,
+    "contract_count": 527,
     "contract_only": [],
-    "runtime_count": 678,
+    "runtime_count": 693,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -28,6 +20,10 @@
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/agent/version-floor",
       "GET /admin/audit/search",
+      "GET /admin/billing/accounts/{account_id}",
+      "GET /admin/billing/explain",
+      "GET /admin/billing/meters",
+      "GET /admin/billing/subscription-links/{link_id}",
       "GET /admin/bundles",
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
@@ -63,6 +59,9 @@
       "GET /admin/system/health",
       "GET /admin/tenants",
       "GET /admin/tenants/{tenant_id}",
+      "GET /admin/tenants/{tenant_id}/billing/account",
+      "GET /admin/tenants/{tenant_id}/billing/subscription-links",
+      "GET /admin/tenants/{tenant_id}/billing/usage",
       "GET /admin/tenants/{tenant_id}/bundles",
       "GET /admin/tenants/{tenant_id}/entitlements",
       "GET /admin/tenants/{tenant_id}/subscriptions/contracts",
@@ -118,6 +117,8 @@
       "GET /ui/scopes",
       "GET /ui/token",
       "HEAD /health",
+      "PATCH /admin/billing/accounts/{account_id}",
+      "PATCH /admin/billing/meters/{meter_code}",
       "PATCH /admin/subscriptions/contracts/{contract_id}/status",
       "PATCH /admin/subscriptions/items/{item_id}/status",
       "POST /admin/agent/commands/issue",
@@ -131,6 +132,10 @@
       "POST /admin/agent/unquarantine/{device_id}",
       "POST /admin/agent/update/rollout",
       "POST /admin/audit/export",
+      "POST /admin/billing/accounts",
+      "POST /admin/billing/meters",
+      "POST /admin/billing/subscription-links",
+      "POST /admin/billing/subscription-links/{link_id}/sync",
       "POST /admin/config/changes/{change_id}/revert",
       "POST /admin/connectors/policy",
       "POST /admin/connectors/{connector_id}/revoke",
@@ -174,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "1415e3428514c2903c7abce36abfe6092b9f0c82ac557ceaea6163234508a08a",
+  "governance_fingerprint": "98838c515c43ad1ca602683061c178b9fab87f3e382c8e86359233f700319a0a",
   "planes": [
     {
       "compat": {
@@ -249,7 +254,8 @@
         "/portal",
         "/rag",
         "/signing",
-        "/status"
+        "/status",
+        "/subscriptions"
       ]
     },
     {
@@ -398,6 +404,10 @@
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/agent/version-floor",
       "GET /admin/audit/search",
+      "GET /admin/billing/accounts/{account_id}",
+      "GET /admin/billing/explain",
+      "GET /admin/billing/meters",
+      "GET /admin/billing/subscription-links/{link_id}",
       "GET /admin/bundles",
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
@@ -433,6 +443,9 @@
       "GET /admin/system/health",
       "GET /admin/tenants",
       "GET /admin/tenants/{tenant_id}",
+      "GET /admin/tenants/{tenant_id}/billing/account",
+      "GET /admin/tenants/{tenant_id}/billing/subscription-links",
+      "GET /admin/tenants/{tenant_id}/billing/usage",
       "GET /admin/tenants/{tenant_id}/bundles",
       "GET /admin/tenants/{tenant_id}/entitlements",
       "GET /admin/tenants/{tenant_id}/subscriptions/contracts",
@@ -674,7 +687,10 @@
       "GET /rag/uploads",
       "GET /signing/public-key",
       "GET /status",
+      "GET /subscriptions/explain-capability",
       "HEAD /health",
+      "PATCH /admin/billing/accounts/{account_id}",
+      "PATCH /admin/billing/meters/{meter_code}",
       "PATCH /admin/subscriptions/contracts/{contract_id}/status",
       "PATCH /admin/subscriptions/items/{item_id}/status",
       "PATCH /field-assessment/engagements/{engagement_id}",
@@ -697,6 +713,10 @@
       "POST /admin/agent/unquarantine/{device_id}",
       "POST /admin/agent/update/rollout",
       "POST /admin/audit/export",
+      "POST /admin/billing/accounts",
+      "POST /admin/billing/meters",
+      "POST /admin/billing/subscription-links",
+      "POST /admin/billing/subscription-links/{link_id}/sync",
       "POST /admin/config/changes/{change_id}/revert",
       "POST /admin/connectors/policy",
       "POST /admin/connectors/{connector_id}/revoke",
@@ -913,6 +933,8 @@
       "POST /billing/invoices/{invoice_id}/finalize",
       "POST /billing/invoices/{invoice_id}/reproduce",
       "POST /billing/runs",
+      "POST /billing/usage/events",
+      "POST /billing/webhooks/stripe",
       "POST /defend",
       "POST /ingest",
       "POST /ingest/assessment/orgs",

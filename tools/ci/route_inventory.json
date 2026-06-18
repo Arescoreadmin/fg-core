@@ -325,6 +325,183 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "POST",
+      "path": "/admin/billing/accounts",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "GET",
+      "path": "/admin/billing/accounts/{account_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "PATCH",
+      "path": "/admin/billing/accounts/{account_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "GET",
+      "path": "/admin/billing/explain",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "GET",
+      "path": "/admin/billing/meters",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "POST",
+      "path": "/admin/billing/meters",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "PATCH",
+      "path": "/admin/billing/meters/{meter_code}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "POST",
+      "path": "/admin/billing/subscription-links",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "GET",
+      "path": "/admin/billing/subscription-links/{link_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "POST",
+      "path": "/admin/billing/subscription-links/{link_id}/sync",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate"
       ],
       "file": "api/entitlements.py",
@@ -1372,6 +1549,60 @@
       "scoped": true,
       "scopes": [
         "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/billing/account",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/billing/subscription-links",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/billing/usage",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -2470,6 +2701,35 @@
       ],
       "source": "runtime-ast",
       "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/billing_v2.py",
+      "method": "POST",
+      "path": "/billing/usage/events",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "billing:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/billing_v2.py",
+      "method": "POST",
+      "path": "/billing/webhooks/stripe",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
     },
     {
       "dependency_categories": [
@@ -11590,7 +11850,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-18T12:55:26.026752+00:00",
+  "generated_at": "2026-06-18T16:00:29.160959+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

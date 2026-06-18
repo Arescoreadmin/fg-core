@@ -482,6 +482,30 @@
           "method": "GET",
           "path": "/_legacy/ui_feed/_disabled",
           "permanent": true
+        },
+        {
+          "class_name": "global_admin",
+          "expires_at": "",
+          "justification": "P1.5 usage meter catalog creation — global operator action, no tenant scope.",
+          "method": "POST",
+          "path": "/admin/billing/meters",
+          "permanent": true
+        },
+        {
+          "class_name": "global_admin",
+          "expires_at": "",
+          "justification": "P1.5 usage meter catalog listing — global operator metadata.",
+          "method": "GET",
+          "path": "/admin/billing/meters",
+          "permanent": true
+        },
+        {
+          "class_name": "global_admin",
+          "expires_at": "",
+          "justification": "P1.5 usage meter catalog update — global operator action, no tenant scope.",
+          "method": "PATCH",
+          "path": "/admin/billing/meters/{meter_code}",
+          "permanent": true
         }
       ],
       "maturity_tag": "production-grade",
@@ -617,7 +641,8 @@
           "decisions:",
           "defend:",
           "stats:",
-          "admin:"
+          "admin:",
+          "billing:"
         ],
         "tenant_binding_required": true
       },
@@ -628,6 +653,22 @@
           "justification": "External Stripe webhook verified by HMAC signature; cannot carry API key credentials.",
           "method": "POST",
           "path": "/ingest/assessment/webhooks/stripe",
+          "permanent": true
+        },
+        {
+          "class_name": "auth_exempt",
+          "expires_at": "",
+          "justification": "P1.5 billing webhook — verified by Stripe HMAC signature; cannot carry API key credentials.",
+          "method": "POST",
+          "path": "/billing/webhooks/stripe",
+          "permanent": true
+        },
+        {
+          "class_name": "auth_exempt",
+          "expires_at": "",
+          "justification": "P1.5 usage event submission — tenant-bound via require_bound_tenant; no additional scope needed beyond tenant key.",
+          "method": "POST",
+          "path": "/billing/usage/events",
           "permanent": true
         }
       ],
@@ -1111,7 +1152,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-18T12:55:26.034380+00:00",
+  "generated_at": "2026-06-18T16:29:54.167569+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

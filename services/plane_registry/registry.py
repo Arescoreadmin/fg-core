@@ -195,6 +195,24 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "bootstrap",
                 "Legacy disabled route; blocked in prod-like mode.",
             ),
+            ex(
+                "POST",
+                "/admin/billing/meters",
+                "global_admin",
+                "P1.5 usage meter catalog creation — global operator action, no tenant scope.",
+            ),
+            ex(
+                "GET",
+                "/admin/billing/meters",
+                "global_admin",
+                "P1.5 usage meter catalog listing — global operator metadata.",
+            ),
+            ex(
+                "PATCH",
+                "/admin/billing/meters/{meter_code}",
+                "global_admin",
+                "P1.5 usage meter catalog update — global operator action, no tenant scope.",
+            ),
         ),
     ),
     PlaneDef(
@@ -256,6 +274,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "defend:",
                 "stats:",
                 "admin:",
+                "billing:",
             ),
             require_any_scope=True,
             tenant_binding_required=True,
@@ -330,6 +349,19 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "/ingest/assessment/webhooks/stripe",
                 "auth_exempt",
                 "External Stripe webhook verified by HMAC signature; cannot carry API key credentials.",
+            ),
+            ex(
+                "POST",
+                "/billing/webhooks/stripe",
+                "auth_exempt",
+                "P1.5 billing webhook — verified by Stripe HMAC signature; cannot carry API key credentials.",
+            ),
+            ex(
+                "POST",
+                "/billing/usage/events",
+                "auth_exempt",
+                "P1.5 usage event submission — tenant-bound via require_bound_tenant; "
+                "no additional scope needed beyond tenant key.",
             ),
         ),
     ),
