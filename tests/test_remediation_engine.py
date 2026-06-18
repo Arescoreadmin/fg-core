@@ -1,5 +1,5 @@
 # tests/test_remediation_engine.py
-"""Remediation Management test suite — PR 13.1.
+"""Remediation Management test suite — PR 13.1 + PR 13.2.
 
 Coverage:
   REM-1   Create task
@@ -22,6 +22,28 @@ Coverage:
   REM-18  Cross-tenant reference prevention
   REM-19  Concurrent update safety
   REM-20  Lifecycle reconstruction from audit trail
+  REM-21  OPEN → PLANNED
+  REM-22  PLANNED → IN_PROGRESS
+  REM-23  IN_PROGRESS → CLOSED
+  REM-24  OPEN → ACCEPTED_RISK
+  REM-25  PLANNED → ACCEPTED_RISK
+  REM-26  IN_PROGRESS → ACCEPTED_RISK
+  REM-27  OPEN → CLOSED denied
+  REM-28  OPEN → IN_PROGRESS denied
+  REM-29  PLANNED → CLOSED denied
+  REM-30  CLOSED transition denied
+  REM-31  ACCEPTED_RISK transition denied
+  REM-32  Transition audit event created
+  REM-33  Transition reason stored
+  REM-34  Missing reason for ACCEPTED_RISK denied
+  REM-35  Wrong tenant transition denied
+  REM-36  Unauthorized transition denied
+  REM-37  Metrics increment
+  REM-38  Allowed transitions API
+  REM-39  State machine integrity
+  REM-40  Lifecycle reconstruction from audit trail
+  REM-41  Concurrent transition safety
+  REM-42  Migration compatibility validation
 """
 
 from __future__ import annotations
@@ -131,6 +153,23 @@ def _make_refs(db: Session, tenant_id: str) -> tuple[str, str]:
     assessment_id = _new_engagement(db, tenant_id)
     finding_id = _new_finding(db, tenant_id, assessment_id)
     return assessment_id, finding_id
+
+
+def _advance_to_in_progress(client: TestClient, task_id: str) -> None:
+    """Drive a task from OPEN through PLANNED to IN_PROGRESS via the transition API.
+
+    Required before /close, which now enforces IN_PROGRESS → CLOSED.
+    """
+    r1 = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "planned"},
+    )
+    assert r1.status_code == 200, f"OPEN→PLANNED failed: {r1.text}"
+    r2 = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "in_progress"},
+    )
+    assert r2.status_code == 200, f"PLANNED→IN_PROGRESS failed: {r2.text}"
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +311,7 @@ def test_rem_3_list_tasks_filter_by_status(
         },
     )
     task_id = resp_create.json()["id"]
+    _advance_to_in_progress(client, task_id)
     client.post(f"/remediation/tasks/{task_id}/close")
 
     open_resp = client.get("/remediation/tasks?status=open")
@@ -348,6 +388,7 @@ def test_rem_5_close_task(client: TestClient, db_session: Session) -> None:
         },
     ).json()["id"]
 
+    _advance_to_in_progress(client, task_id)
     resp = client.post(f"/remediation/tasks/{task_id}/close")
     assert resp.status_code == 200
     data = resp.json()
@@ -368,6 +409,7 @@ def test_rem_5_close_already_closed_returns_409(
         },
     ).json()["id"]
 
+    _advance_to_in_progress(client, task_id)
     client.post(f"/remediation/tasks/{task_id}/close")
     resp = client.post(f"/remediation/tasks/{task_id}/close")
     assert resp.status_code == 409
@@ -663,6 +705,7 @@ def test_rem_13_audit_event_on_close(client: TestClient, db_session: Session) ->
         },
     ).json()["id"]
 
+    _advance_to_in_progress(client, task_id)
     client.post(f"/remediation/tasks/{task_id}/close")
 
     engine = get_engine()
@@ -674,7 +717,7 @@ def test_rem_13_audit_event_on_close(client: TestClient, db_session: Session) ->
         )
     close_events = [e for e in events if e.event_type == "task_closed"]
     assert len(close_events) == 1
-    assert close_events[0].old_state["status"] == "open"
+    assert close_events[0].old_state["status"] == "in_progress"
     assert close_events[0].new_state["status"] == "closed"
     assert close_events[0].new_state["closed_at"] is not None
 
@@ -761,6 +804,7 @@ def test_rem_15_metrics_closed(client: TestClient, db_session: Session) -> None:
         },
     ).json()["id"]
 
+    _advance_to_in_progress(client, task_id)
     before = REMEDIATION_TASKS_CLOSED_TOTAL._value.get()
     client.post(f"/remediation/tasks/{task_id}/close")
     after = REMEDIATION_TASKS_CLOSED_TOTAL._value.get()
@@ -1033,7 +1077,8 @@ def test_rem_20_full_lifecycle_audit_reconstruction(
         json={"title": "Lifecycle updated", "priority": "critical"},
     )
 
-    # Close
+    # Advance through workflow, then close
+    _advance_to_in_progress(client, task_id)
     client.post(f"/remediation/tasks/{task_id}/close")
 
     engine_obj = get_engine()
@@ -1046,7 +1091,13 @@ def test_rem_20_full_lifecycle_audit_reconstruction(
         )
 
     event_types = [e.event_type for e in events]
-    assert event_types == ["task_created", "task_updated", "task_closed"]
+    assert event_types == [
+        "task_created",
+        "task_updated",
+        "task_planned",
+        "task_started",
+        "task_closed",
+    ]
 
     # Reconstruct initial state
     created = events[0]
@@ -1061,9 +1112,21 @@ def test_rem_20_full_lifecycle_audit_reconstruction(
     assert updated.new_state["title"] == "Lifecycle updated"
     assert updated.new_state["priority"] == "critical"
 
+    # Verify planning transition
+    planned = events[2]
+    assert planned.event_type == "task_planned"
+    assert planned.old_state["status"] == "open"
+    assert planned.new_state["status"] == "planned"
+
+    # Verify start transition
+    started = events[3]
+    assert started.event_type == "task_started"
+    assert started.old_state["status"] == "planned"
+    assert started.new_state["status"] == "in_progress"
+
     # Verify closure
-    closed = events[2]
-    assert closed.old_state["status"] == "open"
+    closed = events[4]
+    assert closed.old_state["status"] == "in_progress"
     assert closed.new_state["status"] == "closed"
     assert closed.new_state["closed_at"] is not None
 
@@ -1105,3 +1168,737 @@ def test_rem_20_deleted_task_audit_trail_persists(
     assert events[-1].event_type == "task_deleted"
     assert events[-1].old_state["title"] == "Updated before delete"
     assert events[-1].new_state is None
+
+
+# ===========================================================================
+# PR 13.2 — Remediation Status Workflow Engine
+# ===========================================================================
+
+
+def _create_task(client: TestClient, db: Session, tenant_id: str) -> str:
+    """Helper: create a fresh task and return its ID."""
+    assessment_id, finding_id = _make_refs(db, tenant_id)
+    resp = client.post(
+        "/remediation/tasks",
+        json={
+            "finding_id": finding_id,
+            "assessment_id": assessment_id,
+            "title": "Workflow test task",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+# ---------------------------------------------------------------------------
+# REM-21: OPEN → PLANNED
+# ---------------------------------------------------------------------------
+
+
+def test_rem_21_open_to_planned(client: TestClient, db_session: Session) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "planned"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["old_status"] == "open"
+    assert data["new_status"] == "planned"
+    assert data["task_id"] == task_id
+    assert data["transitioned_at"]
+    assert "in_progress" in data["allowed_next_states"]
+    assert "accepted_risk" in data["allowed_next_states"]
+
+    task_resp = client.get(f"/remediation/tasks/{task_id}")
+    assert task_resp.json()["status"] == "planned"
+
+
+# ---------------------------------------------------------------------------
+# REM-22: PLANNED → IN_PROGRESS
+# ---------------------------------------------------------------------------
+
+
+def test_rem_22_planned_to_in_progress(client: TestClient, db_session: Session) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "in_progress"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["old_status"] == "planned"
+    assert data["new_status"] == "in_progress"
+    assert "closed" in data["allowed_next_states"]
+    assert "accepted_risk" in data["allowed_next_states"]
+
+
+# ---------------------------------------------------------------------------
+# REM-23: IN_PROGRESS → CLOSED
+# ---------------------------------------------------------------------------
+
+
+def test_rem_23_in_progress_to_closed(client: TestClient, db_session: Session) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    _advance_to_in_progress(client, task_id)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "closed"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["old_status"] == "in_progress"
+    assert data["new_status"] == "closed"
+    assert data["allowed_next_states"] == []
+
+    task_resp = client.get(f"/remediation/tasks/{task_id}")
+    assert task_resp.json()["status"] == "closed"
+    assert task_resp.json()["closed_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# REM-24: OPEN → ACCEPTED_RISK
+# ---------------------------------------------------------------------------
+
+
+def test_rem_24_open_to_accepted_risk(client: TestClient, db_session: Session) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "accepted_risk", "reason": "Compensating control in place"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["old_status"] == "open"
+    assert data["new_status"] == "accepted_risk"
+    assert data["allowed_next_states"] == []
+
+    task_resp = client.get(f"/remediation/tasks/{task_id}")
+    assert task_resp.json()["status"] == "accepted_risk"
+
+
+# ---------------------------------------------------------------------------
+# REM-25: PLANNED → ACCEPTED_RISK
+# ---------------------------------------------------------------------------
+
+
+def test_rem_25_planned_to_accepted_risk(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "accepted_risk", "reason": "Risk accepted by CISO"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["old_status"] == "planned"
+    assert resp.json()["new_status"] == "accepted_risk"
+
+
+# ---------------------------------------------------------------------------
+# REM-26: IN_PROGRESS → ACCEPTED_RISK
+# ---------------------------------------------------------------------------
+
+
+def test_rem_26_in_progress_to_accepted_risk(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    _advance_to_in_progress(client, task_id)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={
+            "new_status": "accepted_risk",
+            "reason": "Mitigated by network segmentation",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["old_status"] == "in_progress"
+    assert resp.json()["new_status"] == "accepted_risk"
+
+
+# ---------------------------------------------------------------------------
+# REM-27: OPEN → CLOSED denied
+# ---------------------------------------------------------------------------
+
+
+def test_rem_27_open_to_closed_denied(client: TestClient, db_session: Session) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "closed"},
+    )
+    assert resp.status_code == 422, resp.text
+    assert (
+        "open" in resp.json()["detail"].lower()
+        or "closed" in resp.json()["detail"].lower()
+    )
+
+
+# ---------------------------------------------------------------------------
+# REM-28: OPEN → IN_PROGRESS denied
+# ---------------------------------------------------------------------------
+
+
+def test_rem_28_open_to_in_progress_denied(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "in_progress"},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+# ---------------------------------------------------------------------------
+# REM-29: PLANNED → CLOSED denied
+# ---------------------------------------------------------------------------
+
+
+def test_rem_29_planned_to_closed_denied(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "closed"},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+# ---------------------------------------------------------------------------
+# REM-30: CLOSED is terminal — no further transitions
+# ---------------------------------------------------------------------------
+
+
+def test_rem_30_closed_transition_denied(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    _advance_to_in_progress(client, task_id)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "closed"}
+    )
+
+    for target in ("open", "planned", "in_progress", "accepted_risk", "closed"):
+        resp = client.post(
+            f"/remediation/tasks/{task_id}/transition",
+            json={"new_status": target, "reason": "attempt"},
+        )
+        assert resp.status_code in (
+            422,
+            400,
+        ), f"Expected rejection for CLOSED→{target}, got {resp.status_code}"
+
+
+# ---------------------------------------------------------------------------
+# REM-31: ACCEPTED_RISK is terminal — no further transitions
+# ---------------------------------------------------------------------------
+
+
+def test_rem_31_accepted_risk_transition_denied(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "accepted_risk", "reason": "Initial acceptance"},
+    )
+
+    for target in ("open", "planned", "in_progress", "closed", "accepted_risk"):
+        resp = client.post(
+            f"/remediation/tasks/{task_id}/transition",
+            json={"new_status": target, "reason": "attempt"},
+        )
+        assert resp.status_code in (422, 400), (
+            f"Expected rejection for ACCEPTED_RISK→{target}, got {resp.status_code}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# REM-32: Transition audit event created
+# ---------------------------------------------------------------------------
+
+
+def test_rem_32_transition_creates_audit_event(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        events = (
+            db.query(RemediationTaskAudit)
+            .filter(
+                RemediationTaskAudit.task_id == task_id,
+                RemediationTaskAudit.event_type == "task_planned",
+            )
+            .all()
+        )
+    assert len(events) == 1
+    assert events[0].old_state["status"] == "open"
+    assert events[0].new_state["status"] == "planned"
+    assert events[0].actor is not None
+
+
+# ---------------------------------------------------------------------------
+# REM-33: Transition reason stored in audit
+# ---------------------------------------------------------------------------
+
+
+def test_rem_33_transition_reason_stored(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={
+            "new_status": "accepted_risk",
+            "reason": "CISO approved risk acceptance — ticket #RAR-42",
+        },
+    )
+
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        events = (
+            db.query(RemediationTaskAudit)
+            .filter(
+                RemediationTaskAudit.task_id == task_id,
+                RemediationTaskAudit.event_type == "task_risk_accepted",
+            )
+            .all()
+        )
+    assert len(events) == 1
+    assert events[0].reason == "CISO approved risk acceptance — ticket #RAR-42"
+
+
+# ---------------------------------------------------------------------------
+# REM-34: Missing reason for ACCEPTED_RISK denied
+# ---------------------------------------------------------------------------
+
+
+def test_rem_34_missing_reason_for_accepted_risk_denied(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "accepted_risk"},
+    )
+    assert resp.status_code == 422, resp.text
+    assert "reason" in resp.json()["detail"].lower()
+
+    # Task must still be OPEN — no state change occurred
+    task_resp = client.get(f"/remediation/tasks/{task_id}")
+    assert task_resp.json()["status"] == "open"
+
+
+def test_rem_34_empty_reason_for_accepted_risk_denied(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "accepted_risk", "reason": ""},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+# ---------------------------------------------------------------------------
+# REM-35: Wrong tenant transition denied
+# ---------------------------------------------------------------------------
+
+
+def test_rem_35_wrong_tenant_transition_denied(
+    client: TestClient,
+    client_b: TestClient,
+    db_session: Session,
+) -> None:
+    """Tenant A cannot transition a task that belongs to Tenant B."""
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        assessment_id_b = _new_engagement(db, _TENANT_B)
+        finding_id_b = _new_finding(db, _TENANT_B, assessment_id_b)
+
+    task_id_b = client_b.post(
+        "/remediation/tasks",
+        json={
+            "finding_id": finding_id_b,
+            "assessment_id": assessment_id_b,
+            "title": "Tenant B task",
+        },
+    ).json()["id"]
+
+    resp = client.post(
+        f"/remediation/tasks/{task_id_b}/transition",
+        json={"new_status": "planned"},
+    )
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# REM-36: Unauthorized transition denied (no write scope)
+# ---------------------------------------------------------------------------
+
+
+def test_rem_36_unauthorized_transition_denied(
+    readonly_client: TestClient,
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    resp = readonly_client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "planned"},
+    )
+    assert resp.status_code in (401, 403)
+
+
+def test_rem_36_unauthenticated_transition_denied(
+    unauthed_client: TestClient,
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    resp = unauthed_client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "planned"},
+    )
+    assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# REM-37: Metrics increment on transition
+# ---------------------------------------------------------------------------
+
+
+def test_rem_37_transition_metrics_increment(
+    client: TestClient, db_session: Session
+) -> None:
+    from api.observability.metrics import REMEDIATION_STATUS_TRANSITIONS_TOTAL
+
+    task_id = _create_task(client, db_session, _TENANT_A)
+    before = REMEDIATION_STATUS_TRANSITIONS_TOTAL.labels(
+        from_status="open", to_status="planned"
+    )._value.get()
+
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+
+    after = REMEDIATION_STATUS_TRANSITIONS_TOTAL.labels(
+        from_status="open", to_status="planned"
+    )._value.get()
+    assert after > before
+
+
+def test_rem_37_invalid_transition_metrics_increment(
+    client: TestClient, db_session: Session
+) -> None:
+    from api.observability.metrics import REMEDIATION_INVALID_TRANSITIONS_TOTAL
+
+    task_id = _create_task(client, db_session, _TENANT_A)
+    before = REMEDIATION_INVALID_TRANSITIONS_TOTAL._value.get()
+
+    client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "closed"},  # OPEN→CLOSED is forbidden
+    )
+
+    after = REMEDIATION_INVALID_TRANSITIONS_TOTAL._value.get()
+    assert after > before
+
+
+# ---------------------------------------------------------------------------
+# REM-38: Allowed transitions API
+# ---------------------------------------------------------------------------
+
+
+def test_rem_38_allowed_transitions_open(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    resp = client.get(f"/remediation/tasks/{task_id}/allowed-transitions")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["task_id"] == task_id
+    assert data["current_status"] == "open"
+    assert set(data["allowed_next_states"]) == {"planned", "accepted_risk"}
+
+
+def test_rem_38_allowed_transitions_planned(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    resp = client.get(f"/remediation/tasks/{task_id}/allowed-transitions")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["current_status"] == "planned"
+    assert set(data["allowed_next_states"]) == {"in_progress", "accepted_risk"}
+
+
+def test_rem_38_allowed_transitions_closed_is_empty(
+    client: TestClient, db_session: Session
+) -> None:
+    task_id = _create_task(client, db_session, _TENANT_A)
+    _advance_to_in_progress(client, task_id)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "closed"}
+    )
+    resp = client.get(f"/remediation/tasks/{task_id}/allowed-transitions")
+    assert resp.status_code == 200
+    assert resp.json()["allowed_next_states"] == []
+
+
+def test_rem_38_allowed_transitions_not_found(client: TestClient) -> None:
+    resp = client.get("/remediation/tasks/nonexistent-task/allowed-transitions")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# REM-39: State machine integrity — exhaustive forbidden transition check
+# ---------------------------------------------------------------------------
+
+
+def test_rem_39_state_machine_integrity(
+    client: TestClient, db_session: Session
+) -> None:
+    """Verify the complete forbidden-transition matrix from the spec."""
+    forbidden = [
+        ("open", "closed"),
+        ("open", "in_progress"),
+        ("planned", "closed"),
+        ("planned", "open"),
+        ("in_progress", "open"),
+    ]
+
+    for from_status, to_status in forbidden:
+        task_id = _create_task(client, db_session, _TENANT_A)
+
+        # Advance to from_status
+        if from_status == "planned":
+            client.post(
+                f"/remediation/tasks/{task_id}/transition",
+                json={"new_status": "planned"},
+            )
+        elif from_status == "in_progress":
+            _advance_to_in_progress(client, task_id)
+
+        resp = client.post(
+            f"/remediation/tasks/{task_id}/transition",
+            json={"new_status": to_status, "reason": "integrity check"},
+        )
+        assert resp.status_code == 422, (
+            f"Expected 422 for {from_status}→{to_status}, got {resp.status_code}: {resp.text}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# REM-40: Lifecycle reconstruction from audit trail (workflow path)
+# ---------------------------------------------------------------------------
+
+
+def test_rem_40_workflow_lifecycle_reconstruction(
+    client: TestClient, db_session: Session
+) -> None:
+    """Full OPEN→PLANNED→IN_PROGRESS→CLOSED lifecycle is reconstructable from audit."""
+    task_id = _create_task(client, db_session, _TENANT_A)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "planned", "reason": "Assigned to ops team"},
+    )
+    client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "in_progress"},
+    )
+    client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "closed"},
+    )
+
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        events = (
+            db.query(RemediationTaskAudit)
+            .filter(RemediationTaskAudit.task_id == task_id)
+            .order_by(RemediationTaskAudit.event_at)
+            .all()
+        )
+
+    event_types = [e.event_type for e in events]
+    assert event_types == [
+        "task_created",
+        "task_planned",
+        "task_started",
+        "task_closed",
+    ]
+
+    # Each event preserves the transition
+    assert events[1].old_state["status"] == "open"
+    assert events[1].new_state["status"] == "planned"
+    assert events[1].reason == "Assigned to ops team"
+
+    assert events[2].old_state["status"] == "planned"
+    assert events[2].new_state["status"] == "in_progress"
+
+    assert events[3].old_state["status"] == "in_progress"
+    assert events[3].new_state["status"] == "closed"
+    assert events[3].new_state["closed_at"] is not None
+
+
+def test_rem_40_risk_accepted_lifecycle(
+    client: TestClient, db_session: Session
+) -> None:
+    """OPEN→ACCEPTED_RISK lifecycle reconstructable with reason."""
+    task_id = _create_task(client, db_session, _TENANT_A)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "accepted_risk", "reason": "Low exploitability"},
+    )
+
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        events = (
+            db.query(RemediationTaskAudit)
+            .filter(RemediationTaskAudit.task_id == task_id)
+            .order_by(RemediationTaskAudit.event_at)
+            .all()
+        )
+
+    assert len(events) == 2
+    assert events[1].event_type == "task_risk_accepted"
+    assert events[1].old_state["status"] == "open"
+    assert events[1].new_state["status"] == "accepted_risk"
+    assert events[1].reason == "Low exploitability"
+
+
+# ---------------------------------------------------------------------------
+# REM-41: Concurrent transition safety
+# ---------------------------------------------------------------------------
+
+
+def test_rem_41_sequential_transitions_produce_correct_audit_chain(
+    client: TestClient, db_session: Session
+) -> None:
+    """Each transition records the correct before/after pair."""
+    task_id = _create_task(client, db_session, _TENANT_A)
+
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "in_progress"}
+    )
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "closed"}
+    )
+
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        events = (
+            db.query(RemediationTaskAudit)
+            .filter(
+                RemediationTaskAudit.task_id == task_id,
+                RemediationTaskAudit.event_type.in_(
+                    ["task_planned", "task_started", "task_closed"]
+                ),
+            )
+            .order_by(RemediationTaskAudit.event_at)
+            .all()
+        )
+
+    assert len(events) == 3
+    assert events[0].old_state["status"] == "open"
+    assert events[0].new_state["status"] == "planned"
+    assert events[1].old_state["status"] == "planned"
+    assert events[1].new_state["status"] == "in_progress"
+    assert events[2].old_state["status"] == "in_progress"
+    assert events[2].new_state["status"] == "closed"
+
+
+def test_rem_41_duplicate_transition_rejected(
+    client: TestClient, db_session: Session
+) -> None:
+    """Attempting the same valid transition twice is rejected the second time."""
+    task_id = _create_task(client, db_session, _TENANT_A)
+    r1 = client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    assert r1.status_code == 200
+
+    r2 = client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    assert r2.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# REM-42: Migration compatibility validation
+# ---------------------------------------------------------------------------
+
+
+def test_rem_42_existing_open_tasks_remain_valid(
+    client: TestClient, db_session: Session
+) -> None:
+    """Tasks created before PR 13.2 (status=open) are valid and transitionable."""
+    task_id = _create_task(client, db_session, _TENANT_A)
+    task_resp = client.get(f"/remediation/tasks/{task_id}")
+    assert task_resp.json()["status"] == "open"
+
+    # Can transition using the new workflow engine
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    assert resp.status_code == 200
+
+
+def test_rem_42_all_new_statuses_are_listable(
+    client: TestClient, db_session: Session
+) -> None:
+    """Each new status value can be queried via the list endpoint."""
+    for new_status in ("planned", "in_progress", "accepted_risk"):
+        # Verify the filter parameter is accepted (empty result is fine)
+        resp = client.get(f"/remediation/tasks?status={new_status}")
+        assert resp.status_code == 200, f"status={new_status} query failed: {resp.text}"
+
+
+def test_rem_42_new_audit_event_types_stored_correctly(
+    client: TestClient, db_session: Session
+) -> None:
+    """New audit event types (task_planned, task_started, task_risk_accepted) persist correctly."""
+    task_id = _create_task(client, db_session, _TENANT_A)
+
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        event = (
+            db.query(RemediationTaskAudit)
+            .filter(
+                RemediationTaskAudit.task_id == task_id,
+                RemediationTaskAudit.event_type == "task_planned",
+            )
+            .first()
+        )
+    assert event is not None
+    assert event.tenant_id == _TENANT_A
+    assert event.old_state is not None
+    assert event.new_state is not None

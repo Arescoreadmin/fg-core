@@ -1,3 +1,21 @@
+## 2026-06-18 — PR 13.2: Remediation Status Workflow Engine — 2 new routes + state machine extension
+
+**Classification:** Additive extension of the PR 13.1 remediation governance surface. No auth logic changes. Both new routes require existing `governance:write` / `governance:read` scopes. No new planes. DB schema change is additive-only (nullable `reason` column; no existing rows affected). No secrets stored.
+
+**SOC review:**
+- `POST /remediation/tasks/{task_id}/transition` — governed status transition endpoint; enforces 5-state machine (OPEN → PLANNED → IN_PROGRESS → CLOSED; ACCEPTED_RISK reachable from any active state; CLOSED and ACCEPTED_RISK are terminal). Requires `governance:write`. All transitions are tenant-scoped (tenant from auth context only). Every transition produces an append-only `RemediationTaskAudit` event with `old_state`, `new_state`, `actor`, `reason`, `event_at`. Forbidden transitions (e.g. OPEN→CLOSED, PLANNED→CLOSED, CLOSED→*) return 422. ACCEPTED_RISK transition requires non-empty `reason` — request rejected without it. Invalid transition increments `frostgate_remediation_invalid_transitions_total`.
+- `GET /remediation/tasks/{task_id}/allowed-transitions` — read-only; returns `{ current_status, allowed_next_states }` for a task. Requires `governance:read`. No state mutation.
+- `close_task()` (existing `/close` route) — now delegates through `transition_status()` so state machine is enforced on all code paths. Only IN_PROGRESS → CLOSED is valid; OPEN → CLOSED is now rejected with 422.
+- Migration `0119_remediation_workflow_engine.sql` — adds nullable `reason TEXT` column to `remediation_task_audits` (backward safe: all existing rows get NULL). Adds composite index `(tenant_id, status, created_at DESC)` for future reporting.
+
+**Artifacts regenerated:**
+- `make route-inventory-generate` updated `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256`.
+- `scripts/refresh_contract_authority.py` refreshed `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `contracts/core/openapi.json`, and `schemas/api/openapi.json` (sha256=5e02b0e6e4d4b765a87addba227ef43bc613d90ecc20609e4a0c68ce3010b4dc).
+
+**Validation evidence:**
+- `pytest tests/test_remediation_engine.py -q` — 74 passed (covers REM-1 through REM-42, all transition paths, forbidden transitions, ACCEPTED_RISK reason enforcement, tenant isolation, metric increments, audit reconstruction).
+- `make fg-fast` — all gates passed locally.
+
 ## 2026-06-03 — PR 52.5 Regulatory-Grade Verification Bundle Hardening: 1 new route + 10 hardening items
 
 **Classification:** Additive extension of existing verification bundle surface. No new auth logic. New download route requires `governance:read`. No secrets stored. DB append-only enforcement added via Postgres triggers (migration 0087). No cross-tenant data access.

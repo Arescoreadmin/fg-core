@@ -2,6 +2,7 @@
 """SQLAlchemy ORM models for the Remediation Management subsystem.
 
 PR 13.1 — Remediation Management Foundation.
+PR 13.2 — Remediation Status Workflow Engine.
 
 Imported by api.db._ensure_models_imported() so init_db() creates the tables.
 
@@ -79,6 +80,8 @@ class RemediationTaskAudit(Base):
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
     old_state: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     new_state: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # PR 13.2: transition reason — required for ACCEPTED_RISK, optional otherwise
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     event_at: Mapped[str] = mapped_column(String(64), nullable=False)
 
     __table_args__ = (

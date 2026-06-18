@@ -10597,8 +10597,42 @@
         "tenant"
       ],
       "file": "api/remediation.py",
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/allowed-transitions",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation.py",
       "method": "POST",
       "path": "/remediation/tasks/{task_id}/close",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation.py",
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/transition",
       "plane": "unmapped",
       "plane_id": "unmapped",
       "scoped": true,
@@ -11952,7 +11986,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-18T19:30:08.118394+00:00",
+  "generated_at": "2026-06-18T22:51:33.110911+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

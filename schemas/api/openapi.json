@@ -2221,6 +2221,34 @@
         "title": "AlertRunSummaryResponse",
         "type": "object"
       },
+      "AllowedTransitionsResponse": {
+        "additionalProperties": false,
+        "description": "Response for GET /remediation/tasks/{task_id}/allowed-transitions.",
+        "properties": {
+          "allowed_next_states": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Next States",
+            "type": "array"
+          },
+          "current_status": {
+            "title": "Current Status",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "current_status",
+          "allowed_next_states"
+        ],
+        "title": "AllowedTransitionsResponse",
+        "type": "object"
+      },
       "AnomalyResponse": {
         "properties": {
           "anomaly_id": {
@@ -17032,6 +17060,17 @@
         "title": "RemediationRoadmapResponse",
         "type": "object"
       },
+      "RemediationStatus": {
+        "enum": [
+          "open",
+          "planned",
+          "in_progress",
+          "closed",
+          "accepted_risk"
+        ],
+        "title": "RemediationStatus",
+        "type": "string"
+      },
       "ReplayContractResponse": {
         "properties": {
           "canonical_inputs_hash": {
@@ -20064,6 +20103,44 @@
         "title": "TransitionRecoveryRequest",
         "type": "object"
       },
+      "TransitionResponse": {
+        "additionalProperties": false,
+        "description": "Response for a successful status transition.",
+        "properties": {
+          "allowed_next_states": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Next States",
+            "type": "array"
+          },
+          "new_status": {
+            "title": "New Status",
+            "type": "string"
+          },
+          "old_status": {
+            "title": "Old Status",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "transitioned_at": {
+            "title": "Transitioned At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "old_status",
+          "new_status",
+          "transitioned_at",
+          "allowed_next_states"
+        ],
+        "title": "TransitionResponse",
+        "type": "object"
+      },
       "TransitionRetentionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -20116,6 +20193,33 @@
           "to_state"
         ],
         "title": "TransitionStateRequest",
+        "type": "object"
+      },
+      "TransitionTaskRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /remediation/tasks/{task_id}/transition.",
+        "properties": {
+          "new_status": {
+            "$ref": "#/components/schemas/RemediationStatus"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Transition rationale. Required for ACCEPTED_RISK.",
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "new_status"
+        ],
+        "title": "TransitionTaskRequest",
         "type": "object"
       },
       "TraversalResponse": {
@@ -56903,6 +57007,64 @@
         ]
       }
     },
+    "/remediation/tasks/{task_id}/allowed-transitions": {
+      "get": {
+        "operationId": "get_allowed_transitions_remediation_tasks__task_id__allowed_transitions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllowedTransitionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Allowed Transitions",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
     "/remediation/tasks/{task_id}/close": {
       "post": {
         "operationId": "close_remediation_task_remediation_tasks__task_id__close_post",
@@ -56956,6 +57118,74 @@
           }
         },
         "summary": "Close Remediation Task",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
+    "/remediation/tasks/{task_id}/transition": {
+      "post": {
+        "operationId": "transition_remediation_task_remediation_tasks__task_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransitionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Remediation Task",
         "tags": [
           "remediation"
         ]

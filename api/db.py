@@ -642,6 +642,12 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             # PR 55 — PDF ingestion: content_type provenance column
             _sqlite_add_column_if_missing(conn, "rag_documents", "content_type", "TEXT")
 
+        # PR 13.2 — Remediation Workflow Engine: add reason column to audit table
+        if "remediation_task_audits" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "remediation_task_audits", "reason", "TEXT"
+            )
+
         # (The rest of your large sqlite schema block continues unchanged)
         # NOTE: You pasted duplicated ai_policy_violations creation twice; leaving it as-is is sloppy.
         # If you want it fixed: remove the duplicate block.

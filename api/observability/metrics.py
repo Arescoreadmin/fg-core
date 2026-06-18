@@ -345,3 +345,21 @@ REMEDIATION_TASK_DENIALS_TOTAL = Counter(
     "Total remediation task operations denied (reference violations, tenant violations)",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 13.2: Remediation Workflow Engine metrics
+# from_status/to_status labels are safe — bounded cardinality (5 states × 5 = 25 max).
+# No tenant_id labels.
+# ---------------------------------------------------------------------------
+
+REMEDIATION_STATUS_TRANSITIONS_TOTAL = Counter(
+    "frostgate_remediation_status_transitions_total",
+    "Total valid remediation task status transitions",
+    ["from_status", "to_status"],
+)
+
+REMEDIATION_INVALID_TRANSITIONS_TOTAL = Counter(
+    "frostgate_remediation_invalid_transitions_total",
+    "Total rejected remediation task status transition attempts",
+    [],
+)

@@ -2,6 +2,7 @@
 """Domain enums, exceptions, and Pydantic schemas for the Remediation subsystem.
 
 PR 13.1 — Remediation Management Foundation.
+PR 13.2 — Remediation Status Workflow Engine.
 """
 
 from __future__ import annotations
@@ -27,14 +28,19 @@ class RemediationPriority(str, Enum):
 
 class RemediationStatus(str, Enum):
     OPEN = "open"
+    PLANNED = "planned"
+    IN_PROGRESS = "in_progress"
     CLOSED = "closed"
-    # PR 13.2 will add: in_progress, pending_verification, accepted_risk, etc.
+    ACCEPTED_RISK = "accepted_risk"
 
 
 class RemediationAuditEventType(str, Enum):
     TASK_CREATED = "task_created"
     TASK_UPDATED = "task_updated"
+    TASK_PLANNED = "task_planned"
+    TASK_STARTED = "task_started"
     TASK_CLOSED = "task_closed"
+    TASK_RISK_ACCEPTED = "task_risk_accepted"
     TASK_DELETED = "task_deleted"
 
 
@@ -61,6 +67,10 @@ class RemediationReferenceError(RemediationError):
 
 class RemediationConflict(RemediationError):
     """Operation conflicts with current task state (e.g., closing an already-closed task)."""
+
+
+class RemediationInvalidTransition(RemediationError):
+    """Requested status transition is not permitted by the workflow state machine."""
 
 
 # ---------------------------------------------------------------------------
@@ -157,4 +167,40 @@ class AuditEventResponse(BaseModel):
     actor: str
     old_state: dict[str, Any] | None
     new_state: dict[str, Any] | None
+    reason: str | None
     event_at: str
+
+
+class TransitionTaskRequest(BaseModel):
+    """Request body for POST /remediation/tasks/{task_id}/transition."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    new_status: RemediationStatus
+    reason: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Transition rationale. Required for ACCEPTED_RISK.",
+    )
+
+
+class TransitionResponse(BaseModel):
+    """Response for a successful status transition."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    old_status: str
+    new_status: str
+    transitioned_at: str
+    allowed_next_states: list[str]
+
+
+class AllowedTransitionsResponse(BaseModel):
+    """Response for GET /remediation/tasks/{task_id}/allowed-transitions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    current_status: str
+    allowed_next_states: list[str]

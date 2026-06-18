@@ -3007,8 +3007,20 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/allowed-transitions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/remediation/tasks/{task_id}/close",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/transition",
       "scopes": [],
       "source": "contract"
     },
@@ -3199,7 +3211,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-18T19:30:08.130880+00:00",
+  "generated_at": "2026-06-18T22:51:33.123309+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

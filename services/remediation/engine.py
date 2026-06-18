@@ -2,21 +2,29 @@
 """Remediation Engine — authoritative service layer for the Remediation subsystem.
 
 PR 13.1 — Remediation Management Foundation.
+PR 13.2 — Remediation Status Workflow Engine.
 
 All public methods are tenant-scoped. No direct ORM access from routes.
 Caller (route handler) owns db.commit() — every method prepares the
 transaction but does not commit, enabling atomic route-level commits.
 
+State machine (PR 13.2):
+  OPEN → PLANNED → IN_PROGRESS → CLOSED
+  OPEN | PLANNED | IN_PROGRESS → ACCEPTED_RISK (terminal, risk-bearing)
+  CLOSED and ACCEPTED_RISK are terminal — no further transitions.
+
 Extension points (future PRs):
-  - PR 13.2: status workflow engine (add transition_task(), validate_transition())
   - PR 13.3: SLA engine (add sla_config to task_metadata, compute_sla_breach())
   - PR 13.4: portal integration (add portal_task_id linkage)
-  - PR 13.5: notification hooks (emit_notification() after every mutation)
-  - Risk acceptance: task_metadata["risk_acceptance"] reserved
+  - PR 13.5: notification hooks (emit_notification() after every transition)
+  - PR 14:   risk acceptance workflow (enrich ACCEPTED_RISK with evidence links)
+  - PR 15:   evidence verification (attach evidence_id to IN_PROGRESS tasks)
+  - PR 17:   verification engine (reopen via separate workflow, not direct transition)
   - Compensating controls: task_metadata["compensating_controls"] reserved
   - Control mapping: task_metadata["control_mappings"] reserved
   - Governance correlation: task_metadata["governance_refs"] reserved
   - Autonomous governance: actor_type field planned for future extension
+  - CGIN event hooks: emit_lifecycle_event() stubs for future integration
 """
 
 from __future__ import annotations
@@ -29,10 +37,12 @@ from sqlalchemy.orm import Session
 
 from api.db_models_remediation import RemediationTask, RemediationTaskAudit
 from api.observability.metrics import (
+    REMEDIATION_INVALID_TRANSITIONS_TOTAL,
+    REMEDIATION_STATUS_TRANSITIONS_TOTAL,
     REMEDIATION_TASK_DENIALS_TOTAL,
+    REMEDIATION_TASK_UPDATES_TOTAL,
     REMEDIATION_TASKS_CLOSED_TOTAL,
     REMEDIATION_TASKS_CREATED_TOTAL,
-    REMEDIATION_TASK_UPDATES_TOTAL,
 )
 from services.remediation.repository import (
     apply_task_updates,
@@ -49,18 +59,78 @@ from services.remediation.repository import (
     snapshot_task,
 )
 from services.remediation.schemas import (
+    AllowedTransitionsResponse,
     AuditEventResponse,
     CreateTaskRequest,
     RemediationAuditEventType,
     RemediationConflict,
-    RemediationNotFound,
-    RemediationPriority,
+    RemediationInvalidTransition,
     RemediationStatus,
-    RemediationTenantViolation,
     TaskListResponse,
     TaskResponse,
+    TransitionResponse,
+    TransitionTaskRequest,
     UpdateTaskRequest,
 )
+
+# ---------------------------------------------------------------------------
+# State machine definition
+# ---------------------------------------------------------------------------
+
+# Authoritative transition map. Keys are current states; values are permitted
+# target states.  All other transitions are rejected with RemediationInvalidTransition.
+#
+# Future PR 17 (verification engine) will reopen CLOSED tasks through a
+# separate compensating workflow — it will NOT add CLOSED → OPEN here.
+_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    RemediationStatus.OPEN.value: {
+        RemediationStatus.PLANNED.value,
+        RemediationStatus.ACCEPTED_RISK.value,
+    },
+    RemediationStatus.PLANNED.value: {
+        RemediationStatus.IN_PROGRESS.value,
+        RemediationStatus.ACCEPTED_RISK.value,
+    },
+    RemediationStatus.IN_PROGRESS.value: {
+        RemediationStatus.CLOSED.value,
+        RemediationStatus.ACCEPTED_RISK.value,
+    },
+    RemediationStatus.CLOSED.value: set(),
+    RemediationStatus.ACCEPTED_RISK.value: set(),
+}
+
+# Map each (from, to) pair to the audit event type that documents it.
+_TRANSITION_EVENT: dict[tuple[str, str], RemediationAuditEventType] = {
+    (
+        RemediationStatus.OPEN.value,
+        RemediationStatus.PLANNED.value,
+    ): RemediationAuditEventType.TASK_PLANNED,
+    (
+        RemediationStatus.PLANNED.value,
+        RemediationStatus.IN_PROGRESS.value,
+    ): RemediationAuditEventType.TASK_STARTED,
+    (
+        RemediationStatus.IN_PROGRESS.value,
+        RemediationStatus.CLOSED.value,
+    ): RemediationAuditEventType.TASK_CLOSED,
+    (
+        RemediationStatus.OPEN.value,
+        RemediationStatus.ACCEPTED_RISK.value,
+    ): RemediationAuditEventType.TASK_RISK_ACCEPTED,
+    (
+        RemediationStatus.PLANNED.value,
+        RemediationStatus.ACCEPTED_RISK.value,
+    ): RemediationAuditEventType.TASK_RISK_ACCEPTED,
+    (
+        RemediationStatus.IN_PROGRESS.value,
+        RemediationStatus.ACCEPTED_RISK.value,
+    ): RemediationAuditEventType.TASK_RISK_ACCEPTED,
+}
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
 
 
 def _utcnow() -> str:
@@ -101,8 +171,14 @@ def _audit_to_response(audit: RemediationTaskAudit) -> AuditEventResponse:
         actor=audit.actor,
         old_state=audit.old_state,
         new_state=audit.new_state,
+        reason=audit.reason,
         event_at=audit.event_at,
     )
+
+
+# ---------------------------------------------------------------------------
+# Engine
+# ---------------------------------------------------------------------------
 
 
 class RemediationEngine:
@@ -111,6 +187,108 @@ class RemediationEngine:
     def __init__(self, db: Session, *, tenant_id: str) -> None:
         self._db = db
         self._tenant_id = tenant_id
+
+    # ------------------------------------------------------------------
+    # State machine (PR 13.2)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def validate_transition(from_status: str, to_status: str) -> None:
+        """Raise RemediationInvalidTransition if the transition is forbidden.
+
+        Called before any state change. Centralises all workflow logic so
+        routes, tests, and future integrations have a single enforcement point.
+        """
+        allowed = _ALLOWED_TRANSITIONS.get(from_status, set())
+        if to_status not in allowed:
+            allowed_list = sorted(allowed) if allowed else []
+            msg = (
+                f"Transition '{from_status}' → '{to_status}' is not permitted. "
+                f"Allowed from '{from_status}': {allowed_list or 'none (terminal state)'}."
+            )
+            raise RemediationInvalidTransition(msg)
+
+    @staticmethod
+    def allowed_transitions(current_status: str) -> list[str]:
+        """Return the sorted list of states reachable from current_status."""
+        return sorted(_ALLOWED_TRANSITIONS.get(current_status, set()))
+
+    def get_allowed_transitions(self, *, task_id: str) -> AllowedTransitionsResponse:
+        """Return allowed next states for a specific task."""
+        task = fetch_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
+        return AllowedTransitionsResponse(
+            task_id=task.id,
+            current_status=task.status,
+            allowed_next_states=self.allowed_transitions(task.status),
+        )
+
+    def transition_status(
+        self,
+        *,
+        task_id: str,
+        request: TransitionTaskRequest,
+        actor: str,
+    ) -> TransitionResponse:
+        """Execute a governed status transition on a task.
+
+        Validates:
+          - Transition is permitted by the state machine
+          - reason is provided when transitioning to ACCEPTED_RISK
+
+        Emits: task_planned | task_started | task_closed | task_risk_accepted
+        Increments: frostgate_remediation_status_transitions_total{from,to}
+        """
+        new_status = request.new_status.value
+        reason = request.reason
+
+        if new_status == RemediationStatus.ACCEPTED_RISK.value and not reason:
+            REMEDIATION_INVALID_TRANSITIONS_TOTAL.inc()
+            raise RemediationInvalidTransition(
+                "reason is required when transitioning to 'accepted_risk'."
+            )
+
+        task = fetch_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
+        old_status = task.status
+
+        try:
+            self.validate_transition(old_status, new_status)
+        except RemediationInvalidTransition:
+            REMEDIATION_INVALID_TRANSITIONS_TOTAL.inc()
+            raise
+
+        old_state = snapshot_task(task)
+        now = _utcnow()
+
+        updates: dict[str, Any] = {"status": new_status, "updated_at": now}
+        if new_status == RemediationStatus.CLOSED.value:
+            updates["closed_at"] = now
+
+        apply_task_updates(task, updates=updates)
+        new_state = snapshot_task(task)
+
+        event_type = _TRANSITION_EVENT[(old_status, new_status)]
+        self._emit_audit(
+            task_id=task.id,
+            event_type=event_type,
+            actor=actor,
+            old_state=old_state,
+            new_state=new_state,
+            reason=reason,
+        )
+
+        REMEDIATION_STATUS_TRANSITIONS_TOTAL.labels(
+            from_status=old_status, to_status=new_status
+        ).inc()
+        if new_status == RemediationStatus.CLOSED.value:
+            REMEDIATION_TASKS_CLOSED_TOTAL.inc()
+
+        return TransitionResponse(
+            task_id=task.id,
+            old_status=old_status,
+            new_status=new_status,
+            transitioned_at=now,
+            allowed_next_states=self.allowed_transitions(new_status),
+        )
 
     # ------------------------------------------------------------------
     # Create
@@ -275,7 +453,7 @@ class RemediationEngine:
         return _task_to_response(task)
 
     # ------------------------------------------------------------------
-    # Close
+    # Close (convenience wrapper over transition_status)
     # ------------------------------------------------------------------
 
     def close_task(
@@ -284,38 +462,26 @@ class RemediationEngine:
         task_id: str,
         actor: str,
     ) -> TaskResponse:
-        """Transition a task to closed state.
+        """Transition a task to CLOSED via the state machine.
+
+        Requires current status to be IN_PROGRESS (enforced by state machine).
+        Delegates to transition_status() so audit, metrics, and state validation
+        are handled identically regardless of call path.
 
         Emits: task_closed audit event (REM-13)
-        Increments: frostgate_remediation_tasks_closed_total
+        Increments: frostgate_remediation_tasks_closed_total (via transition_status)
         """
         task = fetch_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
 
         if task.status == RemediationStatus.CLOSED.value:
             raise RemediationConflict(f"task_id={task_id!r} is already closed")
 
-        old_state = snapshot_task(task)
-        now = _utcnow()
-        apply_task_updates(
-            task,
-            updates={
-                "status": RemediationStatus.CLOSED.value,
-                "closed_at": now,
-                "updated_at": now,
-            },
+        req = TransitionTaskRequest(new_status=RemediationStatus.CLOSED, reason=None)
+        self.transition_status(task_id=task_id, request=req, actor=actor)
+        # Re-fetch to return the updated task state
+        return _task_to_response(
+            fetch_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
         )
-        new_state = snapshot_task(task)
-
-        self._emit_audit(
-            task_id=task.id,
-            event_type=RemediationAuditEventType.TASK_CLOSED,
-            actor=actor,
-            old_state=old_state,
-            new_state=new_state,
-        )
-
-        REMEDIATION_TASKS_CLOSED_TOTAL.inc()
-        return _task_to_response(task)
 
     # ------------------------------------------------------------------
     # Delete
@@ -356,7 +522,7 @@ class RemediationEngine:
     ) -> list[AuditEventResponse]:
         """Return the full ordered audit trail for a task.
 
-        Used for lifecycle reconstruction (REM-20).
+        Used for lifecycle reconstruction (REM-20, REM-40).
         The task itself may have been deleted; audit events persist.
         """
         events = fetch_audit_events(
@@ -378,6 +544,7 @@ class RemediationEngine:
         actor: str,
         old_state: dict[str, Any] | None,
         new_state: dict[str, Any] | None,
+        reason: str | None = None,
     ) -> None:
         audit = RemediationTaskAudit(
             id=_new_id(),
@@ -387,6 +554,7 @@ class RemediationEngine:
             actor=actor,
             old_state=old_state,
             new_state=new_state,
+            reason=reason,
             event_at=_utcnow(),
         )
         insert_audit_event(self._db, audit=audit)

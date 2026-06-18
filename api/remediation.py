@@ -2,6 +2,7 @@
 """Remediation Management API router.
 
 PR 13.1 — Remediation Management Foundation.
+PR 13.2 — Remediation Status Workflow Engine.
 
 All routes are tenant-scoped. Tenant is resolved from auth context only —
 never from the request body.
@@ -10,6 +11,7 @@ Security invariants:
   - tenant_id always from auth context via require_bound_tenant()
   - No route bypasses tenant checks, scope checks, or audit generation
   - No direct ORM access — all DB ops go through RemediationEngine
+  - All status transitions enforced by RemediationEngine.validate_transition()
 """
 
 from __future__ import annotations
@@ -21,13 +23,17 @@ from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
 from services.remediation.engine import RemediationEngine
 from services.remediation.schemas import (
+    AllowedTransitionsResponse,
     CreateTaskRequest,
     RemediationConflict,
+    RemediationInvalidTransition,
     RemediationNotFound,
     RemediationReferenceError,
     RemediationTenantViolation,
     TaskListResponse,
     TaskResponse,
+    TransitionResponse,
+    TransitionTaskRequest,
     UpdateTaskRequest,
 )
 
@@ -161,6 +167,63 @@ def update_remediation_task(
 
 
 # ---------------------------------------------------------------------------
+# POST /remediation/tasks/{task_id}/transition  (PR 13.2)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/remediation/tasks/{task_id}/transition",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=TransitionResponse,
+)
+def transition_remediation_task(
+    task_id: str,
+    body: TransitionTaskRequest,
+    request: Request,
+) -> TransitionResponse:
+    tenant_id = require_bound_tenant(request)
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        engine = RemediationEngine(db, tenant_id=tenant_id)
+        try:
+            result = engine.transition_status(
+                task_id=task_id,
+                request=body,
+                actor=_actor(request),
+            )
+            db.commit()
+        except RemediationNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except RemediationInvalidTransition as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# GET /remediation/tasks/{task_id}/allowed-transitions  (PR 13.2)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/remediation/tasks/{task_id}/allowed-transitions",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=AllowedTransitionsResponse,
+)
+def get_allowed_transitions(
+    task_id: str,
+    request: Request,
+) -> AllowedTransitionsResponse:
+    tenant_id = require_bound_tenant(request)
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        engine = RemediationEngine(db, tenant_id=tenant_id)
+        try:
+            return engine.get_allowed_transitions(task_id=task_id)
+        except RemediationNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
 # POST /remediation/tasks/{task_id}/close
 # ---------------------------------------------------------------------------
 
@@ -185,6 +248,8 @@ def close_remediation_task(
             raise HTTPException(status_code=404, detail=str(exc))
         except RemediationConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc))
+        except RemediationInvalidTransition as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
     return result
 
 
