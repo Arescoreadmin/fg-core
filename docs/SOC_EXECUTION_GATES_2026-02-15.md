@@ -4773,6 +4773,18 @@ Additional non-critical-path changes: `api/db_models_billing.py` (5 new ORM mode
 
 `services/plane_registry/registry.py`: 5 additive entries — `POST /billing/webhooks/stripe` registered as `auth_exempt` in data plane (HMAC-verified); `POST /billing/usage/events` registered as `auth_exempt` (tenant-bound); `POST|GET|PATCH /admin/billing/meters` registered as `global_admin` in control plane (meter catalog is global, not tenant-scoped). No existing entries removed or modified.
 
+## 2026-06-18 — PR 13.1: Remediation Management Foundation
+
+**Classification:** Additive remediation management layer. New bounded context `services/remediation/` — no logic added to `field_assessment.py`. No auth, session, middleware, or OPA policy files changed. All routes require `governance:read` or `governance:write` scope via existing `require_scopes()` + `require_bound_tenant()`.
+
+**Critical-path files changed:**
+- `tools/ci/route_inventory.json` — 6 new remediation endpoints registered: `POST /remediation/tasks`, `GET /remediation/tasks`, `GET /remediation/tasks/{task_id}`, `PATCH /remediation/tasks/{task_id}`, `POST /remediation/tasks/{task_id}/close`, `DELETE /remediation/tasks/{task_id}`.
+- `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — updated to reflect 6 new endpoints.
+
+**SOC review outcome:** approved. Route inventory update is purely additive: 6 new remediation management endpoints appended. No existing route entries removed or modified. No auth, session, middleware, OPA, or security files changed. All routes authenticated via existing `require_scopes("governance:read"|"governance:write")` dependency; all queries filter by `tenant_id` extracted from `require_bound_tenant()`. Cross-tenant reference prevention enforced at the repository layer: `assert_finding_exists`, `assert_assessment_exists`, and `assert_finding_belongs_to_assessment` all require matching `tenant_id`. `RemediationTaskAudit` is append-only (no UPDATE/DELETE path). No capabilities, billing, or entitlement code touched.
+
+Additional non-critical-path changes: `api/db_models_remediation.py` (2 new ORM models), `services/remediation/` (new bounded context: engine, repository, schemas), `api/remediation.py` (6-route FastAPI router), `api/observability/metrics.py` (4 new Prometheus counters, no `tenant_id` label), `api/db.py` (model registration), `api/main.py` (remediation_router registered in both app builders), `contracts/core/openapi.json` + `schemas/api/openapi.json` + `BLUEPRINT_STAGED.md` + `CONTRACT.md` (contract authority markers updated), `docs/ai/PR_FIX_LOG.md` (PR 13.1 entry), `ROADMAP.md` (PR 13.1 row), `tests/test_remediation_engine.py` (42 tests REM-1–REM-20).
+
 ## 2026-06-18 — P1.5: Route scope lint fixes (follow-up)
 
 **Classification:** Security hardening follow-up to P1.5 billing layer. No new routes or ORM changes.
