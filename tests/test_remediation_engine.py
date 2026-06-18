@@ -27,26 +27,14 @@ Coverage:
 from __future__ import annotations
 
 import uuid
-from unittest.mock import patch
 
 import pytest
 from starlette.testclient import TestClient
 
 from api.auth_scopes import mint_key
-from api.db import get_engine, init_db, reset_engine_cache
+from api.db import get_engine
 from api.db_models_field_assessment import FaEngagement, FaNormalizedFinding
 from api.db_models_remediation import RemediationTask, RemediationTaskAudit
-from services.remediation.engine import RemediationEngine
-from services.remediation.schemas import (
-    CreateTaskRequest,
-    RemediationConflict,
-    RemediationNotFound,
-    RemediationPriority,
-    RemediationReferenceError,
-    RemediationStatus,
-    RemediationTenantViolation,
-    UpdateTaskRequest,
-)
 from sqlalchemy.orm import Session
 
 _TENANT_A = "tenant-rem-a"
