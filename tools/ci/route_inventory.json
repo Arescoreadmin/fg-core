@@ -1167,6 +1167,132 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "POST",
+      "path": "/admin/subscriptions/contracts",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "GET",
+      "path": "/admin/subscriptions/contracts/{contract_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "POST",
+      "path": "/admin/subscriptions/contracts/{contract_id}/items",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "PATCH",
+      "path": "/admin/subscriptions/contracts/{contract_id}/status",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "GET",
+      "path": "/admin/subscriptions/items/{item_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "GET",
+      "path": "/admin/subscriptions/items/{item_id}/ledger",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "PATCH",
+      "path": "/admin/subscriptions/items/{item_id}/status",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate"
       ],
       "file": "api/admin.py",
@@ -1390,6 +1516,42 @@
       "scoped": true,
       "scopes": [
         "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/subscriptions/contracts",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/subscriptions/items",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -10241,6 +10403,23 @@
     {
       "dependency_categories": [
         "auth",
+        "tenant"
+      ],
+      "file": "api/subscriptions.py",
+      "method": "GET",
+      "path": "/subscriptions/explain-capability",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate"
       ],
       "file": "api/ui_ai_console.py",
@@ -11411,7 +11590,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-17T13:28:46.365267+00:00",
+  "generated_at": "2026-06-18T12:55:26.026752+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

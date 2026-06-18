@@ -15237,3 +15237,30 @@ Resolution order in `check_capability()` (fully backward-compatible):
 **New files:**
 
 `tests/security/test_enterprise_capability_enforcement.py` — 28 tests (ENT-1 through ENT-28). Covers SSO config/readiness/federation (granted/denied), SCIM user create/update (granted/denied), dep chain failures (scim→sso, cross_tenant_reporting→multi_tenant, tenant_switching→multi_tenant), government capability registry assertions, cross-tenant MSP isolation, and route inventory checks for all 9 gated routes.
+
+---
+
+## P1.4 — Subscription Assignment Engine
+
+**Branch:** `feat/p1-4-subscription-assignment-engine`
+**Date:** 2026-06-17
+
+**Summary:** Implements the commercial authority layer for capability entitlements. Adds a `SubscriptionContract → SubscriptionItem → TenantBundleAssignment` pipeline that integrates with the existing P1.2 bundle resolver without duplicating capability logic. Adds an immutable event ledger with SHA-256 hash chain and a `GET /subscriptions/explain-capability` endpoint tracing the full resolution path.
+
+**New files:**
+
+`api/db_models_subscriptions.py` — 3 new ORM models: `SubscriptionContract`, `SubscriptionItem`, `SubscriptionEventLedger` (append-only with hash chain).
+
+`services/subscriptions/__init__.py`, `services/subscriptions/models.py`, `services/subscriptions/engine.py` — `SubscriptionEngine` service implementing contract/item CRUD, bundle assignment sync, ledger appending, and `explain_capability`.
+
+`api/subscriptions.py` — 10 admin + tenant-scoped routes (create/get/patch/list contracts and items, ledger endpoint, `GET /subscriptions/explain-capability`).
+
+`tests/test_subscription_engine.py` — 20 tests (SUB-1 through SUB-20). Covers contract lifecycle, item lifecycle with bundle sync, capability granted/denied via subscription, suspension/cancelation expiry, reactivation, ledger immutability ORM guard, hash chain integrity, tenant isolation, MSP parent_item_id, explain-capability (granted/denied/registry-miss/dep-checks), HTTP endpoint tests.
+
+**Modified files:**
+
+`api/db_models.py` — added `import api.db_models_subscriptions` at bottom for ORM registration.
+
+`api/main.py` — imported `subscriptions_router` and registered it in `build_app` and `build_contract_app`.
+
+`api/observability/metrics.py` — 5 new Prometheus counters: `subscription_contracts_created_total`, `subscription_items_created_total`, `subscription_items_status_changes_total`, `subscription_event_ledger_entries_total`, `subscription_explain_requests_total` (no tenant_id labels).

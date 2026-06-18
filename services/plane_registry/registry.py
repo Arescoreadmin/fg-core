@@ -47,6 +47,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/status",
             "/internal",
             "/admin",
+            "/subscriptions",
             "/_debug",
             "/_legacy",
             "/dev",

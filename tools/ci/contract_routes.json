@@ -3026,6 +3026,12 @@
     },
     {
       "method": "GET",
+      "path": "/subscriptions/explain-capability",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/ui/entitlements",
       "scopes": [],
       "source": "contract"
@@ -3145,7 +3151,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-16T22:04:00.595023+00:00",
+  "generated_at": "2026-06-18T12:09:54.317996+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

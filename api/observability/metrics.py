@@ -228,3 +228,38 @@ CAPABILITY_CACHE_MISSES_TOTAL = Counter(
     "frostgate_capability_cache_misses_total",
     "Capability resolver cache misses (tenant capability set fetched from DB)",
 )
+
+# ---------------------------------------------------------------------------
+# P1.4: Subscription Assignment Engine metrics
+# No tenant_id labels — high cardinality.
+# ---------------------------------------------------------------------------
+
+SUBSCRIPTION_CONTRACTS_CREATED_TOTAL = Counter(
+    "frostgate_subscription_contracts_created_total",
+    "Total subscription contracts created, by SKU package",
+    ["sku_package"],
+)
+
+SUBSCRIPTION_ITEMS_CREATED_TOTAL = Counter(
+    "frostgate_subscription_items_created_total",
+    "Total subscription items created, by SKU code",
+    ["sku_code"],
+)
+
+SUBSCRIPTION_ITEMS_STATUS_CHANGES_TOTAL = Counter(
+    "frostgate_subscription_items_status_changes_total",
+    "Total subscription item status transitions, by from/to status",
+    ["from_status", "to_status"],
+)
+
+SUBSCRIPTION_EVENT_LEDGER_ENTRIES_TOTAL = Counter(
+    "frostgate_subscription_event_ledger_entries_total",
+    "Total immutable ledger entries appended, by event type",
+    ["event_type"],
+)
+
+SUBSCRIPTION_EXPLAIN_REQUESTS_TOTAL = Counter(
+    "frostgate_subscription_explain_requests_total",
+    "Total explain-capability requests, by decision result",
+    ["result"],  # granted | denied
+)

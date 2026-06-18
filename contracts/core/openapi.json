@@ -4854,6 +4854,92 @@
         "title": "ContinuityOpportunityResponse",
         "type": "object"
       },
+      "ContractResponse": {
+        "properties": {
+          "contract_ref": {
+            "title": "Contract Ref",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "sku_metadata": {
+            "title": "Sku Metadata",
+            "type": "object"
+          },
+          "sku_package": {
+            "title": "Sku Package",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "contract_ref",
+          "sku_package",
+          "sku_metadata",
+          "status",
+          "starts_at",
+          "ends_at",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "notes"
+        ],
+        "title": "ContractResponse",
+        "type": "object"
+      },
       "ControlResponse": {
         "properties": {
           "applicability_metadata": {
@@ -5213,6 +5299,62 @@
           "name"
         ],
         "title": "CreateAssetRequest",
+        "type": "object"
+      },
+      "CreateContractRequest": {
+        "properties": {
+          "contract_ref": {
+            "title": "Contract Ref",
+            "type": "string"
+          },
+          "created_by": {
+            "default": "admin",
+            "title": "Created By",
+            "type": "string"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "sku_metadata": {
+            "title": "Sku Metadata",
+            "type": "object"
+          },
+          "sku_package": {
+            "title": "Sku Package",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_ref",
+          "sku_package",
+          "starts_at"
+        ],
+        "title": "CreateContractRequest",
         "type": "object"
       },
       "CreateControlRequest": {
@@ -5722,6 +5864,64 @@
           "portal_login_url"
         ],
         "title": "CreateGrantResponse",
+        "type": "object"
+      },
+      "CreateItemRequest": {
+        "properties": {
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "meter_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meter Code"
+          },
+          "parent_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Item Id"
+          },
+          "sku_code": {
+            "title": "Sku Code",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_id",
+          "sku_code",
+          "starts_at"
+        ],
+        "title": "CreateItemRequest",
         "type": "object"
       },
       "CreateKeyRequest": {
@@ -9081,6 +9281,49 @@
         "title": "ExecutionStateResponse",
         "type": "object"
       },
+      "ExplainCapabilityResponse": {
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "dependency_checks": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Dependency Checks",
+            "type": "object"
+          },
+          "resolution_chain": {
+            "items": {
+              "$ref": "#/components/schemas/ResolutionLayer"
+            },
+            "title": "Resolution Chain",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "capability",
+          "decision",
+          "source",
+          "resolution_chain"
+        ],
+        "title": "ExplainCapabilityResponse",
+        "type": "object"
+      },
       "ExportClassification": {
         "enum": [
           "standard",
@@ -11642,6 +11885,111 @@
           "validation_token"
         ],
         "title": "IssueValidationTokenRequest",
+        "type": "object"
+      },
+      "ItemResponse": {
+        "properties": {
+          "bundle_assignment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Assignment Id"
+          },
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "contract_id": {
+            "title": "Contract Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meter_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meter Code"
+          },
+          "parent_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Item Id"
+          },
+          "sku_code": {
+            "title": "Sku Code",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "contract_id",
+          "tenant_id",
+          "bundle_id",
+          "sku_code",
+          "meter_code",
+          "status",
+          "starts_at",
+          "ends_at",
+          "parent_item_id",
+          "bundle_assignment_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ItemResponse",
         "type": "object"
       },
       "KeyInfo": {
@@ -16435,6 +16783,28 @@
         "title": "ResidencyClassification",
         "type": "string"
       },
+      "ResolutionLayer": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "object"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "string"
+          },
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layer",
+          "result"
+        ],
+        "title": "ResolutionLayer",
+        "type": "object"
+      },
       "RestoreScope": {
         "enum": [
           "full",
@@ -19088,6 +19458,64 @@
           }
         },
         "title": "UpdateAssetRequest",
+        "type": "object"
+      },
+      "UpdateContractStatusRequest": {
+        "properties": {
+          "actor": {
+            "default": "admin",
+            "title": "Actor",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "UpdateContractStatusRequest",
+        "type": "object"
+      },
+      "UpdateItemStatusRequest": {
+        "properties": {
+          "actor": {
+            "default": "admin",
+            "title": "Actor",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "UpdateItemStatusRequest",
         "type": "object"
       },
       "UpdateObservationRequest": {
@@ -55326,6 +55754,65 @@
           }
         },
         "summary": "Status"
+      }
+    },
+    "/subscriptions/explain-capability": {
+      "get": {
+        "description": "Explain the full capability resolution chain for the calling tenant.\n\nTraces: registry \u2192 explicit grant \u2192 bundle/subscription assignment \u2192 tier default.",
+        "operationId": "explain_capability_subscriptions_explain_capability_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "title": "Capability",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplainCapabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explain Capability",
+        "tags": [
+          "subscriptions"
+        ]
       }
     },
     "/ui/entitlements": {

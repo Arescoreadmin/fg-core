@@ -3970,3 +3970,6 @@ class TenantBundleAssignment(Base):
 
 # PR3 External AI Risk Register ORM registration for Base.metadata.create_all().
 import api.db_models_external_ai_risk  # noqa: F401,E402
+
+# P1.4 Subscription Assignment Engine ORM registration.
+import api.db_models_subscriptions  # noqa: F401,E402

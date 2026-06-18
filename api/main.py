@@ -98,6 +98,7 @@ from api.entitlements import (
     router as entitlements_router,
     ui_router as entitlements_ui_router,
 )
+from api.subscriptions import router as subscriptions_router
 from api.reports_engine import router as reports_engine_router
 from api.signing import router as signing_router
 from api.stripe_webhooks import router as stripe_webhooks_router
@@ -647,6 +648,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(billing_router)
     app.include_router(audit_router)
     app.include_router(entitlements_router)
+    app.include_router(subscriptions_router)
     app.include_router(compliance_router)
     app.include_router(compliance_cp_extension_router)
     app.include_router(enterprise_controls_router)
@@ -1159,6 +1161,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
 
     app.include_router(entitlements_router)
     app.include_router(entitlements_ui_router)
+    app.include_router(subscriptions_router)
 
     @app.get("/health/live")
     async def health_live() -> dict[str, str]:
