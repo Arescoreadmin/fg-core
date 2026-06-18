@@ -546,13 +546,11 @@ class SubscriptionEngine:
         """
         from api.entitlements import (
             CAPABILITY_REGISTRY,
-            check_capability,
             _get_tenant_tier,
             _tier_capabilities,
         )
         from api.db import set_tenant_context
         from api.db_models import TenantEntitlement
-        from services.capability_enforcement.graph import get_required_capabilities
         from sqlalchemy import or_
 
         chain: list[ResolutionLayer] = []
@@ -679,7 +677,7 @@ class SubscriptionEngine:
         self, db: Session, tenant_id: str, capability: str
     ) -> dict[str, Any]:
         """Find which active subscription item provides a capability (best effort)."""
-        from api.db_models import Capability, PolicyBundleCapability, PolicyBundle
+        from api.db_models import Capability, PolicyBundleCapability
 
         cap_row = (
             db.query(Capability)
