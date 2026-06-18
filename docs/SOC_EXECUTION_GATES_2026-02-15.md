@@ -4747,3 +4747,14 @@ Additional non-critical-path changes: `migrations/postgres/0118_capability_bundl
 AI routes gated: `GET /ui/ai`, `GET /ui/ai/experience`, `GET /ui/ai/usage` → `require_capability("ai.workspace")`; `POST /ui/ai/chat` → `require_capability("ai.chat")`.
 
 Additional non-critical-path changes: `services/capability_enforcement/` (new package), `services/capability_bundles/resolver.py` (cache hit/miss metrics), `tests/security/test_capability_enforcement.py` (30 security tests CAPE-1–CAPE-16), `tests/conftest.py` (integration test fixture sets enforcement to audit-only).
+
+## 2026-06-18 — P1.4: Subscription Assignment Engine
+
+**Classification:** Additive subscription management layer. New bounded context `services/subscriptions/` with contract/item lifecycle and immutable event ledger. No auth, session, middleware, or OPA policy files changed. All new admin routes require `admin:write` or `admin:read` scope.
+
+**Critical-path file changed:**
+- `tools/ci/route_inventory.json` — 10 new subscription endpoints registered: `POST /admin/subscriptions/contracts`, `GET /admin/subscriptions/contracts/{id}`, `PATCH /admin/subscriptions/contracts/{id}/status`, `GET /admin/tenants/{tid}/subscriptions/contracts`, `POST /admin/subscriptions/contracts/{id}/items`, `GET /admin/subscriptions/items/{id}`, `PATCH /admin/subscriptions/items/{id}/status`, `GET /admin/tenants/{tid}/subscriptions/items`, `GET /admin/subscriptions/items/{id}/ledger`, `GET /subscriptions/explain-capability`.
+
+**SOC review outcome:** approved. Route inventory update is purely additive: 10 new subscription management endpoints appended. No existing route entries removed or modified. No auth, session, middleware, OPA, or security files changed. All admin routes authenticated via existing `require_scopes()` dependency; `explain-capability` bound to tenant via existing `require_bound_tenant()`. No cross-tenant data access: all queries filter by `tenant_id`. SHA-256 hash chain in `SubscriptionEventLedger` is tamper-evident; ORM-level immutability guard prevents updates/deletes.
+
+Additional non-critical-path changes: `api/db_models_subscriptions.py` (3 new ORM models), `services/subscriptions/` (new package: engine + Pydantic schemas), `api/subscriptions.py` (10-route FastAPI router), `api/observability/metrics.py` (5 new Prometheus counters, no `tenant_id` label), `contracts/core/openapi.json` + `schemas/api/openapi.json` (10 new endpoint definitions), `BLUEPRINT_STAGED.md` + `CONTRACT.md` (contract authority markers updated to new spec SHA256), `tests/test_subscription_engine.py` (20 tests SUB-1–SUB-20).
