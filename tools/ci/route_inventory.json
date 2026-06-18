@@ -10408,8 +10408,8 @@
       "file": "api/subscriptions.py",
       "method": "GET",
       "path": "/subscriptions/explain-capability",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "admin:read"
@@ -11590,7 +11590,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-18T12:09:54.303734+00:00",
+  "generated_at": "2026-06-18T12:55:26.026752+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

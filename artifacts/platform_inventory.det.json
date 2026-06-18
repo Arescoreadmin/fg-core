@@ -6,11 +6,19 @@
     "contracts/artifacts/evidence_runs_response.schema.json",
     "contracts/artifacts/plane_registry_response.schema.json"
   ],
-  "gaps": [],
+  "gaps": [
+    {
+      "details": [
+        "/subscriptions/explain-capability"
+      ],
+      "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
+      "type": "unexpected_route_prefixes"
+    }
+  ],
   "governance": {
-    "contract_count": 524,
+    "contract_count": 525,
     "contract_only": [],
-    "runtime_count": 668,
+    "runtime_count": 678,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -49,11 +57,16 @@
       "GET /admin/keys",
       "GET /admin/keys/needing-rotation",
       "GET /admin/keys/{key_prefix}/rotation-status",
+      "GET /admin/subscriptions/contracts/{contract_id}",
+      "GET /admin/subscriptions/items/{item_id}",
+      "GET /admin/subscriptions/items/{item_id}/ledger",
       "GET /admin/system/health",
       "GET /admin/tenants",
       "GET /admin/tenants/{tenant_id}",
       "GET /admin/tenants/{tenant_id}/bundles",
       "GET /admin/tenants/{tenant_id}/entitlements",
+      "GET /admin/tenants/{tenant_id}/subscriptions/contracts",
+      "GET /admin/tenants/{tenant_id}/subscriptions/items",
       "GET /admin/tenants/{tenant_id}/usage",
       "GET /admin/usage/all",
       "GET /control/testing/health",
@@ -105,6 +118,8 @@
       "GET /ui/scopes",
       "GET /ui/token",
       "HEAD /health",
+      "PATCH /admin/subscriptions/contracts/{contract_id}/status",
+      "PATCH /admin/subscriptions/items/{item_id}/status",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",
@@ -132,6 +147,8 @@
       "POST /admin/keys",
       "POST /admin/keys/{key_prefix}/revoke",
       "POST /admin/keys/{key_prefix}/rotate",
+      "POST /admin/subscriptions/contracts",
+      "POST /admin/subscriptions/contracts/{contract_id}/items",
       "POST /admin/tenants",
       "POST /admin/tenants/{tenant_id}/activate",
       "POST /admin/tenants/{tenant_id}/bundles",
@@ -157,7 +174,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "0b3f38ad26bae982f88c59a11e8ac86dde25a3b29e98f720cafa48b5c5935fe1",
+  "governance_fingerprint": "1415e3428514c2903c7abce36abfe6092b9f0c82ac557ceaea6163234508a08a",
   "planes": [
     {
       "compat": {
@@ -410,11 +427,16 @@
       "GET /admin/keys",
       "GET /admin/keys/needing-rotation",
       "GET /admin/keys/{key_prefix}/rotation-status",
+      "GET /admin/subscriptions/contracts/{contract_id}",
+      "GET /admin/subscriptions/items/{item_id}",
+      "GET /admin/subscriptions/items/{item_id}/ledger",
       "GET /admin/system/health",
       "GET /admin/tenants",
       "GET /admin/tenants/{tenant_id}",
       "GET /admin/tenants/{tenant_id}/bundles",
       "GET /admin/tenants/{tenant_id}/entitlements",
+      "GET /admin/tenants/{tenant_id}/subscriptions/contracts",
+      "GET /admin/tenants/{tenant_id}/subscriptions/items",
       "GET /admin/tenants/{tenant_id}/usage",
       "GET /admin/usage/all",
       "GET /compliance-cp/controls",
@@ -653,6 +675,8 @@
       "GET /signing/public-key",
       "GET /status",
       "HEAD /health",
+      "PATCH /admin/subscriptions/contracts/{contract_id}/status",
+      "PATCH /admin/subscriptions/items/{item_id}/status",
       "PATCH /field-assessment/engagements/{engagement_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
@@ -689,6 +713,8 @@
       "POST /admin/keys",
       "POST /admin/keys/{key_prefix}/revoke",
       "POST /admin/keys/{key_prefix}/rotate",
+      "POST /admin/subscriptions/contracts",
+      "POST /admin/subscriptions/contracts/{contract_id}/items",
       "POST /admin/tenants",
       "POST /admin/tenants/{tenant_id}/activate",
       "POST /admin/tenants/{tenant_id}/bundles",
