@@ -3571,6 +3571,234 @@
         "title": "BatchPromoteResponse",
         "type": "object"
       },
+      "BillingAccountResponse": {
+        "properties": {
+          "billing_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Email"
+          },
+          "billing_status": {
+            "title": "Billing Status",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata_json": {
+            "title": "Metadata Json",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Customer Id"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "provider",
+          "provider_customer_id",
+          "billing_email",
+          "billing_status",
+          "metadata_json",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "BillingAccountResponse",
+        "type": "object"
+      },
+      "BillingExplainResponse": {
+        "properties": {
+          "active_meters": {
+            "items": {
+              "$ref": "#/components/schemas/UsageMeterResponse"
+            },
+            "title": "Active Meters",
+            "type": "array"
+          },
+          "billing_account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BillingAccountResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failed_usage": {
+            "items": {
+              "$ref": "#/components/schemas/UsageEventResponse"
+            },
+            "title": "Failed Usage",
+            "type": "array"
+          },
+          "pending_usage": {
+            "items": {
+              "$ref": "#/components/schemas/UsageEventResponse"
+            },
+            "title": "Pending Usage",
+            "type": "array"
+          },
+          "recent_ledger": {
+            "items": {
+              "$ref": "#/components/schemas/BillingLedgerEntryResponse"
+            },
+            "title": "Recent Ledger",
+            "type": "array"
+          },
+          "subscription_links": {
+            "items": {
+              "$ref": "#/components/schemas/BillingSubscriptionLinkResponse"
+            },
+            "title": "Subscription Links",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "billing_account",
+          "subscription_links",
+          "active_meters",
+          "pending_usage",
+          "failed_usage",
+          "recent_ledger"
+        ],
+        "title": "BillingExplainResponse",
+        "type": "object"
+      },
+      "BillingLedgerEntryResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "event_hash": {
+            "title": "Event Hash",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "new_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New State"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "old_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old State"
+          },
+          "prev_hash": {
+            "title": "Prev Hash",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "event_type",
+          "entity_type",
+          "entity_id",
+          "provider",
+          "old_state",
+          "new_state",
+          "actor",
+          "reason",
+          "occurred_at",
+          "prev_hash",
+          "event_hash"
+        ],
+        "title": "BillingLedgerEntryResponse",
+        "type": "object"
+      },
       "BillingRunCreateRequest": {
         "properties": {
           "contract_hash": {
@@ -3620,6 +3848,112 @@
           "period_end"
         ],
         "title": "BillingRunCreateRequest",
+        "type": "object"
+      },
+      "BillingSubscriptionLinkResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Price Id"
+          },
+          "provider_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Product Id"
+          },
+          "provider_subscription_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Subscription Id"
+          },
+          "subscription_contract_id": {
+            "title": "Subscription Contract Id",
+            "type": "string"
+          },
+          "subscription_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Item Id"
+          },
+          "sync_status": {
+            "title": "Sync Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "subscription_contract_id",
+          "subscription_item_id",
+          "provider",
+          "provider_subscription_id",
+          "provider_price_id",
+          "provider_product_id",
+          "sync_status",
+          "last_synced_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "BillingSubscriptionLinkResponse",
         "type": "object"
       },
       "BindPolicyRequest": {
@@ -5301,6 +5635,115 @@
         "title": "CreateAssetRequest",
         "type": "object"
       },
+      "CreateBillingAccountRequest": {
+        "properties": {
+          "billing_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Email"
+          },
+          "billing_status": {
+            "default": "active",
+            "title": "Billing Status",
+            "type": "string"
+          },
+          "metadata_json": {
+            "title": "Metadata Json",
+            "type": "object"
+          },
+          "provider": {
+            "default": "stripe",
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Customer Id"
+          }
+        },
+        "title": "CreateBillingAccountRequest",
+        "type": "object"
+      },
+      "CreateBillingSubscriptionLinkRequest": {
+        "properties": {
+          "provider": {
+            "default": "stripe",
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Price Id"
+          },
+          "provider_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Product Id"
+          },
+          "provider_subscription_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Subscription Id"
+          },
+          "subscription_contract_id": {
+            "title": "Subscription Contract Id",
+            "type": "string"
+          },
+          "subscription_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Item Id"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "subscription_contract_id"
+        ],
+        "title": "CreateBillingSubscriptionLinkRequest",
+        "type": "object"
+      },
       "CreateContractRequest": {
         "properties": {
           "contract_ref": {
@@ -6356,6 +6799,43 @@
           "subscription_type"
         ],
         "title": "CreateSubscriptionRequest",
+        "type": "object"
+      },
+      "CreateUsageMeterRequest": {
+        "properties": {
+          "aggregation_mode": {
+            "default": "sum",
+            "title": "Aggregation Mode",
+            "type": "string"
+          },
+          "billing_category": {
+            "title": "Billing Category",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "metadata_json": {
+            "title": "Metadata Json",
+            "type": "object"
+          },
+          "meter_code": {
+            "title": "Meter Code",
+            "type": "string"
+          },
+          "unit": {
+            "default": "count",
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meter_code",
+          "display_name",
+          "billing_category"
+        ],
+        "title": "CreateUsageMeterRequest",
         "type": "object"
       },
       "CreateWorkflowBody": {
@@ -15732,6 +16212,61 @@
         "title": "RecordRotationOutcomeRequest",
         "type": "object"
       },
+      "RecordUsageEventRequest": {
+        "properties": {
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "metadata_json": {
+            "title": "Metadata Json",
+            "type": "object"
+          },
+          "meter_code": {
+            "title": "Meter Code",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "string"
+          },
+          "source": {
+            "default": "api",
+            "title": "Source",
+            "type": "string"
+          },
+          "subscription_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Item Id"
+          }
+        },
+        "required": [
+          "meter_code",
+          "quantity",
+          "idempotency_key"
+        ],
+        "title": "RecordUsageEventRequest",
+        "type": "object"
+      },
       "RecoveryReadiness": {
         "enum": [
           "unknown",
@@ -19460,6 +19995,56 @@
         "title": "UpdateAssetRequest",
         "type": "object"
       },
+      "UpdateBillingAccountRequest": {
+        "properties": {
+          "billing_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Email"
+          },
+          "billing_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Status"
+          },
+          "metadata_json": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Json"
+          },
+          "provider_customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Customer Id"
+          }
+        },
+        "title": "UpdateBillingAccountRequest",
+        "type": "object"
+      },
       "UpdateContractStatusRequest": {
         "properties": {
           "actor": {
@@ -19720,6 +20305,45 @@
         "title": "UpdateResponseResponse",
         "type": "object"
       },
+      "UpdateUsageMeterRequest": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "metadata_json": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Json"
+          }
+        },
+        "title": "UpdateUsageMeterRequest",
+        "type": "object"
+      },
       "UpdateUserPayload": {
         "properties": {
           "active": {
@@ -19757,6 +20381,157 @@
           }
         },
         "title": "UpdateUserPayload",
+        "type": "object"
+      },
+      "UsageEventResponse": {
+        "properties": {
+          "billing_status": {
+            "title": "Billing Status",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "metadata_json": {
+            "title": "Metadata Json",
+            "type": "object"
+          },
+          "meter_code": {
+            "title": "Meter Code",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "provider_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Event Id"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "string"
+          },
+          "reported_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported At"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "subscription_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Item Id"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "subscription_item_id",
+          "meter_code",
+          "quantity",
+          "idempotency_key",
+          "source",
+          "occurred_at",
+          "reported_at",
+          "billing_status",
+          "provider_event_id",
+          "metadata_json"
+        ],
+        "title": "UsageEventResponse",
+        "type": "object"
+      },
+      "UsageMeterResponse": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "string"
+          },
+          "aggregation_mode": {
+            "title": "Aggregation Mode",
+            "type": "string"
+          },
+          "billing_category": {
+            "title": "Billing Category",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata_json": {
+            "title": "Metadata Json",
+            "type": "object"
+          },
+          "meter_code": {
+            "title": "Meter Code",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "meter_code",
+          "display_name",
+          "unit",
+          "aggregation_mode",
+          "billing_category",
+          "active",
+          "metadata_json",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UsageMeterResponse",
         "type": "object"
       },
       "ValidationError": {
@@ -23892,6 +24667,70 @@
           }
         },
         "summary": "Create Billing Run",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/usage/events": {
+      "post": {
+        "operationId": "record_usage_event_billing_usage_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordUsageEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageEventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Usage Event",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/webhooks/stripe": {
+      "post": {
+        "description": "Receive Stripe webhook events for billing lifecycle updates.\n\nIdempotent: replayed events (already in ledger) return immediately.\nNever grants or revokes entitlements \u2014 only updates sync_status on links.",
+        "operationId": "billing_stripe_webhook_billing_webhooks_stripe_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Billing Stripe Webhook Billing Webhooks Stripe Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Billing Stripe Webhook",
         "tags": [
           "billing"
         ]

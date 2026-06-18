@@ -320,6 +320,18 @@
     },
     {
       "method": "POST",
+      "path": "/billing/usage/events",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/billing/webhooks/stripe",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/breakglass/sessions",
       "scopes": [],
       "source": "contract"
@@ -3151,7 +3163,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-18T12:09:54.317996+00:00",
+  "generated_at": "2026-06-18T14:44:29.158188+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

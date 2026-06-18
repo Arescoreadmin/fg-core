@@ -6,6 +6,37 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-18 — P1.5: Billing Integration Layer
+
+**Branch:** `feat/p1-5-billing-integration-layer`
+
+**New files:**
+- `api/db_models_billing.py` — 5 new ORM models: BillingAccount, BillingSubscriptionLink, UsageMeter, UsageEvent (append-only), BillingEventLedger (append-only, hash-chained)
+- `services/billing/__init__.py` — package init exposing BillingEngine
+- `services/billing/provider.py` — BillingProvider ABC + NullBillingProvider
+- `services/billing/stripe_provider.py` — StripeProvider (lazy stripe import; ProviderNotConfiguredError)
+- `services/billing/models.py` — Pydantic v2 schemas for all billing entities
+- `services/billing/metering.py` — record_usage_event with idempotency, ledger append, optional provider reporting
+- `services/billing/reconciliation.py` — BillingReconciler (pending usage retry + failed link retry)
+- `services/billing/engine.py` — BillingEngine orchestrating all billing operations
+- `api/billing_v2.py` — 15 FastAPI routes (accounts, subscription-links, meters, usage events, Stripe webhook, explain)
+- `tests/test_billing_engine.py` — 36 tests BILL-1 through BILL-35
+
+**Modified files:**
+- `api/db_models.py` — added P1.5 ORM registration import
+- `api/main.py` — registered billing_v2_router in both build_app() and build_contract_app()
+- `api/observability/metrics.py` — added 8 new Prometheus counters
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — P1.5 SOC review entry added
+- `ROADMAP.md` — P1.5 row added to Active Identity Foundation PRs table
+
+**Design invariants enforced:**
+- Billing never calls check_capability, TenantBundleAssignment, or SubscriptionEngine.update_item_status
+- UsageEvent and BillingEventLedger are append-only via ORM event.listen guards
+- Status transitions (billing_status=reported) go through core SQL UPDATE to bypass ORM guards correctly
+- Webhook at /billing/webhooks/stripe does not conflict with /ingest/assessment/webhooks/stripe
+
+---
+
 ### 2026-06-16 — P1: Enterprise Identity Consolidation (Auth0 OIDC + tenant_users enforcement)
 
 **Branch:** `feat/p1-auth0-identity-consolidation`  **PR:** #446

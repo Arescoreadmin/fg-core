@@ -263,3 +263,56 @@ SUBSCRIPTION_EXPLAIN_REQUESTS_TOTAL = Counter(
     "Total explain-capability requests, by decision result",
     ["result"],  # granted | denied
 )
+
+# ---------------------------------------------------------------------------
+# P1.5: Billing Integration Layer metrics
+# No tenant_id labels — high cardinality.
+# ---------------------------------------------------------------------------
+
+BILLING_ACCOUNTS_CREATED_TOTAL = Counter(
+    "frostgate_billing_accounts_created_total",
+    "Total billing accounts created",
+    [],
+)
+
+BILLING_SUBSCRIPTION_LINKS_TOTAL = Counter(
+    "frostgate_billing_subscription_links_total",
+    "Total billing subscription links created",
+    [],
+)
+
+BILLING_USAGE_EVENTS_TOTAL = Counter(
+    "frostgate_billing_usage_events_total",
+    "Total usage events recorded, by meter_code",
+    ["meter_code"],
+)
+
+BILLING_USAGE_REPORT_FAILURES_TOTAL = Counter(
+    "frostgate_billing_usage_report_failures_total",
+    "Total usage events that failed to report to the provider",
+    [],
+)
+
+BILLING_WEBHOOKS_TOTAL = Counter(
+    "frostgate_billing_webhooks_total",
+    "Total billing webhook events received, by event_type",
+    ["event_type"],
+)
+
+BILLING_WEBHOOK_REPLAY_TOTAL = Counter(
+    "frostgate_billing_webhook_replay_total",
+    "Total billing webhook events that were replays (already processed)",
+    [],
+)
+
+BILLING_RECONCILIATION_RUNS_TOTAL = Counter(
+    "frostgate_billing_reconciliation_runs_total",
+    "Total billing reconciliation runs",
+    [],
+)
+
+BILLING_RECONCILIATION_FAILURES_TOTAL = Counter(
+    "frostgate_billing_reconciliation_failures_total",
+    "Total individual reconciliation item failures",
+    [],
+)
