@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_scopes
+from api.entitlements import require_capability
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models_identity import (
     TenantIdentityAuditEvent,
@@ -459,7 +460,11 @@ def _serialize_invitation(inv: TenantInvitation) -> dict[str, Any]:
 
 
 @router.get(
-    "/tenants/{tenant_id}/config", dependencies=[Depends(require_scopes("admin:read"))]
+    "/tenants/{tenant_id}/config",
+    dependencies=[
+        Depends(require_scopes("admin:read")),
+        Depends(require_capability("identity.sso")),
+    ],
 )
 def get_config(request: Request, tenant_id: str) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
@@ -507,7 +512,11 @@ def get_config(request: Request, tenant_id: str) -> dict[str, Any]:
 
 
 @router.put(
-    "/tenants/{tenant_id}/config", dependencies=[Depends(require_scopes("admin:write"))]
+    "/tenants/{tenant_id}/config",
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_capability("identity.sso")),
+    ],
 )
 def upsert_config(
     request: Request, tenant_id: str, body: ConfigUpsertBody
@@ -610,7 +619,10 @@ def upsert_config(
 
 @router.get(
     "/tenants/{tenant_id}/readiness",
-    dependencies=[Depends(require_scopes("admin:read"))],
+    dependencies=[
+        Depends(require_scopes("admin:read")),
+        Depends(require_capability("identity.sso")),
+    ],
 )
 def get_readiness(request: Request, tenant_id: str) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)

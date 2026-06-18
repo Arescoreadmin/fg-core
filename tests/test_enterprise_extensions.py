@@ -8,9 +8,18 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from unittest.mock import Mock
 
+import uuid
+
 from api.auth_scopes import mint_key
-from api.db import init_db, reset_engine_cache
+from api.db import get_sessionmaker, init_db, reset_engine_cache
+from api.db_models import (
+    Capability,
+    PolicyBundle,
+    PolicyBundleCapability,
+    TenantBundleAssignment,
+)
 from api.main import build_app
+from services.capability_bundles.resolver import invalidate_cache
 from services.enterprise_controls_extension.service import EnterpriseControlsService
 
 
@@ -26,6 +35,39 @@ def _setup_client(tmp_path: Path) -> tuple[TestClient, str, str]:
     os.environ["FG_COMPLIANCE_HMAC_KEY_ID_CURRENT"] = "v1"
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
+
+    # Grant identity.sso to both tenants so enterprise routes (e.g. federation)
+    # pass capability enforcement introduced in P1.3D.
+    db = get_sessionmaker(sqlite_path=str(db_path))()
+    cap = Capability(
+        id=str(uuid.uuid4()),
+        capability_key="identity.sso",
+        capability_name="identity.sso",
+        capability_category="identity",
+        active=True,
+    )
+    db.add(cap)
+    db.flush()
+    bundle = PolicyBundle(
+        id=str(uuid.uuid4()),
+        bundle_key="ent_ext_bundle",
+        bundle_name="ent_ext_bundle",
+        active=True,
+    )
+    db.add(bundle)
+    db.flush()
+    db.add(PolicyBundleCapability(bundle_id=bundle.id, capability_id=cap.id))
+    for tid in ["tenant-a", "tenant-b"]:
+        db.add(
+            TenantBundleAssignment(
+                id=str(uuid.uuid4()), tenant_id=tid, bundle_id=bundle.id
+            )
+        )
+    db.commit()
+    db.close()
+    invalidate_cache("tenant-a")
+    invalidate_cache("tenant-b")
+
     key_a = mint_key(
         "admin:write", "compliance:read", "governance:write", tenant_id="tenant-a"
     )

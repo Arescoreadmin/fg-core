@@ -22,6 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
+from api.entitlements import require_capability
 from api.db_models_identity import TenantIdentityConfig
 from api.deps import tenant_db_required
 from api.error_contracts import api_error
@@ -151,7 +152,13 @@ def _compute_risk_profile(db: Session, tenant_id: str, user_id: str) -> dict[str
 # ─── User management ──────────────────────────────────────────────────────────
 
 
-@router.post("/users", dependencies=[Depends(require_scopes("admin:write"))])
+@router.post(
+    "/users",
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_capability("identity.scim")),
+    ],
+)
 def invite_user(
     payload: InviteUserPayload,
     request: Request,
@@ -279,7 +286,13 @@ def list_users(
     }
 
 
-@router.patch("/users/{user_id}", dependencies=[Depends(require_scopes("admin:write"))])
+@router.patch(
+    "/users/{user_id}",
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_capability("identity.scim")),
+    ],
+)
 def update_user(
     user_id: str,
     payload: UpdateUserPayload,

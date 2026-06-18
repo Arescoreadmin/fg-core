@@ -24,6 +24,8 @@ DEPENDENCY_GRAPH: dict[str, list[str]] = {
     "ai.compliance_assistant": ["ai.workspace"],
     "ai.executive_advisor": ["ai.workspace"],
     "identity.scim": ["identity.sso"],
+    "msp.cross_tenant_reporting": ["msp.multi_tenant"],
+    "msp.tenant_switching": ["msp.multi_tenant"],
 }
 
 

@@ -1,3 +1,24 @@
+## 2026-06-17 — P1.3D: Enterprise Capability Enforcement
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (additive capability gate; no new auth subsystem, no privilege escalation, no credential handling added)
+
+**Changes:**
+- `api/auth_federation.py` — `require_capability("identity.sso")` added as a route dependency on `POST /auth/federation/validate`. This is additive restriction: callers that previously had `admin:write` scope can now be denied if `identity.sso` is not provisioned. No auth logic changed; no new credential paths introduced.
+- `api/admin_identity.py` — `require_capability("identity.sso")` added to `GET/PUT /tenants/{id}/config` and `GET /tenants/{id}/readiness`. Existing scope checks unchanged.
+- `api/workforce.py` — `require_capability("identity.scim")` added to `POST /workforce/users` and `PATCH /workforce/users/{id}`. Existing scope checks unchanged.
+- `api/control_plane_v2.py` — `require_capability("msp.multi_tenant")` added to delegation POST/DELETE; `require_capability("msp.cross_tenant_reporting")` added to delegation GET. Existing scope checks unchanged.
+- `api/entitlements.py` — `msp.cross_tenant_reporting` and `msp.tenant_switching` added to `CAPABILITY_REGISTRY`. No existing capabilities modified.
+- `services/capability_enforcement/graph.py` — MSP dependency entries added: `msp.cross_tenant_reporting → msp.multi_tenant`, `msp.tenant_switching → msp.multi_tenant`.
+
+**Security posture:** strictly additive — all changes increase access restriction. No auth bypass, no new unauthenticated surfaces, no credential or token handling added.
+
+### Validation
+
+- `make fg-security-pytest`: 1148 passed
+- `make fg-fast`: All checks passed
+
+---
+
 ## 2026-06-16 — P0-11: Continuous Governance Control Tower (CGCT) Route Addition
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (new governance aggregation routes under `/control-tower`; no new auth subsystems, no privilege escalation, no new credential handling)
