@@ -42,6 +42,19 @@ class RemediationAuditEventType(str, Enum):
     TASK_CLOSED = "task_closed"
     TASK_RISK_ACCEPTED = "task_risk_accepted"
     TASK_DELETED = "task_deleted"
+    TASK_ASSIGNED = "task_assigned"
+    TASK_REASSIGNED = "task_reassigned"
+    TASK_UNASSIGNED = "task_unassigned"
+    TASK_DUE_DATE_CHANGED = "task_due_date_changed"
+    TASK_SLA_CHANGED = "task_sla_changed"
+
+
+class SlaStatus(str, Enum):
+    ON_TRACK = "on_track"
+    AT_RISK = "at_risk"
+    OVERDUE = "overdue"
+    CLOSED = "closed"
+    ACCEPTED_RISK = "accepted_risk"
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +86,10 @@ class RemediationInvalidTransition(RemediationError):
     """Requested status transition is not permitted by the workflow state machine."""
 
 
+class RemediationOwnershipError(RemediationError):
+    """Ownership operation violates business rules."""
+
+
 # ---------------------------------------------------------------------------
 # Internal value objects
 # ---------------------------------------------------------------------------
@@ -98,6 +115,16 @@ class TaskSnapshot(BaseModel):
     updated_at: str
     closed_at: str | None
     task_metadata: dict[str, Any]
+    # PR 13.3 — Ownership + SLA fields
+    assigned_user_id: str | None = None
+    assigned_user_email: str | None = None
+    assigned_display_name: str | None = None
+    assigned_at: str | None = None
+    due_date: str | None = None
+    sla_target_days: int | None = None
+    sla_breach_at: str | None = None
+    ownership_reason: str | None = None
+    last_assignment_change_at: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +175,16 @@ class TaskResponse(BaseModel):
     closed_at: str | None
     task_metadata: dict[str, Any]
     schema_version: str
+    # PR 13.3 — Ownership + SLA fields
+    assigned_user_id: str | None = None
+    assigned_user_email: str | None = None
+    assigned_display_name: str | None = None
+    assigned_at: str | None = None
+    due_date: str | None = None
+    sla_target_days: int | None = None
+    sla_breach_at: str | None = None
+    ownership_reason: str | None = None
+    last_assignment_change_at: str | None = None
 
 
 class TaskListResponse(BaseModel):
@@ -169,6 +206,13 @@ class AuditEventResponse(BaseModel):
     new_state: dict[str, Any] | None
     reason: str | None
     event_at: str
+
+
+class AuditListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    events: list[AuditEventResponse]
 
 
 class TransitionTaskRequest(BaseModel):
@@ -204,3 +248,43 @@ class AllowedTransitionsResponse(BaseModel):
     task_id: str
     current_status: str
     allowed_next_states: list[str]
+
+
+# ---------------------------------------------------------------------------
+# PR 13.3 — Ownership + SLA request/response schemas
+# ---------------------------------------------------------------------------
+
+
+class AssignOwnerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str = Field(..., min_length=1, max_length=255)
+    display_name: str = Field(..., min_length=1, max_length=512)
+    email: str = Field(..., min_length=1, max_length=320)
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class UnassignRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class SetDueDateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    due_date: str = Field(..., description="ISO 8601 UTC datetime string")
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class SlaResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    priority: str
+    sla_status: str
+    age_days: int
+    sla_target_days: int | None
+    days_remaining: int | None
+    due_date: str | None
+    sla_breach_at: str | None

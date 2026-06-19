@@ -10546,6 +10546,40 @@
         "tenant"
       ],
       "file": "api/remediation.py",
+      "method": "GET",
+      "path": "/remediation/tasks/overdue",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation.py",
+      "method": "GET",
+      "path": "/remediation/tasks/unassigned",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation.py",
       "method": "DELETE",
       "path": "/remediation/tasks/{task_id}",
       "plane": "control",
@@ -10615,6 +10649,40 @@
       ],
       "file": "api/remediation.py",
       "method": "POST",
+      "path": "/remediation/tasks/{task_id}/assign",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation.py",
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/audit",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation.py",
+      "method": "POST",
       "path": "/remediation/tasks/{task_id}/close",
       "plane": "control",
       "plane_id": "control",
@@ -10632,7 +10700,58 @@
       ],
       "file": "api/remediation.py",
       "method": "POST",
+      "path": "/remediation/tasks/{task_id}/due-date",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation.py",
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/sla",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation.py",
+      "method": "POST",
       "path": "/remediation/tasks/{task_id}/transition",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation.py",
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/unassign",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -11986,7 +12105,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-18T23:45:36.489561+00:00",
+  "generated_at": "2026-06-19T11:36:59.663414+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

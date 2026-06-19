@@ -24,16 +24,22 @@ from api.db import get_engine
 from services.remediation.engine import RemediationEngine
 from services.remediation.schemas import (
     AllowedTransitionsResponse,
+    AssignOwnerRequest,
+    AuditListResponse,
     CreateTaskRequest,
     RemediationConflict,
     RemediationInvalidTransition,
     RemediationNotFound,
+    RemediationOwnershipError,
     RemediationReferenceError,
     RemediationTenantViolation,
+    SetDueDateRequest,
+    SlaResponse,
     TaskListResponse,
     TaskResponse,
     TransitionResponse,
     TransitionTaskRequest,
+    UnassignRequest,
     UpdateTaskRequest,
 )
 
@@ -76,6 +82,50 @@ def create_remediation_task(
         except RemediationTenantViolation as exc:
             raise HTTPException(status_code=403, detail=str(exc))
     return result
+
+
+# ---------------------------------------------------------------------------
+# GET /remediation/tasks/overdue  — MUST be before /{task_id}
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/remediation/tasks/overdue",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=TaskListResponse,
+)
+def list_overdue_remediation_tasks(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> TaskListResponse:
+    tenant_id = require_bound_tenant(request)
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        engine = RemediationEngine(db, tenant_id=tenant_id)
+        return engine.list_overdue_tasks(limit=limit, offset=offset)
+
+
+# ---------------------------------------------------------------------------
+# GET /remediation/tasks/unassigned  — MUST be before /{task_id}
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/remediation/tasks/unassigned",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=TaskListResponse,
+)
+def list_unassigned_remediation_tasks(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> TaskListResponse:
+    tenant_id = require_bound_tenant(request)
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        engine = RemediationEngine(db, tenant_id=tenant_id)
+        return engine.list_unassigned_tasks(limit=limit, offset=offset)
 
 
 # ---------------------------------------------------------------------------
@@ -274,5 +324,145 @@ def delete_remediation_task(
         try:
             engine.delete_task(task_id=task_id, actor=_actor(request))
             db.commit()
+        except RemediationNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# GET /remediation/tasks/{task_id}/audit  (PR 13.3 — used in new tests)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/remediation/tasks/{task_id}/audit",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=AuditListResponse,
+)
+def get_remediation_task_audit(
+    task_id: str,
+    request: Request,
+) -> AuditListResponse:
+    tenant_id = require_bound_tenant(request)
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        engine = RemediationEngine(db, tenant_id=tenant_id)
+        return engine.get_task_audit_trail(task_id=task_id)
+
+
+# ---------------------------------------------------------------------------
+# POST /remediation/tasks/{task_id}/assign  (PR 13.3)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/remediation/tasks/{task_id}/assign",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=TaskResponse,
+)
+def assign_remediation_task_owner(
+    task_id: str,
+    body: AssignOwnerRequest,
+    request: Request,
+) -> TaskResponse:
+    tenant_id = require_bound_tenant(request)
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        engine = RemediationEngine(db, tenant_id=tenant_id)
+        try:
+            result = engine.assign_owner(
+                task_id=task_id,
+                request=body,
+                actor=_actor(request),
+            )
+            db.commit()
+        except RemediationNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# POST /remediation/tasks/{task_id}/unassign  (PR 13.3)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/remediation/tasks/{task_id}/unassign",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=TaskResponse,
+)
+def unassign_remediation_task_owner(
+    task_id: str,
+    body: UnassignRequest,
+    request: Request,
+) -> TaskResponse:
+    tenant_id = require_bound_tenant(request)
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        engine = RemediationEngine(db, tenant_id=tenant_id)
+        try:
+            result = engine.remove_owner(
+                task_id=task_id,
+                request=body,
+                actor=_actor(request),
+            )
+            db.commit()
+        except RemediationNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except RemediationOwnershipError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# POST /remediation/tasks/{task_id}/due-date  (PR 13.3)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/remediation/tasks/{task_id}/due-date",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=TaskResponse,
+)
+def set_remediation_task_due_date(
+    task_id: str,
+    body: SetDueDateRequest,
+    request: Request,
+) -> TaskResponse:
+    tenant_id = require_bound_tenant(request)
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        engine = RemediationEngine(db, tenant_id=tenant_id)
+        try:
+            result = engine.set_due_date(
+                task_id=task_id,
+                request=body,
+                actor=_actor(request),
+            )
+            db.commit()
+        except RemediationNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# GET /remediation/tasks/{task_id}/sla  (PR 13.3)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/remediation/tasks/{task_id}/sla",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=SlaResponse,
+)
+def get_remediation_task_sla(
+    task_id: str,
+    request: Request,
+) -> SlaResponse:
+    tenant_id = require_bound_tenant(request)
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        engine = RemediationEngine(db, tenant_id=tenant_id)
+        try:
+            return engine.get_sla(task_id=task_id)
         except RemediationNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))

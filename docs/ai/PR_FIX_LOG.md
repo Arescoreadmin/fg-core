@@ -6,6 +6,35 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-19 — PR 13.3: Remediation Ownership, Due Dates & SLA Authority
+
+**Branch:** `pr/13.3-remediation-ownership-sla`
+
+**Purpose:** Adds ownership assignment, due-date tracking, and SLA accountability to the remediation engine. Enforces that tasks require an assigned owner before transitioning to IN_PROGRESS. Computes SLA breach timestamps at task creation from priority defaults. Provides overdue/unassigned list endpoints and a per-task SLA status endpoint.
+
+**New files:**
+- `migrations/postgres/0120_remediation_ownership_sla.sql` — 9 new nullable columns on `remediation_tasks`; idempotent backfill of `sla_target_days` and `sla_breach_at` for existing rows; 3 new composite indexes
+
+**Modified files:**
+- `api/db_models_remediation.py` — `Integer` import added; 9 new `Mapped[str|int|None]` columns: `assigned_user_id`, `assigned_user_email`, `assigned_display_name`, `assigned_at`, `due_date`, `sla_target_days`, `sla_breach_at`, `ownership_reason`, `last_assignment_change_at`; 3 new indexes in `__table_args__`
+- `services/remediation/schemas.py` — `RemediationAuditEventType` extended (TASK_ASSIGNED, TASK_REASSIGNED, TASK_UNASSIGNED, TASK_DUE_DATE_CHANGED, TASK_SLA_CHANGED); `SlaStatus` enum; `RemediationOwnershipError` exception; `TaskSnapshot` + `TaskResponse` updated with 9 new optional fields; `AuditListResponse` schema added; `AssignOwnerRequest`, `UnassignRequest`, `SetDueDateRequest`, `SlaResponse` schemas added
+- `services/remediation/repository.py` — `RemediationStatus` import added; `snapshot_task()` updated with 9 new fields; `fetch_overdue_tasks`, `count_overdue_tasks`, `fetch_unassigned_tasks`, `count_unassigned_tasks` added
+- `services/remediation/engine.py` — `timedelta` import; `SLA_DEFAULTS` dict; `_AT_RISK_THRESHOLD=0.8`; `_compute_sla_breach_at`, `_compute_age_days`, `_compute_sla_status`, `_compute_sla_response` module helpers; `create_task()` computes SLA at creation; `transition_status()` enforces owner requirement before IN_PROGRESS; `_task_to_response()` includes 9 new fields; `assign_owner`, `remove_owner`, `set_due_date`, `get_sla`, `list_overdue_tasks`, `list_unassigned_tasks` methods added; `get_task_audit_trail()` returns `AuditListResponse`; new metric counters imported
+- `api/remediation.py` — 7 new routes: `GET /remediation/tasks/overdue`, `GET /remediation/tasks/unassigned` (placed before `/{task_id}`), `GET /remediation/tasks/{task_id}/audit`, `POST /remediation/tasks/{task_id}/assign`, `POST /remediation/tasks/{task_id}/unassign`, `POST /remediation/tasks/{task_id}/due-date`, `GET /remediation/tasks/{task_id}/sla`; imports updated
+- `api/db.py` — `_auto_migrate_sqlite()` extended with 9 new columns for `remediation_tasks`
+- `api/observability/metrics.py` — 5 new counters: `frostgate_remediation_assignments/reassignments/overdue_tasks/sla_breaches/unassigned_tasks_total`
+- `tests/test_remediation_engine.py` — 102 tests total (REM-1–REM-70); `_advance_to_in_progress()` updated to assign owner before IN_PROGRESS; `_create_task_simple()` helper added; `alt_client` fixture added; REM-20/22/40/41 updated for new owner requirement; REM-43 through REM-70 added
+- `ROADMAP.md` — PR 13.3 entry added
+
+**Security invariants unchanged:**
+- All write operations require `governance:write` scope
+- Read operations require `governance:read` scope
+- `tenant_id` always from auth context via `require_bound_tenant()`
+- No bypass of auth, tenant validation, or audit trail on any code path
+- Cross-tenant SLA/assign operations denied (404) via tenant-scoped fetch
+
+---
+
 ### 2026-06-18 — PR 13.2: Remediation Status Workflow Engine
 
 **Branch:** `pr/13.2-remediation-workflow-engine`
