@@ -1899,3 +1899,45 @@ def test_rem_145_comment_create_and_edit_are_separate_buckets(
         headers=_auth(api_key),
     )
     assert r_edit.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# REM-146 / REM-147: Zero / negative WINDOW env var guard (bot P2 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_rem_146_zero_window_falls_back_to_default(monkeypatch):
+    """REM-146  window_seconds=0 in env falls back to the default (not ZeroDivisionError)."""
+    from services.remediation_portal.rate_policy import (
+        PortalOperation,
+        resolve_portal_limits,
+    )
+
+    monkeypatch.setenv("FG_PORTAL_RL_COMMENT_CREATE_WINDOW", "0")
+    policy = resolve_portal_limits(PortalOperation.COMMENT_CREATE)
+    assert policy.window_seconds == 3600
+
+
+def test_rem_147_negative_window_falls_back_to_default(monkeypatch):
+    """REM-147  Negative window_seconds in env falls back to the default."""
+    from services.remediation_portal.rate_policy import (
+        PortalOperation,
+        resolve_portal_limits,
+    )
+
+    monkeypatch.setenv("FG_PORTAL_RL_EVIDENCE_UPLOAD_WINDOW", "-1")
+    policy = resolve_portal_limits(PortalOperation.EVIDENCE_UPLOAD)
+    assert policy.window_seconds == 3600
+
+
+def test_rem_148_zero_window_does_not_500_write_endpoint(
+    client, api_key, task_id, fresh_limiter, monkeypatch
+):
+    """REM-148  A zero WINDOW env var does not crash the write endpoint with 500."""
+    monkeypatch.setenv("FG_PORTAL_RL_COMMENT_CREATE_WINDOW", "0")
+    r = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert r.status_code in (201, 429)

@@ -39,6 +39,12 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
+def _env_window(key: str, default: int) -> int:
+    """Like _env_int but clamps to >= 1 — window_seconds=0 causes ZeroDivisionError."""
+    v = _env_int(key, default)
+    return v if v >= 1 else default
+
+
 # Subscription-tier write-limit multipliers.
 # Extend this mapping when billing subscription tiers are implemented (P1.5).
 # Tier names must match the billing system's tier identifier strings.
@@ -75,19 +81,19 @@ def resolve_portal_limits(
     _defaults: dict[PortalOperation, PortalRatePolicy] = {
         PortalOperation.COMMENT_CREATE: PortalRatePolicy(
             limit=_env_int("FG_PORTAL_RL_COMMENT_CREATE_LIMIT", 60),
-            window_seconds=_env_int("FG_PORTAL_RL_COMMENT_CREATE_WINDOW", 3600),
+            window_seconds=_env_window("FG_PORTAL_RL_COMMENT_CREATE_WINDOW", 3600),
         ),
         PortalOperation.COMMENT_EDIT: PortalRatePolicy(
             limit=_env_int("FG_PORTAL_RL_COMMENT_EDIT_LIMIT", 60),
-            window_seconds=_env_int("FG_PORTAL_RL_COMMENT_EDIT_WINDOW", 3600),
+            window_seconds=_env_window("FG_PORTAL_RL_COMMENT_EDIT_WINDOW", 3600),
         ),
         PortalOperation.EVIDENCE_UPLOAD: PortalRatePolicy(
             limit=_env_int("FG_PORTAL_RL_EVIDENCE_UPLOAD_LIMIT", 30),
-            window_seconds=_env_int("FG_PORTAL_RL_EVIDENCE_UPLOAD_WINDOW", 3600),
+            window_seconds=_env_window("FG_PORTAL_RL_EVIDENCE_UPLOAD_WINDOW", 3600),
         ),
         PortalOperation.ACKNOWLEDGEMENT: PortalRatePolicy(
             limit=_env_int("FG_PORTAL_RL_ACKNOWLEDGEMENT_LIMIT", 30),
-            window_seconds=_env_int("FG_PORTAL_RL_ACKNOWLEDGEMENT_WINDOW", 3600),
+            window_seconds=_env_window("FG_PORTAL_RL_ACKNOWLEDGEMENT_WINDOW", 3600),
         ),
     }
 
