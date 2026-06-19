@@ -15213,14 +15213,29 @@
             "title": "Events",
             "type": "array"
           },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
           "task_id": {
             "title": "Task Id",
             "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
           "task_id",
-          "events"
+          "events",
+          "total",
+          "limit",
+          "offset"
         ],
         "title": "PortalAuditListResponse",
         "type": "object"
@@ -15280,6 +15295,14 @@
             "title": "Comments",
             "type": "array"
           },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
           "task_id": {
             "title": "Task Id",
             "type": "string"
@@ -15292,7 +15315,9 @@
         "required": [
           "task_id",
           "comments",
-          "total"
+          "total",
+          "limit",
+          "offset"
         ],
         "title": "PortalCommentListResponse",
         "type": "object"
@@ -15411,6 +15436,14 @@
             "title": "Evidence",
             "type": "array"
           },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
           "task_id": {
             "title": "Task Id",
             "type": "string"
@@ -15423,7 +15456,9 @@
         "required": [
           "task_id",
           "evidence",
-          "total"
+          "total",
+          "limit",
+          "offset"
         ],
         "title": "PortalEvidenceListResponse",
         "type": "object"
@@ -56711,6 +56746,29 @@
             }
           },
           {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -56766,6 +56824,29 @@
             "schema": {
               "title": "Task Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           },
           {
@@ -56967,6 +57048,29 @@
             "schema": {
               "title": "Task Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           },
           {

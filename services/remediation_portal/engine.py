@@ -29,6 +29,7 @@ from services.remediation_portal.repository import (
     count_comments,
     count_evidence,
     count_overdue_portal_tasks,
+    count_portal_audit_events,
     count_tasks_by_status,
     count_unassigned_portal_tasks,
     evidence_sha256_exists,
@@ -329,13 +330,24 @@ class PortalRemediationEngine:
         )
         return _comment_to_response(comment)
 
-    def list_comments(self, *, task_id: str) -> PortalCommentListResponse:
+    def list_comments(
+        self, *, task_id: str, limit: int = 50, offset: int = 0
+    ) -> PortalCommentListResponse:
         fetch_portal_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
-        comments = fetch_comments(self._db, tenant_id=self._tenant_id, task_id=task_id)
+        total = count_comments(self._db, tenant_id=self._tenant_id, task_id=task_id)
+        comments = fetch_comments(
+            self._db,
+            tenant_id=self._tenant_id,
+            task_id=task_id,
+            limit=limit,
+            offset=offset,
+        )
         return PortalCommentListResponse(
             task_id=task_id,
             comments=[_comment_to_response(c) for c in comments],
-            total=len(comments),
+            total=total,
+            limit=limit,
+            offset=offset,
         )
 
     # ------------------------------------------------------------------
@@ -383,15 +395,24 @@ class PortalRemediationEngine:
         PORTAL_EVIDENCE_UPLOADS_TOTAL.inc()
         return _evidence_to_response(evidence)
 
-    def list_evidence(self, *, task_id: str) -> PortalEvidenceListResponse:
+    def list_evidence(
+        self, *, task_id: str, limit: int = 50, offset: int = 0
+    ) -> PortalEvidenceListResponse:
         fetch_portal_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
+        total = count_evidence(self._db, tenant_id=self._tenant_id, task_id=task_id)
         evidence = fetch_evidence_list(
-            self._db, tenant_id=self._tenant_id, task_id=task_id
+            self._db,
+            tenant_id=self._tenant_id,
+            task_id=task_id,
+            limit=limit,
+            offset=offset,
         )
         return PortalEvidenceListResponse(
             task_id=task_id,
             evidence=[_evidence_to_response(e) for e in evidence],
-            total=len(evidence),
+            total=total,
+            limit=limit,
+            offset=offset,
         )
 
     # ------------------------------------------------------------------
@@ -428,12 +449,24 @@ class PortalRemediationEngine:
     # Portal audit trail
     # ------------------------------------------------------------------
 
-    def get_portal_audit(self, *, task_id: str) -> PortalAuditListResponse:
+    def get_portal_audit(
+        self, *, task_id: str, limit: int = 50, offset: int = 0
+    ) -> PortalAuditListResponse:
         fetch_portal_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
-        events = fetch_portal_audit_events(
+        total = count_portal_audit_events(
             self._db, tenant_id=self._tenant_id, task_id=task_id
+        )
+        events = fetch_portal_audit_events(
+            self._db,
+            tenant_id=self._tenant_id,
+            task_id=task_id,
+            limit=limit,
+            offset=offset,
         )
         return PortalAuditListResponse(
             task_id=task_id,
             events=[_audit_to_response(e) for e in events],
+            total=total,
+            limit=limit,
+            offset=offset,
         )
