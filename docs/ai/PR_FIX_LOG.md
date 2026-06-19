@@ -6,6 +6,16 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-19 — PR 13.5 bot fix: SHA256 wrong-length validation counter gap
+
+**Issue (P2, chatgpt-codex-connector):** `SubmitEvidenceRequest.sha256` had `min_length=64, max_length=64` on the field, causing Pydantic to reject wrong-length hashes before the `@field_validator("sha256")` ran. Neither `PORTAL_SHA256_VALIDATION_FAILURES_TOTAL` nor `PORTAL_VALIDATION_FAILURES_TOTAL` was incremented for that class of 422.
+
+**Fix:** Removed `min_length=64, max_length=64` from the `sha256 = Field(...)` definition in `services/remediation_portal/schemas.py`. The regex `^[a-f0-9]{64}$` already enforces exact length, so validation coverage is unchanged; our validator now always fires first.
+
+**New test:** REM-121 — verifies that a 63-char SHA256 is rejected with 422 **and** increments both counters.
+
+---
+
 ### 2026-06-19 — PR 13.4: Client Portal Remediation Integration
 
 **New bounded context:** `services/remediation_portal/` (`__init__.py`, `schemas.py`, `repository.py`, `engine.py`). No logic added to `portal.py`, `remediation.py`, or `field_assessment.py`.

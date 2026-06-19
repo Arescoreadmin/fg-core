@@ -1095,6 +1095,41 @@ def test_rem_119_sha256_validation_failure_metric_increments(client, api_key, ta
 
 
 # ---------------------------------------------------------------------------
+# REM-121: Wrong-length SHA256 increments validation counter
+# ---------------------------------------------------------------------------
+
+
+def test_rem_121_wrong_length_sha256_increments_metric(client, api_key, task_id):
+    """REM-121  Wrong-length SHA256 (63 chars) still increments validation counters.
+
+    Pydantic's min_length/max_length was removed from the field so our regex
+    validator always fires — no Pydantic pre-check can short-circuit the metric.
+    """
+    from api.observability.metrics import (
+        PORTAL_SHA256_VALIDATION_FAILURES_TOTAL,
+        PORTAL_VALIDATION_FAILURES_TOTAL,
+    )
+
+    before_sha = PORTAL_SHA256_VALIDATION_FAILURES_TOTAL._value.get()
+    before_total = PORTAL_VALIDATION_FAILURES_TOTAL._value.get()
+
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={
+            "filename": "x.pdf",
+            "content_type": "application/pdf",
+            "sha256": "a" * 63,  # one char short — wrong length
+            "submitted_by": "user@example.com",
+        },
+        headers=_auth(api_key),
+    )
+
+    assert resp.status_code == 422
+    assert PORTAL_SHA256_VALIDATION_FAILURES_TOTAL._value.get() > before_sha
+    assert PORTAL_VALIDATION_FAILURES_TOTAL._value.get() > before_total
+
+
+# ---------------------------------------------------------------------------
 # REM-120: Cross-tenant pagination isolation
 # ---------------------------------------------------------------------------
 

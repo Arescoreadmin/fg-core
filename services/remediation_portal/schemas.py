@@ -265,7 +265,7 @@ class SubmitEvidenceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     filename: str = Field(..., min_length=1, max_length=512)
     content_type: str = Field(..., min_length=1, max_length=128)
-    sha256: str = Field(..., min_length=64, max_length=64)
+    sha256: str
     submitted_by: str = Field(..., min_length=1, max_length=255)
     classification: str | None = Field(default=None, max_length=64)
     description: str | None = Field(default=None, max_length=5000)
