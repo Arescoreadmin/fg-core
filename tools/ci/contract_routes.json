@@ -2989,6 +2989,18 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/remediation/tasks/overdue",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/unassigned",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "DELETE",
       "path": "/remediation/tasks/{task_id}",
       "scopes": [],
@@ -3014,13 +3026,43 @@
     },
     {
       "method": "POST",
+      "path": "/remediation/tasks/{task_id}/assign",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/remediation/tasks/{task_id}/close",
       "scopes": [],
       "source": "contract"
     },
     {
       "method": "POST",
+      "path": "/remediation/tasks/{task_id}/due-date",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/sla",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/remediation/tasks/{task_id}/transition",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/unassign",
       "scopes": [],
       "source": "contract"
     },
@@ -3211,7 +3253,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-18T22:51:33.123309+00:00",
+  "generated_at": "2026-06-19T11:36:59.676437+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -1,3 +1,28 @@
+## 2026-06-19 — PR 13.3: Remediation Ownership, Due Dates & SLA Authority — 7 new routes + SLA engine
+
+**Classification:** Additive extension of the PR 13.2 remediation governance surface. No auth logic changes. All new write routes require existing `governance:write` scope; all new read routes require `governance:read`. No new planes. DB schema change is additive-only (9 nullable columns, idempotent backfill). No secrets stored.
+
+**SOC review:**
+- `GET /remediation/tasks/overdue` — read-only; returns tasks whose `sla_breach_at < now` and status is not terminal. Requires `governance:read`. Tenant-scoped. No state mutation.
+- `GET /remediation/tasks/unassigned` — read-only; returns active tasks with no `assigned_user_id`. Requires `governance:read`. Tenant-scoped. No state mutation.
+- `GET /remediation/tasks/{task_id}/audit` — read-only; returns full ordered audit trail for a task (tenant-scoped; returns events even after task deletion). Requires `governance:read`. No state mutation.
+- `POST /remediation/tasks/{task_id}/assign` — assigns or reassigns an owner (user_id/email/display_name). Requires `governance:write`. Tenant-scoped fetch enforces 404 on cross-tenant access. Emits `task_assigned` (first time) or `task_reassigned` (subsequent) audit event with old/new state snapshots. Increments `frostgate_remediation_assignments_total` or `frostgate_reassignments_total`.
+- `POST /remediation/tasks/{task_id}/unassign` — removes owner. Requires `governance:write`. Rejected (422) if task has no owner or is IN_PROGRESS (must reassign instead). Emits `task_unassigned` audit event.
+- `POST /remediation/tasks/{task_id}/due-date` — sets/updates external due date. Requires `governance:write`. Separate from `sla_breach_at` (computed from priority). Emits `task_due_date_changed` audit event.
+- `GET /remediation/tasks/{task_id}/sla` — returns computed SLA status (ON_TRACK/AT_RISK/OVERDUE/CLOSED/ACCEPTED_RISK), age_days, sla_target_days, days_remaining. Requires `governance:read`. Increments `frostgate_remediation_overdue_tasks_total` and `frostgate_remediation_sla_breaches_total` when OVERDUE is observed (query-time, not async).
+- State machine enforcement: `transition_status()` now rejects PLANNED→IN_PROGRESS if `assigned_user_id` is NULL (422 with message directing caller to POST /assign first).
+- SLA at creation: `create_task()` computes `sla_target_days` and `sla_breach_at` from `SLA_DEFAULTS` (critical=14d, high=30d, medium=60d, low=90d, informational=None).
+- Migration `0120_remediation_ownership_sla.sql` — 9 `ADD COLUMN IF NOT EXISTS` (all nullable, all backward safe); idempotent `UPDATE` backfill for `sla_target_days`/`sla_breach_at` on existing rows; 3 new composite indexes on `(tenant_id, assigned_user_id)`, `(tenant_id, due_date)`, `(tenant_id, sla_breach_at)`.
+
+**Artifacts regenerated:**
+- `make route-inventory-generate` updated `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256`.
+- `contracts/core/openapi.json` and `schemas/api/openapi.json` regenerated (sha256=546615832e05069d092a0fd9c39fcece2c8f921516192f5cc7f3fec5a2b0c1b0).
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` authority markers updated.
+
+**Validation evidence:**
+- `pytest tests/test_remediation_engine.py -q` — 102 passed (covers REM-1 through REM-70: all ownership/SLA/due-date paths, forbidden transitions, cross-tenant denial, scope enforcement, metric increments, audit reconstruction).
+- `make fg-fast` — all gates passed.
+
 ## 2026-06-18 — PR 13.2 fix: Register /remediation prefix in plane registry — 0 new routes, CI gate fix
 
 **Classification:** CI maintenance only. No product logic changes. Adds `/remediation` to the `control` plane's `route_prefixes` in `services/plane_registry/registry.py` so that the 8 remediation routes shipped in PR 13.2 satisfy the plane ownership check (`check_plane_registry: plane registry check: OK`). The routes themselves are unchanged. All scopes, tenant isolation, and auth invariants are identical to what was reviewed in the PR 13.2 SOC entry below.

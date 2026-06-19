@@ -648,6 +648,60 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 conn, "remediation_task_audits", "reason", "TEXT"
             )
 
+        # PR 13.3 — Remediation Ownership + SLA: 9 new columns on remediation_tasks
+        if "remediation_tasks" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "assigned_user_id", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "assigned_user_email", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "assigned_display_name", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "assigned_at", "DATETIME"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "due_date", "DATETIME"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "sla_target_days", "INTEGER"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "sla_breach_at", "DATETIME"
+            )
+            # Backfill SLA fields for pre-existing rows (mirrors Postgres migration 0120)
+            conn.exec_driver_sql(
+                """
+                UPDATE remediation_tasks
+                SET sla_target_days = CASE priority
+                    WHEN 'critical' THEN 14
+                    WHEN 'high'     THEN 30
+                    WHEN 'medium'   THEN 60
+                    WHEN 'low'      THEN 90
+                    ELSE NULL
+                END
+                WHERE sla_target_days IS NULL
+                """
+            )
+            conn.exec_driver_sql(
+                """
+                UPDATE remediation_tasks
+                SET sla_breach_at = datetime(
+                    substr(created_at, 1, 19),
+                    '+' || CAST(sla_target_days AS TEXT) || ' days'
+                )
+                WHERE sla_target_days IS NOT NULL AND sla_breach_at IS NULL
+                """
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "ownership_reason", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "last_assignment_change_at", "DATETIME"
+            )
+
         # (The rest of your large sqlite schema block continues unchanged)
         # NOTE: You pasted duplicated ai_policy_violations creation twice; leaving it as-is is sloppy.
         # If you want it fixed: remove the duplicate block.

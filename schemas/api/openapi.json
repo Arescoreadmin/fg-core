@@ -3255,28 +3255,6 @@
         "title": "AssignEnvironmentRequest",
         "type": "object"
       },
-      "AssignOwnerRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "owner_email": {
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Owner Email",
-            "type": "string"
-          },
-          "owner_role": {
-            "default": "primary",
-            "description": "primary|secondary|delegate",
-            "title": "Owner Role",
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner_email"
-        ],
-        "title": "AssignOwnerRequest",
-        "type": "object"
-      },
       "AssignRoleRequest": {
         "properties": {
           "key_id": {
@@ -3529,6 +3507,28 @@
           "created_at"
         ],
         "title": "AttestationResponse",
+        "type": "object"
+      },
+      "AuditListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/services__remediation__schemas__AuditEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "events"
+        ],
+        "title": "AuditListResponse",
         "type": "object"
       },
       "BackupScope": {
@@ -18633,6 +18633,34 @@
         "title": "SecretType",
         "type": "string"
       },
+      "SetDueDateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "due_date": {
+            "description": "ISO 8601 UTC datetime",
+            "format": "date-time",
+            "title": "Due Date",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "due_date"
+        ],
+        "title": "SetDueDateRequest",
+        "type": "object"
+      },
       "SetLegalHoldRequest": {
         "additionalProperties": false,
         "properties": {
@@ -19021,6 +19049,85 @@
         "title": "SimulationRunSummaryResponse",
         "type": "object"
       },
+      "SlaResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "age_days": {
+            "title": "Age Days",
+            "type": "integer"
+          },
+          "days_remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Remaining"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "sla_breach_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Breach At"
+          },
+          "sla_status": {
+            "title": "Sla Status",
+            "type": "string"
+          },
+          "sla_target_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Target Days"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "priority",
+          "sla_status",
+          "age_days",
+          "sla_target_days",
+          "days_remaining",
+          "due_date",
+          "sla_breach_at"
+        ],
+        "title": "SlaResponse",
+        "type": "object"
+      },
       "StartProvisioningRequest": {
         "additionalProperties": false,
         "properties": {
@@ -19325,6 +19432,29 @@
             "title": "Assessment Id",
             "type": "string"
           },
+          "assigned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned At"
+          },
+          "assigned_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Display Name"
+          },
           "assigned_to": {
             "anyOf": [
               {
@@ -19335,6 +19465,28 @@
               }
             ],
             "title": "Assigned To"
+          },
+          "assigned_user_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Email"
+          },
+          "assigned_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Id"
           },
           "closed_at": {
             "anyOf": [
@@ -19366,6 +19518,18 @@
             ],
             "title": "Description"
           },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
           "finding_id": {
             "title": "Finding Id",
             "type": "string"
@@ -19373,6 +19537,29 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "last_assignment_change_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Assignment Change At"
+          },
+          "ownership_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownership Reason"
           },
           "priority": {
             "title": "Priority",
@@ -19392,6 +19579,29 @@
           "schema_version": {
             "title": "Schema Version",
             "type": "string"
+          },
+          "sla_breach_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Breach At"
+          },
+          "sla_target_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Target Days"
           },
           "status": {
             "title": "Status",
@@ -20259,6 +20469,25 @@
           "truncated"
         ],
         "title": "TraversalResponse",
+        "type": "object"
+      },
+      "UnassignRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "UnassignRequest",
         "type": "object"
       },
       "UpdateAssetRequest": {
@@ -21618,6 +21847,28 @@
         "title": "AuditEventResponse",
         "type": "object"
       },
+      "api__governance_assets__AssignOwnerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "owner_email": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Owner Email",
+            "type": "string"
+          },
+          "owner_role": {
+            "default": "primary",
+            "description": "primary|secondary|delegate",
+            "title": "Owner Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner_email"
+        ],
+        "title": "AssignOwnerRequest",
+        "type": "object"
+      },
       "api__governance_workflows__AuditEventResponse": {
         "properties": {
           "actor": {
@@ -21773,6 +22024,123 @@
         ],
         "title": "EnvironmentType",
         "type": "string"
+      },
+      "services__remediation__schemas__AssignOwnerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Email",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "user_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name",
+          "email"
+        ],
+        "title": "AssignOwnerRequest",
+        "type": "object"
+      },
+      "services__remediation__schemas__AuditEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "event_at": {
+            "title": "Event At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "new_state": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New State"
+          },
+          "old_state": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old State"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "task_id",
+          "event_type",
+          "actor",
+          "old_state",
+          "new_state",
+          "reason",
+          "event_at"
+        ],
+        "title": "AuditEventResponse",
+        "type": "object"
       }
     }
   },
@@ -49688,7 +50056,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssignOwnerRequest"
+                "$ref": "#/components/schemas/api__governance_assets__AssignOwnerRequest"
               }
             }
           },
@@ -56834,6 +57202,150 @@
         ]
       }
     },
+    "/remediation/tasks/overdue": {
+      "get": {
+        "operationId": "list_overdue_remediation_tasks_remediation_tasks_overdue_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Overdue Remediation Tasks",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
+    "/remediation/tasks/unassigned": {
+      "get": {
+        "operationId": "list_unassigned_remediation_tasks_remediation_tasks_unassigned_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Unassigned Remediation Tasks",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
     "/remediation/tasks/{task_id}": {
       "delete": {
         "operationId": "delete_remediation_task_remediation_tasks__task_id__delete",
@@ -57065,6 +57577,132 @@
         ]
       }
     },
+    "/remediation/tasks/{task_id}/assign": {
+      "post": {
+        "operationId": "assign_remediation_task_owner_remediation_tasks__task_id__assign_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__remediation__schemas__AssignOwnerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Remediation Task Owner",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
+    "/remediation/tasks/{task_id}/audit": {
+      "get": {
+        "operationId": "get_remediation_task_audit_remediation_tasks__task_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Remediation Task Audit",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
     "/remediation/tasks/{task_id}/close": {
       "post": {
         "operationId": "close_remediation_task_remediation_tasks__task_id__close_post",
@@ -57118,6 +57756,132 @@
           }
         },
         "summary": "Close Remediation Task",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
+    "/remediation/tasks/{task_id}/due-date": {
+      "post": {
+        "operationId": "set_remediation_task_due_date_remediation_tasks__task_id__due_date_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDueDateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Remediation Task Due Date",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
+    "/remediation/tasks/{task_id}/sla": {
+      "get": {
+        "operationId": "get_remediation_task_sla_remediation_tasks__task_id__sla_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlaResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Remediation Task Sla",
         "tags": [
           "remediation"
         ]
@@ -57186,6 +57950,74 @@
           }
         },
         "summary": "Transition Remediation Task",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
+    "/remediation/tasks/{task_id}/unassign": {
+      "post": {
+        "operationId": "unassign_remediation_task_owner_remediation_tasks__task_id__unassign_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnassignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unassign Remediation Task Owner",
         "tags": [
           "remediation"
         ]

@@ -1,5 +1,5 @@
 # tests/test_remediation_engine.py
-"""Remediation Management test suite — PR 13.1 + PR 13.2.
+"""Remediation Management test suite — PR 13.1 + PR 13.2 + PR 13.3.
 
 Coverage:
   REM-1   Create task
@@ -44,10 +44,39 @@ Coverage:
   REM-40  Lifecycle reconstruction from audit trail
   REM-41  Concurrent transition safety
   REM-42  Migration compatibility validation
+  REM-43  Assign owner to a task
+  REM-44  Reassign owner
+  REM-45  Remove owner
+  REM-46  Assignment audit event
+  REM-47  Due date assignment
+  REM-48  Due date modification
+  REM-49  Due date audit event
+  REM-50  Critical SLA = 14 days
+  REM-51  High SLA = 30 days
+  REM-52  Medium SLA = 60 days
+  REM-53  Low SLA = 90 days
+  REM-54  Informational = no SLA
+  REM-55  ON_TRACK SLA status
+  REM-56  AT_RISK status
+  REM-57  OVERDUE status
+  REM-58  Closed status SLA
+  REM-59  Accepted-risk SLA status
+  REM-60  Wrong tenant assignment denied
+  REM-61  Cross-tenant SLA visibility denied
+  REM-62  Unauthorized assignment denied
+  REM-63  Unauthorized due-date change denied
+  REM-64  Metrics increment on assignment
+  REM-65  Overdue query
+  REM-66  Unassigned query
+  REM-67  Lifecycle reconstruction with ownership history
+  REM-68  Ownership preserved after closure
+  REM-69  Ownership preserved after accepted risk
+  REM-70  Migration compatibility — new columns present after init
 """
 
 from __future__ import annotations
 
+from typing import Any
 import uuid
 
 import pytest
@@ -61,6 +90,11 @@ from sqlalchemy.orm import Session
 
 _TENANT_A = "tenant-rem-a"
 _TENANT_B = "tenant-rem-b"
+
+
+def _json_obj(value: dict[Any, Any] | None) -> dict[Any, Any]:
+    assert value is not None
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +130,14 @@ def unauthed_client(build_app):
     """Client with no API key."""
     app = build_app(auth_enabled=True)
     return TestClient(app)
+
+
+@pytest.fixture()
+def alt_client(build_app):
+    """Separate client for tenant B — alias for cross-tenant tests in PR 13.3."""
+    app = build_app(auth_enabled=True)
+    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_B)
+    return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
@@ -158,13 +200,24 @@ def _make_refs(db: Session, tenant_id: str) -> tuple[str, str]:
 def _advance_to_in_progress(client: TestClient, task_id: str) -> None:
     """Drive a task from OPEN through PLANNED to IN_PROGRESS via the transition API.
 
-    Required before /close, which now enforces IN_PROGRESS → CLOSED.
+    PR 13.3: also assigns an owner before the PLANNED→IN_PROGRESS transition,
+    which is now required by the state machine.
     """
     r1 = client.post(
         f"/remediation/tasks/{task_id}/transition",
         json={"new_status": "planned"},
     )
     assert r1.status_code == 200, f"OPEN→PLANNED failed: {r1.text}"
+    r_assign = client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "user-test-001",
+            "display_name": "Test Owner",
+            "email": "owner@example.com",
+            "reason": "Required for in_progress transition",
+        },
+    )
+    assert r_assign.status_code == 200, f"assign failed: {r_assign.text}"
     r2 = client.post(
         f"/remediation/tasks/{task_id}/transition",
         json={"new_status": "in_progress"},
@@ -654,7 +707,7 @@ def test_rem_11_audit_event_on_create(client: TestClient, db_session: Session) -
     assert events[0].event_type == "task_created"
     assert events[0].old_state is None
     assert events[0].new_state is not None
-    assert events[0].new_state["title"] == "Audited task"
+    assert _json_obj(events[0].new_state)["title"] == "Audited task"
 
 
 # ---------------------------------------------------------------------------
@@ -685,8 +738,8 @@ def test_rem_12_audit_event_on_update(client: TestClient, db_session: Session) -
         )
     assert len(events) == 2
     update_event = next(e for e in events if e.event_type == "task_updated")
-    assert update_event.old_state["title"] == "Before update"
-    assert update_event.new_state["title"] == "After update"
+    assert _json_obj(update_event.old_state)["title"] == "Before update"
+    assert _json_obj(update_event.new_state)["title"] == "After update"
 
 
 # ---------------------------------------------------------------------------
@@ -717,9 +770,9 @@ def test_rem_13_audit_event_on_close(client: TestClient, db_session: Session) ->
         )
     close_events = [e for e in events if e.event_type == "task_closed"]
     assert len(close_events) == 1
-    assert close_events[0].old_state["status"] == "in_progress"
-    assert close_events[0].new_state["status"] == "closed"
-    assert close_events[0].new_state["closed_at"] is not None
+    assert _json_obj(close_events[0].old_state)["status"] == "in_progress"
+    assert _json_obj(close_events[0].new_state)["status"] == "closed"
+    assert _json_obj(close_events[0].new_state)["closed_at"] is not None
 
 
 # ---------------------------------------------------------------------------
@@ -1020,10 +1073,10 @@ def test_rem_19_concurrent_updates_produce_independent_audits(
             .all()
         )
     assert len(events) == 2
-    assert events[0].old_state["title"] == "v1"
-    assert events[0].new_state["title"] == "v2"
-    assert events[1].old_state["title"] == "v2"
-    assert events[1].new_state["title"] == "v3"
+    assert _json_obj(events[0].old_state)["title"] == "v1"
+    assert _json_obj(events[0].new_state)["title"] == "v2"
+    assert _json_obj(events[1].old_state)["title"] == "v2"
+    assert _json_obj(events[1].new_state)["title"] == "v3"
 
 
 def test_rem_19_each_update_increments_updated_at(
@@ -1090,11 +1143,13 @@ def test_rem_20_full_lifecycle_audit_reconstruction(
             .all()
         )
 
+    # PR 13.3: _advance_to_in_progress now emits task_assigned between task_planned and task_started
     event_types = [e.event_type for e in events]
     assert event_types == [
         "task_created",
         "task_updated",
         "task_planned",
+        "task_assigned",
         "task_started",
         "task_closed",
     ]
@@ -1102,33 +1157,33 @@ def test_rem_20_full_lifecycle_audit_reconstruction(
     # Reconstruct initial state
     created = events[0]
     assert created.old_state is None
-    assert created.new_state["title"] == "Lifecycle start"
-    assert created.new_state["priority"] == "high"
-    assert created.new_state["status"] == "open"
+    assert _json_obj(created.new_state)["title"] == "Lifecycle start"
+    assert _json_obj(created.new_state)["priority"] == "high"
+    assert _json_obj(created.new_state)["status"] == "open"
 
     # Verify state transition on update
     updated = events[1]
-    assert updated.old_state["title"] == "Lifecycle start"
-    assert updated.new_state["title"] == "Lifecycle updated"
-    assert updated.new_state["priority"] == "critical"
+    assert _json_obj(updated.old_state)["title"] == "Lifecycle start"
+    assert _json_obj(updated.new_state)["title"] == "Lifecycle updated"
+    assert _json_obj(updated.new_state)["priority"] == "critical"
 
     # Verify planning transition
     planned = events[2]
     assert planned.event_type == "task_planned"
-    assert planned.old_state["status"] == "open"
-    assert planned.new_state["status"] == "planned"
+    assert _json_obj(planned.old_state)["status"] == "open"
+    assert _json_obj(planned.new_state)["status"] == "planned"
 
-    # Verify start transition
-    started = events[3]
+    # Verify start transition (index 4 due to task_assigned at index 3)
+    started = events[4]
     assert started.event_type == "task_started"
-    assert started.old_state["status"] == "planned"
-    assert started.new_state["status"] == "in_progress"
+    assert _json_obj(started.old_state)["status"] == "planned"
+    assert _json_obj(started.new_state)["status"] == "in_progress"
 
     # Verify closure
-    closed = events[4]
-    assert closed.old_state["status"] == "in_progress"
-    assert closed.new_state["status"] == "closed"
-    assert closed.new_state["closed_at"] is not None
+    closed = events[5]
+    assert _json_obj(closed.old_state)["status"] == "in_progress"
+    assert _json_obj(closed.new_state)["status"] == "closed"
+    assert _json_obj(closed.new_state)["closed_at"] is not None
 
 
 def test_rem_20_deleted_task_audit_trail_persists(
@@ -1166,7 +1221,7 @@ def test_rem_20_deleted_task_audit_trail_persists(
     assert task_row is None  # task is gone
     assert len(events) == 3  # create, update, delete events all preserved
     assert events[-1].event_type == "task_deleted"
-    assert events[-1].old_state["title"] == "Updated before delete"
+    assert _json_obj(events[-1].old_state)["title"] == "Updated before delete"
     assert events[-1].new_state is None
 
 
@@ -1184,6 +1239,24 @@ def _create_task(client: TestClient, db: Session, tenant_id: str) -> str:
             "finding_id": finding_id,
             "assessment_id": assessment_id,
             "title": "Workflow test task",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+def _create_task_simple(client: TestClient, priority: str = "medium") -> str:
+    """PR 13.3 helper: create a fresh task using a live DB session. No external db needed."""
+    engine_obj = get_engine()
+    with Session(engine_obj) as db:
+        assessment_id, finding_id = _make_refs(db, _TENANT_A)
+    resp = client.post(
+        "/remediation/tasks",
+        json={
+            "finding_id": finding_id,
+            "assessment_id": assessment_id,
+            "title": "PR 13.3 test task",
+            "priority": priority,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -1223,6 +1296,11 @@ def test_rem_22_planned_to_in_progress(client: TestClient, db_session: Session) 
     task_id = _create_task(client, db_session, _TENANT_A)
     client.post(
         f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    # PR 13.3: must assign owner before transitioning to in_progress
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={"user_id": "u1", "display_name": "User One", "email": "u1@example.com"},
     )
     resp = client.post(
         f"/remediation/tasks/{task_id}/transition",
@@ -1449,8 +1527,8 @@ def test_rem_32_transition_creates_audit_event(
             .all()
         )
     assert len(events) == 1
-    assert events[0].old_state["status"] == "open"
-    assert events[0].new_state["status"] == "planned"
+    assert _json_obj(events[0].old_state)["status"] == "open"
+    assert _json_obj(events[0].new_state)["status"] == "planned"
     assert events[0].actor is not None
 
 
@@ -1723,6 +1801,15 @@ def test_rem_40_workflow_lifecycle_reconstruction(
         f"/remediation/tasks/{task_id}/transition",
         json={"new_status": "planned", "reason": "Assigned to ops team"},
     )
+    # PR 13.3: must assign owner before in_progress
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "u-ops",
+            "display_name": "Ops User",
+            "email": "ops@example.com",
+        },
+    )
     client.post(
         f"/remediation/tasks/{task_id}/transition",
         json={"new_status": "in_progress"},
@@ -1741,25 +1828,27 @@ def test_rem_40_workflow_lifecycle_reconstruction(
             .all()
         )
 
+    # PR 13.3: task_assigned is now part of the lifecycle (emitted before in_progress)
     event_types = [e.event_type for e in events]
     assert event_types == [
         "task_created",
         "task_planned",
+        "task_assigned",
         "task_started",
         "task_closed",
     ]
 
     # Each event preserves the transition
-    assert events[1].old_state["status"] == "open"
-    assert events[1].new_state["status"] == "planned"
+    assert _json_obj(events[1].old_state)["status"] == "open"
+    assert _json_obj(events[1].new_state)["status"] == "planned"
     assert events[1].reason == "Assigned to ops team"
 
-    assert events[2].old_state["status"] == "planned"
-    assert events[2].new_state["status"] == "in_progress"
+    assert _json_obj(events[3].old_state)["status"] == "planned"
+    assert _json_obj(events[3].new_state)["status"] == "in_progress"
 
-    assert events[3].old_state["status"] == "in_progress"
-    assert events[3].new_state["status"] == "closed"
-    assert events[3].new_state["closed_at"] is not None
+    assert _json_obj(events[4].old_state)["status"] == "in_progress"
+    assert _json_obj(events[4].new_state)["status"] == "closed"
+    assert _json_obj(events[4].new_state)["closed_at"] is not None
 
 
 def test_rem_40_risk_accepted_lifecycle(
@@ -1783,8 +1872,8 @@ def test_rem_40_risk_accepted_lifecycle(
 
     assert len(events) == 2
     assert events[1].event_type == "task_risk_accepted"
-    assert events[1].old_state["status"] == "open"
-    assert events[1].new_state["status"] == "accepted_risk"
+    assert _json_obj(events[1].old_state)["status"] == "open"
+    assert _json_obj(events[1].new_state)["status"] == "accepted_risk"
     assert events[1].reason == "Low exploitability"
 
 
@@ -1801,6 +1890,11 @@ def test_rem_41_sequential_transitions_produce_correct_audit_chain(
 
     client.post(
         f"/remediation/tasks/{task_id}/transition", json={"new_status": "planned"}
+    )
+    # PR 13.3: must assign owner before in_progress
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={"user_id": "u1", "display_name": "U1", "email": "u1@example.com"},
     )
     client.post(
         f"/remediation/tasks/{task_id}/transition", json={"new_status": "in_progress"}
@@ -1824,12 +1918,12 @@ def test_rem_41_sequential_transitions_produce_correct_audit_chain(
         )
 
     assert len(events) == 3
-    assert events[0].old_state["status"] == "open"
-    assert events[0].new_state["status"] == "planned"
-    assert events[1].old_state["status"] == "planned"
-    assert events[1].new_state["status"] == "in_progress"
-    assert events[2].old_state["status"] == "in_progress"
-    assert events[2].new_state["status"] == "closed"
+    assert _json_obj(events[0].old_state)["status"] == "open"
+    assert _json_obj(events[0].new_state)["status"] == "planned"
+    assert _json_obj(events[1].old_state)["status"] == "planned"
+    assert _json_obj(events[1].new_state)["status"] == "in_progress"
+    assert _json_obj(events[2].old_state)["status"] == "in_progress"
+    assert _json_obj(events[2].new_state)["status"] == "closed"
 
 
 def test_rem_41_duplicate_transition_rejected(
@@ -1902,3 +1996,510 @@ def test_rem_42_new_audit_event_types_stored_correctly(
     assert event.tenant_id == _TENANT_A
     assert event.old_state is not None
     assert event.new_state is not None
+
+
+# ===========================================================================
+# PR 13.3 — Remediation Ownership, Due Dates & SLA Authority
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# REM-43: Assign owner to a task
+# ---------------------------------------------------------------------------
+
+
+def test_rem_43_assign_owner(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "user-001",
+            "display_name": "Alice",
+            "email": "alice@example.com",
+            "reason": "Initial assignment",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["assigned_user_id"] == "user-001"
+    assert data["assigned_display_name"] == "Alice"
+    assert data["assigned_user_email"] == "alice@example.com"
+    assert data["ownership_reason"] == "Initial assignment"
+    assert data["assigned_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# REM-44: Reassign owner
+# ---------------------------------------------------------------------------
+
+
+def test_rem_44_reassign_owner(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "user-001",
+            "display_name": "Alice",
+            "email": "alice@example.com",
+        },
+    )
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "user-002",
+            "display_name": "Bob",
+            "email": "bob@example.com",
+            "reason": "Reassigned",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["assigned_user_id"] == "user-002"
+
+
+# ---------------------------------------------------------------------------
+# REM-45: Remove owner
+# ---------------------------------------------------------------------------
+
+
+def test_rem_45_remove_owner(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "user-001",
+            "display_name": "Alice",
+            "email": "alice@example.com",
+        },
+    )
+    resp = client.post(f"/remediation/tasks/{task_id}/unassign", json={})
+    assert resp.status_code == 200
+    assert resp.json()["assigned_user_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# REM-46: Assignment audit event
+# ---------------------------------------------------------------------------
+
+
+def test_rem_46_assignment_audit_event(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "user-001",
+            "display_name": "Alice",
+            "email": "alice@example.com",
+            "reason": "Assigning",
+        },
+    )
+    audit_resp = client.get(f"/remediation/tasks/{task_id}/audit")
+    assert audit_resp.status_code == 200
+    events = audit_resp.json()["events"]
+    types = [e["event_type"] for e in events]
+    assert "task_assigned" in types
+    assigned_event = next(e for e in events if e["event_type"] == "task_assigned")
+    assert assigned_event["reason"] == "Assigning"
+    assert assigned_event["new_state"]["assigned_user_id"] == "user-001"
+
+
+# ---------------------------------------------------------------------------
+# REM-47: Due date assignment
+# ---------------------------------------------------------------------------
+
+
+def test_rem_47_set_due_date(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/due-date",
+        json={
+            "due_date": "2026-12-31T00:00:00+00:00",
+            "reason": "Contractual commitment",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["due_date"] == "2026-12-31T00:00:00+00:00"
+
+
+# ---------------------------------------------------------------------------
+# REM-48: Due date modification
+# ---------------------------------------------------------------------------
+
+
+def test_rem_48_modify_due_date(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    client.post(
+        f"/remediation/tasks/{task_id}/due-date",
+        json={"due_date": "2026-12-31T00:00:00+00:00"},
+    )
+    resp = client.post(
+        f"/remediation/tasks/{task_id}/due-date",
+        json={"due_date": "2027-01-15T00:00:00+00:00", "reason": "Extended"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["due_date"] == "2027-01-15T00:00:00+00:00"
+
+
+# ---------------------------------------------------------------------------
+# REM-49: Due date audit event
+# ---------------------------------------------------------------------------
+
+
+def test_rem_49_due_date_audit_event(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    client.post(
+        f"/remediation/tasks/{task_id}/due-date",
+        json={"due_date": "2026-12-31T00:00:00+00:00", "reason": "Deadline set"},
+    )
+    audit_resp = client.get(f"/remediation/tasks/{task_id}/audit")
+    events = audit_resp.json()["events"]
+    types = [e["event_type"] for e in events]
+    assert "task_due_date_changed" in types
+
+
+# ---------------------------------------------------------------------------
+# REM-50: Critical SLA = 14 days
+# ---------------------------------------------------------------------------
+
+
+def test_rem_50_critical_sla(client: TestClient) -> None:
+    task_id = _create_task_simple(client, priority="critical")
+    resp = client.get(f"/remediation/tasks/{task_id}/sla")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["sla_target_days"] == 14
+    assert data["sla_status"] == "on_track"
+
+
+# ---------------------------------------------------------------------------
+# REM-51: High SLA = 30 days
+# ---------------------------------------------------------------------------
+
+
+def test_rem_51_high_sla(client: TestClient) -> None:
+    task_id = _create_task_simple(client, priority="high")
+    resp = client.get(f"/remediation/tasks/{task_id}/sla")
+    assert resp.json()["sla_target_days"] == 30
+
+
+# ---------------------------------------------------------------------------
+# REM-52: Medium SLA = 60 days
+# ---------------------------------------------------------------------------
+
+
+def test_rem_52_medium_sla(client: TestClient) -> None:
+    task_id = _create_task_simple(client, priority="medium")
+    resp = client.get(f"/remediation/tasks/{task_id}/sla")
+    assert resp.json()["sla_target_days"] == 60
+
+
+# ---------------------------------------------------------------------------
+# REM-53: Low SLA = 90 days
+# ---------------------------------------------------------------------------
+
+
+def test_rem_53_low_sla(client: TestClient) -> None:
+    task_id = _create_task_simple(client, priority="low")
+    resp = client.get(f"/remediation/tasks/{task_id}/sla")
+    assert resp.json()["sla_target_days"] == 90
+
+
+# ---------------------------------------------------------------------------
+# REM-54: Informational = no SLA
+# ---------------------------------------------------------------------------
+
+
+def test_rem_54_informational_sla(client: TestClient) -> None:
+    task_id = _create_task_simple(client, priority="informational")
+    resp = client.get(f"/remediation/tasks/{task_id}/sla")
+    data = resp.json()
+    assert data["sla_target_days"] is None
+    assert data["sla_status"] == "on_track"
+    assert data["days_remaining"] is None
+
+
+# ---------------------------------------------------------------------------
+# REM-55: ON_TRACK SLA status — newly created task
+# ---------------------------------------------------------------------------
+
+
+def test_rem_55_on_track_status(client: TestClient) -> None:
+    task_id = _create_task_simple(client, priority="high")
+    resp = client.get(f"/remediation/tasks/{task_id}/sla")
+    assert resp.json()["sla_status"] == "on_track"
+    assert resp.json()["days_remaining"] > 0
+
+
+# ---------------------------------------------------------------------------
+# REM-56: AT_RISK status — task near SLA breach
+# ---------------------------------------------------------------------------
+
+
+def test_rem_56_at_risk_status(client: TestClient, monkeypatch) -> None:
+    import services.remediation.engine as eng
+
+    task_id = _create_task_simple(client, priority="high")
+    original = eng._compute_age_days
+    monkeypatch.setattr(eng, "_compute_age_days", lambda task: 25)
+    try:
+        resp = client.get(f"/remediation/tasks/{task_id}/sla")
+        assert resp.json()["sla_status"] == "at_risk"
+    finally:
+        monkeypatch.setattr(eng, "_compute_age_days", original)
+
+
+# ---------------------------------------------------------------------------
+# REM-57: OVERDUE status — task past SLA breach
+# ---------------------------------------------------------------------------
+
+
+def test_rem_57_overdue_status(client: TestClient, monkeypatch) -> None:
+    import services.remediation.engine as eng
+
+    task_id = _create_task_simple(client, priority="high")
+    original = eng._compute_age_days
+    monkeypatch.setattr(eng, "_compute_age_days", lambda task: 35)
+    try:
+        resp = client.get(f"/remediation/tasks/{task_id}/sla")
+        assert resp.json()["sla_status"] == "overdue"
+    finally:
+        monkeypatch.setattr(eng, "_compute_age_days", original)
+
+
+# ---------------------------------------------------------------------------
+# REM-58: Closed status SLA
+# ---------------------------------------------------------------------------
+
+
+def test_rem_58_closed_sla_status(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    _advance_to_in_progress(client, task_id)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "closed"}
+    )
+    resp = client.get(f"/remediation/tasks/{task_id}/sla")
+    assert resp.json()["sla_status"] == "closed"
+
+
+# ---------------------------------------------------------------------------
+# REM-59: Accepted-risk SLA status
+# ---------------------------------------------------------------------------
+
+
+def test_rem_59_accepted_risk_sla_status(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "accepted_risk", "reason": "Accepted"},
+    )
+    resp = client.get(f"/remediation/tasks/{task_id}/sla")
+    assert resp.json()["sla_status"] == "accepted_risk"
+
+
+# ---------------------------------------------------------------------------
+# REM-60: Wrong tenant assignment denied
+# ---------------------------------------------------------------------------
+
+
+def test_rem_60_wrong_tenant_assign_denied(
+    client: TestClient, alt_client: TestClient
+) -> None:
+    task_id = _create_task_simple(client)
+    resp = alt_client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={"user_id": "user-x", "display_name": "X", "email": "x@example.com"},
+    )
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# REM-61: Cross-tenant SLA visibility denied
+# ---------------------------------------------------------------------------
+
+
+def test_rem_61_cross_tenant_sla_denied(
+    client: TestClient, alt_client: TestClient
+) -> None:
+    task_id = _create_task_simple(client)
+    resp = alt_client.get(f"/remediation/tasks/{task_id}/sla")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# REM-62: Unauthorized assignment denied (no governance:write scope)
+# ---------------------------------------------------------------------------
+
+
+def test_rem_62_unauthorized_assign_denied(
+    readonly_client: TestClient,
+    client: TestClient,
+) -> None:
+    task_id = _create_task_simple(client)
+    resp = readonly_client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={"user_id": "u1", "display_name": "U1", "email": "u1@example.com"},
+    )
+    assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# REM-63: Unauthorized due-date change denied
+# ---------------------------------------------------------------------------
+
+
+def test_rem_63_unauthorized_due_date_denied(
+    readonly_client: TestClient,
+    client: TestClient,
+) -> None:
+    task_id = _create_task_simple(client)
+    resp = readonly_client.post(
+        f"/remediation/tasks/{task_id}/due-date",
+        json={"due_date": "2026-12-31T00:00:00+00:00"},
+    )
+    assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# REM-64: Metrics increment on assignment
+# ---------------------------------------------------------------------------
+
+
+def test_rem_64_metrics_increment_on_assignment(client: TestClient) -> None:
+    from api.observability.metrics import REMEDIATION_ASSIGNMENTS_TOTAL
+
+    before = REMEDIATION_ASSIGNMENTS_TOTAL._value.get()
+    task_id = _create_task_simple(client)
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={"user_id": "u1", "display_name": "U1", "email": "u1@example.com"},
+    )
+    after = REMEDIATION_ASSIGNMENTS_TOTAL._value.get()
+    assert after == before + 1
+
+
+# ---------------------------------------------------------------------------
+# REM-65: Overdue query
+# ---------------------------------------------------------------------------
+
+
+def test_rem_65_overdue_query(client: TestClient) -> None:
+    # Create a task; it will NOT be overdue since it was just created.
+    _create_task_simple(client, priority="critical")
+    resp = client.get("/remediation/tasks/overdue")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "tasks" in data
+    assert "total" in data
+    assert isinstance(data["tasks"], list)
+    assert isinstance(data["total"], int)
+
+
+# ---------------------------------------------------------------------------
+# REM-66: Unassigned query
+# ---------------------------------------------------------------------------
+
+
+def test_rem_66_unassigned_query(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    resp = client.get("/remediation/tasks/unassigned")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] >= 1
+    task_ids = [t["id"] for t in data["tasks"]]
+    assert task_id in task_ids
+
+
+# ---------------------------------------------------------------------------
+# REM-67: Lifecycle reconstruction with ownership history
+# ---------------------------------------------------------------------------
+
+
+def test_rem_67_lifecycle_reconstruction_with_ownership(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "alice",
+            "display_name": "Alice",
+            "email": "alice@example.com",
+            "reason": "Initial",
+        },
+    )
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "bob",
+            "display_name": "Bob",
+            "email": "bob@example.com",
+            "reason": "Reassigned",
+        },
+    )
+    client.post(
+        f"/remediation/tasks/{task_id}/due-date",
+        json={"due_date": "2026-12-31T00:00:00+00:00"},
+    )
+    audit_resp = client.get(f"/remediation/tasks/{task_id}/audit")
+    events = audit_resp.json()["events"]
+    types = [e["event_type"] for e in events]
+    assert "task_created" in types
+    assert "task_assigned" in types
+    assert "task_reassigned" in types
+    assert "task_due_date_changed" in types
+
+
+# ---------------------------------------------------------------------------
+# REM-68: Ownership preserved after closure
+# ---------------------------------------------------------------------------
+
+
+def test_rem_68_ownership_preserved_after_closure(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    # _advance_to_in_progress assigns user-test-001 and transitions
+    _advance_to_in_progress(client, task_id)
+    client.post(
+        f"/remediation/tasks/{task_id}/transition", json={"new_status": "closed"}
+    )
+    resp = client.get(f"/remediation/tasks/{task_id}")
+    # owner assigned by _advance_to_in_progress is preserved post-closure
+    assert resp.json()["assigned_user_id"] is not None
+
+
+# ---------------------------------------------------------------------------
+# REM-69: Ownership preserved after accepted risk
+# ---------------------------------------------------------------------------
+
+
+def test_rem_69_ownership_preserved_after_accepted_risk(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    client.post(
+        f"/remediation/tasks/{task_id}/assign",
+        json={
+            "user_id": "alice",
+            "display_name": "Alice",
+            "email": "alice@example.com",
+        },
+    )
+    client.post(
+        f"/remediation/tasks/{task_id}/transition",
+        json={"new_status": "accepted_risk", "reason": "Risk accepted"},
+    )
+    resp = client.get(f"/remediation/tasks/{task_id}")
+    assert resp.json()["assigned_user_id"] == "alice"
+
+
+# ---------------------------------------------------------------------------
+# REM-70: Migration compatibility — new columns present after init
+# ---------------------------------------------------------------------------
+
+
+def test_rem_70_migration_compatibility(client: TestClient) -> None:
+    task_id = _create_task_simple(client)
+    resp = client.get(f"/remediation/tasks/{task_id}")
+    data = resp.json()
+    assert "assigned_user_id" in data
+    assert "sla_target_days" in data
+    assert "sla_breach_at" in data
+    assert "due_date" in data
+    assert data["assigned_user_id"] is None
+    # medium priority default = 60 days
+    assert data["sla_target_days"] == 60
+    assert data["sla_breach_at"] is not None

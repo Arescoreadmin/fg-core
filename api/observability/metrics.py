@@ -363,3 +363,38 @@ REMEDIATION_INVALID_TRANSITIONS_TOTAL = Counter(
     "Total rejected remediation task status transition attempts",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 13.3: Remediation Ownership + SLA metrics
+# No tenant_id labels.
+# ---------------------------------------------------------------------------
+
+REMEDIATION_ASSIGNMENTS_TOTAL = Counter(
+    "frostgate_remediation_assignments_total",
+    "Total remediation task owner assignments (first-time)",
+    [],
+)
+
+REMEDIATION_REASSIGNMENTS_TOTAL = Counter(
+    "frostgate_remediation_reassignments_total",
+    "Total remediation task owner reassignments",
+    [],
+)
+
+REMEDIATION_OVERDUE_TASKS_TOTAL = Counter(
+    "frostgate_remediation_overdue_tasks_total",
+    "Total remediation task overdue detections (incremented at SLA query time when overdue)",
+    [],
+)
+
+REMEDIATION_SLA_BREACHES_TOTAL = Counter(
+    "frostgate_remediation_sla_breaches_total",
+    "Total SLA breaches observed",
+    [],
+)
+
+REMEDIATION_UNASSIGNED_TASKS_TOTAL = Counter(
+    "frostgate_remediation_unassigned_tasks_total",
+    "Total remediation task unassignment operations",
+    [],
+)

@@ -20,7 +20,9 @@ Tables:
 
 from __future__ import annotations
 
-from sqlalchemy import Index, String, Text
+from datetime import datetime
+
+from sqlalchemy import DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -56,11 +58,35 @@ class RemediationTask(Base):
         String(16), nullable=False, default="1.0"
     )
 
+    # PR 13.3 — Remediation Ownership + SLA Authority
+    assigned_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    assigned_user_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    assigned_display_name: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    assigned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    due_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sla_target_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sla_breach_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ownership_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_assignment_change_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     __table_args__ = (
         Index("ix_remediation_tasks_tenant_finding", "tenant_id", "finding_id"),
         Index("ix_remediation_tasks_tenant_assessment", "tenant_id", "assessment_id"),
         Index("ix_remediation_tasks_tenant_status", "tenant_id", "status"),
         Index("ix_remediation_tasks_tenant_priority", "tenant_id", "priority"),
+        Index("ix_remediation_tasks_assigned_user", "tenant_id", "assigned_user_id"),
+        Index("ix_remediation_tasks_due_date", "tenant_id", "due_date"),
+        Index("ix_remediation_tasks_sla_breach_at", "tenant_id", "sla_breach_at"),
     )
 
 

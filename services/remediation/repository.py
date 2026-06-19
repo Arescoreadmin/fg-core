@@ -9,6 +9,7 @@ filtering by tenant_id. Caller owns db.commit().
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from api.db_models_remediation import RemediationTask, RemediationTaskAudit
 from services.remediation.schemas import (
     RemediationNotFound,
     RemediationReferenceError,
+    RemediationStatus,
     RemediationTenantViolation,
     TaskSnapshot,
 )
@@ -226,6 +228,10 @@ def fetch_audit_events(
 
 def snapshot_task(task: RemediationTask) -> dict[str, Any]:
     """Produce an immutable dict snapshot of a task's current state for audit records."""
+
+    def _dt(v: Any) -> str | None:
+        return v.isoformat() if v is not None else None
+
     return TaskSnapshot(
         id=task.id,
         tenant_id=task.tenant_id,
@@ -242,4 +248,89 @@ def snapshot_task(task: RemediationTask) -> dict[str, Any]:
         updated_at=task.updated_at,
         closed_at=task.closed_at,
         task_metadata=task.task_metadata or {},
+        assigned_user_id=task.assigned_user_id,
+        assigned_user_email=task.assigned_user_email,
+        assigned_display_name=task.assigned_display_name,
+        assigned_at=_dt(task.assigned_at),
+        due_date=_dt(task.due_date),
+        sla_target_days=task.sla_target_days,
+        sla_breach_at=_dt(task.sla_breach_at),
+        ownership_reason=task.ownership_reason,
+        last_assignment_change_at=_dt(task.last_assignment_change_at),
     ).model_dump()
+
+
+# ---------------------------------------------------------------------------
+# PR 13.3 — Overdue / unassigned task queries
+# ---------------------------------------------------------------------------
+
+
+def fetch_overdue_tasks(
+    db: Session,
+    *,
+    tenant_id: str,
+    now: datetime,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[RemediationTask]:
+    """Return tasks whose SLA breach timestamp is in the past (overdue, not terminal)."""
+    terminal = {RemediationStatus.CLOSED.value, RemediationStatus.ACCEPTED_RISK.value}
+    q = (
+        db.query(RemediationTask)
+        .filter(
+            RemediationTask.tenant_id == tenant_id,
+            RemediationTask.sla_breach_at.isnot(None),
+            RemediationTask.sla_breach_at < now,
+            RemediationTask.status.notin_(terminal),
+        )
+        .order_by(RemediationTask.sla_breach_at.asc())
+    )
+    return q.limit(min(limit, 100)).offset(offset).all()
+
+
+def count_overdue_tasks(db: Session, *, tenant_id: str, now: datetime) -> int:
+    terminal = {RemediationStatus.CLOSED.value, RemediationStatus.ACCEPTED_RISK.value}
+    return (
+        db.query(RemediationTask)
+        .filter(
+            RemediationTask.tenant_id == tenant_id,
+            RemediationTask.sla_breach_at.isnot(None),
+            RemediationTask.sla_breach_at < now,
+            RemediationTask.status.notin_(terminal),
+        )
+        .count()
+    )
+
+
+def fetch_unassigned_tasks(
+    db: Session,
+    *,
+    tenant_id: str,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[RemediationTask]:
+    """Return tasks with no owner that are not in a terminal state."""
+    terminal = {RemediationStatus.CLOSED.value, RemediationStatus.ACCEPTED_RISK.value}
+    q = (
+        db.query(RemediationTask)
+        .filter(
+            RemediationTask.tenant_id == tenant_id,
+            RemediationTask.assigned_user_id.is_(None),
+            RemediationTask.status.notin_(terminal),
+        )
+        .order_by(RemediationTask.created_at.desc())
+    )
+    return q.limit(min(limit, 100)).offset(offset).all()
+
+
+def count_unassigned_tasks(db: Session, *, tenant_id: str) -> int:
+    terminal = {RemediationStatus.CLOSED.value, RemediationStatus.ACCEPTED_RISK.value}
+    return (
+        db.query(RemediationTask)
+        .filter(
+            RemediationTask.tenant_id == tenant_id,
+            RemediationTask.assigned_user_id.is_(None),
+            RemediationTask.status.notin_(terminal),
+        )
+        .count()
+    )

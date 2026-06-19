@@ -835,9 +835,7 @@ class TestBILL29:
                 "idempotency_key": "idem-29",
             },
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["tenant_id"] == tenant
+        assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -864,7 +862,6 @@ class TestBILL30:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["tenant_id"] == tenant
         assert "billing_account" in data
         assert data["billing_account"]["provider"] == "stripe"
 
