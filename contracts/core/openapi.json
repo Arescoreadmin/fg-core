@@ -20052,8 +20052,6 @@
             "type": "string"
           },
           "sha256": {
-            "maxLength": 64,
-            "minLength": 64,
             "title": "Sha256",
             "type": "string"
           },

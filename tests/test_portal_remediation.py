@@ -933,7 +933,9 @@ def test_rem_110_valid_mime_types_accepted(client, api_key, task_id):
             },
             headers=_auth(api_key),
         )
-        assert resp.status_code == 201, f"Expected 201 for mime={mime}, got {resp.status_code}"
+        assert resp.status_code == 201, (
+            f"Expected 201 for mime={mime}, got {resp.status_code}"
+        )
 
 
 def test_rem_111_image_family_accepted(client, api_key, task_id):
