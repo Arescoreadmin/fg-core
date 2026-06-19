@@ -6,6 +6,23 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-19 — PR 13.4: Client Portal Remediation Integration
+
+**New bounded context:** `services/remediation_portal/` (`__init__.py`, `schemas.py`, `repository.py`, `engine.py`). No logic added to `portal.py`, `remediation.py`, or `field_assessment.py`.
+
+**New files:**
+- `api/db_models_portal_remediation.py` — 3 ORM models: `PortalRemediationComment`, `PortalEvidenceSubmission`, `PortalRemediationAuditEvent`.
+- `api/portal_remediation.py` — 9-route FastAPI router under `/portal/remediation`.
+- `migrations/postgres/0121_portal_remediation.sql` — 3 tables, RLS, append-only triggers on audit table.
+- `tests/test_portal_remediation.py` — 30 tests (REM-71–REM-100).
+
+**Modified files:**
+- `api/observability/metrics.py` — 5 new Prometheus counters: `frostgate_portal_remediation_views_total`, `frostgate_portal_comments_total`, `frostgate_portal_evidence_uploads_total`, `frostgate_portal_owner_acknowledgements_total`, `frostgate_portal_overdue_views_total`.
+- `api/db.py` — model import registered in `_ensure_models_imported()`; 3 SQLite tables added to `_auto_migrate_sqlite()`.
+- `api/main.py` — `portal_remediation_router` imported and registered in both `build_app()` and `build_contract_app()`.
+
+---
+
 ### 2026-06-19 — PR 13.3: Remediation Ownership, Due Dates & SLA Authority
 
 **Branch:** `pr/13.3-remediation-ownership-sla`

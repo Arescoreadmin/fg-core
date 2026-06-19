@@ -1,3 +1,25 @@
+## 2026-06-19 — PR 13.4: Client Portal Remediation Integration — 9 new routes + 3 new tables
+
+**Classification:** Additive client-facing portal layer on top of PR 13.3 remediation substrate. New bounded context `services/remediation_portal/` — no logic added to `portal.py`, `remediation.py`, or `field_assessment.py`. No auth logic changes. All routes require existing `governance:read` or `governance:write` scope via `require_scopes()` + `require_bound_tenant()`. No new planes — `/portal` prefix already registered in control plane (C7). DB schema change is additive-only (3 new tables). No secrets stored.
+
+**SOC review:**
+- `GET /portal/remediation` — portal dashboard; read-only; returns aggregate counts and recent/overdue task summaries. Requires `governance:read`. Tenant-scoped. No state mutation.
+- `GET /portal/remediation/tasks/{task_id}` — safe task projection (`PortalTaskView`) excluding `assigned_user_id`, `assigned_user_email`, `created_by`, `schema_version`, `task_metadata`. Requires `governance:read`. Returns 404 for cross-tenant access. Emits `portal_task_viewed` audit event (append-only).
+- `GET /portal/remediation/tasks/{task_id}/comments` — returns ordered comment list. Requires `governance:read`. Tenant-scoped (404 on cross-tenant).
+- `POST /portal/remediation/tasks/{task_id}/comments` — adds a comment. Requires `governance:write`. Emits `portal_comment_added` audit event. Increments `frostgate_portal_comments_total`.
+- `PATCH /portal/remediation/tasks/{task_id}/comments/{comment_id}` — edits a comment body; sets `is_edited=True`. Requires `governance:write`. Emits `portal_comment_edited` audit event. 404 on cross-tenant comment.
+- `GET /portal/remediation/tasks/{task_id}/evidence` — returns ordered evidence list. Requires `governance:read`. Tenant-scoped.
+- `POST /portal/remediation/tasks/{task_id}/evidence` — submits evidence metadata (no binary upload; SHA256-referenced). Requires `governance:write`. Rejects duplicate SHA256 per task (409). Emits `portal_evidence_uploaded` audit event. Increments `frostgate_portal_evidence_uploads_total`.
+- `POST /portal/remediation/tasks/{task_id}/acknowledge` — records ownership acknowledgement; idempotent (200 on repeat). Requires `governance:write`. Emits `portal_owner_acknowledged` audit event. Increments `frostgate_portal_owner_acknowledgements_total`.
+- `GET /portal/remediation/tasks/{task_id}/audit` — returns portal-only audit trail (`portal_*` events). Requires `governance:read`. Tenant-scoped.
+- `portal_remediation_audit_events` table: append-only enforced with `append_only_guard()` DB triggers (same pattern as migration 0013). REVOKE TRUNCATE from PUBLIC. RLS enabled on all 3 tables.
+- Migration `0121_portal_remediation.sql` — 3 new tables with IF NOT EXISTS; composite indexes; RLS + FORCE RLS; append-only triggers on audit table.
+
+**Artifacts regenerated:**
+- `make route-inventory-generate` updated `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256`.
+- `make contract-authority-refresh` updated `contracts/core/openapi.json` and `schemas/api/openapi.json`.
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` authority markers updated.
+
 ## 2026-06-19 — PR 13.3: Remediation Ownership, Due Dates & SLA Authority — 7 new routes + SLA engine
 
 **Classification:** Additive extension of the PR 13.2 remediation governance surface. No auth logic changes. All new write routes require existing `governance:write` scope; all new read routes require `governance:read`. No new planes. DB schema change is additive-only (9 nullable columns, idempotent backfill). No secrets stored.

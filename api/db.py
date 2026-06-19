@@ -227,6 +227,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_remediation"
     )  # PR 13.1: Remediation Management
+    importlib.import_module(
+        "api.db_models_portal_remediation"
+    )  # PR 13.4: portal remediation
 
 
 def _get_base():
@@ -700,6 +703,60 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             )
             _sqlite_add_column_if_missing(
                 conn, "remediation_tasks", "last_assignment_change_at", "DATETIME"
+            )
+
+        # PR 13.4 — Portal Remediation: 3 new tables
+        if "portal_remediation_comments" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS portal_remediation_comments (
+                    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL, author TEXT NOT NULL,
+                    body TEXT NOT NULL, is_edited INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_portal_comments_tenant_task "
+                "ON portal_remediation_comments (tenant_id, task_id)"
+            )
+        if "portal_evidence_submissions" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS portal_evidence_submissions (
+                    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL, filename TEXT NOT NULL,
+                    content_type TEXT NOT NULL, sha256 TEXT NOT NULL,
+                    submitted_by TEXT NOT NULL, submitted_at TEXT NOT NULL,
+                    classification TEXT, description TEXT,
+                    verification_state TEXT NOT NULL DEFAULT 'pending',
+                    evidence_metadata TEXT NOT NULL DEFAULT '{}'
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_portal_evidence_tenant_task "
+                "ON portal_evidence_submissions (tenant_id, task_id)"
+            )
+            conn.exec_driver_sql(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_portal_evidence_sha256 "
+                "ON portal_evidence_submissions (tenant_id, task_id, sha256)"
+            )
+        if "portal_remediation_audit_events" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS portal_remediation_audit_events (
+                    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL, event_type TEXT NOT NULL,
+                    actor TEXT NOT NULL, event_at TEXT NOT NULL,
+                    event_metadata TEXT NOT NULL DEFAULT '{}'
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_portal_audit_tenant_task "
+                "ON portal_remediation_audit_events (tenant_id, task_id)"
             )
 
         # (The rest of your large sqlite schema block continues unchanged)

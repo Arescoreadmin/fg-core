@@ -10238,6 +10238,159 @@
     },
     {
       "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal_remediation.py",
+      "method": "GET",
+      "path": "/portal/remediation",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal_remediation.py",
+      "method": "GET",
+      "path": "/portal/remediation/tasks/{task_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal_remediation.py",
+      "method": "POST",
+      "path": "/portal/remediation/tasks/{task_id}/acknowledge",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal_remediation.py",
+      "method": "GET",
+      "path": "/portal/remediation/tasks/{task_id}/audit",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal_remediation.py",
+      "method": "GET",
+      "path": "/portal/remediation/tasks/{task_id}/comments",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal_remediation.py",
+      "method": "POST",
+      "path": "/portal/remediation/tasks/{task_id}/comments",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal_remediation.py",
+      "method": "PATCH",
+      "path": "/portal/remediation/tasks/{task_id}/comments/{comment_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal_remediation.py",
+      "method": "GET",
+      "path": "/portal/remediation/tasks/{task_id}/evidence",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/portal_remediation.py",
+      "method": "POST",
+      "path": "/portal/remediation/tasks/{task_id}/evidence",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
         "auth"
       ],
       "file": "api/portal.py",
@@ -12105,7 +12258,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-19T11:36:59.663414+00:00",
+  "generated_at": "2026-06-19T15:03:12.010514+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
