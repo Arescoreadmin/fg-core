@@ -35,38 +35,39 @@ REM-100 Portal audit projection — only portal events returned
 
 from __future__ import annotations
 
+import os
+import pathlib
+import tempfile
+
 import pytest
 from starlette.testclient import TestClient
 
+_TENANT_A = "tenant-portal-a"
+_TENANT_B = "tenant-portal-b"
+
+
 # ---------------------------------------------------------------------------
-# Import helpers — reuse fixtures from conftest / test_remediation_engine
+# App factory — mirrors the conftest build_app pattern
 # ---------------------------------------------------------------------------
 
 
 def _make_app():
-    import os
-
-    os.environ.setdefault("FG_ENV", "test")
-    os.environ.setdefault("FG_KEY_PEPPER", "test-pepper-value-32chars-exactly!")
-
     from api.main import build_app
-    from api.db import reset_engine_cache
-
-    reset_engine_cache()
-
-    import tempfile
-    import pathlib
+    from api.db import reset_engine_cache, init_db
 
     db_path = pathlib.Path(tempfile.mkdtemp()) / "fg-portal-test.db"
     os.environ["FG_SQLITE_PATH"] = str(db_path)
+    os.environ.setdefault("FG_ENV", "test")
+    os.environ.setdefault("FG_AUTH_ENABLED", "1")
+    os.environ.setdefault("FG_KEY_PEPPER", "ci-test-pepper")
+    os.environ.setdefault("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
+    os.environ.setdefault("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
+    os.environ.setdefault(
+        "FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+    )
     reset_engine_cache()
-
-    app = build_app()
-    from api.db import get_engine
-    from api.db import init_db
-
-    init_db(get_engine())
-    return app
+    init_db(sqlite_path=str(db_path))
+    return build_app()
 
 
 # ---------------------------------------------------------------------------
@@ -86,33 +87,19 @@ def client(app):
 
 
 @pytest.fixture(scope="module")
-def api_key(client):
-    """Create a tenant-bound API key for tenant-a."""
-    resp = client.post(
-        "/control-plane/api-keys",
-        json={
-            "name": "portal-test-key",
-            "scopes": ["governance:read", "governance:write"],
-            "tenant_id": "tenant-portal-a",
-        },
-    )
-    assert resp.status_code == 201, resp.text
-    return resp.json()["secret"]
+def api_key():
+    """Tenant-A scoped key, minted directly (no REST round-trip)."""
+    from api.auth_scopes import mint_key
+
+    return mint_key("governance:read", "governance:write", tenant_id=_TENANT_A)
 
 
 @pytest.fixture(scope="module")
-def alt_api_key(client):
-    """Create a tenant-bound API key for tenant-b (cross-tenant tests)."""
-    resp = client.post(
-        "/control-plane/api-keys",
-        json={
-            "name": "portal-test-key-b",
-            "scopes": ["governance:read", "governance:write"],
-            "tenant_id": "tenant-portal-b",
-        },
-    )
-    assert resp.status_code == 201, resp.text
-    return resp.json()["secret"]
+def alt_api_key():
+    """Tenant-B scoped key for cross-tenant isolation tests."""
+    from api.auth_scopes import mint_key
+
+    return mint_key("governance:read", "governance:write", tenant_id=_TENANT_B)
 
 
 def _auth(key: str) -> dict:
@@ -125,29 +112,48 @@ def _auth(key: str) -> dict:
 
 
 @pytest.fixture(scope="module")
-def finding_and_assessment(client, api_key):
-    """Create a finding + assessment for tenant-portal-a."""
-    eng_resp = client.post(
-        "/field-assessment/engagements",
-        json={"name": "Portal Test Engagement", "description": "test"},
-        headers=_auth(api_key),
-    )
-    assert eng_resp.status_code == 201, eng_resp.text
-    assessment_id = eng_resp.json()["id"]
+def finding_and_assessment(app):
+    """Seed a finding + assessment directly via ORM (no REST round-trip)."""
+    import uuid
+    from api.db import get_engine
+    from api.db_models_field_assessment import FaEngagement, FaNormalizedFinding
+    from sqlalchemy.orm import Session
 
-    finding_resp = client.post(
-        f"/field-assessment/engagements/{assessment_id}/findings",
-        json={
-            "title": "Portal Test Finding",
-            "severity": "high",
-            "category": "access_control",
-            "description": "test finding",
-        },
-        headers=_auth(api_key),
-    )
-    assert finding_resp.status_code == 201, finding_resp.text
-    finding_id = finding_resp.json()["id"]
-    return assessment_id, finding_id
+    now = "2026-01-01T00:00:00+00:00"
+    eid = uuid.uuid4().hex
+    fid = uuid.uuid4().hex
+    with Session(get_engine()) as db:
+        db.add(
+            FaEngagement(
+                id=eid,
+                tenant_id=_TENANT_A,
+                client_name="Portal Test Client",
+                assessor_id="assessor-portal",
+                assessment_type="security",
+                status="in_progress",
+                engagement_metadata={},
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.add(
+            FaNormalizedFinding(
+                id=fid,
+                tenant_id=_TENANT_A,
+                engagement_id=eid,
+                finding_type="vulnerability",
+                findings_hash=uuid.uuid4().hex,
+                severity="high",
+                status="open",
+                title="Portal Test Finding",
+                description="A portal test finding.",
+                source_attribution="scanner",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.commit()
+    return eid, fid
 
 
 @pytest.fixture(scope="module")
@@ -723,3 +729,38 @@ def test_rem_100_portal_audit_projection_only_portal_events(client, api_key, tas
         assert event["event_type"].startswith("portal_"), (
             f"Non-portal event in portal audit: {event['event_type']}"
         )
+
+
+# ---------------------------------------------------------------------------
+# REM-101 / REM-102: Portal session enforcement (13.4a folded in)
+# ---------------------------------------------------------------------------
+
+
+def test_rem_101_portal_source_without_session_returns_403(client, api_key):
+    """REM-101  x-portal-source: client-portal without a session token returns 403."""
+    resp = client.get(
+        "/portal/remediation",
+        headers={**_auth(api_key), "x-portal-source": "client-portal"},
+    )
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body.get("code") == "PORTAL_SESSION_REQUIRED"
+
+
+def test_rem_102_portal_source_with_invalid_session_returns_403(client, api_key):
+    """REM-102  x-portal-source: client-portal with a bogus session token returns 403."""
+    resp = client.get(
+        "/portal/remediation",
+        headers={
+            **_auth(api_key),
+            "x-portal-source": "client-portal",
+            "x-fg-portal-session": "00000000000000000000000000000000000000000000000000000000000000ff",
+        },
+    )
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body.get("code") in {
+        "PORTAL_SESSION_INVALID",
+        "PORTAL_ACCESS_DENIED",
+        "PORTAL_ACCESS_CHECK_FAILED",
+    }

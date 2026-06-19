@@ -31,6 +31,7 @@ from api.db import get_sessionmaker
 from services.portal_grant_service import portal_grant_svc
 
 _PORTAL_ENGAGEMENT_RE = re.compile(r"^/field-assessment/engagements/([^/]+)")
+_PORTAL_REMEDIATION_RE = re.compile(r"^/portal/remediation")
 _PORTAL_SOURCE_HEADER = "x-portal-source"
 _PORTAL_SOURCE_VALUE = "client-portal"
 _PORTAL_SESSION_HEADER = "x-fg-portal-session"
@@ -71,6 +72,44 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
         path = request.scope.get("path", "")
         m = _PORTAL_ENGAGEMENT_RE.match(path)
         if not m:
+            if not _PORTAL_REMEDIATION_RE.match(path):
+                return await call_next(request)
+
+            # Remediation portal path — grant-based session validation, no engagement binding.
+            tenant_id = getattr(getattr(request, "state", None), "tenant_id", None)
+            if not tenant_id:
+                return _json_403("Missing tenant context", "PORTAL_TENANT_MISSING")
+
+            session_id = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
+            if not session_id:
+                return _json_403(
+                    "Portal session required for remediation access",
+                    "PORTAL_SESSION_REQUIRED",
+                )
+
+            SessionLocal = get_sessionmaker()
+            db = SessionLocal()
+            try:
+                result = portal_grant_svc.validate_session(
+                    db,
+                    session_id=session_id,
+                    tenant_id=str(tenant_id),
+                )
+            except Exception:
+                db.close()
+                return _json_403(
+                    "Access check unavailable", "PORTAL_ACCESS_CHECK_FAILED"
+                )
+            finally:
+                db.close()
+
+            if not result.ok:
+                return _json_403(
+                    result.denial_reason or "Access denied",
+                    result.denial_code or "PORTAL_ACCESS_DENIED",
+                )
+
+            request.state.portal_client_id = result.client_id
             return await call_next(request)
 
         engagement_id = m.group(1)

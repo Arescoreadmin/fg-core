@@ -51,8 +51,11 @@ _ACTOR_UNKNOWN = "unknown"
 
 
 def _actor(request: Request) -> str:
+    state = getattr(request, "state", None)
     return str(
-        getattr(getattr(request, "state", None), "key_prefix", None) or _ACTOR_UNKNOWN
+        getattr(state, "portal_client_id", None)
+        or getattr(state, "key_prefix", None)
+        or _ACTOR_UNKNOWN
     )
 
 
