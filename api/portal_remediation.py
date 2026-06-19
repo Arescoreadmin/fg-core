@@ -19,10 +19,15 @@ Security invariants:
 """
 
 from __future__ import annotations
+
+from contextlib import contextmanager
+from typing import Iterator
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+
 from api.auth_scopes import require_bound_tenant, require_scopes
-from api.db import get_engine
+from api.db import get_engine as _get_engine, set_tenant_context
 from services.remediation_portal.engine import PortalRemediationEngine
 from services.remediation_portal.schemas import (
     AcknowledgeOwnershipRequest,
@@ -50,6 +55,14 @@ portal_remediation_router = APIRouter(
 _ACTOR_UNKNOWN = "unknown"
 
 
+@contextmanager
+def _db(tenant_id: str) -> Iterator[Session]:
+    """Open a DB session and bind the RLS tenant context before yielding."""
+    with Session(_get_engine()) as db:
+        set_tenant_context(db, tenant_id)
+        yield db
+
+
 def _actor(request: Request) -> str:
     state = getattr(request, "state", None)
     return str(
@@ -66,7 +79,7 @@ def _actor(request: Request) -> str:
 )
 def portal_remediation_dashboard(request: Request) -> PortalDashboardResponse:
     tenant_id = require_bound_tenant(request)
-    with Session(get_engine()) as db:
+    with _db(tenant_id) as db:
         return PortalRemediationEngine(db, tenant_id=tenant_id).get_dashboard()
 
 
@@ -77,7 +90,7 @@ def portal_remediation_dashboard(request: Request) -> PortalDashboardResponse:
 )
 def portal_get_task(task_id: str, request: Request) -> PortalTaskView:
     tenant_id = require_bound_tenant(request)
-    with Session(get_engine()) as db:
+    with _db(tenant_id) as db:
         engine = PortalRemediationEngine(db, tenant_id=tenant_id)
         try:
             result = engine.get_task(task_id=task_id, actor=_actor(request))
@@ -94,7 +107,7 @@ def portal_get_task(task_id: str, request: Request) -> PortalTaskView:
 )
 def portal_list_comments(task_id: str, request: Request) -> PortalCommentListResponse:
     tenant_id = require_bound_tenant(request)
-    with Session(get_engine()) as db:
+    with _db(tenant_id) as db:
         try:
             return PortalRemediationEngine(db, tenant_id=tenant_id).list_comments(
                 task_id=task_id
@@ -113,7 +126,7 @@ def portal_add_comment(
     task_id: str, body: AddCommentRequest, request: Request
 ) -> PortalCommentResponse:
     tenant_id = require_bound_tenant(request)
-    with Session(get_engine()) as db:
+    with _db(tenant_id) as db:
         engine = PortalRemediationEngine(db, tenant_id=tenant_id)
         try:
             result = engine.add_comment(
@@ -134,7 +147,7 @@ def portal_edit_comment(
     task_id: str, comment_id: str, body: EditCommentRequest, request: Request
 ) -> PortalCommentResponse:
     tenant_id = require_bound_tenant(request)
-    with Session(get_engine()) as db:
+    with _db(tenant_id) as db:
         engine = PortalRemediationEngine(db, tenant_id=tenant_id)
         try:
             result = engine.edit_comment(
@@ -158,7 +171,7 @@ def portal_edit_comment(
 )
 def portal_list_evidence(task_id: str, request: Request) -> PortalEvidenceListResponse:
     tenant_id = require_bound_tenant(request)
-    with Session(get_engine()) as db:
+    with _db(tenant_id) as db:
         try:
             return PortalRemediationEngine(db, tenant_id=tenant_id).list_evidence(
                 task_id=task_id
@@ -177,7 +190,7 @@ def portal_submit_evidence(
     task_id: str, body: SubmitEvidenceRequest, request: Request
 ) -> PortalEvidenceResponse:
     tenant_id = require_bound_tenant(request)
-    with Session(get_engine()) as db:
+    with _db(tenant_id) as db:
         engine = PortalRemediationEngine(db, tenant_id=tenant_id)
         try:
             result = engine.submit_evidence(
@@ -201,7 +214,7 @@ def portal_acknowledge_ownership(
     task_id: str, body: AcknowledgeOwnershipRequest, request: Request
 ) -> AcknowledgeOwnershipResponse:
     tenant_id = require_bound_tenant(request)
-    with Session(get_engine()) as db:
+    with _db(tenant_id) as db:
         engine = PortalRemediationEngine(db, tenant_id=tenant_id)
         try:
             result = engine.acknowledge_ownership(
@@ -220,7 +233,7 @@ def portal_acknowledge_ownership(
 )
 def portal_get_audit(task_id: str, request: Request) -> PortalAuditListResponse:
     tenant_id = require_bound_tenant(request)
-    with Session(get_engine()) as db:
+    with _db(tenant_id) as db:
         try:
             return PortalRemediationEngine(db, tenant_id=tenant_id).get_portal_audit(
                 task_id=task_id

@@ -8,7 +8,7 @@ Three tables:
 """
 
 from __future__ import annotations
-from sqlalchemy import Index, String, Text
+from sqlalchemy import Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -49,7 +49,9 @@ class PortalEvidenceSubmission(Base):
     evidence_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     __table_args__ = (
         Index("ix_portal_evidence_tenant_task", "tenant_id", "task_id"),
-        Index("ix_portal_evidence_sha256", "tenant_id", "sha256"),
+        UniqueConstraint(
+            "tenant_id", "task_id", "sha256", name="uq_portal_evidence_sha256"
+        ),
         Index("ix_portal_evidence_verification", "tenant_id", "verification_state"),
     )
 

@@ -62,8 +62,8 @@ CREATE INDEX IF NOT EXISTS ix_portal_evidence_tenant_id
     ON portal_evidence_submissions (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_portal_evidence_tenant_task
     ON portal_evidence_submissions (tenant_id, task_id);
-CREATE INDEX IF NOT EXISTS ix_portal_evidence_sha256
-    ON portal_evidence_submissions (tenant_id, sha256);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_portal_evidence_sha256
+    ON portal_evidence_submissions (tenant_id, task_id, sha256);
 CREATE INDEX IF NOT EXISTS ix_portal_evidence_verification
     ON portal_evidence_submissions (tenant_id, verification_state);
 
