@@ -24,6 +24,7 @@ from contextlib import contextmanager
 from typing import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
@@ -43,6 +44,7 @@ from services.remediation_portal.schemas import (
     PortalEvidenceListResponse,
     PortalEvidenceResponse,
     PortalNotFound,
+    PortalRateLimitExceeded,
     PortalTaskView,
     SubmitEvidenceRequest,
 )
@@ -55,6 +57,17 @@ portal_remediation_router = APIRouter(
 _ACTOR_UNKNOWN = "unknown"
 
 
+def _rate_limited(exc: PortalRateLimitExceeded) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": "RATE_LIMIT_EXCEEDED",
+            "retry_after_seconds": exc.retry_after_seconds,
+        },
+        headers={"Retry-After": str(exc.retry_after_seconds)},
+    )
+
+
 @contextmanager
 def _db(tenant_id: str) -> Iterator[Session]:
     """Open a DB session and bind the RLS tenant context before yielding."""
@@ -65,8 +78,10 @@ def _db(tenant_id: str) -> Iterator[Session]:
 
 def _actor(request: Request) -> str:
     state = getattr(request, "state", None)
+    auth = getattr(state, "auth", None)
     return str(
         getattr(state, "portal_client_id", None)
+        or getattr(auth, "key_db_id", None)
         or getattr(state, "key_prefix", None)
         or _ACTOR_UNKNOWN
     )
@@ -138,6 +153,9 @@ def portal_add_comment(
                 task_id=task_id, request=body, actor=_actor(request)
             )
             db.commit()
+        except PortalRateLimitExceeded as exc:
+            db.commit()
+            return _rate_limited(exc)
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
     return result
@@ -162,6 +180,9 @@ def portal_edit_comment(
                 actor=_actor(request),
             )
             db.commit()
+        except PortalRateLimitExceeded as exc:
+            db.commit()
+            return _rate_limited(exc)
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except PortalCommentNotFound as exc:
@@ -207,6 +228,9 @@ def portal_submit_evidence(
                 task_id=task_id, request=body, actor=_actor(request)
             )
             db.commit()
+        except PortalRateLimitExceeded as exc:
+            db.commit()
+            return _rate_limited(exc)
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except PortalEvidenceDuplicate as exc:
@@ -231,6 +255,9 @@ def portal_acknowledge_ownership(
                 task_id=task_id, request=body, actor=_actor(request)
             )
             db.commit()
+        except PortalRateLimitExceeded as exc:
+            db.commit()
+            return _rate_limited(exc)
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
     return result

@@ -6,6 +6,28 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-19 — PR 13.6: Portal Abuse Protection & Rate Limiting
+
+**Summary:** Fixed-window per-client rate limiting for all 4 portal write operations (comment create/edit, evidence upload, ownership acknowledgement).
+
+**New files:**
+- `services/remediation_portal/rate_limit.py` — `PortalRateLimiterBackend` ABC + `MemoryPortalRateLimiter` (thread-safe, fixed-window, injectable clock). Module-level singleton `_LIMITER` + `_set_portal_rate_limiter()` for test injection.
+- `services/remediation_portal/rate_policy.py` — `PortalOperation` enum, `PortalRatePolicy` dataclass, `resolve_portal_limits()` reads env vars at call time. Subscription-tier multipliers: starter=1×, professional=2×, enterprise/government=5×.
+
+**Modified files:**
+- `services/remediation_portal/engine.py` — `_check_rate_limit()` method; called as first line of `add_comment`, `edit_comment`, `submit_evidence`, `acknowledge_ownership`. Throttle audit event committed before raising `PortalRateLimitExceeded`.
+- `services/remediation_portal/schemas.py` — `PortalRateLimitExceeded` exception; 4 new `PortalAuditEventType` values.
+- `api/portal_remediation.py` — `_actor()` now prefers `auth.key_db_id`; `_rate_limited()` returns `JSONResponse(429)` with `Retry-After` header; 4 write handlers handle `PortalRateLimitExceeded`.
+- `api/observability/metrics.py` — 4 new counters: `frostgate_portal_rate_limit_hits/comment_throttles/evidence_throttles/acknowledgement_throttles_total`.
+- `tests/test_portal_remediation.py` — 24 new tests (REM-122–REM-145). 75 total passing.
+
+**Key decisions:**
+- Rate key: `portal:rl:{tenant_id}:{client_id}:{operation}` — tenant+client isolated.
+- `key_db_id` used for actor identity (not `key_prefix`, which is a fixed `"fgk"` string for all keys).
+- Throttle audit committed before raising so it persists even though the outer write transaction rolls back.
+
+---
+
 ### 2026-06-19 — PR 13.5 bot fix: SHA256 wrong-length validation counter gap
 
 **Issue (P2, chatgpt-codex-connector):** `SubmitEvidenceRequest.sha256` had `min_length=64, max_length=64` on the field, causing Pydantic to reject wrong-length hashes before the `@field_validator("sha256")` ran. Neither `PORTAL_SHA256_VALIDATION_FAILURES_TOTAL` nor `PORTAL_VALIDATION_FAILURES_TOTAL` was incremented for that class of 422.
