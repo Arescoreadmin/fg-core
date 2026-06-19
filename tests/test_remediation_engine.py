@@ -48,6 +48,7 @@ Coverage:
 
 from __future__ import annotations
 
+from typing import Any
 import uuid
 
 import pytest
@@ -61,6 +62,11 @@ from sqlalchemy.orm import Session
 
 _TENANT_A = "tenant-rem-a"
 _TENANT_B = "tenant-rem-b"
+
+
+def _json_obj(value: dict[Any, Any] | None) -> dict[Any, Any]:
+    assert value is not None
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -654,7 +660,7 @@ def test_rem_11_audit_event_on_create(client: TestClient, db_session: Session) -
     assert events[0].event_type == "task_created"
     assert events[0].old_state is None
     assert events[0].new_state is not None
-    assert events[0].new_state["title"] == "Audited task"
+    assert _json_obj(events[0].new_state)["title"] == "Audited task"
 
 
 # ---------------------------------------------------------------------------
@@ -685,8 +691,8 @@ def test_rem_12_audit_event_on_update(client: TestClient, db_session: Session) -
         )
     assert len(events) == 2
     update_event = next(e for e in events if e.event_type == "task_updated")
-    assert update_event.old_state["title"] == "Before update"
-    assert update_event.new_state["title"] == "After update"
+    assert _json_obj(update_event.old_state)["title"] == "Before update"
+    assert _json_obj(update_event.new_state)["title"] == "After update"
 
 
 # ---------------------------------------------------------------------------
@@ -717,9 +723,9 @@ def test_rem_13_audit_event_on_close(client: TestClient, db_session: Session) ->
         )
     close_events = [e for e in events if e.event_type == "task_closed"]
     assert len(close_events) == 1
-    assert close_events[0].old_state["status"] == "in_progress"
-    assert close_events[0].new_state["status"] == "closed"
-    assert close_events[0].new_state["closed_at"] is not None
+    assert _json_obj(close_events[0].old_state)["status"] == "in_progress"
+    assert _json_obj(close_events[0].new_state)["status"] == "closed"
+    assert _json_obj(close_events[0].new_state)["closed_at"] is not None
 
 
 # ---------------------------------------------------------------------------
@@ -1020,10 +1026,10 @@ def test_rem_19_concurrent_updates_produce_independent_audits(
             .all()
         )
     assert len(events) == 2
-    assert events[0].old_state["title"] == "v1"
-    assert events[0].new_state["title"] == "v2"
-    assert events[1].old_state["title"] == "v2"
-    assert events[1].new_state["title"] == "v3"
+    assert _json_obj(events[0].old_state)["title"] == "v1"
+    assert _json_obj(events[0].new_state)["title"] == "v2"
+    assert _json_obj(events[1].old_state)["title"] == "v2"
+    assert _json_obj(events[1].new_state)["title"] == "v3"
 
 
 def test_rem_19_each_update_increments_updated_at(
@@ -1102,33 +1108,33 @@ def test_rem_20_full_lifecycle_audit_reconstruction(
     # Reconstruct initial state
     created = events[0]
     assert created.old_state is None
-    assert created.new_state["title"] == "Lifecycle start"
-    assert created.new_state["priority"] == "high"
-    assert created.new_state["status"] == "open"
+    assert _json_obj(created.new_state)["title"] == "Lifecycle start"
+    assert _json_obj(created.new_state)["priority"] == "high"
+    assert _json_obj(created.new_state)["status"] == "open"
 
     # Verify state transition on update
     updated = events[1]
-    assert updated.old_state["title"] == "Lifecycle start"
-    assert updated.new_state["title"] == "Lifecycle updated"
-    assert updated.new_state["priority"] == "critical"
+    assert _json_obj(updated.old_state)["title"] == "Lifecycle start"
+    assert _json_obj(updated.new_state)["title"] == "Lifecycle updated"
+    assert _json_obj(updated.new_state)["priority"] == "critical"
 
     # Verify planning transition
     planned = events[2]
     assert planned.event_type == "task_planned"
-    assert planned.old_state["status"] == "open"
-    assert planned.new_state["status"] == "planned"
+    assert _json_obj(planned.old_state)["status"] == "open"
+    assert _json_obj(planned.new_state)["status"] == "planned"
 
     # Verify start transition
     started = events[3]
     assert started.event_type == "task_started"
-    assert started.old_state["status"] == "planned"
-    assert started.new_state["status"] == "in_progress"
+    assert _json_obj(started.old_state)["status"] == "planned"
+    assert _json_obj(started.new_state)["status"] == "in_progress"
 
     # Verify closure
     closed = events[4]
-    assert closed.old_state["status"] == "in_progress"
-    assert closed.new_state["status"] == "closed"
-    assert closed.new_state["closed_at"] is not None
+    assert _json_obj(closed.old_state)["status"] == "in_progress"
+    assert _json_obj(closed.new_state)["status"] == "closed"
+    assert _json_obj(closed.new_state)["closed_at"] is not None
 
 
 def test_rem_20_deleted_task_audit_trail_persists(
@@ -1166,7 +1172,7 @@ def test_rem_20_deleted_task_audit_trail_persists(
     assert task_row is None  # task is gone
     assert len(events) == 3  # create, update, delete events all preserved
     assert events[-1].event_type == "task_deleted"
-    assert events[-1].old_state["title"] == "Updated before delete"
+    assert _json_obj(events[-1].old_state)["title"] == "Updated before delete"
     assert events[-1].new_state is None
 
 
@@ -1449,8 +1455,8 @@ def test_rem_32_transition_creates_audit_event(
             .all()
         )
     assert len(events) == 1
-    assert events[0].old_state["status"] == "open"
-    assert events[0].new_state["status"] == "planned"
+    assert _json_obj(events[0].old_state)["status"] == "open"
+    assert _json_obj(events[0].new_state)["status"] == "planned"
     assert events[0].actor is not None
 
 
@@ -1750,16 +1756,16 @@ def test_rem_40_workflow_lifecycle_reconstruction(
     ]
 
     # Each event preserves the transition
-    assert events[1].old_state["status"] == "open"
-    assert events[1].new_state["status"] == "planned"
+    assert _json_obj(events[1].old_state)["status"] == "open"
+    assert _json_obj(events[1].new_state)["status"] == "planned"
     assert events[1].reason == "Assigned to ops team"
 
-    assert events[2].old_state["status"] == "planned"
-    assert events[2].new_state["status"] == "in_progress"
+    assert _json_obj(events[2].old_state)["status"] == "planned"
+    assert _json_obj(events[2].new_state)["status"] == "in_progress"
 
-    assert events[3].old_state["status"] == "in_progress"
-    assert events[3].new_state["status"] == "closed"
-    assert events[3].new_state["closed_at"] is not None
+    assert _json_obj(events[3].old_state)["status"] == "in_progress"
+    assert _json_obj(events[3].new_state)["status"] == "closed"
+    assert _json_obj(events[3].new_state)["closed_at"] is not None
 
 
 def test_rem_40_risk_accepted_lifecycle(
@@ -1783,8 +1789,8 @@ def test_rem_40_risk_accepted_lifecycle(
 
     assert len(events) == 2
     assert events[1].event_type == "task_risk_accepted"
-    assert events[1].old_state["status"] == "open"
-    assert events[1].new_state["status"] == "accepted_risk"
+    assert _json_obj(events[1].old_state)["status"] == "open"
+    assert _json_obj(events[1].new_state)["status"] == "accepted_risk"
     assert events[1].reason == "Low exploitability"
 
 
@@ -1824,12 +1830,12 @@ def test_rem_41_sequential_transitions_produce_correct_audit_chain(
         )
 
     assert len(events) == 3
-    assert events[0].old_state["status"] == "open"
-    assert events[0].new_state["status"] == "planned"
-    assert events[1].old_state["status"] == "planned"
-    assert events[1].new_state["status"] == "in_progress"
-    assert events[2].old_state["status"] == "in_progress"
-    assert events[2].new_state["status"] == "closed"
+    assert _json_obj(events[0].old_state)["status"] == "open"
+    assert _json_obj(events[0].new_state)["status"] == "planned"
+    assert _json_obj(events[1].old_state)["status"] == "planned"
+    assert _json_obj(events[1].new_state)["status"] == "in_progress"
+    assert _json_obj(events[2].old_state)["status"] == "in_progress"
+    assert _json_obj(events[2].new_state)["status"] == "closed"
 
 
 def test_rem_41_duplicate_transition_rejected(

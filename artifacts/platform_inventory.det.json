@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 527,
+    "contract_count": 535,
     "contract_only": [],
-    "runtime_count": 693,
+    "runtime_count": 701,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "6fe753a0f747673b41d1345950e66af256cd660cdd64e2dd029253a0a0deeb67",
+  "governance_fingerprint": "6b086559e2fa716489c31f77b5f06897af7bc85f14275dab647d6bef9662f8ba",
   "planes": [
     {
       "compat": {
@@ -253,6 +253,7 @@
         "/planes",
         "/portal",
         "/rag",
+        "/remediation",
         "/signing",
         "/status",
         "/subscriptions"
@@ -398,6 +399,7 @@
       "DELETE /governance/assets/{asset_id}/owners/{ownership_id}",
       "DELETE /portal/grants/{grant_id}",
       "DELETE /portal/sessions/{session_id}",
+      "DELETE /remediation/tasks/{task_id}",
       "GET /_debug/routes",
       "GET /admin/agent/devices",
       "GET /admin/agent/devices/{device_id}/status",
@@ -685,6 +687,9 @@
       "GET /rag/documents/{document_id}/ingestion",
       "GET /rag/retrieval-policy",
       "GET /rag/uploads",
+      "GET /remediation/tasks",
+      "GET /remediation/tasks/{task_id}",
+      "GET /remediation/tasks/{task_id}/allowed-transitions",
       "GET /signing/public-key",
       "GET /status",
       "GET /subscriptions/explain-capability",
@@ -702,6 +707,7 @@
       "PATCH /field-assessment/engagements/{engagement_id}/status",
       "PATCH /governance/assets/{asset_id}",
       "PATCH /governance/workflows/{workflow_id}/transition",
+      "PATCH /remediation/tasks/{task_id}",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",
@@ -886,6 +892,9 @@
       "POST /portal/identity/login",
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",
+      "POST /remediation/tasks",
+      "POST /remediation/tasks/{task_id}/close",
+      "POST /remediation/tasks/{task_id}/transition",
       "PUT /admin/agent/version-floor",
       "PUT /admin/identity/tenants/{tenant_id}/config",
       "PUT /admin/tenants/{tenant_id}/quota",
