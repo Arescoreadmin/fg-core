@@ -224,6 +224,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module("api.db_models_qtb")  # P0-9: Quarterly Trust Briefs
     importlib.import_module("api.db_models_clm")  # P0-10: CLM
     importlib.import_module("api.db_models_cgct")  # P0-11: CGCT Control Tower
+    importlib.import_module(
+        "api.db_models_remediation"
+    )  # PR 13.1: Remediation Management
 
 
 def _get_base():
@@ -638,6 +641,12 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
         if "rag_documents" in tables:
             # PR 55 — PDF ingestion: content_type provenance column
             _sqlite_add_column_if_missing(conn, "rag_documents", "content_type", "TEXT")
+
+        # PR 13.2 — Remediation Workflow Engine: add reason column to audit table
+        if "remediation_task_audits" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "remediation_task_audits", "reason", "TEXT"
+            )
 
         # (The rest of your large sqlite schema block continues unchanged)
         # NOTE: You pasted duplicated ai_policy_violations creation twice; leaving it as-is is sloppy.

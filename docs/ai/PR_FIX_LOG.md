@@ -6,6 +6,61 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-18 — PR 13.2: Remediation Status Workflow Engine
+
+**Branch:** `pr/13.2-remediation-workflow-engine`
+
+**Purpose:** Extend the PR 13.1 foundation into a fully governed remediation lifecycle engine. Replaces OPEN/CLOSED with a 5-state machine (OPEN → PLANNED → IN_PROGRESS → CLOSED, with ACCEPTED_RISK reachable from any active state). Every transition is validated, audited, tenant-safe, and reported via Prometheus metrics.
+
+**New files:**
+- `migrations/postgres/0119_remediation_workflow_engine.sql` — adds nullable `reason` column to `remediation_task_audits`; adds composite index `(tenant_id, status, created_at DESC)` for future reporting queries
+
+**Modified files:**
+- `services/remediation/schemas.py` — `RemediationStatus` extended with PLANNED, IN_PROGRESS, ACCEPTED_RISK; `RemediationAuditEventType` extended with TASK_PLANNED, TASK_STARTED, TASK_RISK_ACCEPTED; `RemediationInvalidTransition` exception; `TransitionTaskRequest`, `TransitionResponse`, `AllowedTransitionsResponse` schemas
+- `services/remediation/engine.py` — `_ALLOWED_TRANSITIONS` state machine dict; `_TRANSITION_EVENT` audit type map; `validate_transition()` static method; `allowed_transitions()` static method; `get_allowed_transitions()` method; `transition_status()` method; `close_task()` refactored to delegate through state machine; `_emit_audit()` now accepts optional `reason` param
+- `api/db_models_remediation.py` — `RemediationTaskAudit.reason` column (nullable Text) added
+- `api/db.py` — `_auto_migrate_sqlite()` extended for `remediation_task_audits.reason` column
+- `api/remediation.py` — 2 new routes: `POST /remediation/tasks/{task_id}/transition`, `GET /remediation/tasks/{task_id}/allowed-transitions`; `close_task` route now handles `RemediationInvalidTransition` (422)
+- `api/observability/metrics.py` — 2 new counters: `frostgate_remediation_status_transitions_total{from_status,to_status}`, `frostgate_remediation_invalid_transitions_total`
+- `tests/test_remediation_engine.py` — 74 tests total; REM-21 through REM-42 added; existing tests REM-3/5/13/15/20 updated to use `_advance_to_in_progress()` helper (OPEN→CLOSED is now forbidden)
+- `ROADMAP.md` — PR 13.2 entry added
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` — regenerated (2 new routes)
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` — contract authority SHA256 refreshed
+- `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — regenerated
+
+**Security invariants unchanged:**
+- All transitions require `governance:write` scope
+- `tenant_id` always from auth context via `require_bound_tenant()`
+- No bypass of auth, tenant validation, or audit trail on any code path
+
+---
+
+### 2026-06-18 — PR 13.1: Remediation Management Foundation
+
+**Branch:** `pr/13.1-remediation-foundation`
+
+**Purpose:** Establish the authoritative remediation management subsystem as a new bounded context. Transforms `Finding → RemediationTask` into a first-class platform entity with full tenant isolation, audit trail, and governance readiness.
+
+**New files:**
+- `api/db_models_remediation.py` — 2 ORM models: `RemediationTask` (status-mutable, indexed on tenant+finding+assessment+status+priority), `RemediationTaskAudit` (append-only, no UPDATE/DELETE)
+- `api/remediation.py` — 6 FastAPI routes under `/remediation/tasks` (POST/GET/GET-list/PATCH/POST-close/DELETE; `governance:read`/`governance:write` scopes)
+- `services/remediation/__init__.py` — package init
+- `services/remediation/engine.py` — `RemediationEngine`: 6 tenant-aware methods + `get_task_audit_trail()`; emits audit event before every mutation
+- `services/remediation/repository.py` — low-level DB ops with cross-tenant reference validation; `assert_finding_exists`, `assert_assessment_exists`, `assert_finding_belongs_to_assessment`
+- `services/remediation/schemas.py` — `RemediationPriority` enum (critical/high/medium/low/informational), `RemediationStatus` enum (open/closed), exceptions, Pydantic request/response models
+- `tests/test_remediation_engine.py` — 42 tests covering REM-1 through REM-20 (CRUD, tenant isolation, wrong-tenant denial, missing reference rejection, audit events, metrics, auth/scope enforcement, cross-tenant prevention, concurrent update safety, lifecycle reconstruction)
+
+**Modified files:**
+- `api/db.py` — registered `api.db_models_remediation` in `_ensure_models_imported()` for `create_all()`
+- `api/main.py` — imported and registered `remediation_router` in both `build_app()` and `build_contract_app()`
+- `api/observability/metrics.py` — 4 new Prometheus counters: `frostgate_remediation_tasks_created/closed/updates/denials_total` (no tenant labels)
+- `ROADMAP.md` — PR 13.1 entry added
+- `contracts/core/openapi.json` — regenerated to include 6 new remediation routes
+- `schemas/api/openapi.json` — schema mirror updated
+- `BLUEPRINT_STAGED.md` — `Contract-Authority-SHA256` refreshed
+
+---
+
 ### 2026-06-18 — P1.5: Billing Integration Layer
 
 **Branch:** `feat/p1-5-billing-integration-layer`

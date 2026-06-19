@@ -1,3 +1,34 @@
+## 2026-06-18 — PR 13.2 fix: Register /remediation prefix in plane registry — 0 new routes, CI gate fix
+
+**Classification:** CI maintenance only. No product logic changes. Adds `/remediation` to the `control` plane's `route_prefixes` in `services/plane_registry/registry.py` so that the 8 remediation routes shipped in PR 13.2 satisfy the plane ownership check (`check_plane_registry: plane registry check: OK`). The routes themselves are unchanged. All scopes, tenant isolation, and auth invariants are identical to what was reviewed in the PR 13.2 SOC entry below.
+
+**SOC review:**
+- `services/plane_registry/registry.py` — added `"/remediation"` to the `control` plane's `route_prefixes` tuple. Remediation routes use `governance:` scope prefix, which is already declared as a valid scope prefix for the `control` plane (`auth_class.required_scope_prefixes`). No new ownership, no new auth surface.
+- `make route-inventory-generate` re-ran to update `tools/ci/plane_registry_snapshot.json`, `tools/ci/plane_registry_snapshot.sha256`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, and `tools/ci/topology.sha256`.
+
+**Validation evidence:**
+- `make check_plane_registry` — plane registry check: OK (no unexpected-route gaps).
+- `make route-inventory-audit` — route inventory: OK.
+- `make soc-review-sync` — OK after this entry.
+
+## 2026-06-18 — PR 13.2: Remediation Status Workflow Engine — 2 new routes + state machine extension
+
+**Classification:** Additive extension of the PR 13.1 remediation governance surface. No auth logic changes. Both new routes require existing `governance:write` / `governance:read` scopes. No new planes. DB schema change is additive-only (nullable `reason` column; no existing rows affected). No secrets stored.
+
+**SOC review:**
+- `POST /remediation/tasks/{task_id}/transition` — governed status transition endpoint; enforces 5-state machine (OPEN → PLANNED → IN_PROGRESS → CLOSED; ACCEPTED_RISK reachable from any active state; CLOSED and ACCEPTED_RISK are terminal). Requires `governance:write`. All transitions are tenant-scoped (tenant from auth context only). Every transition produces an append-only `RemediationTaskAudit` event with `old_state`, `new_state`, `actor`, `reason`, `event_at`. Forbidden transitions (e.g. OPEN→CLOSED, PLANNED→CLOSED, CLOSED→*) return 422. ACCEPTED_RISK transition requires non-empty `reason` — request rejected without it. Invalid transition increments `frostgate_remediation_invalid_transitions_total`.
+- `GET /remediation/tasks/{task_id}/allowed-transitions` — read-only; returns `{ current_status, allowed_next_states }` for a task. Requires `governance:read`. No state mutation.
+- `close_task()` (existing `/close` route) — now delegates through `transition_status()` so state machine is enforced on all code paths. Only IN_PROGRESS → CLOSED is valid; OPEN → CLOSED is now rejected with 422.
+- Migration `0119_remediation_workflow_engine.sql` — adds nullable `reason TEXT` column to `remediation_task_audits` (backward safe: all existing rows get NULL). Adds composite index `(tenant_id, status, created_at DESC)` for future reporting.
+
+**Artifacts regenerated:**
+- `make route-inventory-generate` updated `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256`.
+- `scripts/refresh_contract_authority.py` refreshed `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `contracts/core/openapi.json`, and `schemas/api/openapi.json` (sha256=5e02b0e6e4d4b765a87addba227ef43bc613d90ecc20609e4a0c68ce3010b4dc).
+
+**Validation evidence:**
+- `pytest tests/test_remediation_engine.py -q` — 74 passed (covers REM-1 through REM-42, all transition paths, forbidden transitions, ACCEPTED_RISK reason enforcement, tenant isolation, metric increments, audit reconstruction).
+- `make fg-fast` — all gates passed locally.
+
 ## 2026-06-03 — PR 52.5 Regulatory-Grade Verification Bundle Hardening: 1 new route + 10 hardening items
 
 **Classification:** Additive extension of existing verification bundle surface. No new auth logic. New download route requires `governance:read`. No secrets stored. DB append-only enforcement added via Postgres triggers (migration 0087). No cross-tenant data access.
@@ -4772,6 +4803,18 @@ Additional non-critical-path changes: `api/db_models_subscriptions.py` (3 new OR
 Additional non-critical-path changes: `api/db_models_billing.py` (5 new ORM models), `services/billing/` (new package: engine, provider ABC, Stripe impl, metering, reconciliation, Pydantic schemas), `api/billing_v2.py` (15-route FastAPI router), `api/observability/metrics.py` (8 new Prometheus counters, no `tenant_id` label), `api/db_models.py` (P1.5 ORM registration import), `api/main.py` (billing_v2_router registered in both app builders), `contracts/core/openapi.json` + `schemas/api/openapi.json` + `BLUEPRINT_STAGED.md` + `CONTRACT.md` (contract authority markers updated), `tests/test_billing_engine.py` (36 tests BILL-1–BILL-35).
 
 `services/plane_registry/registry.py`: 5 additive entries — `POST /billing/webhooks/stripe` registered as `auth_exempt` in data plane (HMAC-verified); `POST /billing/usage/events` registered as `auth_exempt` (tenant-bound); `POST|GET|PATCH /admin/billing/meters` registered as `global_admin` in control plane (meter catalog is global, not tenant-scoped). No existing entries removed or modified.
+
+## 2026-06-18 — PR 13.1: Remediation Management Foundation
+
+**Classification:** Additive remediation management layer. New bounded context `services/remediation/` — no logic added to `field_assessment.py`. No auth, session, middleware, or OPA policy files changed. All routes require `governance:read` or `governance:write` scope via existing `require_scopes()` + `require_bound_tenant()`.
+
+**Critical-path files changed:**
+- `tools/ci/route_inventory.json` — 6 new remediation endpoints registered: `POST /remediation/tasks`, `GET /remediation/tasks`, `GET /remediation/tasks/{task_id}`, `PATCH /remediation/tasks/{task_id}`, `POST /remediation/tasks/{task_id}/close`, `DELETE /remediation/tasks/{task_id}`.
+- `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — updated to reflect 6 new endpoints.
+
+**SOC review outcome:** approved. Route inventory update is purely additive: 6 new remediation management endpoints appended. No existing route entries removed or modified. No auth, session, middleware, OPA, or security files changed. All routes authenticated via existing `require_scopes("governance:read"|"governance:write")` dependency; all queries filter by `tenant_id` extracted from `require_bound_tenant()`. Cross-tenant reference prevention enforced at the repository layer: `assert_finding_exists`, `assert_assessment_exists`, and `assert_finding_belongs_to_assessment` all require matching `tenant_id`. `RemediationTaskAudit` is append-only (no UPDATE/DELETE path). No capabilities, billing, or entitlement code touched.
+
+Additional non-critical-path changes: `api/db_models_remediation.py` (2 new ORM models), `services/remediation/` (new bounded context: engine, repository, schemas), `api/remediation.py` (6-route FastAPI router), `api/observability/metrics.py` (4 new Prometheus counters, no `tenant_id` label), `api/db.py` (model registration), `api/main.py` (remediation_router registered in both app builders), `contracts/core/openapi.json` + `schemas/api/openapi.json` + `BLUEPRINT_STAGED.md` + `CONTRACT.md` (contract authority markers updated), `docs/ai/PR_FIX_LOG.md` (PR 13.1 entry), `ROADMAP.md` (PR 13.1 row), `tests/test_remediation_engine.py` (42 tests REM-1–REM-20).
 
 ## 2026-06-18 — P1.5: Route scope lint fixes (follow-up)
 
