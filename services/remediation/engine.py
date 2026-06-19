@@ -166,18 +166,23 @@ _AT_RISK_THRESHOLD = 0.8
 # ---------------------------------------------------------------------------
 
 
+def _now_dt() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return _now_dt().isoformat()
 
 
 def _new_id() -> str:
     return uuid.uuid4().hex
 
 
-def _compute_sla_breach_at(created_at: str, sla_target_days: int) -> str:
+def _compute_sla_breach_at(created_at: str, sla_target_days: int) -> datetime:
     created = datetime.fromisoformat(created_at)
-    breach = created + timedelta(days=sla_target_days)
-    return breach.isoformat()
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return created + timedelta(days=sla_target_days)
 
 
 def _compute_age_days(task: RemediationTask) -> int:
@@ -207,9 +212,7 @@ def _compute_sla_response(task: RemediationTask) -> SlaResponse:
     age_days = _compute_age_days(task)
     sla_status = _compute_sla_status(task)
     days_remaining = (
-        task.sla_target_days - age_days
-        if task.sla_target_days is not None
-        else None
+        task.sla_target_days - age_days if task.sla_target_days is not None else None
     )
     return SlaResponse(
         task_id=task.id,
@@ -341,7 +344,10 @@ class RemediationEngine:
         task = fetch_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
         old_status = task.status
 
-        if new_status == RemediationStatus.IN_PROGRESS.value and not task.assigned_user_id:
+        if (
+            new_status == RemediationStatus.IN_PROGRESS.value
+            and not task.assigned_user_id
+        ):
             REMEDIATION_INVALID_TRANSITIONS_TOTAL.inc()
             raise RemediationInvalidTransition(
                 "Transitioning to 'in_progress' requires an assigned owner. "
@@ -669,16 +675,17 @@ class RemediationEngine:
         task = fetch_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
         old_state = snapshot_task(task)
         is_reassignment = task.assigned_user_id is not None
-        now = _utcnow()
+        now_dt = _now_dt()
+        now_str = now_dt.isoformat()
 
         updates: dict[str, Any] = {
             "assigned_user_id": request.user_id,
             "assigned_user_email": request.email,
             "assigned_display_name": request.display_name,
-            "assigned_at": now,
+            "assigned_at": now_dt,
             "ownership_reason": request.reason,
-            "last_assignment_change_at": now,
-            "updated_at": now,
+            "last_assignment_change_at": now_dt,
+            "updated_at": now_str,
         }
         apply_task_updates(task, updates=updates)
         new_state = snapshot_task(task)
@@ -731,7 +738,8 @@ class RemediationEngine:
             )
 
         old_state = snapshot_task(task)
-        now = _utcnow()
+        now_dt = _now_dt()
+        now_str = now_dt.isoformat()
 
         updates: dict[str, Any] = {
             "assigned_user_id": None,
@@ -739,8 +747,8 @@ class RemediationEngine:
             "assigned_display_name": None,
             "assigned_at": None,
             "ownership_reason": None,
-            "last_assignment_change_at": now,
-            "updated_at": now,
+            "last_assignment_change_at": now_dt,
+            "updated_at": now_str,
         }
         apply_task_updates(task, updates=updates)
         new_state = snapshot_task(task)
@@ -776,11 +784,10 @@ class RemediationEngine:
         """
         task = fetch_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
         old_state = snapshot_task(task)
-        now = _utcnow()
 
         updates: dict[str, Any] = {
             "due_date": request.due_date,
-            "updated_at": now,
+            "updated_at": _utcnow(),
         }
         apply_task_updates(task, updates=updates)
         new_state = snapshot_task(task)
@@ -812,18 +819,18 @@ class RemediationEngine:
         offset: int = 0,
     ) -> TaskListResponse:
         """Return all active tasks whose SLA breach timestamp is in the past."""
-        now = _utcnow()
+        now = _now_dt()
         tasks = fetch_overdue_tasks(
             self._db,
             tenant_id=self._tenant_id,
-            now_iso=now,
+            now=now,
             limit=limit,
             offset=offset,
         )
         total = count_overdue_tasks(
             self._db,
             tenant_id=self._tenant_id,
-            now_iso=now,
+            now=now,
         )
         return TaskListResponse(
             tasks=[_task_to_response(t) for t in tasks],

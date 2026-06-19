@@ -7,6 +7,7 @@ PR 13.2 — Remediation Status Workflow Engine.
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -179,12 +180,12 @@ class TaskResponse(BaseModel):
     assigned_user_id: str | None = None
     assigned_user_email: str | None = None
     assigned_display_name: str | None = None
-    assigned_at: str | None = None
-    due_date: str | None = None
+    assigned_at: datetime | None = None
+    due_date: datetime | None = None
     sla_target_days: int | None = None
-    sla_breach_at: str | None = None
+    sla_breach_at: datetime | None = None
     ownership_reason: str | None = None
-    last_assignment_change_at: str | None = None
+    last_assignment_change_at: datetime | None = None
 
 
 class TaskListResponse(BaseModel):
@@ -273,7 +274,7 @@ class UnassignRequest(BaseModel):
 class SetDueDateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    due_date: str = Field(..., description="ISO 8601 UTC datetime string")
+    due_date: datetime = Field(..., description="ISO 8601 UTC datetime")
     reason: str | None = Field(default=None, max_length=2000)
 
 
@@ -286,5 +287,5 @@ class SlaResponse(BaseModel):
     age_days: int
     sla_target_days: int | None
     days_remaining: int | None
-    due_date: str | None
-    sla_breach_at: str | None
+    due_date: datetime | None
+    sla_breach_at: datetime | None

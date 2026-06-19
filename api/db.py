@@ -660,20 +660,22 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 conn, "remediation_tasks", "assigned_display_name", "TEXT"
             )
             _sqlite_add_column_if_missing(
-                conn, "remediation_tasks", "assigned_at", "TEXT"
+                conn, "remediation_tasks", "assigned_at", "DATETIME"
             )
-            _sqlite_add_column_if_missing(conn, "remediation_tasks", "due_date", "TEXT")
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "due_date", "DATETIME"
+            )
             _sqlite_add_column_if_missing(
                 conn, "remediation_tasks", "sla_target_days", "INTEGER"
             )
             _sqlite_add_column_if_missing(
-                conn, "remediation_tasks", "sla_breach_at", "TEXT"
+                conn, "remediation_tasks", "sla_breach_at", "DATETIME"
             )
             _sqlite_add_column_if_missing(
                 conn, "remediation_tasks", "ownership_reason", "TEXT"
             )
             _sqlite_add_column_if_missing(
-                conn, "remediation_tasks", "last_assignment_change_at", "TEXT"
+                conn, "remediation_tasks", "last_assignment_change_at", "DATETIME"
             )
 
         # (The rest of your large sqlite schema block continues unchanged)

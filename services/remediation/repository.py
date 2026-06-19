@@ -9,6 +9,7 @@ filtering by tenant_id. Caller owns db.commit().
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -227,6 +228,10 @@ def fetch_audit_events(
 
 def snapshot_task(task: RemediationTask) -> dict[str, Any]:
     """Produce an immutable dict snapshot of a task's current state for audit records."""
+
+    def _dt(v: Any) -> str | None:
+        return v.isoformat() if v is not None else None
+
     return TaskSnapshot(
         id=task.id,
         tenant_id=task.tenant_id,
@@ -246,12 +251,12 @@ def snapshot_task(task: RemediationTask) -> dict[str, Any]:
         assigned_user_id=task.assigned_user_id,
         assigned_user_email=task.assigned_user_email,
         assigned_display_name=task.assigned_display_name,
-        assigned_at=task.assigned_at,
-        due_date=task.due_date,
+        assigned_at=_dt(task.assigned_at),
+        due_date=_dt(task.due_date),
         sla_target_days=task.sla_target_days,
-        sla_breach_at=task.sla_breach_at,
+        sla_breach_at=_dt(task.sla_breach_at),
         ownership_reason=task.ownership_reason,
-        last_assignment_change_at=task.last_assignment_change_at,
+        last_assignment_change_at=_dt(task.last_assignment_change_at),
     ).model_dump()
 
 
@@ -264,7 +269,7 @@ def fetch_overdue_tasks(
     db: Session,
     *,
     tenant_id: str,
-    now_iso: str,
+    now: datetime,
     limit: int = 100,
     offset: int = 0,
 ) -> list[RemediationTask]:
@@ -275,7 +280,7 @@ def fetch_overdue_tasks(
         .filter(
             RemediationTask.tenant_id == tenant_id,
             RemediationTask.sla_breach_at.isnot(None),
-            RemediationTask.sla_breach_at < now_iso,
+            RemediationTask.sla_breach_at < now,
             RemediationTask.status.notin_(terminal),
         )
         .order_by(RemediationTask.sla_breach_at.asc())
@@ -283,14 +288,14 @@ def fetch_overdue_tasks(
     return q.limit(min(limit, 100)).offset(offset).all()
 
 
-def count_overdue_tasks(db: Session, *, tenant_id: str, now_iso: str) -> int:
+def count_overdue_tasks(db: Session, *, tenant_id: str, now: datetime) -> int:
     terminal = {RemediationStatus.CLOSED.value, RemediationStatus.ACCEPTED_RISK.value}
     return (
         db.query(RemediationTask)
         .filter(
             RemediationTask.tenant_id == tenant_id,
             RemediationTask.sla_breach_at.isnot(None),
-            RemediationTask.sla_breach_at < now_iso,
+            RemediationTask.sla_breach_at < now,
             RemediationTask.status.notin_(terminal),
         )
         .count()

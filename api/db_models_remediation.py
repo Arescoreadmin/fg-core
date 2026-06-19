@@ -20,7 +20,9 @@ Tables:
 
 from __future__ import annotations
 
-from sqlalchemy import Index, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -62,13 +64,19 @@ class RemediationTask(Base):
     assigned_display_name: Mapped[str | None] = mapped_column(
         String(512), nullable=True
     )
-    assigned_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    due_date: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    assigned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    due_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     sla_target_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    sla_breach_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sla_breach_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     ownership_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_assignment_change_at: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
+    last_assignment_change_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     __table_args__ = (
