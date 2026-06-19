@@ -6,7 +6,6 @@ All functions are tenant-scoped.
 
 from __future__ import annotations
 from datetime import datetime
-from typing import Any
 from sqlalchemy.orm import Session
 from api.db_models_remediation import RemediationTask
 from api.db_models_portal_remediation import (

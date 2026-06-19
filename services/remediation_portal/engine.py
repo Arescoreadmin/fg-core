@@ -23,7 +23,7 @@ from api.observability.metrics import (
     PORTAL_OVERDUE_VIEWS_TOTAL,
     PORTAL_REMEDIATION_VIEWS_TOTAL,
 )
-from services.remediation.engine import SLA_DEFAULTS, _AT_RISK_THRESHOLD
+from services.remediation.engine import _AT_RISK_THRESHOLD
 from services.remediation.schemas import RemediationStatus
 from services.remediation_portal.repository import (
     count_comments,
@@ -57,7 +57,6 @@ from services.remediation_portal.schemas import (
     PortalEvidenceDuplicate,
     PortalEvidenceListResponse,
     PortalEvidenceResponse,
-    PortalNotFound,
     PortalTaskSummary,
     PortalTaskView,
     SubmitEvidenceRequest,
