@@ -432,6 +432,25 @@ PORTAL_COMMENT_VALIDATION_FAILURES_TOTAL = Counter(
     "Total portal comment body validation failures (blank/whitespace-only bodies)",
 )
 
+# PR 13.6: Portal Abuse Protection — rate-limit / throttle counters.
+# No tenant_id / user labels — bounded cardinality.
+PORTAL_RATE_LIMIT_HITS_TOTAL = Counter(
+    "frostgate_portal_rate_limit_hits_total",
+    "Total portal write requests rejected by rate limiting (all operations combined)",
+)
+PORTAL_COMMENT_THROTTLES_TOTAL = Counter(
+    "frostgate_portal_comment_throttles_total",
+    "Total portal comment write operations (create or edit) rejected by rate limiting",
+)
+PORTAL_EVIDENCE_THROTTLES_TOTAL = Counter(
+    "frostgate_portal_evidence_throttles_total",
+    "Total portal evidence upload operations rejected by rate limiting",
+)
+PORTAL_ACKNOWLEDGEMENT_THROTTLES_TOTAL = Counter(
+    "frostgate_portal_acknowledgement_throttles_total",
+    "Total portal ownership acknowledgement operations rejected by rate limiting",
+)
+
 REMEDIATION_SLA_BREACHES_TOTAL = Counter(
     "frostgate_remediation_sla_breaches_total",
     "Total SLA breaches observed",

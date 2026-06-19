@@ -53,6 +53,11 @@ class PortalAuditEventType(str, Enum):
     PORTAL_EVIDENCE_UPLOADED = "portal_evidence_uploaded"
     PORTAL_OWNER_ACKNOWLEDGED = "portal_owner_acknowledged"
     PORTAL_STATUS_VIEWED = "portal_status_viewed"
+    # PR 13.6 — abuse protection throttle events
+    PORTAL_RATE_LIMIT_EXCEEDED = "portal_rate_limit_exceeded"
+    PORTAL_COMMENT_THROTTLED = "portal_comment_throttled"
+    PORTAL_EVIDENCE_THROTTLED = "portal_evidence_throttled"
+    PORTAL_ACKNOWLEDGEMENT_THROTTLED = "portal_acknowledgement_throttled"
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +83,14 @@ class PortalCommentNotFound(PortalError):
 
 class PortalEvidenceDuplicate(PortalError):
     """Evidence with this SHA256 already submitted for this task."""
+
+
+class PortalRateLimitExceeded(PortalError):
+    """Write rate limit exceeded for this portal client."""
+
+    def __init__(self, *, retry_after_seconds: int = 3600) -> None:
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(f"Rate limit exceeded. Retry after {retry_after_seconds}s.")
 
 
 # ---------------------------------------------------------------------------

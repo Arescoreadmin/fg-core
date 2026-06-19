@@ -17,10 +17,14 @@ from api.db_models_portal_remediation import (
     PortalRemediationComment,
 )
 from api.observability.metrics import (
+    PORTAL_ACKNOWLEDGEMENT_THROTTLES_TOTAL,
+    PORTAL_COMMENT_THROTTLES_TOTAL,
     PORTAL_COMMENTS_TOTAL,
+    PORTAL_EVIDENCE_THROTTLES_TOTAL,
     PORTAL_EVIDENCE_UPLOADS_TOTAL,
     PORTAL_OWNER_ACKNOWLEDGEMENTS_TOTAL,
     PORTAL_OVERDUE_VIEWS_TOTAL,
+    PORTAL_RATE_LIMIT_HITS_TOTAL,
     PORTAL_REMEDIATION_VIEWS_TOTAL,
 )
 from services.remediation.engine import _AT_RISK_THRESHOLD
@@ -44,6 +48,14 @@ from services.remediation_portal.repository import (
     insert_evidence,
     insert_portal_audit_event,
 )
+from services.remediation_portal.rate_limit import (
+    get_portal_rate_limiter,
+    make_rate_limit_key,
+)
+from services.remediation_portal.rate_policy import (
+    PortalOperation,
+    resolve_portal_limits,
+)
 from services.remediation_portal.schemas import (
     AcknowledgeOwnershipRequest,
     AcknowledgeOwnershipResponse,
@@ -58,11 +70,20 @@ from services.remediation_portal.schemas import (
     PortalEvidenceDuplicate,
     PortalEvidenceListResponse,
     PortalEvidenceResponse,
+    PortalRateLimitExceeded,
     PortalTaskSummary,
     PortalTaskView,
     SubmitEvidenceRequest,
     VerificationState,
 )
+
+
+_THROTTLE_EVENT_MAP: dict[PortalOperation, PortalAuditEventType] = {
+    PortalOperation.COMMENT_CREATE: PortalAuditEventType.PORTAL_COMMENT_THROTTLED,
+    PortalOperation.COMMENT_EDIT: PortalAuditEventType.PORTAL_COMMENT_THROTTLED,
+    PortalOperation.EVIDENCE_UPLOAD: PortalAuditEventType.PORTAL_EVIDENCE_THROTTLED,
+    PortalOperation.ACKNOWLEDGEMENT: PortalAuditEventType.PORTAL_ACKNOWLEDGEMENT_THROTTLED,
+}
 
 
 def _now() -> str:
@@ -205,6 +226,56 @@ class PortalRemediationEngine:
         self._tenant_id = tenant_id
 
     # ------------------------------------------------------------------
+    # Internal: rate limiting
+    # ------------------------------------------------------------------
+
+    def _check_rate_limit(
+        self,
+        *,
+        task_id: str,
+        operation: PortalOperation,
+        actor: str,
+    ) -> None:
+        """Check and consume a rate-limit token for the given operation.
+
+        On exhaustion: emits a throttle audit event (committed immediately),
+        increments Prometheus counters, then raises PortalRateLimitExceeded.
+        The audit commit happens before raising so the event is durable even
+        though the outer transaction is never completed.
+        """
+        policy = resolve_portal_limits(operation, tenant_id=self._tenant_id)
+        key = make_rate_limit_key(self._tenant_id, actor, operation.value)
+        allowed, retry_after = get_portal_rate_limiter().increment_and_check(
+            key, policy.limit, policy.window_seconds
+        )
+        if not allowed:
+            _emit_portal_audit(
+                self._db,
+                tenant_id=self._tenant_id,
+                task_id=task_id,
+                event_type=_THROTTLE_EVENT_MAP[operation],
+                actor=actor,
+                metadata={
+                    "operation": operation.value,
+                    "limit": policy.limit,
+                    "window_seconds": policy.window_seconds,
+                    "retry_after_seconds": retry_after,
+                },
+            )
+            self._db.commit()
+            PORTAL_RATE_LIMIT_HITS_TOTAL.inc()
+            if operation in (
+                PortalOperation.COMMENT_CREATE,
+                PortalOperation.COMMENT_EDIT,
+            ):
+                PORTAL_COMMENT_THROTTLES_TOTAL.inc()
+            elif operation == PortalOperation.EVIDENCE_UPLOAD:
+                PORTAL_EVIDENCE_THROTTLES_TOTAL.inc()
+            elif operation == PortalOperation.ACKNOWLEDGEMENT:
+                PORTAL_ACKNOWLEDGEMENT_THROTTLES_TOTAL.inc()
+            raise PortalRateLimitExceeded(retry_after_seconds=retry_after)
+
+    # ------------------------------------------------------------------
     # Dashboard
     # ------------------------------------------------------------------
 
@@ -287,6 +358,9 @@ class PortalRemediationEngine:
     def add_comment(
         self, *, task_id: str, request: AddCommentRequest, actor: str
     ) -> PortalCommentResponse:
+        self._check_rate_limit(
+            task_id=task_id, operation=PortalOperation.COMMENT_CREATE, actor=actor
+        )
         fetch_portal_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
         now = _now()
         comment = PortalRemediationComment(
@@ -314,6 +388,9 @@ class PortalRemediationEngine:
     def edit_comment(
         self, *, task_id: str, comment_id: str, request: EditCommentRequest, actor: str
     ) -> PortalCommentResponse:
+        self._check_rate_limit(
+            task_id=task_id, operation=PortalOperation.COMMENT_EDIT, actor=actor
+        )
         comment = fetch_comment(
             self._db, tenant_id=self._tenant_id, task_id=task_id, comment_id=comment_id
         )
@@ -357,6 +434,9 @@ class PortalRemediationEngine:
     def submit_evidence(
         self, *, task_id: str, request: SubmitEvidenceRequest, actor: str
     ) -> PortalEvidenceResponse:
+        self._check_rate_limit(
+            task_id=task_id, operation=PortalOperation.EVIDENCE_UPLOAD, actor=actor
+        )
         fetch_portal_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
         if evidence_sha256_exists(
             self._db, tenant_id=self._tenant_id, task_id=task_id, sha256=request.sha256
@@ -422,6 +502,9 @@ class PortalRemediationEngine:
     def acknowledge_ownership(
         self, *, task_id: str, request: AcknowledgeOwnershipRequest, actor: str
     ) -> AcknowledgeOwnershipResponse:
+        self._check_rate_limit(
+            task_id=task_id, operation=PortalOperation.ACKNOWLEDGEMENT, actor=actor
+        )
         task = fetch_portal_task(self._db, tenant_id=self._tenant_id, task_id=task_id)
         now = _now()
         _emit_portal_audit(

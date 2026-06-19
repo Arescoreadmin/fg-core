@@ -1145,3 +1145,757 @@ def test_rem_120_cross_tenant_comment_pagination_denied(
         headers=_auth(alt_api_key),
     )
     assert resp.status_code == 404
+
+
+# ===========================================================================
+# PR 13.6 — Portal Abuse Protection & Rate Limiting (REM-122 through REM-145)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Shared helpers for rate-limit tests
+# ---------------------------------------------------------------------------
+
+_RL_COMMENT_BODY = {"body": "rate limit test comment", "author": "rl-tester"}
+_RL_EVIDENCE_BODY = {
+    "filename": "rl-test.pdf",
+    "content_type": "application/pdf",
+    "sha256": "a" * 64,
+    "submitted_by": "rl-tester",
+}
+_RL_ACK_BODY = {"acknowledged_by": "rl-tester"}
+
+
+class _AlwaysThrottledLimiter:
+    """Test backend that always reports the limit as exhausted."""
+
+    def increment_and_check(self, key: str, limit: int, window_seconds: int) -> tuple:
+        return False, 3600
+
+    def reset(self, key: str) -> None:
+        pass
+
+    def backend_name(self) -> str:
+        return "always_throttled"
+
+
+@pytest.fixture()
+def throttled_limiter():
+    """Swap in an always-throttled backend; restore original after test."""
+    from services.remediation_portal.rate_limit import (
+        _set_portal_rate_limiter,
+        get_portal_rate_limiter,
+    )
+
+    original = get_portal_rate_limiter()
+    _set_portal_rate_limiter(_AlwaysThrottledLimiter())
+    yield
+    _set_portal_rate_limiter(original)
+
+
+@pytest.fixture()
+def fresh_limiter():
+    """Swap in a fresh MemoryPortalRateLimiter; restore original after test."""
+    from services.remediation_portal.rate_limit import (
+        MemoryPortalRateLimiter,
+        _set_portal_rate_limiter,
+        get_portal_rate_limiter,
+    )
+
+    original = get_portal_rate_limiter()
+    limiter = MemoryPortalRateLimiter()
+    _set_portal_rate_limiter(limiter)
+    yield limiter
+    _set_portal_rate_limiter(original)
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for Tenant B task (cross-tenant fairness tests)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def finding_and_assessment_b(app):
+    """Seed a finding + assessment for Tenant B directly via ORM."""
+    import uuid
+
+    from sqlalchemy.orm import Session
+
+    from api.db import get_engine
+    from api.db_models_field_assessment import FaEngagement, FaNormalizedFinding
+
+    now = "2026-01-02T00:00:00+00:00"
+    eid = uuid.uuid4().hex
+    fid = uuid.uuid4().hex
+    with Session(get_engine()) as db:
+        db.add(
+            FaEngagement(
+                id=eid,
+                tenant_id=_TENANT_B,
+                client_name="Portal Test Client B",
+                assessor_id="assessor-portal-b",
+                assessment_type="security",
+                status="in_progress",
+                engagement_metadata={},
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.add(
+            FaNormalizedFinding(
+                id=fid,
+                tenant_id=_TENANT_B,
+                engagement_id=eid,
+                finding_type="vulnerability",
+                findings_hash=uuid.uuid4().hex,
+                severity="medium",
+                status="open",
+                title="Portal Test Finding B",
+                description="A portal test finding for Tenant B.",
+                source_attribution="scanner",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.commit()
+    return eid, fid
+
+
+@pytest.fixture(scope="module")
+def task_id_b(client, alt_api_key, finding_and_assessment_b):
+    """Create a remediation task for Tenant B and return its ID."""
+    assessment_id, finding_id = finding_and_assessment_b
+    resp = client.post(
+        "/remediation/tasks",
+        json={
+            "finding_id": finding_id,
+            "assessment_id": assessment_id,
+            "title": "Portal Test Task B",
+            "description": "Test remediation for portal tenant B",
+            "priority": "medium",
+        },
+        headers=_auth(alt_api_key),
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+@pytest.fixture(scope="module")
+def api_key_b2():
+    """Second API key for Tenant A — different client ID for per-client isolation tests."""
+    from api.auth_scopes import mint_key
+
+    return mint_key("governance:read", "governance:write", tenant_id=_TENANT_A)
+
+
+# ---------------------------------------------------------------------------
+# REM-122: Comment create throttled → 429
+# ---------------------------------------------------------------------------
+
+
+def test_rem_122_comment_create_throttled(client, api_key, task_id, throttled_limiter):
+    """REM-122  Add-comment is rejected with 429 when rate limit is exhausted."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# REM-123: Comment edit throttled → 429
+# ---------------------------------------------------------------------------
+
+
+def test_rem_123_comment_edit_throttled(client, api_key, task_id, throttled_limiter):
+    """REM-123  Edit-comment is rejected with 429 when rate limit is exhausted."""
+    # Create a real comment first (using fresh limiter, not throttled)
+    from services.remediation_portal.rate_limit import (
+        MemoryPortalRateLimiter,
+        _set_portal_rate_limiter,
+    )
+
+    _set_portal_rate_limiter(MemoryPortalRateLimiter())
+    r = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert r.status_code == 201
+    cid = r.json()["id"]
+    _set_portal_rate_limiter(_AlwaysThrottledLimiter())
+
+    resp = client.patch(
+        f"/portal/remediation/tasks/{task_id}/comments/{cid}",
+        json={"body": "edited"},
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# REM-124: Evidence upload throttled → 429
+# ---------------------------------------------------------------------------
+
+
+def test_rem_124_evidence_upload_throttled(client, api_key, task_id, throttled_limiter):
+    """REM-124  Submit-evidence is rejected with 429 when rate limit is exhausted."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json=_RL_EVIDENCE_BODY,
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# REM-125: Acknowledgement throttled → 429
+# ---------------------------------------------------------------------------
+
+
+def test_rem_125_acknowledgement_throttled(client, api_key, task_id, throttled_limiter):
+    """REM-125  Acknowledge-ownership is rejected with 429 when rate limit is exhausted."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/acknowledge",
+        json=_RL_ACK_BODY,
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# REM-126: 429 response body format
+# ---------------------------------------------------------------------------
+
+
+def test_rem_126_429_body_format(client, api_key, task_id, throttled_limiter):
+    """REM-126  429 body is {"error": "RATE_LIMIT_EXCEEDED", "retry_after_seconds": N}."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 429
+    data = resp.json()
+    assert data["error"] == "RATE_LIMIT_EXCEEDED"
+    assert isinstance(data["retry_after_seconds"], int)
+    assert data["retry_after_seconds"] > 0
+
+
+# ---------------------------------------------------------------------------
+# REM-127: Retry-After header on 429
+# ---------------------------------------------------------------------------
+
+
+def test_rem_127_retry_after_header(client, api_key, task_id, throttled_limiter):
+    """REM-127  429 response includes Retry-After header."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 429
+    assert "retry-after" in {k.lower() for k in resp.headers}
+    assert int(resp.headers["retry-after"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# REM-128: Cross-tenant fairness — Tenant A throttled ≠ Tenant B degraded
+# ---------------------------------------------------------------------------
+
+
+def test_rem_128_cross_tenant_fairness(
+    client, api_key, alt_api_key, task_id, task_id_b, fresh_limiter, monkeypatch
+):
+    """REM-128  Exhausting Tenant A's rate limit does not affect Tenant B."""
+    from services.remediation_portal import engine as _engine
+    from services.remediation_portal.rate_policy import PortalRatePolicy
+
+    monkeypatch.setattr(
+        _engine,
+        "resolve_portal_limits",
+        lambda op, **kw: PortalRatePolicy(limit=1, window_seconds=3600),
+    )
+
+    # Tenant A: first request allowed, second throttled
+    r1 = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert r1.status_code == 201
+
+    r2 = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json={**_RL_COMMENT_BODY, "body": "second comment"},
+        headers=_auth(api_key),
+    )
+    assert r2.status_code == 429
+
+    # Tenant B: must still be able to write (different tenant bucket)
+    r3 = client.post(
+        f"/portal/remediation/tasks/{task_id_b}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(alt_api_key),
+    )
+    assert r3.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# REM-129: Per-client isolation — Client A throttled ≠ Client B throttled
+# ---------------------------------------------------------------------------
+
+
+def test_rem_129_per_client_isolation(
+    client, api_key, api_key_b2, task_id, fresh_limiter, monkeypatch
+):
+    """REM-129  Client A throttled within Tenant A does not affect Client B (same tenant)."""
+    from services.remediation_portal import engine as _engine
+    from services.remediation_portal.rate_policy import PortalRatePolicy
+
+    monkeypatch.setattr(
+        _engine,
+        "resolve_portal_limits",
+        lambda op, **kw: PortalRatePolicy(limit=1, window_seconds=3600),
+    )
+
+    # Client A (api_key): exhaust
+    r1 = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert r1.status_code == 201
+    r2 = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json={**_RL_COMMENT_BODY, "body": "second"},
+        headers=_auth(api_key),
+    )
+    assert r2.status_code == 429
+
+    # Client B2 (api_key_b2, different key → different client_id within Tenant A)
+    r3 = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key_b2),
+    )
+    assert r3.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# REM-130: Throttle audit event recorded
+# ---------------------------------------------------------------------------
+
+
+def test_rem_130_throttle_audit_event_recorded(
+    client, api_key, task_id, throttled_limiter
+):
+    """REM-130  A PORTAL_COMMENT_THROTTLED audit event is written on throttle."""
+    client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    # Fetch audit trail with fresh limiter so the GET is not blocked
+    from services.remediation_portal.rate_limit import (
+        MemoryPortalRateLimiter,
+        _set_portal_rate_limiter,
+    )
+
+    _set_portal_rate_limiter(MemoryPortalRateLimiter())
+    audit = client.get(
+        f"/portal/remediation/tasks/{task_id}/audit",
+        headers=_auth(api_key),
+    )
+    assert audit.status_code == 200
+    events = audit.json()["events"]
+    throttle_events = [e for e in events if "throttled" in e["event_type"]]
+    assert len(throttle_events) >= 1
+    assert throttle_events[-1]["event_type"] == "portal_comment_throttled"
+
+
+# ---------------------------------------------------------------------------
+# REM-131: PORTAL_RATE_LIMIT_HITS_TOTAL increments
+# ---------------------------------------------------------------------------
+
+
+def test_rem_131_rate_limit_hits_metric(client, api_key, task_id, throttled_limiter):
+    """REM-131  PORTAL_RATE_LIMIT_HITS_TOTAL increments when any write is throttled."""
+    from api.observability.metrics import PORTAL_RATE_LIMIT_HITS_TOTAL
+
+    before = PORTAL_RATE_LIMIT_HITS_TOTAL._value.get()
+    client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert PORTAL_RATE_LIMIT_HITS_TOTAL._value.get() > before
+
+
+# ---------------------------------------------------------------------------
+# REM-132: PORTAL_COMMENT_THROTTLES_TOTAL increments
+# ---------------------------------------------------------------------------
+
+
+def test_rem_132_comment_throttle_metric(client, api_key, task_id, throttled_limiter):
+    """REM-132  PORTAL_COMMENT_THROTTLES_TOTAL increments on comment throttle."""
+    from api.observability.metrics import PORTAL_COMMENT_THROTTLES_TOTAL
+
+    before = PORTAL_COMMENT_THROTTLES_TOTAL._value.get()
+    client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert PORTAL_COMMENT_THROTTLES_TOTAL._value.get() > before
+
+
+# ---------------------------------------------------------------------------
+# REM-133: PORTAL_EVIDENCE_THROTTLES_TOTAL increments
+# ---------------------------------------------------------------------------
+
+
+def test_rem_133_evidence_throttle_metric(client, api_key, task_id, throttled_limiter):
+    """REM-133  PORTAL_EVIDENCE_THROTTLES_TOTAL increments on evidence throttle."""
+    from api.observability.metrics import PORTAL_EVIDENCE_THROTTLES_TOTAL
+
+    before = PORTAL_EVIDENCE_THROTTLES_TOTAL._value.get()
+    client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json=_RL_EVIDENCE_BODY,
+        headers=_auth(api_key),
+    )
+    assert PORTAL_EVIDENCE_THROTTLES_TOTAL._value.get() > before
+
+
+# ---------------------------------------------------------------------------
+# REM-134: PORTAL_ACKNOWLEDGEMENT_THROTTLES_TOTAL increments
+# ---------------------------------------------------------------------------
+
+
+def test_rem_134_acknowledgement_throttle_metric(
+    client, api_key, task_id, throttled_limiter
+):
+    """REM-134  PORTAL_ACKNOWLEDGEMENT_THROTTLES_TOTAL increments on ack throttle."""
+    from api.observability.metrics import PORTAL_ACKNOWLEDGEMENT_THROTTLES_TOTAL
+
+    before = PORTAL_ACKNOWLEDGEMENT_THROTTLES_TOTAL._value.get()
+    client.post(
+        f"/portal/remediation/tasks/{task_id}/acknowledge",
+        json=_RL_ACK_BODY,
+        headers=_auth(api_key),
+    )
+    assert PORTAL_ACKNOWLEDGEMENT_THROTTLES_TOTAL._value.get() > before
+
+
+# ---------------------------------------------------------------------------
+# REM-135: Read endpoints are NOT rate-limited
+# ---------------------------------------------------------------------------
+
+
+def test_rem_135_reads_not_rate_limited(client, api_key, task_id, throttled_limiter):
+    """REM-135  GET endpoints bypass rate limiting — throttled_limiter has no effect."""
+    r1 = client.get("/portal/remediation", headers=_auth(api_key))
+    assert r1.status_code == 200
+
+    r2 = client.get(f"/portal/remediation/tasks/{task_id}", headers=_auth(api_key))
+    assert r2.status_code == 200
+
+    r3 = client.get(
+        f"/portal/remediation/tasks/{task_id}/comments", headers=_auth(api_key)
+    )
+    assert r3.status_code == 200
+
+    r4 = client.get(
+        f"/portal/remediation/tasks/{task_id}/evidence", headers=_auth(api_key)
+    )
+    assert r4.status_code == 200
+
+    r5 = client.get(
+        f"/portal/remediation/tasks/{task_id}/audit", headers=_auth(api_key)
+    )
+    assert r5.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# REM-136: Separate rate-limit buckets per operation
+# ---------------------------------------------------------------------------
+
+
+def test_rem_136_separate_buckets_per_operation(
+    client, api_key, task_id, fresh_limiter, monkeypatch
+):
+    """REM-136  Comment bucket is independent from evidence bucket."""
+    from services.remediation_portal import engine as _engine
+    from services.remediation_portal.rate_policy import PortalRatePolicy
+
+    monkeypatch.setattr(
+        _engine,
+        "resolve_portal_limits",
+        lambda op, **kw: PortalRatePolicy(limit=1, window_seconds=3600),
+    )
+
+    # Exhaust comment bucket
+    client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    r_comment = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json={**_RL_COMMENT_BODY, "body": "second"},
+        headers=_auth(api_key),
+    )
+    assert r_comment.status_code == 429
+
+    # Evidence bucket is independent — still has capacity (unique sha256 per test)
+    r_evidence = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={**_RL_EVIDENCE_BODY, "sha256": "1" * 64},
+        headers=_auth(api_key),
+    )
+    assert r_evidence.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# REM-137 / REM-138: Rate-limit key composition
+# ---------------------------------------------------------------------------
+
+
+def test_rem_137_rate_limit_key_includes_tenant():
+    """REM-137  Keys for the same operation differ across tenants."""
+    from services.remediation_portal.rate_limit import make_rate_limit_key
+
+    key_a = make_rate_limit_key("tenant-a", "client-x", "comment_create")
+    key_b = make_rate_limit_key("tenant-b", "client-x", "comment_create")
+    assert key_a != key_b
+    assert "tenant-a" in key_a
+    assert "tenant-b" in key_b
+
+
+def test_rem_138_rate_limit_key_includes_client():
+    """REM-138  Keys for the same tenant + operation differ across clients."""
+    from services.remediation_portal.rate_limit import make_rate_limit_key
+
+    key_1 = make_rate_limit_key("tenant-a", "client-1", "comment_create")
+    key_2 = make_rate_limit_key("tenant-a", "client-2", "comment_create")
+    assert key_1 != key_2
+    assert "client-1" in key_1
+    assert "client-2" in key_2
+
+
+# ---------------------------------------------------------------------------
+# REM-139: Exactly at limit is allowed; first-over is rejected
+# ---------------------------------------------------------------------------
+
+
+def test_rem_139_at_limit_allowed_over_limit_rejected(
+    client, api_key, task_id, fresh_limiter, monkeypatch
+):
+    """REM-139  Request exactly at the limit is allowed; the next one is rejected."""
+    from services.remediation_portal import engine as _engine
+    from services.remediation_portal.rate_policy import PortalRatePolicy
+
+    monkeypatch.setattr(
+        _engine,
+        "resolve_portal_limits",
+        lambda op, **kw: PortalRatePolicy(limit=2, window_seconds=3600),
+    )
+
+    r1 = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert r1.status_code == 201
+
+    r2 = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json={**_RL_COMMENT_BODY, "body": "second"},
+        headers=_auth(api_key),
+    )
+    assert r2.status_code == 201  # exactly at limit — allowed
+
+    r3 = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json={**_RL_COMMENT_BODY, "body": "third"},
+        headers=_auth(api_key),
+    )
+    assert r3.status_code == 429  # over limit — rejected
+
+
+# ---------------------------------------------------------------------------
+# REM-140: Throttle audit metadata
+# ---------------------------------------------------------------------------
+
+
+def test_rem_140_throttle_audit_metadata(client, api_key, task_id, throttled_limiter):
+    """REM-140  Throttle audit event metadata contains operation, limit, retry_after_seconds."""
+    client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json=_RL_EVIDENCE_BODY,
+        headers=_auth(api_key),
+    )
+    from services.remediation_portal.rate_limit import (
+        MemoryPortalRateLimiter,
+        _set_portal_rate_limiter,
+    )
+
+    _set_portal_rate_limiter(MemoryPortalRateLimiter())
+    audit = client.get(
+        f"/portal/remediation/tasks/{task_id}/audit",
+        headers=_auth(api_key),
+    )
+    events = audit.json()["events"]
+    ev = next(
+        (e for e in reversed(events) if e["event_type"] == "portal_evidence_throttled"),
+        None,
+    )
+    assert ev is not None
+    meta = ev["event_metadata"]
+    assert "operation" in meta
+    assert "limit" in meta
+    assert "retry_after_seconds" in meta
+    assert meta["operation"] == "evidence_upload"
+
+
+# ---------------------------------------------------------------------------
+# REM-141: MemoryPortalRateLimiter satisfies backend protocol
+# ---------------------------------------------------------------------------
+
+
+def test_rem_141_memory_backend_protocol():
+    """REM-141  MemoryPortalRateLimiter implements the PortalRateLimiterBackend protocol."""
+    from services.remediation_portal.rate_limit import (
+        MemoryPortalRateLimiter,
+        PortalRateLimiterBackend,
+    )
+
+    limiter = MemoryPortalRateLimiter()
+    assert isinstance(limiter, PortalRateLimiterBackend)
+    assert limiter.backend_name() == "memory"
+
+    allowed, retry = limiter.increment_and_check("test-key", 5, 60)
+    assert allowed is True
+    assert retry == 0
+
+    limiter.reset("test-key")
+    allowed2, _ = limiter.increment_and_check("test-key", 5, 60)
+    assert allowed2 is True  # counter reset
+
+
+# ---------------------------------------------------------------------------
+# REM-142: resolve_portal_limits returns correct defaults
+# ---------------------------------------------------------------------------
+
+
+def test_rem_142_default_policy_values():
+    """REM-142  Default limits: 60/hr for comments, 30/hr for evidence and acks."""
+    from services.remediation_portal.rate_policy import (
+        PortalOperation,
+        resolve_portal_limits,
+    )
+
+    comment = resolve_portal_limits(PortalOperation.COMMENT_CREATE)
+    assert comment.limit == 60
+    assert comment.window_seconds == 3600
+
+    edit = resolve_portal_limits(PortalOperation.COMMENT_EDIT)
+    assert edit.limit == 60
+
+    evidence = resolve_portal_limits(PortalOperation.EVIDENCE_UPLOAD)
+    assert evidence.limit == 30
+    assert evidence.window_seconds == 3600
+
+    ack = resolve_portal_limits(PortalOperation.ACKNOWLEDGEMENT)
+    assert ack.limit == 30
+
+
+# ---------------------------------------------------------------------------
+# REM-143: Subscription tier multiplier
+# ---------------------------------------------------------------------------
+
+
+def test_rem_143_professional_tier_doubles_limit():
+    """REM-143  Professional subscription tier doubles the base rate limit."""
+    from services.remediation_portal.rate_policy import (
+        PortalOperation,
+        resolve_portal_limits,
+    )
+
+    base = resolve_portal_limits(PortalOperation.COMMENT_CREATE)
+    pro = resolve_portal_limits(
+        PortalOperation.COMMENT_CREATE, subscription_tier="professional"
+    )
+    assert pro.limit == base.limit * 2
+    assert pro.window_seconds == base.window_seconds
+
+
+# ---------------------------------------------------------------------------
+# REM-144: Window reset allows fresh requests
+# ---------------------------------------------------------------------------
+
+
+def test_rem_144_window_reset_allows_fresh_requests():
+    """REM-144  Moving to a new time window resets the counter (new epoch key)."""
+    from services.remediation_portal.rate_limit import MemoryPortalRateLimiter
+
+    clock_val = [0.0]
+    limiter = MemoryPortalRateLimiter(clock=lambda: clock_val[0])
+    window = 3600
+
+    # Window 0: exhaust
+    clock_val[0] = 0.0
+    allowed, _ = limiter.increment_and_check("k", 1, window)
+    assert allowed is True
+    allowed, _ = limiter.increment_and_check("k", 1, window)
+    assert allowed is False
+
+    # Advance to window 1
+    clock_val[0] = float(window)
+    allowed, _ = limiter.increment_and_check("k", 1, window)
+    assert allowed is True  # fresh window
+
+
+# ---------------------------------------------------------------------------
+# REM-145: Comment create and comment edit are separate buckets
+# ---------------------------------------------------------------------------
+
+
+def test_rem_145_comment_create_and_edit_are_separate_buckets(
+    client, api_key, task_id, fresh_limiter, monkeypatch
+):
+    """REM-145  COMMENT_CREATE and COMMENT_EDIT use separate rate-limit buckets."""
+    from services.remediation_portal import engine as _engine
+    from services.remediation_portal.rate_policy import PortalRatePolicy
+
+    monkeypatch.setattr(
+        _engine,
+        "resolve_portal_limits",
+        lambda op, **kw: PortalRatePolicy(limit=1, window_seconds=3600),
+    )
+
+    # Create a comment (uses COMMENT_CREATE bucket)
+    r_create = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json=_RL_COMMENT_BODY,
+        headers=_auth(api_key),
+    )
+    assert r_create.status_code == 201
+    cid = r_create.json()["id"]
+
+    # Second create is throttled (COMMENT_CREATE exhausted)
+    r_create2 = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json={**_RL_COMMENT_BODY, "body": "second"},
+        headers=_auth(api_key),
+    )
+    assert r_create2.status_code == 429
+
+    # Edit uses a DIFFERENT bucket — first edit is allowed
+    r_edit = client.patch(
+        f"/portal/remediation/tasks/{task_id}/comments/{cid}",
+        json={"body": "edited body"},
+        headers=_auth(api_key),
+    )
+    assert r_edit.status_code == 200
