@@ -23,7 +23,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Iterator
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
@@ -105,12 +105,17 @@ def portal_get_task(task_id: str, request: Request) -> PortalTaskView:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=PortalCommentListResponse,
 )
-def portal_list_comments(task_id: str, request: Request) -> PortalCommentListResponse:
+def portal_list_comments(
+    task_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> PortalCommentListResponse:
     tenant_id = require_bound_tenant(request)
     with _db(tenant_id) as db:
         try:
             return PortalRemediationEngine(db, tenant_id=tenant_id).list_comments(
-                task_id=task_id
+                task_id=task_id, limit=limit, offset=offset
             )
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
@@ -169,12 +174,17 @@ def portal_edit_comment(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=PortalEvidenceListResponse,
 )
-def portal_list_evidence(task_id: str, request: Request) -> PortalEvidenceListResponse:
+def portal_list_evidence(
+    task_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> PortalEvidenceListResponse:
     tenant_id = require_bound_tenant(request)
     with _db(tenant_id) as db:
         try:
             return PortalRemediationEngine(db, tenant_id=tenant_id).list_evidence(
-                task_id=task_id
+                task_id=task_id, limit=limit, offset=offset
             )
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
@@ -231,12 +241,17 @@ def portal_acknowledge_ownership(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=PortalAuditListResponse,
 )
-def portal_get_audit(task_id: str, request: Request) -> PortalAuditListResponse:
+def portal_get_audit(
+    task_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> PortalAuditListResponse:
     tenant_id = require_bound_tenant(request)
     with _db(tenant_id) as db:
         try:
             return PortalRemediationEngine(db, tenant_id=tenant_id).get_portal_audit(
-                task_id=task_id
+                task_id=task_id, limit=limit, offset=offset
             )
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))

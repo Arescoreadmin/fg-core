@@ -1,8 +1,42 @@
 # services/remediation_portal/schemas.py
 from __future__ import annotations
+
+import json
+import re
 from enum import Enum
 from typing import Any
-from pydantic import BaseModel, ConfigDict, Field
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+_METADATA_MAX_BYTES = 8192  # 8 KB
+
+# Approved MIME type registry. image/* family is allowed as a prefix.
+_ALLOWED_MIME_PREFIXES = frozenset({"image/"})
+_ALLOWED_MIME_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/zip",
+        "application/json",
+        "application/octet-stream",
+        "text/plain",
+        "text/csv",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+        "image/tiff",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
 
 
 class VerificationState(str, Enum):
@@ -19,6 +53,11 @@ class PortalAuditEventType(str, Enum):
     PORTAL_EVIDENCE_UPLOADED = "portal_evidence_uploaded"
     PORTAL_OWNER_ACKNOWLEDGED = "portal_owner_acknowledged"
     PORTAL_STATUS_VIEWED = "portal_status_viewed"
+
+
+# ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
 
 
 class PortalError(Exception):
@@ -41,7 +80,11 @@ class PortalEvidenceDuplicate(PortalError):
     """Evidence with this SHA256 already submitted for this task."""
 
 
-# Safe client-facing projection — excludes internal fields
+# ---------------------------------------------------------------------------
+# Read-only projections
+# ---------------------------------------------------------------------------
+
+
 class PortalTaskView(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
@@ -54,10 +97,10 @@ class PortalTaskView(BaseModel):
     priority: str
     status: str
     assigned_display_name: str | None
-    assigned_at: str | None  # ISO string (converted from datetime if needed)
-    due_date: str | None  # ISO string
+    assigned_at: str | None
+    due_date: str | None
     sla_target_days: int | None
-    sla_breach_at: str | None  # ISO string
+    sla_breach_at: str | None
     sla_status: str
     created_at: str
     updated_at: str
@@ -91,6 +134,11 @@ class PortalDashboardResponse(BaseModel):
     overdue_tasks: list[PortalTaskSummary]
 
 
+# ---------------------------------------------------------------------------
+# Comments
+# ---------------------------------------------------------------------------
+
+
 class PortalCommentResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
@@ -107,6 +155,13 @@ class PortalCommentListResponse(BaseModel):
     task_id: str
     comments: list[PortalCommentResponse]
     total: int
+    limit: int
+    offset: int
+
+
+# ---------------------------------------------------------------------------
+# Evidence
+# ---------------------------------------------------------------------------
 
 
 class PortalEvidenceResponse(BaseModel):
@@ -128,6 +183,13 @@ class PortalEvidenceListResponse(BaseModel):
     task_id: str
     evidence: list[PortalEvidenceResponse]
     total: int
+    limit: int
+    offset: int
+
+
+# ---------------------------------------------------------------------------
+# Audit
+# ---------------------------------------------------------------------------
 
 
 class PortalAuditEventResponse(BaseModel):
@@ -144,6 +206,14 @@ class PortalAuditListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     task_id: str
     events: list[PortalAuditEventResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+# ---------------------------------------------------------------------------
+# Request schemas — with hardened validators (PR 13.5)
+# ---------------------------------------------------------------------------
 
 
 class AddCommentRequest(BaseModel):
@@ -151,21 +221,115 @@ class AddCommentRequest(BaseModel):
     body: str = Field(..., min_length=1, max_length=10000)
     author: str = Field(..., min_length=1, max_length=255)
 
+    @field_validator("body")
+    @classmethod
+    def _body_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            try:
+                from api.observability.metrics import (
+                    PORTAL_COMMENT_VALIDATION_FAILURES_TOTAL,
+                    PORTAL_VALIDATION_FAILURES_TOTAL,
+                )
+
+                PORTAL_COMMENT_VALIDATION_FAILURES_TOTAL.inc()
+                PORTAL_VALIDATION_FAILURES_TOTAL.inc()
+            except Exception:
+                pass
+            raise ValueError("comment body must contain non-whitespace content")
+        return v
+
 
 class EditCommentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     body: str = Field(..., min_length=1, max_length=10000)
+
+    @field_validator("body")
+    @classmethod
+    def _body_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            try:
+                from api.observability.metrics import (
+                    PORTAL_COMMENT_VALIDATION_FAILURES_TOTAL,
+                    PORTAL_VALIDATION_FAILURES_TOTAL,
+                )
+
+                PORTAL_COMMENT_VALIDATION_FAILURES_TOTAL.inc()
+                PORTAL_VALIDATION_FAILURES_TOTAL.inc()
+            except Exception:
+                pass
+            raise ValueError("comment body must contain non-whitespace content")
+        return v
 
 
 class SubmitEvidenceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     filename: str = Field(..., min_length=1, max_length=512)
     content_type: str = Field(..., min_length=1, max_length=128)
-    sha256: str = Field(..., min_length=64, max_length=64)
+    sha256: str
     submitted_by: str = Field(..., min_length=1, max_length=255)
     classification: str | None = Field(default=None, max_length=64)
     description: str | None = Field(default=None, max_length=5000)
     evidence_metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("sha256")
+    @classmethod
+    def _sha256_hex(cls, v: str) -> str:
+        if not _SHA256_RE.fullmatch(v):
+            try:
+                from api.observability.metrics import (
+                    PORTAL_SHA256_VALIDATION_FAILURES_TOTAL,
+                    PORTAL_VALIDATION_FAILURES_TOTAL,
+                )
+
+                PORTAL_SHA256_VALIDATION_FAILURES_TOTAL.inc()
+                PORTAL_VALIDATION_FAILURES_TOTAL.inc()
+            except Exception:
+                pass
+            raise ValueError(
+                "sha256 must be exactly 64 lowercase hexadecimal characters ([a-f0-9]{64})"
+            )
+        return v
+
+    @field_validator("content_type")
+    @classmethod
+    def _mime_whitelist(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if normalized in _ALLOWED_MIME_TYPES:
+            return normalized
+        for prefix in _ALLOWED_MIME_PREFIXES:
+            if normalized.startswith(prefix):
+                return normalized
+        try:
+            from api.observability.metrics import PORTAL_VALIDATION_FAILURES_TOTAL
+
+            PORTAL_VALIDATION_FAILURES_TOTAL.inc()
+        except Exception:
+            pass
+        raise ValueError(
+            f"content_type {v!r} is not in the approved MIME type list. "
+            f"Allowed: {sorted(_ALLOWED_MIME_TYPES)} plus image/* family."
+        )
+
+    @field_validator("evidence_metadata")
+    @classmethod
+    def _metadata_size(cls, v: dict) -> dict:
+        serialized = json.dumps(v, separators=(",", ":"))
+        if len(serialized) > _METADATA_MAX_BYTES:
+            try:
+                from api.observability.metrics import (
+                    PORTAL_METADATA_REJECTIONS_TOTAL,
+                    PORTAL_VALIDATION_FAILURES_TOTAL,
+                )
+
+                PORTAL_METADATA_REJECTIONS_TOTAL.inc()
+                PORTAL_VALIDATION_FAILURES_TOTAL.inc()
+            except Exception:
+                pass
+            raise ValueError(
+                f"evidence_metadata exceeds the 8 KB size limit "
+                f"(got {len(serialized)} bytes)"
+            )
+        return v
 
 
 class AcknowledgeOwnershipRequest(BaseModel):

@@ -1,5 +1,5 @@
 # tests/test_portal_remediation.py
-"""Portal Remediation Integration tests — PR 13.4.
+"""Portal Remediation Integration tests — PR 13.4 + PR 13.5.
 
 REM-71  Portal dashboard — open count
 REM-72  Portal dashboard — closed count
@@ -764,3 +764,384 @@ def test_rem_102_portal_source_with_invalid_session_returns_403(client, api_key)
         "PORTAL_ACCESS_DENIED",
         "PORTAL_ACCESS_CHECK_FAILED",
     }
+
+
+# ===========================================================================
+# PR 13.5 — Portal Input Hardening & Operational Safety
+# REM-103 through REM-120
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# REM-103: Comment edit creates PORTAL_COMMENT_EDITED audit event
+# ---------------------------------------------------------------------------
+
+
+def test_rem_103_comment_edit_creates_audit_event(client, api_key, task_id):
+    """REM-103  Editing a comment creates a PORTAL_COMMENT_EDITED audit event."""
+    add_resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json={"body": "Original body for audit test.", "author": "audit@example.com"},
+        headers=_auth(api_key),
+    )
+    assert add_resp.status_code == 201
+    comment_id = add_resp.json()["id"]
+
+    client.patch(
+        f"/portal/remediation/tasks/{task_id}/comments/{comment_id}",
+        json={"body": "Edited body for audit test."},
+        headers=_auth(api_key),
+    )
+
+    audit_resp = client.get(
+        f"/portal/remediation/tasks/{task_id}/audit",
+        headers=_auth(api_key),
+    )
+    assert audit_resp.status_code == 200
+    event_types = [e["event_type"] for e in audit_resp.json()["events"]]
+    assert "portal_comment_edited" in event_types
+
+
+# ---------------------------------------------------------------------------
+# REM-104 / REM-105 / REM-106: SHA256 format validation
+# ---------------------------------------------------------------------------
+
+
+def test_rem_104_invalid_sha256_uppercase_rejected(client, api_key, task_id):
+    """REM-104  Uppercase SHA256 is rejected with 422."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={
+            "filename": "report.pdf",
+            "content_type": "application/pdf",
+            "sha256": "A" * 64,  # uppercase — invalid
+            "submitted_by": "user@example.com",
+        },
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 422
+
+
+def test_rem_105_invalid_sha256_non_hex_rejected(client, api_key, task_id):
+    """REM-105  Non-hex SHA256 (all Z's) is rejected with 422."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={
+            "filename": "report.pdf",
+            "content_type": "application/pdf",
+            "sha256": "Z" * 64,  # non-hex — invalid
+            "submitted_by": "user@example.com",
+        },
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 422
+
+
+def test_rem_106_invalid_sha256_wrong_length_rejected(client, api_key, task_id):
+    """REM-106  SHA256 with wrong length (63 chars) is rejected with 422."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={
+            "filename": "report.pdf",
+            "content_type": "application/pdf",
+            "sha256": "a" * 63,  # one char short — invalid
+            "submitted_by": "user@example.com",
+        },
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# REM-107 / REM-108: Evidence metadata size limits
+# ---------------------------------------------------------------------------
+
+
+def test_rem_107_oversized_metadata_rejected(client, api_key, task_id):
+    """REM-107  evidence_metadata exceeding 8 KB is rejected with 422."""
+    large_meta = {"key_" + str(i): "x" * 100 for i in range(200)}  # ~24 KB
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={
+            "filename": "big.pdf",
+            "content_type": "application/pdf",
+            "sha256": "b" * 64,
+            "submitted_by": "user@example.com",
+            "evidence_metadata": large_meta,
+        },
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 422
+
+
+def test_rem_108_metadata_within_limit_accepted(client, api_key, task_id):
+    """REM-108  evidence_metadata within 8 KB limit is accepted."""
+    small_meta = {"classification": "financial", "reviewed_by": "auditor@example.com"}
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={
+            "filename": "within-limit.pdf",
+            "content_type": "application/pdf",
+            "sha256": "c1" + "0" * 62,
+            "submitted_by": "user@example.com",
+            "evidence_metadata": small_meta,
+        },
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# REM-109 / REM-110 / REM-111: MIME type whitelist
+# ---------------------------------------------------------------------------
+
+
+def test_rem_109_invalid_mime_type_rejected(client, api_key, task_id):
+    """REM-109  content_type not in approved list is rejected with 422."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={
+            "filename": "script.exe",
+            "content_type": "application/x-msdownload",
+            "sha256": "d1" + "0" * 62,
+            "submitted_by": "user@example.com",
+        },
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 422
+
+
+def test_rem_110_valid_mime_types_accepted(client, api_key, task_id):
+    """REM-110  All approved MIME types are accepted."""
+    approved = [
+        ("application/pdf", "f1" + "0" * 62),
+        ("text/plain", "f2" + "0" * 62),
+        ("text/csv", "f3" + "0" * 62),
+        ("image/png", "f4" + "0" * 62),
+        ("image/jpeg", "f5" + "0" * 62),
+        ("application/zip", "f6" + "0" * 62),
+        ("application/json", "f7" + "0" * 62),
+    ]
+    for mime, sha in approved:
+        resp = client.post(
+            f"/portal/remediation/tasks/{task_id}/evidence",
+            json={
+                "filename": f"file.{mime.split('/')[-1]}",
+                "content_type": mime,
+                "sha256": sha,
+                "submitted_by": "user@example.com",
+            },
+            headers=_auth(api_key),
+        )
+        assert resp.status_code == 201, (
+            f"Expected 201 for mime={mime}, got {resp.status_code}"
+        )
+
+
+def test_rem_111_image_family_accepted(client, api_key, task_id):
+    """REM-111  image/* family MIME types (image/webp, image/tiff) are accepted."""
+    for mime, sha in [("image/webp", "a1" + "0" * 62), ("image/tiff", "a2" + "0" * 62)]:
+        resp = client.post(
+            f"/portal/remediation/tasks/{task_id}/evidence",
+            json={
+                "filename": "screenshot.img",
+                "content_type": mime,
+                "sha256": sha,
+                "submitted_by": "user@example.com",
+            },
+            headers=_auth(api_key),
+        )
+        assert resp.status_code == 201, f"Expected 201 for mime={mime}"
+
+
+# ---------------------------------------------------------------------------
+# REM-112 / REM-113: Comment body sanitization
+# ---------------------------------------------------------------------------
+
+
+def test_rem_112_whitespace_only_comment_rejected(client, api_key, task_id):
+    """REM-112  Whitespace-only comment body is rejected with 422."""
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json={"body": "     ", "author": "user@example.com"},
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 422
+
+
+def test_rem_113_whitespace_only_edit_rejected(client, api_key, task_id):
+    """REM-113  Whitespace-only body on comment edit is rejected with 422."""
+    add_resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        json={"body": "Valid initial body.", "author": "user@example.com"},
+        headers=_auth(api_key),
+    )
+    assert add_resp.status_code == 201
+    comment_id = add_resp.json()["id"]
+
+    resp = client.patch(
+        f"/portal/remediation/tasks/{task_id}/comments/{comment_id}",
+        json={"body": "\t\n  "},
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# REM-114 / REM-115 / REM-116: Pagination on list endpoints
+# ---------------------------------------------------------------------------
+
+
+def test_rem_114_comment_list_pagination_fields_present(client, api_key, task_id):
+    """REM-114  Comment list response contains total, limit, offset fields."""
+    resp = client.get(
+        f"/portal/remediation/tasks/{task_id}/comments",
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "total" in data
+    assert "limit" in data
+    assert "offset" in data
+    assert data["limit"] == 50
+    assert data["offset"] == 0
+
+
+def test_rem_115_evidence_list_pagination_fields_present(client, api_key, task_id):
+    """REM-115  Evidence list response contains total, limit, offset fields."""
+    resp = client.get(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "total" in data
+    assert "limit" in data
+    assert "offset" in data
+
+
+def test_rem_116_audit_list_pagination_fields_present(client, api_key, task_id):
+    """REM-116  Audit list response contains total, limit, offset fields."""
+    resp = client.get(
+        f"/portal/remediation/tasks/{task_id}/audit",
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "total" in data
+    assert "limit" in data
+    assert "offset" in data
+
+
+# ---------------------------------------------------------------------------
+# REM-117: Pagination max limit enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_rem_117_pagination_limit_exceeding_max_rejected(client, api_key, task_id):
+    """REM-117  limit > 100 is rejected with 422."""
+    resp = client.get(
+        f"/portal/remediation/tasks/{task_id}/comments?limit=101",
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# REM-118: Pagination offset returns subset
+# ---------------------------------------------------------------------------
+
+
+def test_rem_118_pagination_offset_returns_subset(client, api_key, task_id):
+    """REM-118  offset=999 returns empty list when fewer items exist."""
+    resp = client.get(
+        f"/portal/remediation/tasks/{task_id}/comments?limit=50&offset=999",
+        headers=_auth(api_key),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data["comments"], list)
+    assert len(data["comments"]) == 0
+    assert data["total"] >= 0
+    assert data["offset"] == 999
+
+
+# ---------------------------------------------------------------------------
+# REM-119: Validation failure metric increments on bad SHA256
+# ---------------------------------------------------------------------------
+
+
+def test_rem_119_sha256_validation_failure_metric_increments(client, api_key, task_id):
+    """REM-119  Submitting a bad SHA256 increments frostgate_portal_sha256_validation_failures_total."""
+    from api.observability.metrics import (
+        PORTAL_SHA256_VALIDATION_FAILURES_TOTAL,
+        PORTAL_VALIDATION_FAILURES_TOTAL,
+    )
+
+    before_sha = PORTAL_SHA256_VALIDATION_FAILURES_TOTAL._value.get()
+    before_total = PORTAL_VALIDATION_FAILURES_TOTAL._value.get()
+
+    client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={
+            "filename": "x.pdf",
+            "content_type": "application/pdf",
+            "sha256": "Z" * 64,  # 64 chars but non-hex — triggers our validator
+            "submitted_by": "user@example.com",
+        },
+        headers=_auth(api_key),
+    )
+
+    assert PORTAL_SHA256_VALIDATION_FAILURES_TOTAL._value.get() > before_sha
+    assert PORTAL_VALIDATION_FAILURES_TOTAL._value.get() > before_total
+
+
+# ---------------------------------------------------------------------------
+# REM-121: Wrong-length SHA256 increments validation counter
+# ---------------------------------------------------------------------------
+
+
+def test_rem_121_wrong_length_sha256_increments_metric(client, api_key, task_id):
+    """REM-121  Wrong-length SHA256 (63 chars) still increments validation counters.
+
+    Pydantic's min_length/max_length was removed from the field so our regex
+    validator always fires — no Pydantic pre-check can short-circuit the metric.
+    """
+    from api.observability.metrics import (
+        PORTAL_SHA256_VALIDATION_FAILURES_TOTAL,
+        PORTAL_VALIDATION_FAILURES_TOTAL,
+    )
+
+    before_sha = PORTAL_SHA256_VALIDATION_FAILURES_TOTAL._value.get()
+    before_total = PORTAL_VALIDATION_FAILURES_TOTAL._value.get()
+
+    resp = client.post(
+        f"/portal/remediation/tasks/{task_id}/evidence",
+        json={
+            "filename": "x.pdf",
+            "content_type": "application/pdf",
+            "sha256": "a" * 63,  # one char short — wrong length
+            "submitted_by": "user@example.com",
+        },
+        headers=_auth(api_key),
+    )
+
+    assert resp.status_code == 422
+    assert PORTAL_SHA256_VALIDATION_FAILURES_TOTAL._value.get() > before_sha
+    assert PORTAL_VALIDATION_FAILURES_TOTAL._value.get() > before_total
+
+
+# ---------------------------------------------------------------------------
+# REM-120: Cross-tenant pagination isolation
+# ---------------------------------------------------------------------------
+
+
+def test_rem_120_cross_tenant_comment_pagination_denied(
+    client, api_key, alt_api_key, task_id
+):
+    """REM-120  Tenant B cannot paginate Tenant A's comments — gets 404."""
+    resp = client.get(
+        f"/portal/remediation/tasks/{task_id}/comments?limit=10&offset=0",
+        headers=_auth(alt_api_key),
+    )
+    assert resp.status_code == 404

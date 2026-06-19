@@ -413,6 +413,25 @@ PORTAL_OVERDUE_VIEWS_TOTAL = Counter(
     "Total portal dashboard views with overdue tasks present",
 )
 
+# PR 13.5: Portal Input Hardening — validation failure counters.
+# No tenant_id / user labels — bounded cardinality.
+PORTAL_VALIDATION_FAILURES_TOTAL = Counter(
+    "frostgate_portal_validation_failures_total",
+    "Total portal input validation failures (all fields combined)",
+)
+PORTAL_SHA256_VALIDATION_FAILURES_TOTAL = Counter(
+    "frostgate_portal_sha256_validation_failures_total",
+    "Total portal evidence SHA256 format validation failures",
+)
+PORTAL_METADATA_REJECTIONS_TOTAL = Counter(
+    "frostgate_portal_metadata_rejections_total",
+    "Total portal evidence_metadata payloads rejected for exceeding 8 KB size limit",
+)
+PORTAL_COMMENT_VALIDATION_FAILURES_TOTAL = Counter(
+    "frostgate_portal_comment_validation_failures_total",
+    "Total portal comment body validation failures (blank/whitespace-only bodies)",
+)
+
 REMEDIATION_SLA_BREACHES_TOTAL = Counter(
     "frostgate_remediation_sla_breaches_total",
     "Total SLA breaches observed",

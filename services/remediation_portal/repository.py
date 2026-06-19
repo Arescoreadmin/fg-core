@@ -136,7 +136,12 @@ def fetch_comment(
 
 
 def fetch_comments(
-    db: Session, *, tenant_id: str, task_id: str
+    db: Session,
+    *,
+    tenant_id: str,
+    task_id: str,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[PortalRemediationComment]:
     return (
         db.query(PortalRemediationComment)
@@ -145,6 +150,8 @@ def fetch_comments(
             PortalRemediationComment.task_id == task_id,
         )
         .order_by(PortalRemediationComment.created_at.asc())
+        .limit(limit)
+        .offset(offset)
         .all()
     )
 
@@ -173,7 +180,12 @@ def insert_evidence(
 
 
 def fetch_evidence_list(
-    db: Session, *, tenant_id: str, task_id: str
+    db: Session,
+    *,
+    tenant_id: str,
+    task_id: str,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[PortalEvidenceSubmission]:
     return (
         db.query(PortalEvidenceSubmission)
@@ -182,6 +194,8 @@ def fetch_evidence_list(
             PortalEvidenceSubmission.task_id == task_id,
         )
         .order_by(PortalEvidenceSubmission.submitted_at.asc())
+        .limit(limit)
+        .offset(offset)
         .all()
     )
 
@@ -224,7 +238,12 @@ def insert_portal_audit_event(
 
 
 def fetch_portal_audit_events(
-    db: Session, *, tenant_id: str, task_id: str
+    db: Session,
+    *,
+    tenant_id: str,
+    task_id: str,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[PortalRemediationAuditEvent]:
     return (
         db.query(PortalRemediationAuditEvent)
@@ -233,5 +252,18 @@ def fetch_portal_audit_events(
             PortalRemediationAuditEvent.task_id == task_id,
         )
         .order_by(PortalRemediationAuditEvent.event_at.asc())
+        .limit(limit)
+        .offset(offset)
         .all()
+    )
+
+
+def count_portal_audit_events(db: Session, *, tenant_id: str, task_id: str) -> int:
+    return (
+        db.query(PortalRemediationAuditEvent)
+        .filter(
+            PortalRemediationAuditEvent.tenant_id == tenant_id,
+            PortalRemediationAuditEvent.task_id == task_id,
+        )
+        .count()
     )
