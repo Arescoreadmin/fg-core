@@ -154,6 +154,7 @@ def portal_add_comment(
             )
             db.commit()
         except PortalRateLimitExceeded as exc:
+            db.commit()
             return _rate_limited(exc)
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
@@ -180,6 +181,7 @@ def portal_edit_comment(
             )
             db.commit()
         except PortalRateLimitExceeded as exc:
+            db.commit()
             return _rate_limited(exc)
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
@@ -227,6 +229,7 @@ def portal_submit_evidence(
             )
             db.commit()
         except PortalRateLimitExceeded as exc:
+            db.commit()
             return _rate_limited(exc)
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
@@ -253,6 +256,7 @@ def portal_acknowledge_ownership(
             )
             db.commit()
         except PortalRateLimitExceeded as exc:
+            db.commit()
             return _rate_limited(exc)
         except PortalNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))

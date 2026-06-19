@@ -238,10 +238,9 @@ class PortalRemediationEngine:
     ) -> None:
         """Check and consume a rate-limit token for the given operation.
 
-        On exhaustion: emits a throttle audit event (committed immediately),
-        increments Prometheus counters, then raises PortalRateLimitExceeded.
-        The audit commit happens before raising so the event is durable even
-        though the outer transaction is never completed.
+        On exhaustion: emits a throttle audit event into the session (not
+        committed here — caller owns db.commit()), increments Prometheus
+        counters, then raises PortalRateLimitExceeded.
         """
         policy = resolve_portal_limits(operation, tenant_id=self._tenant_id)
         key = make_rate_limit_key(self._tenant_id, actor, operation.value)
@@ -262,7 +261,6 @@ class PortalRemediationEngine:
                     "retry_after_seconds": retry_after,
                 },
             )
-            self._db.commit()
             PORTAL_RATE_LIMIT_HITS_TOTAL.inc()
             if operation in (
                 PortalOperation.COMMENT_CREATE,
