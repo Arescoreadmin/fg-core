@@ -552,6 +552,14 @@ class RemediationEngine:
             updates["recommended_action"] = request.recommended_action
         if request.priority is not None:
             updates["priority"] = request.priority.value
+            if request.priority.value != task.priority:
+                new_sla_target = SLA_DEFAULTS.get(request.priority.value)
+                updates["sla_target_days"] = new_sla_target
+                updates["sla_breach_at"] = (
+                    _compute_sla_breach_at(task.created_at, new_sla_target)
+                    if new_sla_target is not None
+                    else None
+                )
         if request.assigned_to is not None:
             updates["assigned_to"] = request.assigned_to
         if request.task_metadata is not None:

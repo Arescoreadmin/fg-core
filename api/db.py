@@ -671,6 +671,30 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             _sqlite_add_column_if_missing(
                 conn, "remediation_tasks", "sla_breach_at", "DATETIME"
             )
+            # Backfill SLA fields for pre-existing rows (mirrors Postgres migration 0120)
+            conn.exec_driver_sql(
+                """
+                UPDATE remediation_tasks
+                SET sla_target_days = CASE priority
+                    WHEN 'critical' THEN 14
+                    WHEN 'high'     THEN 30
+                    WHEN 'medium'   THEN 60
+                    WHEN 'low'      THEN 90
+                    ELSE NULL
+                END
+                WHERE sla_target_days IS NULL
+                """
+            )
+            conn.exec_driver_sql(
+                """
+                UPDATE remediation_tasks
+                SET sla_breach_at = datetime(
+                    substr(created_at, 1, 19),
+                    '+' || CAST(sla_target_days AS TEXT) || ' days'
+                )
+                WHERE sla_target_days IS NOT NULL AND sla_breach_at IS NULL
+                """
+            )
             _sqlite_add_column_if_missing(
                 conn, "remediation_tasks", "ownership_reason", "TEXT"
             )

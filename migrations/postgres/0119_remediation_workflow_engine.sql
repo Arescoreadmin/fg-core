@@ -117,3 +117,22 @@ ALTER TABLE remediation_task_audits
 -- ---------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS ix_remediation_tasks_tenant_status_created
     ON remediation_tasks (tenant_id, status, created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Append-only enforcement: remediation_task_audits must never be mutated.
+-- Uses the shared append_only_guard() function from migration 0013.
+-- DROP + CREATE is idempotent — safe for re-runs and blue/green deployments.
+-- ---------------------------------------------------------------------------
+DROP TRIGGER IF EXISTS remediation_task_audits_append_only_update
+    ON remediation_task_audits;
+CREATE TRIGGER remediation_task_audits_append_only_update
+    BEFORE UPDATE ON remediation_task_audits
+    FOR EACH ROW EXECUTE FUNCTION append_only_guard();
+
+DROP TRIGGER IF EXISTS remediation_task_audits_append_only_delete
+    ON remediation_task_audits;
+CREATE TRIGGER remediation_task_audits_append_only_delete
+    BEFORE DELETE ON remediation_task_audits
+    FOR EACH ROW EXECUTE FUNCTION append_only_guard();
+
+REVOKE TRUNCATE ON remediation_task_audits FROM PUBLIC;
