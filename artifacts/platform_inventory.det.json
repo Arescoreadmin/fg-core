@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 535,
+    "contract_count": 542,
     "contract_only": [],
-    "runtime_count": 701,
+    "runtime_count": 708,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "6b086559e2fa716489c31f77b5f06897af7bc85f14275dab647d6bef9662f8ba",
+  "governance_fingerprint": "2a54e89003662a6067f470095ad27d449e94cb0350739786c42a2cf678085fc7",
   "planes": [
     {
       "compat": {
@@ -688,8 +688,12 @@
       "GET /rag/retrieval-policy",
       "GET /rag/uploads",
       "GET /remediation/tasks",
+      "GET /remediation/tasks/overdue",
+      "GET /remediation/tasks/unassigned",
       "GET /remediation/tasks/{task_id}",
       "GET /remediation/tasks/{task_id}/allowed-transitions",
+      "GET /remediation/tasks/{task_id}/audit",
+      "GET /remediation/tasks/{task_id}/sla",
       "GET /signing/public-key",
       "GET /status",
       "GET /subscriptions/explain-capability",
@@ -893,8 +897,11 @@
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",
       "POST /remediation/tasks",
+      "POST /remediation/tasks/{task_id}/assign",
       "POST /remediation/tasks/{task_id}/close",
+      "POST /remediation/tasks/{task_id}/due-date",
       "POST /remediation/tasks/{task_id}/transition",
+      "POST /remediation/tasks/{task_id}/unassign",
       "PUT /admin/agent/version-floor",
       "PUT /admin/identity/tenants/{tenant_id}/config",
       "PUT /admin/tenants/{tenant_id}/quota",

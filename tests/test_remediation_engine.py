@@ -2112,12 +2112,12 @@ def test_rem_47_set_due_date(client: TestClient) -> None:
     resp = client.post(
         f"/remediation/tasks/{task_id}/due-date",
         json={
-            "due_date": "2026-12-31T00:00:00+00:00",
+            "due_date": "2026-12-31T00:00:00Z",
             "reason": "Contractual commitment",
         },
     )
     assert resp.status_code == 200
-    assert resp.json()["due_date"] == "2026-12-31T00:00:00+00:00"
+    assert resp.json()["due_date"] == "2026-12-31T00:00:00Z"
 
 
 # ---------------------------------------------------------------------------
@@ -2129,14 +2129,14 @@ def test_rem_48_modify_due_date(client: TestClient) -> None:
     task_id = _create_task_simple(client)
     client.post(
         f"/remediation/tasks/{task_id}/due-date",
-        json={"due_date": "2026-12-31T00:00:00+00:00"},
+        json={"due_date": "2026-12-31T00:00:00Z"},
     )
     resp = client.post(
         f"/remediation/tasks/{task_id}/due-date",
-        json={"due_date": "2027-01-15T00:00:00+00:00", "reason": "Extended"},
+        json={"due_date": "2027-01-15T00:00:00Z", "reason": "Extended"},
     )
     assert resp.status_code == 200
-    assert resp.json()["due_date"] == "2027-01-15T00:00:00+00:00"
+    assert resp.json()["due_date"] == "2027-01-15T00:00:00Z"
 
 
 # ---------------------------------------------------------------------------
@@ -2148,7 +2148,7 @@ def test_rem_49_due_date_audit_event(client: TestClient) -> None:
     task_id = _create_task_simple(client)
     client.post(
         f"/remediation/tasks/{task_id}/due-date",
-        json={"due_date": "2026-12-31T00:00:00+00:00", "reason": "Deadline set"},
+        json={"due_date": "2026-12-31T00:00:00Z", "reason": "Deadline set"},
     )
     audit_resp = client.get(f"/remediation/tasks/{task_id}/audit")
     events = audit_resp.json()["events"]
@@ -2353,7 +2353,7 @@ def test_rem_63_unauthorized_due_date_denied(
     task_id = _create_task_simple(client)
     resp = readonly_client.post(
         f"/remediation/tasks/{task_id}/due-date",
-        json={"due_date": "2026-12-31T00:00:00+00:00"},
+        json={"due_date": "2026-12-31T00:00:00Z"},
     )
     assert resp.status_code in (401, 403)
 
@@ -2435,7 +2435,7 @@ def test_rem_67_lifecycle_reconstruction_with_ownership(client: TestClient) -> N
     )
     client.post(
         f"/remediation/tasks/{task_id}/due-date",
-        json={"due_date": "2026-12-31T00:00:00+00:00"},
+        json={"due_date": "2026-12-31T00:00:00Z"},
     )
     audit_resp = client.get(f"/remediation/tasks/{task_id}/audit")
     events = audit_resp.json()["events"]
