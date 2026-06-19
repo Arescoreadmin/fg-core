@@ -280,7 +280,7 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 521,
+    "control": 530,
     "data": 54,
     "evidence": 23,
     "rbac": 5,
@@ -340,7 +340,7 @@
     "POST /ui/devices/{device_id}/enable"
   ],
   "removed": [],
-  "runtime_count": 708,
+  "runtime_count": 717,
   "runtime_only": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
     "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -403,6 +403,11 @@
     "GET /control/testing/runs/{run_id}",
     "GET /health",
     "GET /metrics",
+    "GET /portal/remediation",
+    "GET /portal/remediation/tasks/{task_id}",
+    "GET /portal/remediation/tasks/{task_id}/audit",
+    "GET /portal/remediation/tasks/{task_id}/comments",
+    "GET /portal/remediation/tasks/{task_id}/evidence",
     "GET /ui/ai",
     "GET /ui/ai/experience",
     "GET /ui/ai/usage",
@@ -451,6 +456,7 @@
     "PATCH /admin/billing/meters/{meter_code}",
     "PATCH /admin/subscriptions/contracts/{contract_id}/status",
     "PATCH /admin/subscriptions/items/{item_id}/status",
+    "PATCH /portal/remediation/tasks/{task_id}/comments/{comment_id}",
     "POST /admin/agent/commands/issue",
     "POST /admin/agent/devices/{device_id}/disable",
     "POST /admin/agent/devices/{device_id}/enable",
@@ -493,6 +499,9 @@
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
+    "POST /portal/remediation/tasks/{task_id}/acknowledge",
+    "POST /portal/remediation/tasks/{task_id}/comments",
+    "POST /portal/remediation/tasks/{task_id}/evidence",
     "POST /ui/ai/chat",
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
@@ -502,5 +511,15 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": []
+  "unauthorized_runtime_only": [
+    "GET /portal/remediation",
+    "GET /portal/remediation/tasks/{task_id}",
+    "GET /portal/remediation/tasks/{task_id}/audit",
+    "GET /portal/remediation/tasks/{task_id}/comments",
+    "GET /portal/remediation/tasks/{task_id}/evidence",
+    "PATCH /portal/remediation/tasks/{task_id}/comments/{comment_id}",
+    "POST /portal/remediation/tasks/{task_id}/acknowledge",
+    "POST /portal/remediation/tasks/{task_id}/comments",
+    "POST /portal/remediation/tasks/{task_id}/evidence"
+  ]
 }

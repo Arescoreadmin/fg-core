@@ -387,6 +387,32 @@ REMEDIATION_OVERDUE_TASKS_TOTAL = Counter(
     [],
 )
 
+# ---------------------------------------------------------------------------
+# PR 13.4: Portal Remediation Integration metrics
+# No tenant_id labels — high cardinality.
+# ---------------------------------------------------------------------------
+
+PORTAL_REMEDIATION_VIEWS_TOTAL = Counter(
+    "frostgate_portal_remediation_views_total",
+    "Total portal remediation dashboard and task detail views",
+)
+PORTAL_COMMENTS_TOTAL = Counter(
+    "frostgate_portal_comments_total",
+    "Total portal remediation comments added",
+)
+PORTAL_EVIDENCE_UPLOADS_TOTAL = Counter(
+    "frostgate_portal_evidence_uploads_total",
+    "Total portal evidence submissions",
+)
+PORTAL_OWNER_ACKNOWLEDGEMENTS_TOTAL = Counter(
+    "frostgate_portal_owner_acknowledgements_total",
+    "Total portal ownership acknowledgements",
+)
+PORTAL_OVERDUE_VIEWS_TOTAL = Counter(
+    "frostgate_portal_overdue_views_total",
+    "Total portal dashboard views with overdue tasks present",
+)
+
 REMEDIATION_SLA_BREACHES_TOTAL = Counter(
     "frostgate_remediation_sla_breaches_total",
     "Total SLA breaches observed",

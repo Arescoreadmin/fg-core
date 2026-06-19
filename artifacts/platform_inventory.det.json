@@ -10,7 +10,7 @@
   "governance": {
     "contract_count": 542,
     "contract_only": [],
-    "runtime_count": 708,
+    "runtime_count": 717,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -73,6 +73,11 @@
       "GET /control/testing/runs/{run_id}",
       "GET /health",
       "GET /metrics",
+      "GET /portal/remediation",
+      "GET /portal/remediation/tasks/{task_id}",
+      "GET /portal/remediation/tasks/{task_id}/audit",
+      "GET /portal/remediation/tasks/{task_id}/comments",
+      "GET /portal/remediation/tasks/{task_id}/evidence",
       "GET /ui/ai",
       "GET /ui/ai/experience",
       "GET /ui/ai/usage",
@@ -121,6 +126,7 @@
       "PATCH /admin/billing/meters/{meter_code}",
       "PATCH /admin/subscriptions/contracts/{contract_id}/status",
       "PATCH /admin/subscriptions/items/{item_id}/status",
+      "PATCH /portal/remediation/tasks/{task_id}/comments/{comment_id}",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",
@@ -163,6 +169,9 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
+      "POST /portal/remediation/tasks/{task_id}/acknowledge",
+      "POST /portal/remediation/tasks/{task_id}/comments",
+      "POST /portal/remediation/tasks/{task_id}/evidence",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -179,7 +188,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "2a54e89003662a6067f470095ad27d449e94cb0350739786c42a2cf678085fc7",
+  "governance_fingerprint": "8f6f270ba00b056f575d699b738e6ef7dffd55b5937934382cea51e06d0a0358",
   "planes": [
     {
       "compat": {
@@ -680,6 +689,11 @@
       "GET /planes",
       "GET /portal/grants",
       "GET /portal/me",
+      "GET /portal/remediation",
+      "GET /portal/remediation/tasks/{task_id}",
+      "GET /portal/remediation/tasks/{task_id}/audit",
+      "GET /portal/remediation/tasks/{task_id}/comments",
+      "GET /portal/remediation/tasks/{task_id}/evidence",
       "GET /rag/corpora",
       "GET /rag/corpora/{corpus_id}",
       "GET /rag/corpora/{corpus_id}/documents",
@@ -711,6 +725,7 @@
       "PATCH /field-assessment/engagements/{engagement_id}/status",
       "PATCH /governance/assets/{asset_id}",
       "PATCH /governance/workflows/{workflow_id}/transition",
+      "PATCH /portal/remediation/tasks/{task_id}/comments/{comment_id}",
       "PATCH /remediation/tasks/{task_id}",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
@@ -894,6 +909,9 @@
       "POST /portal/authenticate",
       "POST /portal/grants",
       "POST /portal/identity/login",
+      "POST /portal/remediation/tasks/{task_id}/acknowledge",
+      "POST /portal/remediation/tasks/{task_id}/comments",
+      "POST /portal/remediation/tasks/{task_id}/evidence",
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",
       "POST /remediation/tasks",
