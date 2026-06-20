@@ -160,9 +160,16 @@ def _create_body(assessment_id: str, finding_id: str, **overrides: Any) -> dict:
 
 def _drive_to_active(client: TestClient, ra_id: str) -> None:
     """Drive a risk acceptance record from DRAFT to ACTIVE."""
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"})
-    r = client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"}
+    )
+    r = client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"}
+    )
     assert r.status_code == 200, f"APPROVED→ACTIVE failed: {r.text}"
 
 
@@ -233,7 +240,9 @@ def test_ra_1_create(client: TestClient, db_session: Session) -> None:
 def test_ra_2_get(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
@@ -267,7 +276,9 @@ def test_ra_3_list(client: TestClient, db_session: Session) -> None:
 def test_ra_4_update(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
@@ -289,7 +300,9 @@ def test_ra_4_update(client: TestClient, db_session: Session) -> None:
 def test_ra_5_update_terminal_denied(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
@@ -331,8 +344,7 @@ def test_ra_7_tenant_isolation(
     data = _json(r.json())
     # Tenant B should not see Tenant A's records
     tenant_a_ids = {
-        item["id"]
-        for item in _json(client.get("/risk-acceptances").json())["items"]
+        item["id"] for item in _json(client.get("/risk-acceptances").json())["items"]
     }
     for item in data["items"]:
         assert item["id"] not in tenant_a_ids
@@ -350,7 +362,9 @@ def test_ra_8_cross_tenant_get_denied(
 ) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
@@ -413,7 +427,9 @@ def test_ra_10_review_scheduling(client: TestClient, db_session: Session) -> Non
 def test_ra_11_audit_on_create(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
@@ -432,7 +448,9 @@ def test_ra_11_audit_on_create(client: TestClient, db_session: Session) -> None:
 def test_ra_12_audit_on_update(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
     client.patch(f"/risk-acceptances/{ra_id}", json={"title": "Patched Title"})
@@ -450,7 +468,9 @@ def test_ra_12_audit_on_update(client: TestClient, db_session: Session) -> None:
 def test_ra_13_audit_on_transition(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
     client.post(
@@ -471,7 +491,9 @@ def test_ra_13_audit_on_transition(client: TestClient, db_session: Session) -> N
 def test_ra_14_draft_to_pending(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
@@ -491,7 +513,9 @@ def test_ra_14_draft_to_pending(client: TestClient, db_session: Session) -> None
 def test_ra_15_pending_to_approved(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
     client.post(
@@ -530,10 +554,17 @@ def test_ra_16_approved_to_active(client: TestClient, db_session: Session) -> No
         ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"}
+    )
 
-    r = client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"})
+    r = client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"}
+    )
     assert r.status_code == 200
     data = _json(r.json())
     assert data["status"] == "active"
@@ -572,10 +603,15 @@ def test_ra_17_active_to_revoked(client: TestClient, db_session: Session) -> Non
 def test_ra_18_pending_to_rejected(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
 
     r = client.post(
         f"/risk-acceptances/{ra_id}/transitions",
@@ -593,7 +629,9 @@ def test_ra_18_pending_to_rejected(client: TestClient, db_session: Session) -> N
 def test_ra_19_draft_to_revoked(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
@@ -639,6 +677,7 @@ def test_ra_20_active_to_expired_via_sweep(db_session: Session, build_app) -> No
 
         # Drive to ACTIVE
         from services.risk_acceptance.schemas import TransitionRiskAcceptanceRequest
+
         for target in ["pending_approval", "approved", "active"]:
             svc.transition(
                 ra_id,
@@ -670,10 +709,14 @@ def test_ra_21_revoked_no_further_transitions(
 ) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "revoked"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "revoked"}
+    )
 
     r = client.post(
         f"/risk-acceptances/{ra_id}/transitions",
@@ -692,11 +735,18 @@ def test_ra_22_rejected_no_further_transitions(
 ) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "rejected"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "rejected"}
+    )
 
     r = client.post(
         f"/risk-acceptances/{ra_id}/transitions",
@@ -766,7 +816,9 @@ def test_ra_23_expired_no_further_transitions(
 def test_ra_24_draft_to_active_denied(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
@@ -787,7 +839,9 @@ def test_ra_25_transition_reason_in_audit(
 ) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
     client.post(
@@ -812,7 +866,9 @@ def test_ra_26_allowed_transitions_draft(
 ) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
@@ -833,10 +889,15 @@ def test_ra_27_allowed_transitions_pending(
 ) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
 
     r = client.get(f"/risk-acceptances/{ra_id}/transitions")
     data = _json(r.json())
@@ -876,10 +937,14 @@ def test_ra_29_terminal_states_empty_transitions(
 ) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "revoked"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "revoked"}
+    )
 
     r = client.get(f"/risk-acceptances/{ra_id}/transitions")
     data = _json(r.json())
@@ -911,13 +976,20 @@ def test_ra_31_metrics_on_approve(client: TestClient, db_session: Session) -> No
 
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
 
     before = RISK_APPROVED_TOTAL._value.get()
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"}
+    )
     assert RISK_APPROVED_TOTAL._value.get() == before + 1
 
 
@@ -931,13 +1003,20 @@ def test_ra_32_metrics_on_reject(client: TestClient, db_session: Session) -> Non
 
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
 
     before = RISK_REJECTED_TOTAL._value.get()
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "rejected"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "rejected"}
+    )
     assert RISK_REJECTED_TOTAL._value.get() == before + 1
 
 
@@ -951,12 +1030,16 @@ def test_ra_33_metrics_on_revoke(client: TestClient, db_session: Session) -> Non
 
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
     before = RISK_REVOKED_TOTAL._value.get()
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "revoked"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "revoked"}
+    )
     assert RISK_REVOKED_TOTAL._value.get() == before + 1
 
 
@@ -977,7 +1060,9 @@ def test_ra_34_compensating_controls_roundtrip(
     created = _json(
         client.post(
             "/risk-acceptances",
-            json=_create_body(assessment_id, finding_id, compensating_controls=controls),
+            json=_create_body(
+                assessment_id, finding_id, compensating_controls=controls
+            ),
         ).json()
     )
     ra_id = created["id"]
@@ -994,9 +1079,7 @@ def test_ra_34_compensating_controls_roundtrip(
 
 
 @pytest.mark.parametrize("level", ["low", "medium", "high", "critical"])
-def test_ra_35_risk_levels(
-    level: str, client: TestClient, db_session: Session
-) -> None:
+def test_ra_35_risk_levels(level: str, client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     r = client.post(
         "/risk-acceptances",
@@ -1046,7 +1129,11 @@ def test_ra_36_expiration_sweep_past_date(db_session: Session, build_app) -> Non
         ra_id = ra.id
 
         for target in ["pending_approval", "approved", "active"]:
-            svc.transition(ra_id, TransitionRiskAcceptanceRequest(target_status=target), actor="test")
+            svc.transition(
+                ra_id,
+                TransitionRiskAcceptanceRequest(target_status=target),
+                actor="test",
+            )
             db.commit()
 
         count = svc.expire_overdue(actor="system")
@@ -1088,7 +1175,11 @@ def test_ra_37_expiration_sweep_future_date(db_session: Session, build_app) -> N
         ra_id = ra.id
 
         for target in ["pending_approval", "approved", "active"]:
-            svc.transition(ra_id, TransitionRiskAcceptanceRequest(target_status=target), actor="test")
+            svc.transition(
+                ra_id,
+                TransitionRiskAcceptanceRequest(target_status=target),
+                actor="test",
+            )
             db.commit()
 
         svc.expire_overdue(actor="system")
@@ -1158,10 +1249,15 @@ def test_ra_40_remediation_task_link(client: TestClient, db_session: Session) ->
 def test_ra_41_list_filter_status(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
 
     r = client.get("/risk-acceptances", params={"status": "pending_approval"})
     assert r.status_code == 200
@@ -1210,8 +1306,14 @@ def test_ra_44_list_pagination(client: TestClient, db_session: Session) -> None:
     for _ in range(3):
         client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id))
 
-    r1 = client.get("/risk-acceptances", params={"limit": 2, "offset": 0, "assessment_id": assessment_id})
-    r2 = client.get("/risk-acceptances", params={"limit": 2, "offset": 2, "assessment_id": assessment_id})
+    r1 = client.get(
+        "/risk-acceptances",
+        params={"limit": 2, "offset": 0, "assessment_id": assessment_id},
+    )
+    r2 = client.get(
+        "/risk-acceptances",
+        params={"limit": 2, "offset": 2, "assessment_id": assessment_id},
+    )
     d1 = _json(r1.json())
     d2 = _json(r2.json())
 
@@ -1231,7 +1333,9 @@ def test_ra_45_audit_chronological_order(
 ) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
     client.patch(f"/risk-acceptances/{ra_id}", json={"title": "Updated 1"})
@@ -1251,13 +1355,20 @@ def test_ra_45_audit_chronological_order(
 def test_ra_46_audit_immutability(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
 
     # Drive through multiple transitions and then check all events still exist
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "revoked"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "revoked"}
+    )
 
     r = client.get(f"/risk-acceptances/{ra_id}/audit")
     data = _json(r.json())
@@ -1375,14 +1486,23 @@ def test_ra_53_active_requires_expires_at(
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     # Create WITHOUT expires_at
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances", json=_create_body(assessment_id, finding_id)
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"})
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions",
+        json={"target_status": "pending_approval"},
+    )
+    client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"}
+    )
 
     # Attempt ACTIVE without expires_at — must be rejected
-    r = client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"})
+    r = client.post(
+        f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"}
+    )
     assert r.status_code == 422
     assert "expires_at" in r.json()["detail"].lower()
 
@@ -1400,9 +1520,18 @@ def test_ra_54_list_count_matches_task_filter(
     other_task_id = uuid.uuid4().hex
 
     # Create 2 linked to task_id, 1 linked to other_task_id
-    client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id, remediation_task_id=task_id))
-    client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id, remediation_task_id=task_id))
-    client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id, remediation_task_id=other_task_id))
+    client.post(
+        "/risk-acceptances",
+        json=_create_body(assessment_id, finding_id, remediation_task_id=task_id),
+    )
+    client.post(
+        "/risk-acceptances",
+        json=_create_body(assessment_id, finding_id, remediation_task_id=task_id),
+    )
+    client.post(
+        "/risk-acceptances",
+        json=_create_body(assessment_id, finding_id, remediation_task_id=other_task_id),
+    )
 
     r = client.get("/risk-acceptances", params={"remediation_task_id": task_id})
     data = _json(r.json())
@@ -1447,7 +1576,11 @@ def test_ra_55_expiry_offset_timezone_sweep(db_session: Session, build_app) -> N
         ra_id = ra.id
 
         for target in ["pending_approval", "approved", "active"]:
-            svc.transition(ra_id, TransitionRiskAcceptanceRequest(target_status=target), actor="test")
+            svc.transition(
+                ra_id,
+                TransitionRiskAcceptanceRequest(target_status=target),
+                actor="test",
+            )
             db.commit()
 
         count = svc.expire_overdue(actor="system")

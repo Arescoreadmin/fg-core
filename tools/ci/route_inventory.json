@@ -10985,6 +10985,125 @@
       "tenant_bound": false
     },
     {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_acceptance.py",
+      "method": "GET",
+      "path": "/risk-acceptances",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_acceptance.py",
+      "method": "POST",
+      "path": "/risk-acceptances",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_acceptance.py",
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_acceptance.py",
+      "method": "PATCH",
+      "path": "/risk-acceptances/{ra_id}",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_acceptance.py",
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/audit",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_acceptance.py",
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/transitions",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_acceptance.py",
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/transitions",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
       "dependency_categories": [],
       "file": "api/roe_engine.py",
       "method": "POST",
@@ -12292,7 +12411,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-20T00:42:44.629799+00:00",
+  "generated_at": "2026-06-20T19:17:25.619273+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -3151,6 +3151,48 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/risk-acceptances",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-acceptances",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/risk-acceptances/{ra_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/transitions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/transitions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/roe/evaluate",
       "scopes": [],
@@ -3319,7 +3361,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-20T00:44:54.619099+00:00",
+  "generated_at": "2026-06-20T19:17:25.632483+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
