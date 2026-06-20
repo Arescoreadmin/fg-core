@@ -6,11 +6,63 @@ All functions are tenant-scoped.  Caller owns db.commit().
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from api.db_models_field_assessment import FaEngagement, FaNormalizedFinding
 from api.db_models_risk_acceptance import RiskAcceptance, RiskAcceptanceAudit
+from services.risk_acceptance.schemas import RiskAcceptanceTenantViolation
+
+
+# ---------------------------------------------------------------------------
+# Reference validation (tenant-scoped)
+# ---------------------------------------------------------------------------
+
+
+def assert_assessment_exists(
+    db: Session,
+    *,
+    tenant_id: str,
+    assessment_id: str,
+) -> None:
+    """Raise RiskAcceptanceTenantViolation if the engagement does not exist for this tenant."""
+    row = (
+        db.query(FaEngagement)
+        .filter(
+            FaEngagement.id == assessment_id,
+            FaEngagement.tenant_id == tenant_id,
+        )
+        .first()
+    )
+    if row is None:
+        raise RiskAcceptanceTenantViolation(
+            f"assessment_id={assessment_id!r} not found for tenant."
+        )
+
+
+def assert_finding_belongs_to_tenant(
+    db: Session,
+    *,
+    tenant_id: str,
+    finding_id: str,
+    assessment_id: str,
+) -> None:
+    """Raise RiskAcceptanceTenantViolation if finding does not belong to tenant/assessment."""
+    row = (
+        db.query(FaNormalizedFinding)
+        .filter(
+            FaNormalizedFinding.id == finding_id,
+            FaNormalizedFinding.tenant_id == tenant_id,
+            FaNormalizedFinding.engagement_id == assessment_id,
+        )
+        .first()
+    )
+    if row is None:
+        raise RiskAcceptanceTenantViolation(
+            f"finding_id={finding_id!r} not found in assessment {assessment_id!r} for tenant."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +130,7 @@ def count_risk_acceptances(
     status: str | None = None,
     finding_id: str | None = None,
     assessment_id: str | None = None,
+    remediation_task_id: str | None = None,
 ) -> int:
     q = db.query(RiskAcceptance).filter(RiskAcceptance.tenant_id == tenant_id)
     if status is not None:
@@ -86,6 +139,8 @@ def count_risk_acceptances(
         q = q.filter(RiskAcceptance.finding_id == finding_id)
     if assessment_id is not None:
         q = q.filter(RiskAcceptance.assessment_id == assessment_id)
+    if remediation_task_id is not None:
+        q = q.filter(RiskAcceptance.remediation_task_id == remediation_task_id)
     return q.count()
 
 
@@ -129,17 +184,38 @@ def count_audit_events(
 def fetch_expired_active(
     db: Session, *, tenant_id: str, now_iso: str
 ) -> list[RiskAcceptance]:
-    """Return ACTIVE records whose expires_at is in the past."""
-    return (
+    """Return ACTIVE records whose expires_at is in the past.
+
+    Comparison is done in Python with parsed datetimes so timezone-offset
+    values (e.g. -05:00) are normalized to UTC before being compared —
+    a lexicographic SQL string comparison would give wrong results for
+    non-UTC offsets.
+    """
+    now_dt = datetime.fromisoformat(now_iso)
+    if now_dt.tzinfo is None:
+        now_dt = now_dt.replace(tzinfo=timezone.utc)
+
+    candidates = (
         db.query(RiskAcceptance)
         .filter(
             RiskAcceptance.tenant_id == tenant_id,
             RiskAcceptance.status == "active",
             RiskAcceptance.expires_at.isnot(None),
-            RiskAcceptance.expires_at <= now_iso,
         )
         .all()
     )
+
+    result = []
+    for ra in candidates:
+        try:
+            exp_dt = datetime.fromisoformat(ra.expires_at)
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+            if exp_dt <= now_dt:
+                result.append(ra)
+        except (ValueError, TypeError):
+            pass
+    return result
 
 
 def snapshot_risk_acceptance(ra: RiskAcceptance) -> dict[str, Any]:

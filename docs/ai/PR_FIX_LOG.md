@@ -6,6 +6,24 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-20 — PR 14.1 bot fixes: Risk Acceptance Governance Foundation
+
+**Issues (chatgpt-codex-connector review):**
+
+- **P1** — `engine.create()` copied `finding_id` and `assessment_id` from the request without validating they exist for the tenant, allowing orphaned or cross-tenant governance records.
+- **P1** — `engine.transition()` to ACTIVE did not require `expires_at`, so an accepted risk could be activated with no expiry date, bypassing the expiration enforcement invariant.
+- **P2** — `fetch_expired_active()` used a lexicographic SQL string comparison for `expires_at <= now_iso`; ISO timestamps with non-UTC offsets (e.g. `-05:00`) would sort incorrectly, causing premature or missed expirations.
+- **P2** — `count_risk_acceptances()` was called without `remediation_task_id`, so list pagination totals were overstated when filtering by task.
+
+**Fixes:**
+
+- `services/risk_acceptance/repository.py` — Added `assert_assessment_exists()` and `assert_finding_belongs_to_tenant()` validators; both raise `RiskAcceptanceTenantViolation` (→ HTTP 422). `fetch_expired_active()` now fetches all ACTIVE with non-null `expires_at` and filters in Python with parsed datetimes normalized to UTC. `count_risk_acceptances()` now accepts and applies `remediation_task_id` filter.
+- `services/risk_acceptance/engine.py` — `create()` calls both validators before inserting. `transition()` raises `RiskAcceptanceInvalidTransition` if `target == ACTIVE` and `expires_at` is not set. `list()` passes `remediation_task_id` through to `count_risk_acceptances()`.
+- `api/risk_acceptance.py` — `create_risk_acceptance` route catches `RiskAcceptanceTenantViolation` and returns 422.
+- `tests/test_risk_acceptance.py` — Fixed RA-16, RA-17, RA-28 to include `expires_at` when driving to ACTIVE; added `_drive_to_active()` helper and `_FUTURE_EXPIRY`/`_PAST_EXPIRY` constants. Added 5 new tests: RA-51 (orphaned finding rejected), RA-52 (cross-tenant finding rejected), RA-53 (ACTIVE without expires_at blocked), RA-54 (task_id filter count accuracy), RA-55 (non-UTC offset expiry swept correctly). 58 total tests passing.
+
+---
+
 ### 2026-06-19 — PR 13.6: Portal Abuse Protection & Rate Limiting
 
 **Summary:** Fixed-window per-client rate limiting for all 4 portal write operations (comment create/edit, evidence upload, ownership acknowledgement).

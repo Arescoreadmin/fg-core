@@ -52,6 +52,11 @@ Coverage:
   RA-48  Authorization — read route rejected without read scope
   RA-49  Schema version 1.0 on all created records
   RA-50  State machine integrity — all terminal states have no allowed transitions
+  RA-51  Orphaned finding reference rejected (P1 bot fix)
+  RA-52  Cross-tenant finding reference rejected (P1 bot fix)
+  RA-53  APPROVED → ACTIVE blocked without expires_at (P1 bot fix)
+  RA-54  List count matches filtered items for remediation_task_id (P2 bot fix)
+  RA-55  Expiry with non-UTC offset timezone swept correctly (P2 bot fix)
 """
 
 from __future__ import annotations
@@ -66,7 +71,6 @@ from starlette.testclient import TestClient
 from api.auth_scopes import mint_key
 from api.db import get_engine
 from api.db_models_field_assessment import FaEngagement, FaNormalizedFinding
-from api.db_models_risk_acceptance import RiskAcceptance, RiskAcceptanceAudit
 from services.risk_acceptance.schemas import (
     ALLOWED_TRANSITIONS,
     TERMINAL_STATUSES,
@@ -135,6 +139,10 @@ def _make_refs(db: Session, tenant_id: str) -> tuple[str, str]:
     return assessment_id, finding_id
 
 
+_FUTURE_EXPIRY = "2099-01-01T00:00:00+00:00"
+_PAST_EXPIRY = "2020-01-01T00:00:00+00:00"
+
+
 def _create_body(assessment_id: str, finding_id: str, **overrides: Any) -> dict:
     base: dict[str, Any] = {
         "finding_id": finding_id,
@@ -148,6 +156,14 @@ def _create_body(assessment_id: str, finding_id: str, **overrides: Any) -> dict:
     }
     base.update(overrides)
     return base
+
+
+def _drive_to_active(client: TestClient, ra_id: str) -> None:
+    """Drive a risk acceptance record from DRAFT to ACTIVE."""
+    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
+    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"})
+    r = client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"})
+    assert r.status_code == 200, f"APPROVED→ACTIVE failed: {r.text}"
 
 
 # ---------------------------------------------------------------------------
@@ -508,7 +524,10 @@ def test_ra_15_pending_to_approved(client: TestClient, db_session: Session) -> N
 def test_ra_16_approved_to_active(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances",
+            json=_create_body(assessment_id, finding_id, expires_at=_FUTURE_EXPIRY),
+        ).json()
     )
     ra_id = created["id"]
     client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
@@ -529,12 +548,13 @@ def test_ra_16_approved_to_active(client: TestClient, db_session: Session) -> No
 def test_ra_17_active_to_revoked(client: TestClient, db_session: Session) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances",
+            json=_create_body(assessment_id, finding_id, expires_at=_FUTURE_EXPIRY),
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"})
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"})
+    _drive_to_active(client, ra_id)
 
     r = client.post(
         f"/risk-acceptances/{ra_id}/transitions",
@@ -833,12 +853,13 @@ def test_ra_28_allowed_transitions_active(
 ) -> None:
     assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
     created = _json(
-        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+        client.post(
+            "/risk-acceptances",
+            json=_create_body(assessment_id, finding_id, expires_at=_FUTURE_EXPIRY),
+        ).json()
     )
     ra_id = created["id"]
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"})
-    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"})
+    _drive_to_active(client, ra_id)
 
     r = client.get(f"/risk-acceptances/{ra_id}/transitions")
     data = _json(r.json())
@@ -1070,7 +1091,7 @@ def test_ra_37_expiration_sweep_future_date(db_session: Session, build_app) -> N
             svc.transition(ra_id, TransitionRiskAcceptanceRequest(target_status=target), actor="test")
             db.commit()
 
-        count = svc.expire_overdue(actor="system")
+        svc.expire_overdue(actor="system")
         db.commit()
         # This specific record should NOT be expired
         assert svc.get(ra_id).status == "active"
@@ -1307,3 +1328,129 @@ def test_ra_50_state_machine_integrity() -> None:
         assert len(allowed) > 0, (
             f"Non-terminal state {state.value!r} has no allowed transitions"
         )
+
+
+# ---------------------------------------------------------------------------
+# RA-51: Orphaned finding reference rejected (P1 validation)
+# ---------------------------------------------------------------------------
+
+
+def test_ra_51_orphaned_finding_rejected(
+    client: TestClient, db_session: Session
+) -> None:
+    assessment_id, _ = _make_refs(db_session, _TENANT_A)
+    r = client.post(
+        "/risk-acceptances",
+        json=_create_body(assessment_id, "nonexistent-finding-id"),
+    )
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# RA-52: Cross-tenant finding reference rejected (P1 validation)
+# ---------------------------------------------------------------------------
+
+
+def test_ra_52_cross_tenant_finding_rejected(
+    client: TestClient, db_session: Session
+) -> None:
+    # Create refs under tenant B
+    assessment_b, finding_b = _make_refs(db_session, _TENANT_B)
+    # Try to create acceptance for tenant A using tenant B's IDs
+    r = client.post(
+        "/risk-acceptances",
+        json=_create_body(assessment_b, finding_b),
+    )
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# RA-53: APPROVED → ACTIVE blocked without expires_at (P1 validation)
+# ---------------------------------------------------------------------------
+
+
+def test_ra_53_active_requires_expires_at(
+    client: TestClient, db_session: Session
+) -> None:
+    assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
+    # Create WITHOUT expires_at
+    created = _json(
+        client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id)).json()
+    )
+    ra_id = created["id"]
+    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "pending_approval"})
+    client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "approved"})
+
+    # Attempt ACTIVE without expires_at — must be rejected
+    r = client.post(f"/risk-acceptances/{ra_id}/transitions", json={"target_status": "active"})
+    assert r.status_code == 422
+    assert "expires_at" in r.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# RA-54: List count matches filtered items for remediation_task_id (P2 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_ra_54_list_count_matches_task_filter(
+    client: TestClient, db_session: Session
+) -> None:
+    assessment_id, finding_id = _make_refs(db_session, _TENANT_A)
+    task_id = uuid.uuid4().hex
+    other_task_id = uuid.uuid4().hex
+
+    # Create 2 linked to task_id, 1 linked to other_task_id
+    client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id, remediation_task_id=task_id))
+    client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id, remediation_task_id=task_id))
+    client.post("/risk-acceptances", json=_create_body(assessment_id, finding_id, remediation_task_id=other_task_id))
+
+    r = client.get("/risk-acceptances", params={"remediation_task_id": task_id})
+    data = _json(r.json())
+    # total must equal the number of items returned for this filter
+    assert data["total"] == 2
+    assert len(data["items"]) == 2
+    assert all(item["remediation_task_id"] == task_id for item in data["items"])
+
+
+# ---------------------------------------------------------------------------
+# RA-55: Expiry with non-UTC offset timestamp swept correctly (P2 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_ra_55_expiry_offset_timezone_sweep(db_session: Session, build_app) -> None:
+    """expires_at with a non-UTC offset (-05:00) is correctly swept to EXPIRED."""
+    from services.risk_acceptance.engine import RiskAcceptanceEngine
+    from services.risk_acceptance.schemas import (
+        CreateRiskAcceptanceRequest,
+        TransitionRiskAcceptanceRequest,
+    )
+
+    build_app(auth_enabled=True)
+    engine = get_engine()
+    assessment_id = _new_engagement(db_session, _TENANT_A)
+    finding_id = _new_finding(db_session, _TENANT_A, assessment_id)
+
+    with Session(engine) as db:
+        svc = RiskAcceptanceEngine(db, tenant_id=_TENANT_A)
+        # 2020-01-01 at midnight US/Central is 2020-01-01T06:00:00Z — clearly in the past
+        req = CreateRiskAcceptanceRequest(
+            finding_id=finding_id,
+            assessment_id=assessment_id,
+            title="Offset TZ Test",
+            business_justification="test",
+            risk_rationale="test",
+            accepted_by="owner@example.com",
+            expires_at="2020-01-01T00:00:00-05:00",
+        )
+        ra = svc.create(req, actor="test")
+        db.commit()
+        ra_id = ra.id
+
+        for target in ["pending_approval", "approved", "active"]:
+            svc.transition(ra_id, TransitionRiskAcceptanceRequest(target_status=target), actor="test")
+            db.commit()
+
+        count = svc.expire_overdue(actor="system")
+        db.commit()
+        assert count >= 1
+        assert svc.get(ra_id).status == "expired"

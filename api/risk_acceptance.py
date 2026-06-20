@@ -28,6 +28,7 @@ from services.risk_acceptance.schemas import (
     RiskAcceptanceListResponse,
     RiskAcceptanceNotFound,
     RiskAcceptanceResponse,
+    RiskAcceptanceTenantViolation,
     TransitionRiskAcceptanceRequest,
     UpdateRiskAcceptanceRequest,
 )
@@ -62,8 +63,11 @@ def create_risk_acceptance(
     engine = get_engine()
     with Session(engine) as db:
         svc = RiskAcceptanceEngine(db, tenant_id=tenant_id)
-        result = svc.create(body, actor=_actor(request))
-        db.commit()
+        try:
+            result = svc.create(body, actor=_actor(request))
+            db.commit()
+        except RiskAcceptanceTenantViolation as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
     return result
 
 

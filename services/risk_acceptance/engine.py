@@ -36,6 +36,8 @@ from api.observability.metrics import (
 from services.notifications.engine import NotificationEngine
 from services.notifications.schemas import NotificationTrigger
 from services.risk_acceptance.repository import (
+    assert_assessment_exists,
+    assert_finding_belongs_to_tenant,
     count_audit_events,
     count_risk_acceptances,
     fetch_audit_events,
@@ -113,6 +115,21 @@ class RiskAcceptanceEngine:
     def create(
         self, request: CreateRiskAcceptanceRequest, *, actor: str
     ) -> RiskAcceptanceResponse:
+        # Validate that the referenced assessment and finding exist for this
+        # tenant and that the finding belongs to the given assessment.
+        # Prevents orphaned acceptances and cross-tenant reference pollution.
+        assert_assessment_exists(
+            self._db,
+            tenant_id=self._tenant_id,
+            assessment_id=request.assessment_id,
+        )
+        assert_finding_belongs_to_tenant(
+            self._db,
+            tenant_id=self._tenant_id,
+            finding_id=request.finding_id,
+            assessment_id=request.assessment_id,
+        )
+
         now = _utcnow()
         ra = RiskAcceptance(
             id=_new_id(),
@@ -192,6 +209,7 @@ class RiskAcceptanceEngine:
             status=status,
             finding_id=finding_id,
             assessment_id=assessment_id,
+            remediation_task_id=remediation_task_id,
         )
         return RiskAcceptanceListResponse(
             items=[_to_response(ra) for ra in items],
@@ -299,6 +317,13 @@ class RiskAcceptanceEngine:
                 ra.approver_role = request.approver_role
             if request.approval_authority:
                 ra.approval_authority = request.approval_authority.value
+
+        # Require expires_at before activating — accepted risks cannot live forever.
+        if target == RiskAcceptanceStatus.ACTIVE and not ra.expires_at:
+            raise RiskAcceptanceInvalidTransition(
+                "expires_at must be set before a risk acceptance can become active. "
+                "Accepted risks without an expiry date are not permitted."
+            )
 
         # Record acceptance timestamp when becoming ACTIVE
         if target == RiskAcceptanceStatus.ACTIVE:
