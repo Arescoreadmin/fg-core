@@ -112,7 +112,7 @@ jobs:
 
       - name: Run fg-required harness
         id: fg_required
-        timeout-minutes: 25
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail

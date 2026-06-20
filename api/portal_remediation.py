@@ -144,7 +144,7 @@ def portal_list_comments(
 )
 def portal_add_comment(
     task_id: str, body: AddCommentRequest, request: Request
-) -> PortalCommentResponse:
+) -> PortalCommentResponse | JSONResponse:
     tenant_id = require_bound_tenant(request)
     with _db(tenant_id) as db:
         engine = PortalRemediationEngine(db, tenant_id=tenant_id)
@@ -168,7 +168,7 @@ def portal_add_comment(
 )
 def portal_edit_comment(
     task_id: str, comment_id: str, body: EditCommentRequest, request: Request
-) -> PortalCommentResponse:
+) -> PortalCommentResponse | JSONResponse:
     tenant_id = require_bound_tenant(request)
     with _db(tenant_id) as db:
         engine = PortalRemediationEngine(db, tenant_id=tenant_id)
@@ -219,7 +219,7 @@ def portal_list_evidence(
 )
 def portal_submit_evidence(
     task_id: str, body: SubmitEvidenceRequest, request: Request
-) -> PortalEvidenceResponse:
+) -> PortalEvidenceResponse | JSONResponse:
     tenant_id = require_bound_tenant(request)
     with _db(tenant_id) as db:
         engine = PortalRemediationEngine(db, tenant_id=tenant_id)
@@ -246,7 +246,7 @@ def portal_submit_evidence(
 )
 def portal_acknowledge_ownership(
     task_id: str, body: AcknowledgeOwnershipRequest, request: Request
-) -> AcknowledgeOwnershipResponse:
+) -> AcknowledgeOwnershipResponse | JSONResponse:
     tenant_id = require_bound_tenant(request)
     with _db(tenant_id) as db:
         engine = PortalRemediationEngine(db, tenant_id=tenant_id)
