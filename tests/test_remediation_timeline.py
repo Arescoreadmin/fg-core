@@ -1146,7 +1146,6 @@ def test_rem_178_closed_no_notification_when_unassigned(
     assert resp.status_code == 201
     tid = resp.json()["id"]
 
-    before_count_q = None
     with Session(get_engine()) as db:
         before_notifs = (
             db.query(Notification)

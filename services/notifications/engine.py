@@ -187,7 +187,7 @@ class NotificationEngine:
             task_id=task_id,
             trigger=NotificationTrigger.TASK_ASSIGNED,
             recipient=recipient,
-            subject=f"You have been assigned a remediation task",
+            subject="You have been assigned a remediation task",
             body=f"Hi {display_name},\n\nYou have been assigned remediation task {task_id}.\n\nActor: {actor}",
             metadata=m,
         )
@@ -207,7 +207,7 @@ class NotificationEngine:
             task_id=task_id,
             trigger=NotificationTrigger.TASK_UNASSIGNED,
             recipient=recipient,
-            subject=f"You have been unassigned from a remediation task",
+            subject="You have been unassigned from a remediation task",
             body=f"You have been unassigned from remediation task {task_id}.\n\nActor: {actor}",
             metadata=m,
         )
@@ -227,7 +227,7 @@ class NotificationEngine:
             task_id=task_id,
             trigger=NotificationTrigger.TASK_CLOSED,
             recipient=recipient,
-            subject=f"Remediation task closed",
+            subject="Remediation task closed",
             body=f"Remediation task {task_id} has been closed.\n\nActor: {actor}",
             metadata=m,
         )
@@ -250,7 +250,7 @@ class NotificationEngine:
             task_id=task_id,
             trigger=NotificationTrigger.TASK_ACCEPTED_RISK,
             recipient=recipient,
-            subject=f"Risk accepted on remediation task",
+            subject="Risk accepted on remediation task",
             body=f"Risk has been accepted on remediation task {task_id}.\n\nReason: {reason or 'not provided'}\nActor: {actor}",
             metadata=m,
         )
@@ -289,7 +289,7 @@ class NotificationEngine:
             task_id=task_id,
             trigger=NotificationTrigger.SLA_BREACHED,
             recipient=recipient,
-            subject=f"SLA breached on remediation task",
+            subject="SLA breached on remediation task",
             body=f"Remediation task {task_id} has breached its SLA.",
             metadata=m,
         )
