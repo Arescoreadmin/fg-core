@@ -147,14 +147,16 @@ class RiskAcceptanceEngine:
             approver_name=request.approver_name,
             approver_role=request.approver_role,
             approval_authority=(
-                request.approval_authority.value
-                if request.approval_authority
-                else None
+                request.approval_authority.value if request.approval_authority else None
             ),
             approval_source=request.approval_source,
             expires_at=request.expires_at,
-            inherent_risk=request.inherent_risk.value if request.inherent_risk else None,
-            residual_risk=request.residual_risk.value if request.residual_risk else None,
+            inherent_risk=request.inherent_risk.value
+            if request.inherent_risk
+            else None,
+            residual_risk=request.residual_risk.value
+            if request.residual_risk
+            else None,
             compensating_controls=[
                 c.model_dump() for c in request.compensating_controls
             ],
@@ -257,7 +259,9 @@ class RiskAcceptanceEngine:
         if request.residual_risk is not None:
             ra.residual_risk = request.residual_risk.value
         if request.compensating_controls is not None:
-            ra.compensating_controls = [c.model_dump() for c in request.compensating_controls]
+            ra.compensating_controls = [
+                c.model_dump() for c in request.compensating_controls
+            ]
         if request.review_required is not None:
             ra.review_required = request.review_required
         if request.review_frequency_days is not None:
@@ -331,9 +335,7 @@ class RiskAcceptanceEngine:
 
         self._db.flush()
 
-        event_type = _TRANSITION_EVENT.get(
-            target, RiskAcceptanceEventType.RISK_UPDATED
-        )
+        event_type = _TRANSITION_EVENT.get(target, RiskAcceptanceEventType.RISK_UPDATED)
         self._emit_audit(
             ra=ra,
             event_type=event_type,
@@ -416,9 +418,7 @@ class RiskAcceptanceEngine:
             limit=limit,
             offset=offset,
         )
-        total = count_audit_events(
-            self._db, tenant_id=self._tenant_id, ra_id=ra_id
-        )
+        total = count_audit_events(self._db, tenant_id=self._tenant_id, ra_id=ra_id)
         return RiskAcceptanceAuditListResponse(
             items=[RiskAcceptanceAuditResponse.model_validate(e) for e in events],
             total=total,
@@ -442,9 +442,7 @@ class RiskAcceptanceEngine:
     # -----------------------------------------------------------------------
 
     def _require(self, ra_id: str) -> RiskAcceptance:
-        ra = fetch_risk_acceptance(
-            self._db, tenant_id=self._tenant_id, ra_id=ra_id
-        )
+        ra = fetch_risk_acceptance(self._db, tenant_id=self._tenant_id, ra_id=ra_id)
         if ra is None:
             raise RiskAcceptanceNotFound(
                 f"Risk acceptance {ra_id!r} not found for tenant."
@@ -486,9 +484,7 @@ class RiskAcceptanceEngine:
             RISK_EXPIRED_TOTAL.inc()
 
     @staticmethod
-    def _notification_subject(
-        target: RiskAcceptanceStatus, ra: RiskAcceptance
-    ) -> str:
+    def _notification_subject(target: RiskAcceptanceStatus, ra: RiskAcceptance) -> str:
         messages = {
             RiskAcceptanceStatus.PENDING_APPROVAL: f"Risk acceptance approval requested: {ra.title}",
             RiskAcceptanceStatus.APPROVED: f"Risk acceptance approved: {ra.title}",

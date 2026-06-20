@@ -207,8 +207,11 @@ def fetch_expired_active(
 
     result = []
     for ra in candidates:
+        expires_at = ra.expires_at
+        if expires_at is None:
+            continue
         try:
-            exp_dt = datetime.fromisoformat(ra.expires_at)
+            exp_dt = datetime.fromisoformat(expires_at)
             if exp_dt.tzinfo is None:
                 exp_dt = exp_dt.replace(tzinfo=timezone.utc)
             if exp_dt <= now_dt:
