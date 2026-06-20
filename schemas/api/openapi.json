@@ -139,6 +139,19 @@
         "title": "AIPolicyUpsertRequest",
         "type": "object"
       },
+      "AcknowledgeNotificationRequest": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor"
+        ],
+        "title": "AcknowledgeNotificationRequest",
+        "type": "object"
+      },
       "AcknowledgeOwnershipRequest": {
         "additionalProperties": false,
         "properties": {
@@ -20730,95 +20743,41 @@
         "title": "TieD",
         "type": "object"
       },
-      "TimelineEventResponse": {
+      "TimelineListResponse": {
+        "additionalProperties": false,
         "properties": {
-          "classification": {
-            "title": "Classification",
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/services__remediation__schemas__TimelineEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "task_id": {
+            "title": "Task Id",
             "type": "string"
           },
-          "display": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display"
-          },
-          "event_id": {
-            "title": "Event Id",
-            "type": "string"
-          },
-          "event_type": {
-            "title": "Event Type",
-            "type": "string"
-          },
-          "event_version": {
-            "title": "Event Version",
-            "type": "string"
-          },
-          "manifest_hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manifest Hash"
-          },
-          "occurred_at": {
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "payload": {
-            "title": "Payload",
-            "type": "object"
-          },
-          "recorded_at": {
-            "title": "Recorded At",
-            "type": "string"
-          },
-          "replay_eligible": {
-            "title": "Replay Eligible",
-            "type": "boolean"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "source_id": {
-            "title": "Source Id",
-            "type": "string"
-          },
-          "source_type": {
-            "title": "Source Type",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
+          "total": {
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
-          "event_id",
-          "tenant_id",
-          "source_type",
-          "source_id",
-          "event_type",
-          "occurred_at",
-          "recorded_at",
-          "classification",
-          "manifest_hash",
-          "replay_eligible",
-          "schema_version",
-          "event_version",
-          "payload"
+          "task_id",
+          "events",
+          "total",
+          "limit",
+          "offset"
         ],
-        "title": "TimelineEventResponse",
+        "title": "TimelineListResponse",
         "type": "object"
       },
       "TimelinePageResponse": {
@@ -20836,7 +20795,7 @@
           },
           "events": {
             "items": {
-              "$ref": "#/components/schemas/TimelineEventResponse"
+              "$ref": "#/components/schemas/api__governance_timeline_manager__TimelineEventResponse"
             },
             "title": "Events",
             "type": "array"
@@ -22595,6 +22554,97 @@
         "title": "AssignOwnerRequest",
         "type": "object"
       },
+      "api__governance_timeline_manager__TimelineEventResponse": {
+        "properties": {
+          "classification": {
+            "title": "Classification",
+            "type": "string"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "event_version": {
+            "title": "Event Version",
+            "type": "string"
+          },
+          "manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Hash"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "title": "Payload",
+            "type": "object"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "replay_eligible": {
+            "title": "Replay Eligible",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "tenant_id",
+          "source_type",
+          "source_id",
+          "event_type",
+          "occurred_at",
+          "recorded_at",
+          "classification",
+          "manifest_hash",
+          "replay_eligible",
+          "schema_version",
+          "event_version",
+          "payload"
+        ],
+        "title": "TimelineEventResponse",
+        "type": "object"
+      },
       "api__governance_workflows__AuditEventResponse": {
         "properties": {
           "actor": {
@@ -22866,6 +22916,50 @@
           "event_at"
         ],
         "title": "AuditEventResponse",
+        "type": "object"
+      },
+      "services__remediation__schemas__TimelineEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "event_at": {
+            "title": "Event At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata": {
+            "title": "Metadata",
+            "type": "object"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "event_type",
+          "source",
+          "actor",
+          "event_at",
+          "metadata"
+        ],
+        "title": "TimelineEventResponse",
         "type": "object"
       }
     }
@@ -53265,7 +53359,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TimelineEventResponse"
+                  "$ref": "#/components/schemas/api__governance_timeline_manager__TimelineEventResponse"
                 }
               }
             },
@@ -59182,6 +59276,84 @@
         ]
       }
     },
+    "/remediation/tasks/{task_id}/notifications/{notification_id}/acknowledge": {
+      "post": {
+        "operationId": "acknowledge_notification_remediation_tasks__task_id__notifications__notification_id__acknowledge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "notification_id",
+            "required": true,
+            "schema": {
+              "title": "Notification Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcknowledgeNotificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Acknowledge Notification Remediation Tasks  Task Id  Notifications  Notification Id  Acknowledge Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Acknowledge Notification",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
     "/remediation/tasks/{task_id}/sla": {
       "get": {
         "operationId": "get_remediation_task_sla_remediation_tasks__task_id__sla_get",
@@ -59235,6 +59407,151 @@
           }
         },
         "summary": "Get Remediation Task Sla",
+        "tags": [
+          "remediation"
+        ]
+      }
+    },
+    "/remediation/tasks/{task_id}/timeline": {
+      "get": {
+        "operationId": "get_remediation_task_timeline_remediation_tasks__task_id__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Remediation Task Timeline",
         "tags": [
           "remediation"
         ]

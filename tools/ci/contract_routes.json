@@ -3103,8 +3103,20 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/notifications/{notification_id}/acknowledge",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/remediation/tasks/{task_id}/sla",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/timeline",
       "scopes": [],
       "source": "contract"
     },
@@ -3307,7 +3319,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-19T18:13:39.374174+00:00",
+  "generated_at": "2026-06-20T00:44:54.619099+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

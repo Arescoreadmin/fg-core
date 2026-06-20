@@ -15428,3 +15428,53 @@ Resolution order in `check_capability()` (fully backward-compatible):
 `api/main.py` — imported `subscriptions_router` and registered it in `build_app` and `build_contract_app`.
 
 `api/observability/metrics.py` — 5 new Prometheus counters: `subscription_contracts_created_total`, `subscription_items_created_total`, `subscription_items_status_changes_total`, `subscription_event_ledger_entries_total`, `subscription_explain_requests_total` (no tenant_id labels).
+
+---
+
+## PR 13.7 — Remediation Audit History & Notification Authority
+
+**Branch:** `pr/13.7-remediation-audit-timeline-notifications`
+**Date:** 2026-06-19
+**Tests:** REM-149–REM-190 (42 tests: 41 passed, 1 skipped)
+
+**Summary:** Adds a unified audit timeline merging three event sources into one chronological API, and a notification engine with channel abstraction that fires on task lifecycle events.
+
+**New files:**
+
+`services/notifications/__init__.py` — empty package marker for the notifications bounded context.
+
+`services/notifications/schemas.py` — `NotificationChannel`, `NotificationDeliveryStatus`, `NotificationTrigger`, `NotificationPreference` enums; `NotificationError`, `NotificationNotFound`, `NotificationChannelError` exceptions.
+
+`services/notifications/channels.py` — `NotificationChannelBackend` ABC; `NullNotificationChannel` (test/dev default), `EmailNotificationChannel` (outbox stub), `PortalNotificationChannel` (in-app stub); module-level injectable registry with `_set_notification_channel()` for test isolation.
+
+`services/notifications/engine.py` — `NotificationEngine(db, tenant_id)`: `notify()`, `acknowledge()`, `list_notifications()` core methods; `notify_assignment/unassignment/closed/risk_accepted/sla_approaching/sla_breached()` convenience wrappers. Increments 5 Prometheus metrics. Caller owns `db.commit()`.
+
+`api/db_models_notifications.py` — `Notification` ORM model mapping to `notifications` table (delivery state machine: pending → sent/failed → acknowledged). 3 compound indexes by `(tenant_id, task_id)`, `(tenant_id, delivery_status)`, `(tenant_id, trigger_type)`.
+
+`services/remediation/timeline.py` — `UnifiedTimelineEngine(db, tenant_id)`: `get_timeline()` merges `remediation_task_audits` (source=remediation), `portal_remediation_audit_events` (source=portal), `notifications` non-pending (source=notification). Filters: `event_type`, `source`, `since`, `until`. Sorts by `event_at` ASC. Paginates. Raises `RemediationNotFound` if task not in tenant. Increments `TIMELINE_EVENTS_TOTAL`.
+
+`migrations/postgres/0122_notifications.sql` — new `notifications` table with RLS policy (app.tenant_id GUC). 4 indexes. Idempotent (`IF NOT EXISTS`).
+
+`tests/test_remediation_timeline.py` — 42 tests REM-149–REM-190. Module-scoped app/client/key fixtures; function-scoped channel injection (`null_channel`, `recording_channel`, `failing_channel`); two tenants for isolation tests; `pytest.skip` for pagination offset when insufficient events.
+
+**Modified files:**
+
+`services/remediation/schemas.py` — added `TimelineEventResponse` and `TimelineListResponse` Pydantic models.
+
+`services/remediation/engine.py` — notification hooks in `assign_owner()` (fires `TASK_ASSIGNED`), `remove_owner()` (captures old email before clearing, fires `TASK_UNASSIGNED`), `transition_status()` (fires `TASK_CLOSED` or `TASK_ACCEPTED_RISK` when assigned_user_email is set). All via lazy import `from services.notifications.engine import NotificationEngine` to avoid circular imports.
+
+`api/remediation.py` — added `GET /remediation/tasks/{task_id}/timeline` route (requires `governance:read`) + `POST /remediation/tasks/{task_id}/notifications/{notification_id}/acknowledge` route (requires `governance:write`) + `AcknowledgeNotificationRequest` schema.
+
+`api/db.py` — added `importlib.import_module("api.db_models_notifications")` to `_ensure_models_imported()`; added `notifications` table creation + 3 indexes to `_auto_migrate_sqlite()`.
+
+`api/observability/metrics.py` — 5 new Prometheus counters: `frostgate_notifications_sent_total`, `frostgate_notifications_failed_total`, `frostgate_notifications_acknowledged_total`, `frostgate_timeline_events_total`, `frostgate_sla_escalations_total` (no tenant_id labels, bounded cardinality).
+
+`tools/ci/contract_routes.json` — 2 new contract route entries for timeline and acknowledge endpoints.
+
+`contracts/core/openapi.json` + `schemas/api/openapi.json` + `CONTRACT.md` — contract authority refreshed (SHA256=`62e629ede879785d532f3d5677faf8614b740520db5ac76b097561ce203623e4`).
+
+`tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — regenerated to reflect 2 new endpoints.
+
+`docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 13.7 entry added.
+
+`ROADMAP.md` — PR 13.7 row added.

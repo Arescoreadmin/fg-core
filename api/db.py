@@ -230,6 +230,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_portal_remediation"
     )  # PR 13.4: portal remediation
+    importlib.import_module(
+        "api.db_models_notifications"
+    )  # PR 13.7: notification records
 
 
 def _get_base():
@@ -757,6 +760,38 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             conn.exec_driver_sql(
                 "CREATE INDEX IF NOT EXISTS ix_portal_audit_tenant_task "
                 "ON portal_remediation_audit_events (tenant_id, task_id)"
+            )
+
+        # PR 13.7 — Notification records table
+        if "notifications" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    trigger_type TEXT NOT NULL,
+                    channel TEXT NOT NULL DEFAULT 'email',
+                    recipient TEXT NOT NULL,
+                    subject TEXT,
+                    delivery_status TEXT NOT NULL DEFAULT 'pending',
+                    sent_at TEXT,
+                    acknowledged_at TEXT,
+                    failure_reason TEXT,
+                    event_metadata TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_notifications_tenant_task ON notifications (tenant_id, task_id)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_notifications_tenant_status ON notifications (tenant_id, delivery_status)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_notifications_trigger_type ON notifications (tenant_id, trigger_type)"
             )
 
         # (The rest of your large sqlite schema block continues unchanged)

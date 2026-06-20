@@ -386,6 +386,27 @@ class RemediationEngine:
         if new_status == RemediationStatus.CLOSED.value:
             REMEDIATION_TASKS_CLOSED_TOTAL.inc()
 
+        # PR 13.7 — notification hooks
+        from services.notifications.engine import NotificationEngine  # noqa: PLC0415
+
+        _ne = NotificationEngine(self._db, tenant_id=self._tenant_id)
+        if new_status == RemediationStatus.CLOSED.value and task.assigned_user_email:
+            _ne.notify_closed(
+                task_id=task.id,
+                recipient=task.assigned_user_email,
+                actor=actor,
+            )
+        elif (
+            new_status == RemediationStatus.ACCEPTED_RISK.value
+            and task.assigned_user_email
+        ):
+            _ne.notify_risk_accepted(
+                task_id=task.id,
+                recipient=task.assigned_user_email,
+                actor=actor,
+                reason=reason,
+            )
+
         return TransitionResponse(
             task_id=task.id,
             old_status=old_status,
@@ -717,6 +738,21 @@ class RemediationEngine:
         else:
             REMEDIATION_ASSIGNMENTS_TOTAL.inc()
 
+        # PR 13.7 — notification hook for assignment
+        if task.assigned_user_email:
+            from services.notifications.engine import NotificationEngine  # noqa: PLC0415
+
+            NotificationEngine(self._db, tenant_id=self._tenant_id).notify_assignment(
+                task_id=task_id,
+                recipient=task.assigned_user_email,
+                display_name=task.assigned_display_name or task.assigned_user_email,
+                actor=actor,
+                metadata={
+                    "user_id": task.assigned_user_id,
+                    "display_name": task.assigned_display_name,
+                },
+            )
+
         return _task_to_response(task)
 
     def remove_owner(
@@ -746,6 +782,7 @@ class RemediationEngine:
             )
 
         old_state = snapshot_task(task)
+        old_email = task.assigned_user_email  # capture before clearing (PR 13.7)
         now_dt = _now_dt()
         now_str = now_dt.isoformat()
 
@@ -771,6 +808,17 @@ class RemediationEngine:
         )
 
         REMEDIATION_UNASSIGNED_TASKS_TOTAL.inc()
+
+        # PR 13.7 — notification hook for unassignment
+        if old_email:
+            from services.notifications.engine import NotificationEngine  # noqa: PLC0415
+
+            NotificationEngine(self._db, tenant_id=self._tenant_id).notify_unassignment(
+                task_id=task_id,
+                recipient=old_email,
+                actor=actor,
+            )
+
         return _task_to_response(task)
 
     # ------------------------------------------------------------------
