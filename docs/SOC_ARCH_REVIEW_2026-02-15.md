@@ -2788,3 +2788,36 @@ All service functions (`transition_lifecycle`, `add_review`, `add_attestation`, 
 
 - `make route-inventory-generate`: OK
 - `make fg-fast`: All checks passed
+
+---
+
+## 2026-06-20 — PR 14.1 Risk Acceptance Governance Foundation (plane registry + route inventory)
+
+**Reviewer:** Codex | **Classification:** SOC-P2 (new tenant-scoped routes registered under control plane; no auth or middleware changes)
+
+**Change:** PR 14.1 added 7 new read/write routes under `/risk-acceptances` as a new bounded context for formal risk acceptance governance. All routes are tenant-scoped via `require_bound_tenant()` and gated on `governance:read` or `governance:write` scopes. No auth middleware, OPA policy, or `.github/workflows/` files were modified.
+
+`/risk-acceptances` was added to the `control` plane's `route_prefixes` in `services/plane_registry/registry.py` — the same plane that owns `/governance`, `/remediation`, and `/subscriptions`. This is correct: risk acceptance is governance/control-plane functionality, not a public or data-plane surface.
+
+The following `tools/ci/` files were regenerated as a routine consequence:
+- `tools/ci/route_inventory.json` — 7 new routes added
+- `tools/ci/plane_registry_snapshot.json` — updated after plane registry source change
+- `tools/ci/route_inventory_summary.json` — summary counts updated
+- `tools/ci/topology.sha256` — SHA256 of topology state updated
+
+### Files Changed
+
+- `api/db_models_risk_acceptance.py` — new ORM models (RiskAcceptance, RiskAcceptanceAudit)
+- `api/risk_acceptance.py` — 7 new FastAPI routes, all tenant-scoped
+- `services/risk_acceptance/` — engine, repository, schemas (new bounded context)
+- `services/plane_registry/registry.py` — `/risk-acceptances` added to control plane route_prefixes
+- `api/observability/metrics.py` — 8 new Prometheus counters (bounded cardinality; no tenant labels)
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `route_inventory_summary.json`, `topology.sha256` — regenerated via `make route-inventory-generate`
+
+### Validation
+
+- `make check_plane_registry`: OK (no unexpected-route gaps)
+- `make route-inventory-generate`: OK (7 new routes registered)
+- `make contract-authority-refresh`: OK
+- `PYTHONPATH=. pytest tests/test_risk_acceptance.py`: 58/58 passed
+- `make fg-fast`: All checks passed

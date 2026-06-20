@@ -2319,34 +2319,6 @@
         "title": "AlertRunSummaryResponse",
         "type": "object"
       },
-      "AllowedTransitionsResponse": {
-        "additionalProperties": false,
-        "description": "Response for GET /remediation/tasks/{task_id}/allowed-transitions.",
-        "properties": {
-          "allowed_next_states": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Allowed Next States",
-            "type": "array"
-          },
-          "current_status": {
-            "title": "Current Status",
-            "type": "string"
-          },
-          "task_id": {
-            "title": "Task Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "current_status",
-          "allowed_next_states"
-        ],
-        "title": "AllowedTransitionsResponse",
-        "type": "object"
-      },
       "AnomalyResponse": {
         "properties": {
           "anomaly_id": {
@@ -2451,6 +2423,16 @@
         },
         "title": "ApprovalActionBody",
         "type": "object"
+      },
+      "ApprovalAuthority": {
+        "enum": [
+          "ciso",
+          "risk_committee",
+          "executive_sponsor",
+          "business_owner"
+        ],
+        "title": "ApprovalAuthority",
+        "type": "string"
       },
       "ApprovalCreateRequest": {
         "properties": {
@@ -4696,6 +4678,29 @@
         "title": "CommandRequest",
         "type": "object"
       },
+      "CompensatingControl": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "type": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "description"
+        ],
+        "title": "CompensatingControl",
+        "type": "object"
+      },
       "CompensatingControlResponse": {
         "properties": {
           "approved_at": {
@@ -6858,6 +6863,174 @@
           "retention_days"
         ],
         "title": "CreateRetentionPolicyRequest",
+        "type": "object"
+      },
+      "CreateRiskAcceptanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_by": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Accepted By",
+            "type": "string"
+          },
+          "approval_authority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalAuthority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approval_source": {
+            "default": "api_key",
+            "maxLength": 64,
+            "title": "Approval Source",
+            "type": "string"
+          },
+          "approver_name": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Name"
+          },
+          "approver_role": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Role"
+          },
+          "assessment_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "business_justification": {
+            "minLength": 1,
+            "title": "Business Justification",
+            "type": "string"
+          },
+          "compensating_controls": {
+            "items": {
+              "$ref": "#/components/schemas/CompensatingControl"
+            },
+            "title": "Compensating Controls",
+            "type": "array"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "finding_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "inherent_risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Review At"
+          },
+          "remediation_task_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Task Id"
+          },
+          "residual_risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_frequency_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Frequency Days"
+          },
+          "review_required": {
+            "default": false,
+            "title": "Review Required",
+            "type": "boolean"
+          },
+          "risk_rationale": {
+            "minLength": 1,
+            "title": "Risk Rationale",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "assessment_id",
+          "title",
+          "business_justification",
+          "risk_rationale",
+          "accepted_by"
+        ],
+        "title": "CreateRiskAcceptanceRequest",
         "type": "object"
       },
       "CreateScoringContractRequest": {
@@ -18430,6 +18603,101 @@
         "title": "RingRouteResponse",
         "type": "object"
       },
+      "RiskAcceptanceAuditListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RiskAcceptanceAuditResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "RiskAcceptanceAuditListResponse",
+        "type": "object"
+      },
+      "RiskAcceptanceAuditResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "event_at": {
+            "title": "Event At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "new_state": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New State"
+          },
+          "old_state": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old State"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "risk_acceptance_id": {
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "risk_acceptance_id",
+          "event_type",
+          "actor",
+          "old_state",
+          "new_state",
+          "reason",
+          "event_at"
+        ],
+        "title": "RiskAcceptanceAuditResponse",
+        "type": "object"
+      },
       "RiskAcceptanceCreateBody": {
         "properties": {
           "accepted_risk_level": {
@@ -18546,6 +18814,271 @@
         ],
         "title": "RiskAcceptanceCreateBody",
         "type": "object"
+      },
+      "RiskAcceptanceListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RiskAcceptanceResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "RiskAcceptanceListResponse",
+        "type": "object"
+      },
+      "RiskAcceptanceResponse": {
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "accepted_by": {
+            "title": "Accepted By",
+            "type": "string"
+          },
+          "approval_authority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Authority"
+          },
+          "approval_source": {
+            "title": "Approval Source",
+            "type": "string"
+          },
+          "approver_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Name"
+          },
+          "approver_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Role"
+          },
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "business_justification": {
+            "title": "Business Justification",
+            "type": "string"
+          },
+          "compensating_controls": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensating Controls"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inherent_risk": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inherent Risk"
+          },
+          "next_review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Review At"
+          },
+          "remediation_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Task Id"
+          },
+          "residual_risk": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Risk"
+          },
+          "review_frequency_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Frequency Days"
+          },
+          "review_required": {
+            "title": "Review Required",
+            "type": "boolean"
+          },
+          "risk_rationale": {
+            "title": "Risk Rationale",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "schema_version",
+          "finding_id",
+          "assessment_id",
+          "remediation_task_id",
+          "status",
+          "title",
+          "business_justification",
+          "risk_rationale",
+          "accepted_by",
+          "accepted_at",
+          "approver_name",
+          "approver_role",
+          "approval_authority",
+          "approval_source",
+          "expires_at",
+          "inherent_risk",
+          "residual_risk",
+          "compensating_controls",
+          "review_required",
+          "review_frequency_days",
+          "next_review_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RiskAcceptanceResponse",
+        "type": "object"
+      },
+      "RiskAcceptanceStatus": {
+        "enum": [
+          "draft",
+          "pending_approval",
+          "approved",
+          "active",
+          "expired",
+          "revoked",
+          "rejected"
+        ],
+        "title": "RiskAcceptanceStatus",
+        "type": "string"
+      },
+      "RiskLevel": {
+        "enum": [
+          "low",
+          "medium",
+          "high",
+          "critical"
+        ],
+        "title": "RiskLevel",
+        "type": "string"
       },
       "RiskScoreResponse": {
         "properties": {
@@ -21060,6 +21593,66 @@
         "title": "TransitionRetentionRequest",
         "type": "object"
       },
+      "TransitionRiskAcceptanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_authority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalAuthority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approver_name": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Name"
+          },
+          "approver_role": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Role"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "target_status": {
+            "$ref": "#/components/schemas/RiskAcceptanceStatus"
+          }
+        },
+        "required": [
+          "target_status"
+        ],
+        "title": "TransitionRiskAcceptanceRequest",
+        "type": "object"
+      },
       "TransitionSecretRequest": {
         "additionalProperties": false,
         "properties": {
@@ -21545,6 +22138,174 @@
           "updated_at"
         ],
         "title": "UpdateResponseResponse",
+        "type": "object"
+      },
+      "UpdateRiskAcceptanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_authority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalAuthority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approver_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Name"
+          },
+          "approver_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Role"
+          },
+          "business_justification": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Justification"
+          },
+          "compensating_controls": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CompensatingControl"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensating Controls"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "inherent_risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Review At"
+          },
+          "remediation_task_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Task Id"
+          },
+          "residual_risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_frequency_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Frequency Days"
+          },
+          "review_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Required"
+          },
+          "risk_rationale": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Rationale"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdateRiskAcceptanceRequest",
         "type": "object"
       },
       "UpdateTaskRequest": {
@@ -22801,6 +23562,34 @@
         "title": "EnvironmentType",
         "type": "string"
       },
+      "services__remediation__schemas__AllowedTransitionsResponse": {
+        "additionalProperties": false,
+        "description": "Response for GET /remediation/tasks/{task_id}/allowed-transitions.",
+        "properties": {
+          "allowed_next_states": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Next States",
+            "type": "array"
+          },
+          "current_status": {
+            "title": "Current Status",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "current_status",
+          "allowed_next_states"
+        ],
+        "title": "AllowedTransitionsResponse",
+        "type": "object"
+      },
       "services__remediation__schemas__AssignOwnerRequest": {
         "additionalProperties": false,
         "properties": {
@@ -22960,6 +23749,27 @@
           "metadata"
         ],
         "title": "TimelineEventResponse",
+        "type": "object"
+      },
+      "services__risk_acceptance__schemas__AllowedTransitionsResponse": {
+        "properties": {
+          "allowed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed",
+            "type": "array"
+          },
+          "current_status": {
+            "title": "Current Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_status",
+          "allowed"
+        ],
+        "title": "AllowedTransitionsResponse",
         "type": "object"
       }
     }
@@ -59001,7 +59811,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AllowedTransitionsResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__AllowedTransitionsResponse"
                 }
               }
             },
@@ -59809,6 +60619,544 @@
         "summary": "Route Request",
         "tags": [
           "rings"
+        ]
+      }
+    },
+    "/risk-acceptances": {
+      "get": {
+        "operationId": "list_risk_acceptances_risk_acceptances_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "finding_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Finding Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assessment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assessment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "remediation_task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Remediation Task Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAcceptanceListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Risk Acceptances",
+        "tags": [
+          "risk-acceptance"
+        ]
+      },
+      "post": {
+        "operationId": "create_risk_acceptance_risk_acceptances_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRiskAcceptanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAcceptanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Risk Acceptance",
+        "tags": [
+          "risk-acceptance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}": {
+      "get": {
+        "operationId": "get_risk_acceptance_risk_acceptances__ra_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAcceptanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Risk Acceptance",
+        "tags": [
+          "risk-acceptance"
+        ]
+      },
+      "patch": {
+        "operationId": "update_risk_acceptance_risk_acceptances__ra_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRiskAcceptanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAcceptanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Risk Acceptance",
+        "tags": [
+          "risk-acceptance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}/audit": {
+      "get": {
+        "operationId": "get_risk_acceptance_audit_risk_acceptances__ra_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAcceptanceAuditListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Risk Acceptance Audit",
+        "tags": [
+          "risk-acceptance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}/transitions": {
+      "get": {
+        "operationId": "get_allowed_transitions_risk_acceptances__ra_id__transitions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__risk_acceptance__schemas__AllowedTransitionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Allowed Transitions",
+        "tags": [
+          "risk-acceptance"
+        ]
+      },
+      "post": {
+        "operationId": "transition_risk_acceptance_risk_acceptances__ra_id__transitions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionRiskAcceptanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAcceptanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Risk Acceptance",
+        "tags": [
+          "risk-acceptance"
         ]
       }
     },

@@ -51,6 +51,13 @@ class NotificationTrigger(str, Enum):
     VERIFICATION_FAILED = "verification_failed"
     SLA_APPROACHING = "sla_approaching"
     SLA_BREACHED = "sla_breached"
+    # PR 14.1 — Risk Acceptance Governance
+    RISK_APPROVAL_REQUESTED = "risk_approval_requested"
+    RISK_APPROVED = "risk_approved"
+    RISK_REJECTED = "risk_rejected"
+    RISK_EXPIRING_SOON = "risk_expiring_soon"
+    RISK_EXPIRED = "risk_expired"
+    RISK_REVOKED = "risk_revoked"
 
 
 class NotificationPreference(str, Enum):

@@ -489,3 +489,57 @@ SLA_ESCALATIONS_TOTAL = Counter(
     "Total SLA escalation notifications sent",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 14.1: Risk Acceptance Governance metrics
+# No tenant_id or user labels — bounded cardinality.
+# from_status/to_status labels are safe: ≤7 states × 7 = ≤49 combinations.
+# ---------------------------------------------------------------------------
+
+RISK_ACCEPTANCE_TOTAL = Counter(
+    "frostgate_risk_acceptance_total",
+    "Total risk acceptance records created (all statuses)",
+    [],
+)
+
+RISK_APPROVED_TOTAL = Counter(
+    "frostgate_risk_approved_total",
+    "Total risk acceptance records transitioned to approved",
+    [],
+)
+
+RISK_REJECTED_TOTAL = Counter(
+    "frostgate_risk_rejected_total",
+    "Total risk acceptance records rejected",
+    [],
+)
+
+RISK_EXPIRED_TOTAL = Counter(
+    "frostgate_risk_expired_total",
+    "Total risk acceptance records expired (automatic + manual)",
+    [],
+)
+
+RISK_REVOKED_TOTAL = Counter(
+    "frostgate_risk_revoked_total",
+    "Total risk acceptance records revoked",
+    [],
+)
+
+RISK_REVIEW_DUE_TOTAL = Counter(
+    "frostgate_risk_review_due_total",
+    "Total risk acceptance review-due detections",
+    [],
+)
+
+RISK_STATUS_TRANSITIONS_TOTAL = Counter(
+    "frostgate_risk_status_transitions_total",
+    "Total valid risk acceptance status transitions",
+    ["from_status", "to_status"],
+)
+
+RISK_INVALID_TRANSITIONS_TOTAL = Counter(
+    "frostgate_risk_invalid_transitions_total",
+    "Total rejected risk acceptance status transition attempts",
+    [],
+)

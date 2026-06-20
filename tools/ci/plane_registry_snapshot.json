@@ -609,6 +609,7 @@
         "/breakglass",
         "/governance",
         "/remediation",
+        "/risk-acceptances",
         "/field-assessment",
         "/portal",
         "/config",
@@ -1153,7 +1154,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-20T00:44:54.613770+00:00",
+  "generated_at": "2026-06-20T20:11:15.251393+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

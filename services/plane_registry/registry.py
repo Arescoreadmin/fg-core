@@ -40,6 +40,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/breakglass",
             "/governance",
             "/remediation",
+            "/risk-acceptances",
             "/field-assessment",
             "/portal",
             "/config",

@@ -96,6 +96,7 @@ from api.clm import router as clm_router
 from api.control_tower import router as control_tower_router
 from api.portal import portal_router
 from api.portal_remediation import portal_remediation_router
+from api.risk_acceptance import router as risk_acceptance_router
 from api.entitlements import (
     router as entitlements_router,
     ui_router as entitlements_ui_router,
@@ -705,6 +706,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(control_tower_router)
     app.include_router(portal_router)
     app.include_router(portal_remediation_router)
+    app.include_router(risk_acceptance_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
     app.include_router(rag_corpus_ingestion_router)
@@ -1136,6 +1138,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(control_tower_router)
     app.include_router(portal_router)
     app.include_router(portal_remediation_router)
+    app.include_router(risk_acceptance_router)
     app.include_router(connectors_msgraph_report_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
