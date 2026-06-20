@@ -81,14 +81,14 @@ class ApprovalAuthority(str, Enum):
 
 class RiskAcceptanceEventType(str, Enum):
     RISK_CREATED = "risk_created"
-    RISK_SUBMITTED = "risk_submitted"          # DRAFT → PENDING_APPROVAL
-    RISK_APPROVED = "risk_approved"            # PENDING_APPROVAL → APPROVED
-    RISK_ACTIVATED = "risk_activated"          # APPROVED → ACTIVE
-    RISK_REJECTED = "risk_rejected"            # → REJECTED
-    RISK_REVOKED = "risk_revoked"              # → REVOKED
-    RISK_EXPIRED = "risk_expired"              # → EXPIRED (automatic)
-    RISK_UPDATED = "risk_updated"              # field-level update (status unchanged)
-    RISK_REVIEWED = "risk_reviewed"            # review cycle recorded
+    RISK_SUBMITTED = "risk_submitted"  # DRAFT → PENDING_APPROVAL
+    RISK_APPROVED = "risk_approved"  # PENDING_APPROVAL → APPROVED
+    RISK_ACTIVATED = "risk_activated"  # APPROVED → ACTIVE
+    RISK_REJECTED = "risk_rejected"  # → REJECTED
+    RISK_REVOKED = "risk_revoked"  # → REVOKED
+    RISK_EXPIRED = "risk_expired"  # → EXPIRED (automatic)
+    RISK_UPDATED = "risk_updated"  # field-level update (status unchanged)
+    RISK_REVIEWED = "risk_reviewed"  # review cycle recorded
 
 
 # ---------------------------------------------------------------------------

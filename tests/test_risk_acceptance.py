@@ -678,7 +678,11 @@ def test_ra_20_active_to_expired_via_sweep(db_session: Session, build_app) -> No
         # Drive to ACTIVE
         from services.risk_acceptance.schemas import TransitionRiskAcceptanceRequest
 
-        for target in ["pending_approval", "approved", "active"]:
+        for target in [
+            RiskAcceptanceStatus.PENDING_APPROVAL,
+            RiskAcceptanceStatus.APPROVED,
+            RiskAcceptanceStatus.ACTIVE,
+        ]:
             svc.transition(
                 ra_id,
                 TransitionRiskAcceptanceRequest(target_status=target),
@@ -789,7 +793,11 @@ def test_ra_23_expired_no_further_transitions(
         db.commit()
         ra_id = ra.id
 
-        for target in ["pending_approval", "approved", "active"]:
+        for target in [
+            RiskAcceptanceStatus.PENDING_APPROVAL,
+            RiskAcceptanceStatus.APPROVED,
+            RiskAcceptanceStatus.ACTIVE,
+        ]:
             svc.transition(
                 ra_id,
                 TransitionRiskAcceptanceRequest(target_status=target),
@@ -1128,7 +1136,11 @@ def test_ra_36_expiration_sweep_past_date(db_session: Session, build_app) -> Non
         db.commit()
         ra_id = ra.id
 
-        for target in ["pending_approval", "approved", "active"]:
+        for target in [
+            RiskAcceptanceStatus.PENDING_APPROVAL,
+            RiskAcceptanceStatus.APPROVED,
+            RiskAcceptanceStatus.ACTIVE,
+        ]:
             svc.transition(
                 ra_id,
                 TransitionRiskAcceptanceRequest(target_status=target),
@@ -1174,7 +1186,11 @@ def test_ra_37_expiration_sweep_future_date(db_session: Session, build_app) -> N
         db.commit()
         ra_id = ra.id
 
-        for target in ["pending_approval", "approved", "active"]:
+        for target in [
+            RiskAcceptanceStatus.PENDING_APPROVAL,
+            RiskAcceptanceStatus.APPROVED,
+            RiskAcceptanceStatus.ACTIVE,
+        ]:
             svc.transition(
                 ra_id,
                 TransitionRiskAcceptanceRequest(target_status=target),
@@ -1575,7 +1591,11 @@ def test_ra_55_expiry_offset_timezone_sweep(db_session: Session, build_app) -> N
         db.commit()
         ra_id = ra.id
 
-        for target in ["pending_approval", "approved", "active"]:
+        for target in [
+            RiskAcceptanceStatus.PENDING_APPROVAL,
+            RiskAcceptanceStatus.APPROVED,
+            RiskAcceptanceStatus.ACTIVE,
+        ]:
             svc.transition(
                 ra_id,
                 TransitionRiskAcceptanceRequest(target_status=target),
