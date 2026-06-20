@@ -462,3 +462,30 @@ REMEDIATION_UNASSIGNED_TASKS_TOTAL = Counter(
     "Total remediation task unassignment operations",
     [],
 )
+
+# PR 13.7: Notification Authority + Unified Timeline
+NOTIFICATIONS_SENT_TOTAL = Counter(
+    "frostgate_notifications_sent_total",
+    "Total notifications sent successfully",
+    [],
+)
+NOTIFICATIONS_FAILED_TOTAL = Counter(
+    "frostgate_notifications_failed_total",
+    "Total notifications that failed delivery",
+    [],
+)
+NOTIFICATIONS_ACKNOWLEDGED_TOTAL = Counter(
+    "frostgate_notifications_acknowledged_total",
+    "Total notifications acknowledged by recipients",
+    [],
+)
+TIMELINE_EVENTS_TOTAL = Counter(
+    "frostgate_timeline_events_total",
+    "Total unified timeline API requests",
+    [],
+)
+SLA_ESCALATIONS_TOTAL = Counter(
+    "frostgate_sla_escalations_total",
+    "Total SLA escalation notifications sent",
+    [],
+)

@@ -17,6 +17,7 @@ Security invariants:
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
@@ -37,11 +38,17 @@ from services.remediation.schemas import (
     SlaResponse,
     TaskListResponse,
     TaskResponse,
+    TimelineListResponse,
     TransitionResponse,
     TransitionTaskRequest,
     UnassignRequest,
     UpdateTaskRequest,
 )
+
+
+class AcknowledgeNotificationRequest(BaseModel):
+    actor: str
+
 
 router = APIRouter(tags=["remediation"])
 
@@ -465,4 +472,77 @@ def get_remediation_task_sla(
         try:
             return engine.get_sla(task_id=task_id)
         except RemediationNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# GET /remediation/tasks/{task_id}/timeline  (PR 13.7)
+# MUST be before /{task_id} — already fine as a sub-path
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/remediation/tasks/{task_id}/timeline",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=TimelineListResponse,
+)
+def get_remediation_task_timeline(
+    task_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    event_type: str | None = Query(default=None),
+    source: str | None = Query(default=None),
+    since: str | None = Query(default=None),
+    until: str | None = Query(default=None),
+) -> TimelineListResponse:
+    tenant_id = require_bound_tenant(request)
+    with Session(get_engine()) as db:
+        from services.remediation.timeline import UnifiedTimelineEngine
+
+        try:
+            return UnifiedTimelineEngine(db, tenant_id=tenant_id).get_timeline(
+                task_id=task_id,
+                limit=limit,
+                offset=offset,
+                event_type=event_type,
+                source=source,
+                since=since,
+                until=until,
+            )
+        except RemediationNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# POST /remediation/tasks/{task_id}/notifications/{notification_id}/acknowledge  (PR 13.7)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/remediation/tasks/{task_id}/notifications/{notification_id}/acknowledge",
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def acknowledge_notification(
+    task_id: str,
+    notification_id: str,
+    body: AcknowledgeNotificationRequest,
+    request: Request,
+) -> dict:
+    tenant_id = require_bound_tenant(request)
+    with Session(get_engine()) as db:
+        from services.notifications.engine import NotificationEngine
+        from services.notifications.schemas import NotificationNotFound
+
+        try:
+            notification = NotificationEngine(db, tenant_id=tenant_id).acknowledge(
+                notification_id=notification_id, actor=body.actor
+            )
+            db.commit()
+            return {
+                "notification_id": notification.id,
+                "delivery_status": notification.delivery_status,
+                "acknowledged_at": notification.acknowledged_at,
+            }
+        except NotificationNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))

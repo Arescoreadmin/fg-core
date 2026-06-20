@@ -289,3 +289,30 @@ class SlaResponse(BaseModel):
     days_remaining: int | None
     due_date: datetime | None
     sla_breach_at: datetime | None
+
+
+# ---------------------------------------------------------------------------
+# PR 13.7 — Unified Timeline schemas
+# ---------------------------------------------------------------------------
+
+
+class TimelineEventResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    task_id: str
+    event_type: str
+    source: str
+    actor: str
+    event_at: str
+    metadata: dict[str, Any]
+
+
+class TimelineListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    events: list[TimelineEventResponse]
+    total: int
+    limit: int
+    offset: int
