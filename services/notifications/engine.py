@@ -123,7 +123,9 @@ class NotificationEngine:
 
         return notification
 
-    def acknowledge(self, *, notification_id: str, task_id: str, actor: str) -> Notification:
+    def acknowledge(
+        self, *, notification_id: str, task_id: str, actor: str
+    ) -> Notification:
         """Mark notification as ACKNOWLEDGED. Increments NOTIFICATIONS_ACKNOWLEDGED_TOTAL."""
         notification = (
             self._db.query(Notification)

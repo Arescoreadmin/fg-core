@@ -87,22 +87,22 @@ class UnifiedTimelineEngine:
                 RemediationTaskAudit.tenant_id == self._tenant_id,
                 RemediationTaskAudit.task_id == task_id,
             )
-            for row in rem_q.all():
+            for remediation_row in rem_q.all():
                 metadata: dict[str, Any] = {}
-                if row.old_state is not None:
-                    metadata["old_state"] = row.old_state
-                if row.new_state is not None:
-                    metadata["new_state"] = row.new_state
-                if row.reason is not None:
-                    metadata["reason"] = row.reason
+                if remediation_row.old_state is not None:
+                    metadata["old_state"] = remediation_row.old_state
+                if remediation_row.new_state is not None:
+                    metadata["new_state"] = remediation_row.new_state
+                if remediation_row.reason is not None:
+                    metadata["reason"] = remediation_row.reason
                 events.append(
                     TimelineEvent(
-                        id=row.id,
-                        task_id=row.task_id,
-                        event_type=row.event_type,
+                        id=remediation_row.id,
+                        task_id=remediation_row.task_id,
+                        event_type=remediation_row.event_type,
                         source="remediation",
-                        actor=row.actor,
-                        event_at=row.event_at,
+                        actor=remediation_row.actor,
+                        event_at=remediation_row.event_at,
                         metadata=metadata,
                     )
                 )
@@ -113,16 +113,16 @@ class UnifiedTimelineEngine:
                 PortalRemediationAuditEvent.tenant_id == self._tenant_id,
                 PortalRemediationAuditEvent.task_id == task_id,
             )
-            for row in portal_q.all():
+            for portal_row in portal_q.all():
                 events.append(
                     TimelineEvent(
-                        id=row.id,
-                        task_id=row.task_id,
-                        event_type=row.event_type,
+                        id=portal_row.id,
+                        task_id=portal_row.task_id,
+                        event_type=portal_row.event_type,
                         source="portal",
-                        actor=row.actor,
-                        event_at=row.event_at,
-                        metadata=row.event_metadata or {},
+                        actor=portal_row.actor,
+                        event_at=portal_row.event_at,
+                        metadata=portal_row.event_metadata or {},
                     )
                 )
 
@@ -133,19 +133,20 @@ class UnifiedTimelineEngine:
                 Notification.task_id == task_id,
                 Notification.delivery_status != "pending",
             )
-            for row in notif_q.all():
+            for notification_row in notif_q.all():
                 events.append(
                     TimelineEvent(
-                        id=row.id,
-                        task_id=row.task_id,
-                        event_type=row.trigger_type,
+                        id=notification_row.id,
+                        task_id=notification_row.task_id,
+                        event_type=notification_row.trigger_type,
                         source="notification",
-                        actor=row.recipient,
-                        event_at=row.sent_at or row.created_at,
+                        actor=notification_row.recipient,
+                        event_at=notification_row.sent_at
+                        or notification_row.created_at,
                         metadata={
-                            "channel": row.channel,
-                            "delivery_status": row.delivery_status,
-                            "recipient": row.recipient,
+                            "channel": notification_row.channel,
+                            "delivery_status": notification_row.delivery_status,
+                            "recipient": notification_row.recipient,
                         },
                     )
                 )
