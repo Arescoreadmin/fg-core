@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
-from api.db import get_engine
+from api.db import get_engine, set_tenant_context
 from services.remediation.engine import RemediationEngine
 from services.remediation.schemas import (
     AllowedTransitionsResponse,
@@ -498,6 +498,7 @@ def get_remediation_task_timeline(
 ) -> TimelineListResponse:
     tenant_id = require_bound_tenant(request)
     with Session(get_engine()) as db:
+        set_tenant_context(db, tenant_id)
         from services.remediation.timeline import UnifiedTimelineEngine
 
         try:
@@ -536,7 +537,7 @@ def acknowledge_notification(
 
         try:
             notification = NotificationEngine(db, tenant_id=tenant_id).acknowledge(
-                notification_id=notification_id, actor=body.actor
+                notification_id=notification_id, task_id=task_id, actor=body.actor
             )
             db.commit()
             return {

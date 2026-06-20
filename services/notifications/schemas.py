@@ -16,9 +16,25 @@ class NotificationChannel(str, Enum):
 
 
 class NotificationDeliveryStatus(str, Enum):
+    """Delivery state machine for notification records.
+
+    Active states (phase 1):
+      PENDING      — record created, send not yet attempted
+      SENT         — channel backend accepted transmission (returned True)
+      FAILED       — channel backend rejected or raised
+      ACKNOWLEDGED — recipient explicitly acknowledged via the API
+
+    Reserved (phase 2 — not written by the engine today):
+      DELIVERED    — confirmed receipt from transport layer (e.g. SendGrid
+                     delivery webhook, websocket ACK from portal client).
+                     Until a transport integration provides confirmation,
+                     no record will ever enter this state.  Stored in the
+                     DB schema now so phase 2 requires no migration.
+    """
+
     PENDING = "pending"
     SENT = "sent"
-    DELIVERED = "delivered"
+    DELIVERED = "delivered"  # phase 2 — see docstring above
     FAILED = "failed"
     ACKNOWLEDGED = "acknowledged"
 
