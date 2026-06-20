@@ -233,6 +233,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_notifications"
     )  # PR 13.7: notification records
+    importlib.import_module(
+        "api.db_models_risk_acceptance"
+    )  # PR 14.1: Risk Acceptance Governance
 
 
 def _get_base():
