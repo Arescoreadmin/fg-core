@@ -280,13 +280,12 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 532,
+    "control": 539,
     "data": 54,
     "evidence": 23,
     "rbac": 5,
     "security": 6,
     "ui": 49,
-    "unmapped": 7,
     "workforce": 17
   },
   "public_exempt": [

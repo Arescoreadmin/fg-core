@@ -6,6 +6,18 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-20 — PR 14.1 guard fix: plane registry route ownership for /risk-acceptances
+
+**Issue:** Guard failed with `unexpected-route gap` for all 7 `/risk-acceptances` routes because the prefix was not registered in `services/plane_registry/registry.py`. The `control` plane's `route_prefixes` did not include `/risk-acceptances`, causing `check_plane_registry.py` to treat these routes as unowned.
+
+**Fix:**
+
+- `services/plane_registry/registry.py` — Added `/risk-acceptances` to the `control` plane's `route_prefixes`, alongside `/governance`, `/remediation`, and `/subscriptions` (same classification: governance/control-plane functionality, tenant-scoped, `governance:` scope prefix).
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `route_inventory_summary.json`, `topology.sha256` — Regenerated via `make route-inventory-generate`.
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — Updated PR 14.1 SOC entry to document the plane registry source change and regenerated artifacts (SOC-HIGH-002).
+
+---
+
 ### 2026-06-20 — PR 14.1 bot fixes: Risk Acceptance Governance Foundation
 
 **Issues (chatgpt-codex-connector review):**

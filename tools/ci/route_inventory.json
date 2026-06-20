@@ -10992,8 +10992,8 @@
       "file": "api/risk_acceptance.py",
       "method": "GET",
       "path": "/risk-acceptances",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11009,8 +11009,8 @@
       "file": "api/risk_acceptance.py",
       "method": "POST",
       "path": "/risk-acceptances",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11026,8 +11026,8 @@
       "file": "api/risk_acceptance.py",
       "method": "GET",
       "path": "/risk-acceptances/{ra_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11043,8 +11043,8 @@
       "file": "api/risk_acceptance.py",
       "method": "PATCH",
       "path": "/risk-acceptances/{ra_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11060,8 +11060,8 @@
       "file": "api/risk_acceptance.py",
       "method": "GET",
       "path": "/risk-acceptances/{ra_id}/audit",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11077,8 +11077,8 @@
       "file": "api/risk_acceptance.py",
       "method": "GET",
       "path": "/risk-acceptances/{ra_id}/transitions",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11094,8 +11094,8 @@
       "file": "api/risk_acceptance.py",
       "method": "POST",
       "path": "/risk-acceptances/{ra_id}/transitions",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -12411,7 +12411,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-20T19:17:25.619273+00:00",
+  "generated_at": "2026-06-20T20:11:15.243055+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
