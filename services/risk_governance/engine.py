@@ -17,9 +17,9 @@ Escalations are append-only governance signals; not a state machine.
 """
 
 from __future__ import annotations
+from datetime import datetime, timezone
 
 import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -93,7 +93,6 @@ from services.risk_governance.schemas import (
     EscalationTrigger,
     GovernanceDashboardResponse,
     GovernanceEventType,
-    GovernanceTenantViolation,
     PolicyListResponse,
     PolicyNotFound,
     PolicyResponse,
@@ -170,7 +169,10 @@ class GovernanceEngine:
         self._emit_timeline(
             risk_acceptance_id=risk_acceptance_id,
             event_type=GovernanceEventType.APPROVAL_REQUESTED.value,
-            payload={"approval_id": approval.id, "approver_name": approval.approver_name},
+            payload={
+                "approval_id": approval.id,
+                "approver_name": approval.approver_name,
+            },
         )
         RISK_APPROVALS_TOTAL.inc()
 
@@ -181,7 +183,10 @@ class GovernanceEngine:
                     task_id=risk_acceptance_id,
                     trigger=NotificationTrigger.RISK_APPROVAL_PENDING,
                     recipient=notification_recipient,
-                    metadata={"approval_id": approval.id, "approver_name": approval.approver_name},
+                    metadata={
+                        "approval_id": approval.id,
+                        "approver_name": approval.approver_name,
+                    },
                 )
             except Exception:
                 pass
@@ -200,14 +205,20 @@ class GovernanceEngine:
         assert_risk_acceptance_owned(
             self._db, tenant_id=self._tenant_id, risk_acceptance_id=risk_acceptance_id
         )
-        approval = fetch_approval(self._db, tenant_id=self._tenant_id, approval_id=approval_id)
+        approval = fetch_approval(
+            self._db, tenant_id=self._tenant_id, approval_id=approval_id
+        )
         if approval is None or approval.risk_acceptance_id != risk_acceptance_id:
             raise ApprovalNotFound(f"approval_id={approval_id!r} not found.")
 
         current = ApprovalStatus(approval.status)
         target = request.decision
 
-        if target not in {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.REVOKED}:
+        if target not in {
+            ApprovalStatus.APPROVED,
+            ApprovalStatus.REJECTED,
+            ApprovalStatus.REVOKED,
+        }:
             raise ApprovalInvalidTransition(
                 f"decision must be APPROVED, REJECTED, or REVOKED, got {target.value!r}."
             )
@@ -306,11 +317,15 @@ class GovernanceEngine:
             total=total,
         )
 
-    def get_approval(self, risk_acceptance_id: str, approval_id: str) -> ApprovalResponse:
+    def get_approval(
+        self, risk_acceptance_id: str, approval_id: str
+    ) -> ApprovalResponse:
         assert_risk_acceptance_owned(
             self._db, tenant_id=self._tenant_id, risk_acceptance_id=risk_acceptance_id
         )
-        approval = fetch_approval(self._db, tenant_id=self._tenant_id, approval_id=approval_id)
+        approval = fetch_approval(
+            self._db, tenant_id=self._tenant_id, approval_id=approval_id
+        )
         if approval is None or approval.risk_acceptance_id != risk_acceptance_id:
             raise ApprovalNotFound(f"approval_id={approval_id!r} not found.")
         return self._approval_response(approval)
@@ -326,7 +341,9 @@ class GovernanceEngine:
         assert_risk_acceptance_owned(
             self._db, tenant_id=self._tenant_id, risk_acceptance_id=risk_acceptance_id
         )
-        approval = fetch_approval(self._db, tenant_id=self._tenant_id, approval_id=approval_id)
+        approval = fetch_approval(
+            self._db, tenant_id=self._tenant_id, approval_id=approval_id
+        )
         if approval is None or approval.risk_acceptance_id != risk_acceptance_id:
             raise ApprovalNotFound(f"approval_id={approval_id!r} not found.")
         items = fetch_approval_audits(
@@ -425,7 +442,9 @@ class GovernanceEngine:
             limit=limit,
             offset=offset,
         )
-        total = count_policies(self._db, tenant_id=self._tenant_id, active_only=active_only)
+        total = count_policies(
+            self._db, tenant_id=self._tenant_id, active_only=active_only
+        )
         return PolicyListResponse(
             items=[self._policy_response(p) for p in items],
             total=total,
@@ -487,7 +506,10 @@ class GovernanceEngine:
                     task_id=risk_acceptance_id,
                     trigger=NotificationTrigger.RISK_REVIEW_DUE,
                     recipient=notification_recipient,
-                    metadata={"review_id": review.id, "review_due_at": review.review_due_at},
+                    metadata={
+                        "review_id": review.id,
+                        "review_due_at": review.review_due_at,
+                    },
                 )
             except Exception:
                 pass
@@ -711,10 +733,11 @@ class GovernanceEngine:
         """Return governance KPIs for dashboard readiness (PR 14.2)."""
         pending_approvals = count_pending_approvals(self._db, tenant_id=self._tenant_id)
         overdue_reviews = count_overdue_reviews(self._db, tenant_id=self._tenant_id)
-        unresolved_escalations = count_unresolved_escalations(self._db, tenant_id=self._tenant_id)
+        unresolved_escalations = count_unresolved_escalations(
+            self._db, tenant_id=self._tenant_id
+        )
 
         from api.db_models_risk_acceptance import RiskAcceptance
-        from datetime import datetime, timezone
 
         now_str = _now()
         now_dt = datetime.fromisoformat(now_str)
@@ -731,6 +754,7 @@ class GovernanceEngine:
         threshold_30 = "2099-01-01T00:00:00+00:00"
         try:
             from datetime import timedelta
+
             t30 = (now_dt + timedelta(days=30)).isoformat()
             threshold_30 = t30
         except Exception:
@@ -747,8 +771,11 @@ class GovernanceEngine:
         )
         upcoming_30 = 0
         for ra in candidates:
+            expires_at = ra.expires_at
+            if expires_at is None:
+                continue
             try:
-                exp_dt = datetime.fromisoformat(ra.expires_at)
+                exp_dt = datetime.fromisoformat(expires_at)
                 if exp_dt.tzinfo is None:
                     exp_dt = exp_dt.replace(tzinfo=timezone.utc)
                 if now_dt <= exp_dt <= datetime.fromisoformat(threshold_30):
@@ -862,7 +889,9 @@ class GovernanceEngine:
             schema_version=review.schema_version,
         )
 
-    def _escalation_response(self, escalation: RiskGovernanceEscalation) -> EscalationResponse:
+    def _escalation_response(
+        self, escalation: RiskGovernanceEscalation
+    ) -> EscalationResponse:
         return EscalationResponse(
             id=escalation.id,
             tenant_id=escalation.tenant_id,

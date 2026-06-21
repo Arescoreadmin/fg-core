@@ -30,9 +30,18 @@ class ApprovalStatus(str, Enum):
     REVOKED = "revoked"
 
 
-TERMINAL_APPROVAL_STATUSES = {ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED, ApprovalStatus.REVOKED}
+TERMINAL_APPROVAL_STATUSES = {
+    ApprovalStatus.REJECTED,
+    ApprovalStatus.EXPIRED,
+    ApprovalStatus.REVOKED,
+}
 APPROVAL_ALLOWED_TRANSITIONS: dict[ApprovalStatus, set[ApprovalStatus]] = {
-    ApprovalStatus.PENDING: {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED, ApprovalStatus.REVOKED},
+    ApprovalStatus.PENDING: {
+        ApprovalStatus.APPROVED,
+        ApprovalStatus.REJECTED,
+        ApprovalStatus.EXPIRED,
+        ApprovalStatus.REVOKED,
+    },
     ApprovalStatus.APPROVED: {ApprovalStatus.REVOKED},
     ApprovalStatus.REJECTED: set(),
     ApprovalStatus.EXPIRED: set(),

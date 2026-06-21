@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 560,
+    "contract_count": 577,
     "contract_only": [],
-    "runtime_count": 726,
+    "runtime_count": 743,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "9d10718f23d319cd66b236b776de14e46e05ab0e54c570a1f320402d8cea036c",
+  "governance_fingerprint": "e2f05eb383047293364038ba346db44d72d58625f053bb4e52d0d5cf5d403983",
   "planes": [
     {
       "compat": {
@@ -255,6 +255,7 @@
         "/rag",
         "/remediation",
         "/risk-acceptances",
+        "/risk-governance",
         "/signing",
         "/status",
         "/subscriptions"
@@ -703,8 +704,17 @@
       "GET /remediation/tasks/{task_id}/timeline",
       "GET /risk-acceptances",
       "GET /risk-acceptances/{ra_id}",
+      "GET /risk-acceptances/{ra_id}/approvals",
+      "GET /risk-acceptances/{ra_id}/approvals/{approval_id}",
+      "GET /risk-acceptances/{ra_id}/approvals/{approval_id}/audit",
       "GET /risk-acceptances/{ra_id}/audit",
+      "GET /risk-acceptances/{ra_id}/escalations",
+      "GET /risk-acceptances/{ra_id}/reviews",
+      "GET /risk-acceptances/{ra_id}/reviews/{review_id}",
       "GET /risk-acceptances/{ra_id}/transitions",
+      "GET /risk-governance/dashboard",
+      "GET /risk-governance/policies",
+      "GET /risk-governance/policies/{policy_id}",
       "GET /signing/public-key",
       "GET /status",
       "GET /subscriptions/explain-capability",
@@ -920,7 +930,15 @@
       "POST /remediation/tasks/{task_id}/transition",
       "POST /remediation/tasks/{task_id}/unassign",
       "POST /risk-acceptances",
+      "POST /risk-acceptances/{ra_id}/approvals",
+      "POST /risk-acceptances/{ra_id}/approvals/{approval_id}/decision",
+      "POST /risk-acceptances/{ra_id}/escalations",
+      "POST /risk-acceptances/{ra_id}/reviews",
+      "POST /risk-acceptances/{ra_id}/reviews/{review_id}/complete",
       "POST /risk-acceptances/{ra_id}/transitions",
+      "POST /risk-governance/maintenance/expire-approvals",
+      "POST /risk-governance/maintenance/mark-overdue-reviews",
+      "POST /risk-governance/policies",
       "PUT /admin/agent/version-floor",
       "PUT /admin/identity/tenants/{tenant_id}/config",
       "PUT /admin/tenants/{tenant_id}/quota",
