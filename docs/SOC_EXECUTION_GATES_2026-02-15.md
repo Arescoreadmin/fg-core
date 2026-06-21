@@ -4909,6 +4909,15 @@ Additional non-critical-path changes: `api/db_models_remediation.py` (2 new ORM 
 
 Additional non-critical-path changes: `services/notifications/__init__.py`, `services/notifications/schemas.py`, `services/notifications/channels.py`, `services/notifications/engine.py` (new bounded context); `api/db_models_notifications.py` (1 new ORM model: `notifications` table); `services/remediation/timeline.py` (new `UnifiedTimelineEngine`); `services/remediation/schemas.py` (`TimelineEventResponse` + `TimelineListResponse` Pydantic models added); `api/remediation.py` (2 new routes + `AcknowledgeNotificationRequest` schema); `api/db.py` (model registration + SQLite migration for `notifications` table); `api/observability/metrics.py` (5 new Prometheus counters: `notifications_sent/failed/acknowledged_total`, `timeline_events_total`, `sla_escalations_total` — no `tenant_id` labels); `migrations/postgres/0122_notifications.sql` (new migration with RLS); `services/remediation/engine.py` (notification hooks in `assign_owner`, `remove_owner`, `transition_status` — lazy imports to avoid circular dependencies); `tests/test_remediation_timeline.py` (42 tests REM-149–REM-190, 41 passed, 1 skipped with `pytest.skip` when insufficient test data).
 
+## 2026-06-20 — PR 14.3 CI Repair: fg-fast Budget Adjustment
+
+**Classification:** CI configuration only. No production code, auth, middleware, OPA, or security files changed. Single-file change to `.github/workflows/testing-module.yml`.
+
+**Critical-path files changed:**
+- `.github/workflows/testing-module.yml` — `fg-fast` job `timeout-minutes` raised from 10 (600s) to 15 (900s). The Makefile `FG_FAST_MAX_SECONDS` is 720s; a 600s job-level GH Actions wall-clock timeout would kill the job before the budget check could run on a slow CI runner.
+
+**SOC review outcome:** approved. The change is a CI job timeout extension only. No test is removed, skipped, or weakened. No production code path is touched. The fg-fast lane still enforces the same `smoke or contract or security` marker filter, the same 398-test set, and the same `FG_FAST_MAX_SECONDS=720` budget via the Makefile budget-check. The GH Actions job timeout must exceed the Makefile budget by a meaningful margin to avoid false kills under runner variance; 900s (15 min) vs 720s budget gives 180s headroom. No capabilities, session, OPA, or auth files changed.
+
 ## 2026-06-20 — PR 14.3: Compensating Control Registry & Evidence Governance Foundation
 
 **Classification:** New bounded context `services/control_registry/`. Additive: new tables, new routes, new metrics. No auth, session, middleware, OPA policy, or existing bounded-context files changed beyond integration hooks.

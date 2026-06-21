@@ -85,7 +85,6 @@ from services.control_registry.schemas import (
     ControlResponse,
     ControlReviewConflict,
     ControlReviewListResponse,
-    ControlReviewOutcome,
     ControlReviewResponse,
     ControlReviewStatus,
     ControlStatus,
@@ -397,7 +396,10 @@ class ControlRegistryEngine:
         self._emit_timeline(
             control_id=ctl_id,
             event_type=ControlEventType.CONTROL_VERIFIED.value,
-            payload={"control_id": control.control_id, "evidence_count": evidence_count},
+            payload={
+                "control_id": control.control_id,
+                "evidence_count": evidence_count,
+            },
         )
         CONTROLS_VERIFIED_TOTAL.inc()
 
@@ -451,7 +453,10 @@ class ControlRegistryEngine:
         self._emit_timeline(
             control_id=ctl_id,
             event_type=ControlEventType.CONTROL_EVIDENCE_LINKED.value,
-            payload={"control_id": control.control_id, "evidence_id": request.evidence_id},
+            payload={
+                "control_id": control.control_id,
+                "evidence_id": request.evidence_id,
+            },
         )
         CONTROLS_EVIDENCE_LINKS_TOTAL.inc()
 
@@ -460,7 +465,10 @@ class ControlRegistryEngine:
                 task_id=ctl_id,
                 trigger=NotificationTrigger.CONTROL_EVIDENCE_ADDED,
                 recipient=notification_recipient,
-                metadata={"control_id": control.control_id, "evidence_id": request.evidence_id},
+                metadata={
+                    "control_id": control.control_id,
+                    "evidence_id": request.evidence_id,
+                },
             )
 
         return self._evidence_link_response(link)
@@ -506,9 +514,7 @@ class ControlRegistryEngine:
 
         # Governance rule: cannot link RETIRED control to risk acceptance
         if control.control_status == ControlStatus.RETIRED.value:
-            raise ControlConflict(
-                "Cannot link a RETIRED control to a risk acceptance."
-            )
+            raise ControlConflict("Cannot link a RETIRED control to a risk acceptance.")
 
         now = _now()
         link = RiskAcceptanceControlLink(
@@ -565,9 +571,7 @@ class ControlRegistryEngine:
             limit=limit,
             offset=offset,
         )
-        total = count_risk_links(
-            self._db, tenant_id=self._tenant_id, control_id=ctl_id
-        )
+        total = count_risk_links(self._db, tenant_id=self._tenant_id, control_id=ctl_id)
         return RiskAcceptanceControlLinkListResponse(
             items=[self._risk_link_response(r) for r in items],
             total=total,
@@ -634,7 +638,10 @@ class ControlRegistryEngine:
                 task_id=ctl_id,
                 trigger=NotificationTrigger.CONTROL_REVIEW_DUE,
                 recipient=notification_recipient,
-                metadata={"control_id": control.control_id, "review_date": request.review_date},
+                metadata={
+                    "control_id": control.control_id,
+                    "review_date": request.review_date,
+                },
             )
 
         return self._review_response(review)
@@ -654,6 +661,7 @@ class ControlRegistryEngine:
         review = fetch_review(self._db, tenant_id=self._tenant_id, review_id=review_id)
         if review is None or review.control_id != ctl_id:
             from services.control_registry.schemas import ControlReviewNotFound
+
             raise ControlReviewNotFound(f"review_id={review_id!r} not found.")
         if review.status == ControlReviewStatus.COMPLETED.value:
             raise ControlReviewConflict(
@@ -683,7 +691,10 @@ class ControlRegistryEngine:
         self._emit_timeline(
             control_id=ctl_id,
             event_type=ControlEventType.CONTROL_REVIEW_COMPLETED.value,
-            payload={"control_id": control.control_id, "outcome": request.outcome.value},
+            payload={
+                "control_id": control.control_id,
+                "outcome": request.outcome.value,
+            },
         )
 
         if notification_recipient:
@@ -711,9 +722,7 @@ class ControlRegistryEngine:
             limit=limit,
             offset=offset,
         )
-        total = count_reviews(
-            self._db, tenant_id=self._tenant_id, control_id=ctl_id
-        )
+        total = count_reviews(self._db, tenant_id=self._tenant_id, control_id=ctl_id)
         return ControlReviewListResponse(
             items=[self._review_response(r) for r in items],
             total=total,
@@ -802,9 +811,7 @@ class ControlRegistryEngine:
     # Maintenance sweeps
     # -----------------------------------------------------------------------
 
-    def expire_stale_verifications(
-        self, *, actor: str
-    ) -> FreshnessSweepResponse:
+    def expire_stale_verifications(self, *, actor: str) -> FreshnessSweepResponse:
         now = _now()
         stale = fetch_verified_controls_for_freshness(
             self._db, tenant_id=self._tenant_id, now_iso=now
@@ -813,7 +820,10 @@ class ControlRegistryEngine:
         for control in stale:
             old_state = snapshot_control(control)
             control.verification_status = VerificationStatus.EXPIRED.value
-            if control.effectiveness_rating == EffectivenessRating.HIGHLY_EFFECTIVE.value:
+            if (
+                control.effectiveness_rating
+                == EffectivenessRating.HIGHLY_EFFECTIVE.value
+            ):
                 control.effectiveness_rating = EffectivenessRating.EFFECTIVE.value
             control.updated_at = now
             self._db.flush()

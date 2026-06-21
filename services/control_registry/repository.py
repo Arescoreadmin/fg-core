@@ -18,7 +18,7 @@ from api.db_models_control_registry import (
     ControlReview,
     RiskAcceptanceControlLink,
 )
-from services.control_registry.schemas import ControlNotFound, ControlTenantViolation
+from services.control_registry.schemas import ControlNotFound
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ def count_controls_due_for_review(db: Session, *, tenant_id: str, now_iso: str) 
     count = 0
     for c in candidates:
         try:
-            due_dt = datetime.fromisoformat(c.next_review_at)
+            due_dt = datetime.fromisoformat(c.next_review_at or "")
             if due_dt.tzinfo is None:
                 due_dt = due_dt.replace(tzinfo=timezone.utc)
             if due_dt <= now_dt:
@@ -419,7 +419,7 @@ def fetch_verified_controls_for_freshness(
     result = []
     for control in candidates:
         try:
-            verified_dt = datetime.fromisoformat(control.last_verified_at)
+            verified_dt = datetime.fromisoformat(control.last_verified_at or "")
             if verified_dt.tzinfo is None:
                 verified_dt = verified_dt.replace(tzinfo=timezone.utc)
             elapsed_days = (now_dt - verified_dt).days
