@@ -590,3 +590,44 @@ RISK_GOVERNANCE_ESCALATIONS_TOTAL = Counter(
     "Total risk governance escalations raised",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 14.3 — Compensating Control Registry metrics
+# No tenant or user labels; bounded cardinality only.
+# ---------------------------------------------------------------------------
+
+CONTROLS_TOTAL = Counter(
+    "frostgate_controls_total",
+    "Total compensating controls created",
+    [],
+)
+
+CONTROLS_VERIFIED_TOTAL = Counter(
+    "frostgate_controls_verified_total",
+    "Total compensating controls verified",
+    [],
+)
+
+CONTROLS_EXPIRED_TOTAL = Counter(
+    "frostgate_controls_expired_total",
+    "Total compensating controls expired (stale verification)",
+    [],
+)
+
+CONTROLS_REVIEWS_TOTAL = Counter(
+    "frostgate_control_reviews_total",
+    "Total control reviews created",
+    [],
+)
+
+CONTROLS_REVIEWS_OVERDUE_TOTAL = Counter(
+    "frostgate_control_reviews_overdue_total",
+    "Total control reviews marked overdue",
+    [],
+)
+
+CONTROLS_EVIDENCE_LINKS_TOTAL = Counter(
+    "frostgate_control_evidence_links_total",
+    "Total evidence records linked to controls",
+    [],
+)

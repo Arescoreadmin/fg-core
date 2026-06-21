@@ -1413,3 +1413,72 @@ class TestAdapterRegistryPR102:
     def test_all_seven_source_types_registered(self):
         for source_type in SourceType:
             assert source_type in TIMELINE_ADAPTERS, f"{source_type} not in registry"
+
+
+# ---------------------------------------------------------------------------
+# TestAdapterRegistryPR143 — CONTROL_REGISTRY source type
+# ---------------------------------------------------------------------------
+
+
+class TestAdapterRegistryPR143:
+    def test_control_registry_registered(self):
+        assert SourceType.CONTROL_REGISTRY in TIMELINE_ADAPTERS
+
+    def test_control_registry_adapter_callable(self):
+        from services.governance.timeline.adapters import (
+            control_registry_to_timeline_event,
+        )
+
+        evt = control_registry_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="ctl-abc123",
+            event_type="control_created",
+            occurred_at="2026-06-21T00:00:00.000Z",
+            payload={"control_id": "CC-001", "title": "Test Control"},
+        )
+        assert evt.source_type == SourceType.CONTROL_REGISTRY
+        assert evt.source_id == "ctl-abc123"
+        assert evt.event_type == "control_created"
+        assert evt.tenant_id == "tenant-a"
+
+    def test_control_registry_event_id_deterministic(self):
+        from services.governance.timeline.adapters import (
+            control_registry_to_timeline_event,
+        )
+
+        e1 = control_registry_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="ctl-001",
+            event_type="control_verified",
+            occurred_at="2026-06-21T00:00:00.000Z",
+        )
+        e2 = control_registry_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="ctl-001",
+            event_type="control_verified",
+            occurred_at="2026-06-21T00:00:00.000Z",
+        )
+        assert e1.event_id == e2.event_id
+
+    def test_control_registry_event_id_differs_across_tenants(self):
+        from services.governance.timeline.adapters import (
+            control_registry_to_timeline_event,
+        )
+
+        ea = control_registry_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="ctl-001",
+            event_type="control_created",
+            occurred_at="2026-06-21T00:00:00.000Z",
+        )
+        eb = control_registry_to_timeline_event(
+            tenant_id="tenant-b",
+            source_id="ctl-001",
+            event_type="control_created",
+            occurred_at="2026-06-21T00:00:00.000Z",
+        )
+        assert ea.event_id != eb.event_id
+
+    def test_all_source_types_registered_including_control_registry(self):
+        for source_type in SourceType:
+            assert source_type in TIMELINE_ADAPTERS, f"{source_type} not in registry"

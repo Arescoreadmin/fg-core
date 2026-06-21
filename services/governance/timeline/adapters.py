@@ -525,6 +525,37 @@ def risk_governance_to_timeline_event(
     )
 
 
+def control_registry_to_timeline_event(
+    *,
+    tenant_id: str,
+    source_id: str,
+    event_type: str,
+    occurred_at: str,
+    payload: dict[str, object] | None = None,
+    replay_eligible: bool = False,
+) -> TimelineEvent:
+    """Convert control registry lifecycle activity into TimelineEvent."""
+    occurred_at = _normalize_iso(occurred_at)
+
+    return TimelineEvent(
+        event_id=derive_event_id(
+            tenant_id=tenant_id,
+            source_type=SourceType.CONTROL_REGISTRY.value,
+            source_id=source_id,
+            event_type=event_type,
+            occurred_at=occurred_at,
+        ),
+        tenant_id=tenant_id,
+        source_type=SourceType.CONTROL_REGISTRY,
+        source_id=source_id,
+        event_type=event_type,
+        occurred_at=occurred_at,
+        recorded_at=utc_iso8601_z_now(),
+        payload=payload or {},
+        replay_eligible=replay_eligible,
+    )
+
+
 TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.SIMULATION: simulation_entry_to_timeline_event,
     SourceType.GOVERNANCE_REPORT: governance_report_to_timeline_event,
@@ -535,4 +566,5 @@ TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.REPLAY: replay_verify_to_timeline_event,
     SourceType.FIELD_ASSESSMENT: field_assessment_to_timeline_event,
     SourceType.RISK_GOVERNANCE: risk_governance_to_timeline_event,
+    SourceType.CONTROL_REGISTRY: control_registry_to_timeline_event,
 }
