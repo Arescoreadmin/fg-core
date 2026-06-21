@@ -1390,3 +1390,86 @@ def test_ccr_79_patch_nonexistent(client):
 def test_ccr_80_verify_nonexistent(client):
     r = client.post("/controls/nonexistent-id-xyz/verify", json={})
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# CCR-81: Create with HIGHLY_EFFECTIVE rejected (P2 fix — bot review)
+# Controls start UNVERIFIED so HIGHLY_EFFECTIVE on creation violates the
+# HIGHLY_EFFECTIVE-requires-VERIFIED invariant before any evidence exists.
+# ---------------------------------------------------------------------------
+
+
+def test_ccr_81_create_highly_effective_rejected(client):
+    body = _control_body()
+    body["effectiveness_rating"] = "highly_effective"
+    r = client.post("/controls", json=body)
+    assert r.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# CCR-82: Complete an OVERDUE review (P2 fix — bot review)
+# After run_review_sweep marks a review overdue, the /complete route must
+# still accept it. Only COMPLETED is truly terminal.
+# ---------------------------------------------------------------------------
+
+
+def test_ccr_82_complete_overdue_review(client, db_session):
+    from api.db_models_control_registry import ControlReview
+
+    ctl_id = _json(client.post("/controls", json=_control_body()).json())["id"]
+    rev_id = _json(
+        client.post(
+            f"/controls/{ctl_id}/reviews",
+            json={
+                "reviewer": "auditor@example.com",
+                "review_date": _FUTURE_DUE,
+            },
+        ).json()
+    )["id"]
+
+    db_session.query(ControlReview).filter(ControlReview.id == rev_id).update(
+        {"status": "overdue", "review_date": _PAST_DUE}
+    )
+    db_session.commit()
+
+    r = client.post(
+        f"/controls/{ctl_id}/reviews/{rev_id}/complete",
+        json={"outcome": "effective"},
+    )
+    assert r.status_code == 200
+    assert _json(r.json())["status"] == "completed"
+
+
+# ---------------------------------------------------------------------------
+# CCR-83: Freshness sweep downgrades HIGHLY_EFFECTIVE to EFFECTIVE (P2 fix)
+# When verification expires, the HIGHLY_EFFECTIVE rating must be cleared
+# so dashboards don't treat expired controls as highly effective.
+# ---------------------------------------------------------------------------
+
+
+def test_ccr_83_freshness_sweep_downgrades_highly_effective(client, db_session):
+    from api.db_models_control_registry import ControlRegistry as ControlModel
+
+    # Create with EFFECTIVE (highest allowed at creation), activate, then
+    # manually push to VERIFIED + HIGHLY_EFFECTIVE + stale last_verified_at.
+    body = _control_body()
+    body["effectiveness_rating"] = "effective"
+    ctl_id = _json(client.post("/controls", json=body).json())["id"]
+    client.patch(f"/controls/{ctl_id}", json={"control_status": "active"})
+
+    db_session.query(ControlModel).filter(ControlModel.id == ctl_id).update(
+        {
+            "verification_status": "verified",
+            "effectiveness_rating": "highly_effective",
+            "last_verified_at": _OLD_VERIFIED,
+        }
+    )
+    db_session.commit()
+
+    r = client.post("/controls/maintenance/freshness", json={})
+    assert r.status_code == 200
+    assert _json(r.json())["expired"] >= 1
+
+    updated = _json(client.get(f"/controls/{ctl_id}").json())
+    assert updated["verification_status"] == "expired"
+    assert updated["effectiveness_rating"] == "effective"

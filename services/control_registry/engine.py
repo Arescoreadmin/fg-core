@@ -171,6 +171,12 @@ class ControlRegistryEngine:
         ctl_id = _new_id()
         public_id = request.control_id or ctl_id[:16].upper()
 
+        if request.effectiveness_rating == EffectivenessRating.HIGHLY_EFFECTIVE:
+            raise ControlConflict(
+                "Cannot create a control with effectiveness HIGHLY_EFFECTIVE: "
+                "controls start UNVERIFIED and must be verified before reaching that rating."
+            )
+
         control = ControlRegistry(
             id=ctl_id,
             tenant_id=self._tenant_id,
@@ -649,7 +655,7 @@ class ControlRegistryEngine:
         if review is None or review.control_id != ctl_id:
             from services.control_registry.schemas import ControlReviewNotFound
             raise ControlReviewNotFound(f"review_id={review_id!r} not found.")
-        if review.status != ControlReviewStatus.PENDING.value:
+        if review.status == ControlReviewStatus.COMPLETED.value:
             raise ControlReviewConflict(
                 f"Review is already in terminal state {review.status!r}."
             )
@@ -807,6 +813,8 @@ class ControlRegistryEngine:
         for control in stale:
             old_state = snapshot_control(control)
             control.verification_status = VerificationStatus.EXPIRED.value
+            if control.effectiveness_rating == EffectivenessRating.HIGHLY_EFFECTIVE.value:
+                control.effectiveness_rating = EffectivenessRating.EFFECTIVE.value
             control.updated_at = now
             self._db.flush()
             self._emit_audit(

@@ -140,12 +140,15 @@ def create_control(
     engine = get_engine()
     with Session(engine) as db:
         svc = ControlRegistryEngine(db, tenant_id=tenant_id)
-        result = svc.create_control(
-            body,
-            actor=_actor(request),
-            notification_recipient=notify_recipient,
-        )
-        db.commit()
+        try:
+            result = svc.create_control(
+                body,
+                actor=_actor(request),
+                notification_recipient=notify_recipient,
+            )
+            db.commit()
+        except ControlConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
     return result
 
 
