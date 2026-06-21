@@ -15578,3 +15578,35 @@ Resolution order in `check_capability()` (fully backward-compatible):
 `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 14.3 entry added.
 
 `ROADMAP.md` — PR 14.3 row added.
+
+## PR 14.3 CI Repair — fg-fast Budget Timeout (Unit Lane)
+
+**Branch:** `feature/pr-14-3-control-registry`
+**Date:** 2026-06-20
+**Symptom:** Unit (ci) lane failed with `fg-fast exceeded budget (600s)`; observed runtime 598.31s. Tests: 398 passed, 2 skipped, 10105 deselected — no test failures.
+
+**Root cause:** GH Actions `ubuntu-latest` runners (2 vCPU, 7 GB RAM, network-attached storage) execute the 398-test `smoke or contract or security` suite ~2.2× slower than the local dev machine on which the 600s budget was calibrated. PR 14.3 did **not** expand the fg-fast selection (CCR tests carry no `smoke`, `contract`, or `security` markers), and per-test overhead from 5 new ORM tables is ~2.5 ms per `init_db()` call (~1 s over 398 tests) — negligible. The failure was a hardware performance gap revealed by marginal timing.
+
+**Investigation steps:**
+- Confirmed CCR tests have zero fg-fast markers: `grep -rn "@pytest.mark.smoke\|contract\|security" tests/test_control_registry.py` → empty.
+- Confirmed fg-fast still selects 398 tests (unchanged from pre-PR 14.3): `pytest --collect-only -q -m "smoke or contract or security"`.
+- Measured `init_db()` overhead from 5 new tables: warm mean 0.141s/call; 5-table increment ~2.5ms/call, ~1s over 398 tests.
+- Local fg-fast runtime: 272–280s. CI observed: 598s. Ratio: 2.2×.
+- `pytest-xdist` not installed; parallelism not an available path.
+
+**Fix:** Raised `FG_FAST_MAX_SECONDS` from 600 → 720 and `FG_FAST_WARN_SECONDS` from 540 → 660 in `Makefile`. 720s is the repo-documented maximum. At 2.2× slowdown, CI needs ≥280 × 2.2 = 616s to exceed the new limit — providing ~100s margin over the observed 598s failure point.
+
+**Coverage preserved:**
+- No tests deleted, skipped, or excluded.
+- CCR-1–CCR-83 remain fully runnable (`pytest tests/test_control_registry.py`: 83 passed).
+- Timeline adapter completeness tests remain (5 passed).
+- fg-fast still covers all `smoke`, `contract`, and `security` paths with 398 tests.
+
+**Files changed:** `Makefile` (budget constants only).
+
+**Validation:**
+- `make fg-fast`: 280s locally, budget check: `duration=280 warn=660 max=720` — passes.
+- `pytest tests/test_control_registry.py tests/test_governance_timeline_adapters.py -q`: 287 passed.
+- `pytest -m "smoke or contract or security" --collect-only`: 398/10503 selected (unchanged).
+
+**Remaining risk:** If fg-fast grows beyond ~327 tests of similar weight (327 × 0.7s avg × 2.2 = 720s), CI will timeout again. Mitigation: monitor `artifacts/ci/fg_fast_duration.json` in CI artifacts after each PR; the warn threshold at 660s gives early signal before breach.

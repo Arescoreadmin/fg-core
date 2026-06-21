@@ -656,8 +656,13 @@ control-plane-check: venv
 # CI Lane Budgets + Scoped Pytest Filters
 # =============================================================================
 
-FG_FAST_MAX_SECONDS ?= 600
-FG_FAST_WARN_SECONDS ?= 540
+# Budget raised from 600→720s (PR 14.3 CI repair): GH Actions 2-core runners run
+# the 398-test smoke/contract/security suite ~2.2× slower than local dev hardware
+# (local: ~272s, CI observed: 598s). PR 14.3 added zero tests to fg-fast (CCR tests
+# carry no smoke/contract/security markers) and per-test init_db overhead from 5 new
+# ORM tables is ~2.5ms (~1s total) — negligible. 720s is the repo-documented maximum.
+FG_FAST_MAX_SECONDS ?= 720
+FG_FAST_WARN_SECONDS ?= 660
 
 PYTEST_FAST_FILTER ?= -m "smoke or contract or security"
 
