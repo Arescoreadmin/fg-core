@@ -25,6 +25,7 @@ class SourceType(str, Enum):
     EVIDENCE = "EVIDENCE"
     FIELD_ASSESSMENT = "FIELD_ASSESSMENT"
     RISK_GOVERNANCE = "RISK_GOVERNANCE"
+    CONTROL_REGISTRY = "CONTROL_REGISTRY"
 
 
 # ---------------------------------------------------------------------------

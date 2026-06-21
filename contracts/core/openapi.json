@@ -5089,6 +5089,51 @@
         "title": "CompensatingControlResponse",
         "type": "object"
       },
+      "CompleteControlReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "effectiveness_after": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectivenessRating"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effectiveness_before": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectivenessRating"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ControlReviewOutcome",
+            "description": "Review outcome"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "CompleteControlReviewRequest",
+        "type": "object"
+      },
       "CompleteReviewRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5799,61 +5844,74 @@
         "title": "ContractResponse",
         "type": "object"
       },
-      "ControlResponse": {
+      "ControlAuditListResponse": {
+        "additionalProperties": false,
         "properties": {
-          "applicability_metadata": {
-            "title": "Applicability Metadata",
-            "type": "object"
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ControlAuditResponse"
+            },
+            "title": "Items",
+            "type": "array"
           },
-          "control_description": {
-            "title": "Control Description",
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ControlAuditListResponse",
+        "type": "object"
+      },
+      "ControlAuditResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "title": "Actor",
             "type": "string"
           },
           "control_id": {
             "title": "Control Id",
             "type": "string"
           },
-          "control_identifier": {
-            "title": "Control Identifier",
+          "event_at": {
+            "title": "Event At",
             "type": "string"
           },
-          "control_metadata": {
-            "title": "Control Metadata",
-            "type": "object"
-          },
-          "control_name": {
-            "title": "Control Name",
+          "event_type": {
+            "title": "Event Type",
             "type": "string"
           },
-          "created_at": {
-            "title": "Created At",
+          "id": {
+            "title": "Id",
             "type": "string"
           },
-          "created_by": {
-            "title": "Created By",
-            "type": "string"
+          "new_state": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New State"
           },
-          "domain_id": {
-            "title": "Domain Id",
-            "type": "string"
+          "old_state": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old State"
           },
-          "evidence_requirements": {
-            "title": "Evidence Requirements",
-            "type": "object"
-          },
-          "framework_id": {
-            "title": "Framework Id",
-            "type": "string"
-          },
-          "maturity_mapping_metadata": {
-            "title": "Maturity Mapping Metadata",
-            "type": "object"
-          },
-          "scoring_compatibility_metadata": {
-            "title": "Scoring Compatibility Metadata",
-            "type": "object"
-          },
-          "tenant_id": {
+          "reason": {
             "anyOf": [
               {
                 "type": "string"
@@ -5862,26 +5920,352 @@
                 "type": "null"
               }
             ],
-            "title": "Tenant Id"
+            "title": "Reason"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
           }
         },
         "required": [
-          "control_id",
-          "framework_id",
-          "domain_id",
-          "control_identifier",
-          "control_name",
-          "control_description",
+          "id",
           "tenant_id",
-          "control_metadata",
-          "applicability_metadata",
-          "evidence_requirements",
-          "maturity_mapping_metadata",
-          "scoring_compatibility_metadata",
-          "created_by",
-          "created_at"
+          "control_id",
+          "event_type",
+          "actor",
+          "old_state",
+          "new_state",
+          "reason",
+          "event_at"
         ],
-        "title": "ControlResponse",
+        "title": "ControlAuditResponse",
+        "type": "object"
+      },
+      "ControlCriticality": {
+        "enum": [
+          "low",
+          "medium",
+          "high",
+          "critical"
+        ],
+        "title": "ControlCriticality",
+        "type": "string"
+      },
+      "ControlDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_controls": {
+            "title": "Active Controls",
+            "type": "integer"
+          },
+          "controls_due_for_review": {
+            "title": "Controls Due For Review",
+            "type": "integer"
+          },
+          "controls_with_expired_verification": {
+            "title": "Controls With Expired Verification",
+            "type": "integer"
+          },
+          "controls_without_evidence": {
+            "title": "Controls Without Evidence",
+            "type": "integer"
+          },
+          "controls_without_owner": {
+            "title": "Controls Without Owner",
+            "type": "integer"
+          },
+          "draft_controls": {
+            "title": "Draft Controls",
+            "type": "integer"
+          },
+          "high_criticality_unverified": {
+            "title": "High Criticality Unverified",
+            "type": "integer"
+          },
+          "retired_controls": {
+            "title": "Retired Controls",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_controls": {
+            "title": "Total Controls",
+            "type": "integer"
+          },
+          "unverified_controls": {
+            "title": "Unverified Controls",
+            "type": "integer"
+          },
+          "verified_controls": {
+            "title": "Verified Controls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_controls",
+          "active_controls",
+          "draft_controls",
+          "retired_controls",
+          "verified_controls",
+          "unverified_controls",
+          "controls_without_evidence",
+          "controls_without_owner",
+          "controls_with_expired_verification",
+          "controls_due_for_review",
+          "high_criticality_unverified"
+        ],
+        "title": "ControlDashboardResponse",
+        "type": "object"
+      },
+      "ControlEvidenceLinkListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ControlEvidenceLinkResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ControlEvidenceLinkListResponse",
+        "type": "object"
+      },
+      "ControlEvidenceLinkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "linked_at": {
+            "title": "Linked At",
+            "type": "string"
+          },
+          "linked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked By"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "control_id",
+          "evidence_id",
+          "evidence_type",
+          "linked_at",
+          "linked_by"
+        ],
+        "title": "ControlEvidenceLinkResponse",
+        "type": "object"
+      },
+      "ControlListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__control_registry__schemas__ControlResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ControlListResponse",
+        "type": "object"
+      },
+      "ControlReviewListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ControlReviewResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ControlReviewListResponse",
+        "type": "object"
+      },
+      "ControlReviewOutcome": {
+        "enum": [
+          "effective",
+          "partially_effective",
+          "ineffective",
+          "needs_update"
+        ],
+        "title": "ControlReviewOutcome",
+        "type": "string"
+      },
+      "ControlReviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "effectiveness_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness After"
+          },
+          "effectiveness_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness Before"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "review_date": {
+            "title": "Review Date",
+            "type": "string"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "control_id",
+          "reviewer",
+          "status",
+          "review_date",
+          "completed_at",
+          "outcome",
+          "notes",
+          "effectiveness_before",
+          "effectiveness_after",
+          "created_at",
+          "updated_at",
+          "schema_version"
+        ],
+        "title": "ControlReviewResponse",
         "type": "object"
       },
       "ControlScoreResponse": {
@@ -5936,6 +6320,31 @@
         ],
         "title": "ControlScoreResponse",
         "type": "object"
+      },
+      "ControlStatus": {
+        "enum": [
+          "draft",
+          "active",
+          "retired",
+          "suspended"
+        ],
+        "title": "ControlStatus",
+        "type": "string"
+      },
+      "ControlType": {
+        "enum": [
+          "technical",
+          "administrative",
+          "physical",
+          "process",
+          "human",
+          "detective",
+          "preventive",
+          "corrective",
+          "compensating"
+        ],
+        "title": "ControlType",
+        "type": "string"
       },
       "CoverageChangeRequest": {
         "properties": {
@@ -6432,62 +6841,72 @@
         "title": "CreateContractRequest",
         "type": "object"
       },
-      "CreateControlRequest": {
+      "CreateControlReviewRequest": {
         "additionalProperties": false,
         "properties": {
-          "applicability_metadata": {
-            "title": "Applicability Metadata",
-            "type": "object"
+          "effectiveness_after": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectivenessRating"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
-          "control_description": {
-            "default": "",
-            "title": "Control Description",
+          "effectiveness_before": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectivenessRating"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ControlReviewOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_date": {
+            "description": "ISO 8601 datetime",
+            "title": "Review Date",
             "type": "string"
           },
-          "control_identifier": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Control Identifier",
-            "type": "string"
-          },
-          "control_metadata": {
-            "title": "Control Metadata",
-            "type": "object"
-          },
-          "control_name": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Control Name",
-            "type": "string"
-          },
-          "domain_id": {
-            "title": "Domain Id",
-            "type": "string"
-          },
-          "evidence_requirements": {
-            "title": "Evidence Requirements",
-            "type": "object"
-          },
-          "framework_id": {
-            "title": "Framework Id",
-            "type": "string"
-          },
-          "maturity_mapping_metadata": {
-            "title": "Maturity Mapping Metadata",
-            "type": "object"
-          },
-          "scoring_compatibility_metadata": {
-            "title": "Scoring Compatibility Metadata",
-            "type": "object"
+          "reviewer": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer"
           }
         },
         "required": [
-          "framework_id",
-          "domain_id",
-          "control_identifier",
-          "control_name"
+          "review_date"
         ],
-        "title": "CreateControlRequest",
+        "title": "CreateControlReviewRequest",
         "type": "object"
       },
       "CreateDeploymentRequest": {
@@ -9577,6 +9996,17 @@
         "title": "EditCommentRequest",
         "type": "object"
       },
+      "EffectivenessRating": {
+        "enum": [
+          "unknown",
+          "ineffective",
+          "partially_effective",
+          "effective",
+          "highly_effective"
+        ],
+        "title": "EffectivenessRating",
+        "type": "string"
+      },
       "EngagementListResponse": {
         "properties": {
           "cursor": {
@@ -11962,6 +12392,20 @@
         "title": "FrameworkVersionResponse",
         "type": "object"
       },
+      "FreshnessSweepResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "expired": {
+            "title": "Expired",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expired"
+        ],
+        "title": "FreshnessSweepResponse",
+        "type": "object"
+      },
       "GapAnalysisResultResponse": {
         "properties": {
           "analysis_version": {
@@ -13836,6 +14280,68 @@
           "reason"
         ],
         "title": "LifecycleTransitionRequest",
+        "type": "object"
+      },
+      "LinkEvidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "evidence_type": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "linked_by": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked By"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "evidence_type"
+        ],
+        "title": "LinkEvidenceRequest",
+        "type": "object"
+      },
+      "LinkRiskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "risk_acceptance_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "risk_acceptance_id"
+        ],
+        "title": "LinkRiskRequest",
         "type": "object"
       },
       "ListGrantsResponse": {
@@ -19554,6 +20060,20 @@
         "title": "ReviewStatus",
         "type": "string"
       },
+      "ReviewSweepResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "marked_overdue": {
+            "title": "Marked Overdue",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "marked_overdue"
+        ],
+        "title": "ReviewSweepResponse",
+        "type": "object"
+      },
       "ReviewType": {
         "enum": [
           "periodic",
@@ -19796,6 +20316,74 @@
           "event_at"
         ],
         "title": "RiskAcceptanceAuditResponse",
+        "type": "object"
+      },
+      "RiskAcceptanceControlLinkListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RiskAcceptanceControlLinkResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "RiskAcceptanceControlLinkListResponse",
+        "type": "object"
+      },
+      "RiskAcceptanceControlLinkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "risk_acceptance_id": {
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "risk_acceptance_id",
+          "control_id",
+          "rationale",
+          "created_at"
+        ],
+        "title": "RiskAcceptanceControlLinkResponse",
         "type": "object"
       },
       "RiskAcceptanceCreateBody": {
@@ -23009,6 +23597,133 @@
         "title": "UpdateContractStatusRequest",
         "type": "object"
       },
+      "UpdateControlRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "business_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Unit"
+          },
+          "control_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ControlStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "control_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ControlType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "criticality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ControlCriticality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "effectiveness_rating": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectivenessRating"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Review At"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "owner_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Email"
+          },
+          "review_frequency_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Frequency Days"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdateControlRequest",
+        "type": "object"
+      },
       "UpdateItemStatusRequest": {
         "properties": {
           "actor": {
@@ -23965,6 +24680,24 @@
         "title": "VerificationBundleResponse",
         "type": "object"
       },
+      "VerifyControlRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "title": "VerifyControlRequest",
+        "type": "object"
+      },
       "VerifyReportResponse": {
         "properties": {
           "finding_count": {
@@ -24616,6 +25349,406 @@
           "slug"
         ],
         "title": "CreateEnvironmentRequest",
+        "type": "object"
+      },
+      "api__readiness_manager__ControlResponse": {
+        "properties": {
+          "applicability_metadata": {
+            "title": "Applicability Metadata",
+            "type": "object"
+          },
+          "control_description": {
+            "title": "Control Description",
+            "type": "string"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "control_identifier": {
+            "title": "Control Identifier",
+            "type": "string"
+          },
+          "control_metadata": {
+            "title": "Control Metadata",
+            "type": "object"
+          },
+          "control_name": {
+            "title": "Control Name",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "domain_id": {
+            "title": "Domain Id",
+            "type": "string"
+          },
+          "evidence_requirements": {
+            "title": "Evidence Requirements",
+            "type": "object"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "maturity_mapping_metadata": {
+            "title": "Maturity Mapping Metadata",
+            "type": "object"
+          },
+          "scoring_compatibility_metadata": {
+            "title": "Scoring Compatibility Metadata",
+            "type": "object"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "control_id",
+          "framework_id",
+          "domain_id",
+          "control_identifier",
+          "control_name",
+          "control_description",
+          "tenant_id",
+          "control_metadata",
+          "applicability_metadata",
+          "evidence_requirements",
+          "maturity_mapping_metadata",
+          "scoring_compatibility_metadata",
+          "created_by",
+          "created_at"
+        ],
+        "title": "ControlResponse",
+        "type": "object"
+      },
+      "api__readiness_manager__CreateControlRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "applicability_metadata": {
+            "title": "Applicability Metadata",
+            "type": "object"
+          },
+          "control_description": {
+            "default": "",
+            "title": "Control Description",
+            "type": "string"
+          },
+          "control_identifier": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Control Identifier",
+            "type": "string"
+          },
+          "control_metadata": {
+            "title": "Control Metadata",
+            "type": "object"
+          },
+          "control_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Control Name",
+            "type": "string"
+          },
+          "domain_id": {
+            "title": "Domain Id",
+            "type": "string"
+          },
+          "evidence_requirements": {
+            "title": "Evidence Requirements",
+            "type": "object"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "maturity_mapping_metadata": {
+            "title": "Maturity Mapping Metadata",
+            "type": "object"
+          },
+          "scoring_compatibility_metadata": {
+            "title": "Scoring Compatibility Metadata",
+            "type": "object"
+          }
+        },
+        "required": [
+          "framework_id",
+          "domain_id",
+          "control_identifier",
+          "control_name"
+        ],
+        "title": "CreateControlRequest",
+        "type": "object"
+      },
+      "services__control_registry__schemas__ControlResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "business_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Unit"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "control_status": {
+            "title": "Control Status",
+            "type": "string"
+          },
+          "control_type": {
+            "title": "Control Type",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "criticality": {
+            "title": "Criticality",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "effectiveness_rating": {
+            "title": "Effectiveness Rating",
+            "type": "string"
+          },
+          "freshness": {
+            "title": "Freshness",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Review At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "next_review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Review At"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "owner_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Email"
+          },
+          "review_frequency_days": {
+            "title": "Review Frequency Days",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verification_status": {
+            "title": "Verification Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "control_id",
+          "title",
+          "description",
+          "control_type",
+          "criticality",
+          "owner",
+          "owner_email",
+          "business_unit",
+          "effectiveness_rating",
+          "verification_status",
+          "control_status",
+          "review_frequency_days",
+          "next_review_at",
+          "last_review_at",
+          "last_verified_at",
+          "freshness",
+          "created_at",
+          "updated_at",
+          "schema_version"
+        ],
+        "title": "ControlResponse",
+        "type": "object"
+      },
+      "services__control_registry__schemas__CreateControlRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "business_unit": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Unit"
+          },
+          "control_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "control_type": {
+            "$ref": "#/components/schemas/ControlType",
+            "default": "technical"
+          },
+          "criticality": {
+            "$ref": "#/components/schemas/ControlCriticality",
+            "default": "medium"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "effectiveness_rating": {
+            "$ref": "#/components/schemas/EffectivenessRating",
+            "default": "unknown"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "owner_email": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Email"
+          },
+          "review_frequency_days": {
+            "default": 90,
+            "minimum": 1.0,
+            "title": "Review Frequency Days",
+            "type": "integer"
+          },
+          "title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CreateControlRequest",
         "type": "object"
       },
       "services__deployment__models__EnvironmentLifecycleState": {
@@ -35120,7 +36253,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateControlRequest"
+                "$ref": "#/components/schemas/api__readiness_manager__CreateControlRequest"
               }
             }
           },
@@ -35131,7 +36264,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ControlResponse"
+                  "$ref": "#/components/schemas/api__readiness_manager__ControlResponse"
                 }
               }
             },
@@ -35190,7 +36323,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ControlResponse"
+                  "$ref": "#/components/schemas/api__readiness_manager__ControlResponse"
                 }
               }
             },
@@ -35618,7 +36751,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/ControlResponse"
+                    "$ref": "#/components/schemas/api__readiness_manager__ControlResponse"
                   },
                   "title": "Response List Controls Control Plane Readiness Frameworks  Framework Id  Controls Get",
                   "type": "array"
@@ -39564,6 +40697,1233 @@
         "summary": "Get Timeline Route",
         "tags": [
           "control-tower-cgct"
+        ]
+      }
+    },
+    "/controls": {
+      "get": {
+        "operationId": "list_controls_controls_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "control_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Control Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "verification_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Verification Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Controls",
+        "tags": [
+          "control-registry"
+        ]
+      },
+      "post": {
+        "operationId": "create_control_controls_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__control_registry__schemas__CreateControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__control_registry__schemas__ControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Control",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/dashboard": {
+      "get": {
+        "operationId": "control_dashboard_controls_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Control Dashboard",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/maintenance/freshness": {
+      "post": {
+        "operationId": "expire_stale_verifications_controls_maintenance_freshness_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessSweepResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Expire Stale Verifications",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/maintenance/review-sweep": {
+      "post": {
+        "operationId": "mark_overdue_reviews_controls_maintenance_review_sweep_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewSweepResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark Overdue Reviews",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/{ctl_id}": {
+      "get": {
+        "operationId": "get_control_controls__ctl_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__control_registry__schemas__ControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Control",
+        "tags": [
+          "control-registry"
+        ]
+      },
+      "patch": {
+        "operationId": "update_control_controls__ctl_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__control_registry__schemas__ControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Control",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/{ctl_id}/audit": {
+      "get": {
+        "operationId": "get_audit_controls__ctl_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlAuditListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Audit",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/{ctl_id}/evidence": {
+      "get": {
+        "operationId": "list_evidence_controls__ctl_id__evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlEvidenceLinkListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evidence",
+        "tags": [
+          "control-registry"
+        ]
+      },
+      "post": {
+        "operationId": "link_evidence_controls__ctl_id__evidence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkEvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlEvidenceLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Evidence",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/{ctl_id}/reviews": {
+      "get": {
+        "operationId": "list_reviews_controls__ctl_id__reviews_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlReviewListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Reviews",
+        "tags": [
+          "control-registry"
+        ]
+      },
+      "post": {
+        "operationId": "create_review_controls__ctl_id__reviews_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateControlReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Review",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/{ctl_id}/reviews/{review_id}/complete": {
+      "post": {
+        "operationId": "complete_review_controls__ctl_id__reviews__review_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteControlReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Review",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/{ctl_id}/risk-links": {
+      "get": {
+        "operationId": "list_risk_links_controls__ctl_id__risk_links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAcceptanceControlLinkListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Risk Links",
+        "tags": [
+          "control-registry"
+        ]
+      },
+      "post": {
+        "operationId": "link_risk_controls__ctl_id__risk_links_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkRiskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAcceptanceControlLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Risk",
+        "tags": [
+          "control-registry"
+        ]
+      }
+    },
+    "/controls/{ctl_id}/verify": {
+      "post": {
+        "operationId": "verify_control_controls__ctl_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ctl_id",
+            "required": true,
+            "schema": {
+              "title": "Ctl Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__control_registry__schemas__ControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Control",
+        "tags": [
+          "control-registry"
         ]
       }
     },

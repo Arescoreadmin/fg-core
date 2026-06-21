@@ -67,6 +67,16 @@ class NotificationTrigger(str, Enum):
     RISK_REVIEW_COMPLETED = "risk_review_completed"
     RISK_EXPIRING = "risk_expiring"
     RISK_ESCALATED = "risk_escalated"
+    # PR 14.3 — Compensating Control Registry
+    CONTROL_CREATED = "control_created"
+    CONTROL_VERIFIED = "control_verified"
+    CONTROL_VERIFICATION_EXPIRED = "control_verification_expired"
+    CONTROL_REVIEW_DUE = "control_review_due"
+    CONTROL_REVIEW_OVERDUE = "control_review_overdue"
+    CONTROL_REVIEW_COMPLETED = "control_review_completed"
+    CONTROL_EFFECTIVENESS_CHANGED = "control_effectiveness_changed"
+    CONTROL_LINKED_TO_RISK = "control_linked_to_risk"
+    CONTROL_EVIDENCE_ADDED = "control_evidence_added"
 
 
 class NotificationPreference(str, Enum):

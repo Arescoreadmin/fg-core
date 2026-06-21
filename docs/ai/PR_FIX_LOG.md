@@ -15528,3 +15528,53 @@ Resolution order in `check_capability()` (fully backward-compatible):
 `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 13.7 entry added.
 
 `ROADMAP.md` — PR 13.7 row added.
+
+## PR 14.3 — Compensating Control Registry & Evidence Governance Foundation
+
+**Branch:** `feature/pr-14-3-control-registry`
+**Date:** 2026-06-20
+**Tests:** CCR-1–CCR-80 (80 tests); 5 additional adapter completeness tests in `TestAdapterRegistryPR143`
+
+**Summary:** Establishes the Compensating Control Registry bounded context (`services/control_registry/`) with full CRUD, governance rule enforcement (4 invariants: HIGHLY_EFFECTIVE requires VERIFIED, status transition FSM, evidence required for verification, RETIRED blocks risk links), evidence linkage, risk acceptance links, review lifecycle, freshness engine (FRESH/AGING/STALE/EXPIRED by ratio), maintenance sweeps, timeline emission, notification hooks, and an append-only audit trail.
+
+**New files:**
+
+`api/db_models_control_registry.py` — 5 ORM models: `ControlRegistry` (13 fields + 4 compound indexes), `ControlEvidenceLink` (append-only), `RiskAcceptanceControlLink`, `ControlReview` (pending/completed/overdue FSM), `ControlAudit` (append-only event log).
+
+`services/control_registry/__init__.py` — empty package marker.
+
+`services/control_registry/schemas.py` — `ControlType`, `ControlCriticality`, `VerificationStatus`, `EffectivenessRating`, `ControlStatus`, `ControlFreshness`, `ControlEventType` enums; `CONTROL_STATUS_TRANSITIONS` FSM dict; 8 domain exceptions (`ControlNotFound`, `ControlTenantViolation`, `ControlInvalidTransition`, `ControlConflict`, `ControlVerificationError`, `ControlReviewNotFound`, `ControlReviewConflict`, `ControlRegistryError`); all Pydantic request/response models.
+
+`services/control_registry/repository.py` — `fetch_control_owned()` (tenant-enforcing), `insert/fetch/count_controls`, `count_controls_without_evidence/owner/due_for_review`, `snapshot_control`, `insert/fetch/count_control_audits`, `insert/fetch/count_evidence_links`, `insert/fetch/count_risk_links`, `insert/fetch/count/fetch_review/fetch_overdue_pending_reviews`, `fetch_verified_controls_for_freshness`.
+
+`services/control_registry/engine.py` — `ControlRegistryEngine(db, tenant_id)`: `create_control`, `get_control`, `list_controls`, `update_control` (governance rule 1+2), `verify_control` (governance rule 3 — must have evidence), `link_evidence`, `get_evidence`, `link_risk` (governance rule 4 — blocks RETIRED), `get_risk_links`, `create_review`, `list_reviews`, `complete_review`, `get_audit`, `list_controls_dashboard`, `run_freshness_sweep`, `run_review_sweep`; freshness engine `_compute_freshness()` by elapsed/frequency ratio.
+
+`api/control_registry.py` — 16-route FastAPI router. Route ordering enforced: `/controls/dashboard` and `/controls/maintenance/*` defined before `/{ctl_id}` to prevent path-param shadowing.
+
+`tests/test_control_registry.py` — 80 tests CCR-1–CCR-80 covering: CRUD lifecycle, governance rule enforcement, tenant isolation, freshness classification (backdating `last_verified_at` directly in DB), evidence linkage, risk linkage, review lifecycle (create/complete/overdue), timeline emission, notification hooks, maintenance sweeps, audit trail, dashboard aggregates, authorization gates, metrics increments.
+
+**Modified files:**
+
+`services/governance/timeline/models.py` — `CONTROL_REGISTRY` added to `SourceType` enum.
+
+`services/governance/timeline/adapters.py` — `control_registry_to_timeline_event()` adapter function + `TIMELINE_ADAPTERS[SourceType.CONTROL_REGISTRY]` registration.
+
+`services/notifications/schemas.py` — 9 new `NotificationTrigger` values: `CONTROL_CREATED`, `CONTROL_VERIFIED`, `CONTROL_VERIFICATION_EXPIRED`, `CONTROL_REVIEW_DUE`, `CONTROL_REVIEW_OVERDUE`, `CONTROL_REVIEW_COMPLETED`, `CONTROL_EFFECTIVENESS_CHANGED`, `CONTROL_LINKED_TO_RISK`, `CONTROL_EVIDENCE_ADDED`.
+
+`api/observability/metrics.py` — 6 new Prometheus counters: `frostgate_controls_total`, `frostgate_controls_verified_total`, `frostgate_controls_expired_total`, `frostgate_control_reviews_total`, `frostgate_control_reviews_overdue_total`, `frostgate_control_evidence_links_total` (no tenant_id labels).
+
+`api/db.py` — `importlib.import_module("api.db_models_control_registry")` registration + SQLite auto-migration for 5 new tables and 11 indexes.
+
+`api/main.py` — `control_registry_router` included in both `build_app` locations.
+
+`services/plane_registry/registry.py` — `/controls` prefix added to `route_prefixes`.
+
+`tests/test_governance_timeline_adapters.py` — `TestAdapterRegistryPR143` class: 5 tests verifying CONTROL_REGISTRY adapter registration, callable output, event_id determinism, cross-tenant uniqueness, and all SourceType values covered.
+
+`contracts/core/openapi.json` + `schemas/api/openapi.json` + `CONTRACT.md` — contract authority refreshed (SHA256=`3bb0ad4ec80ac42af6417a2f810fb8e160522e8eef03e2511c3a8f35ae501ae1`).
+
+`tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — regenerated to reflect 16 new endpoints.
+
+`docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 14.3 entry added.
+
+`ROADMAP.md` — PR 14.3 row added.

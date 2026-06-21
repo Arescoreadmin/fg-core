@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 577,
+    "contract_count": 593,
     "contract_only": [],
-    "runtime_count": 743,
+    "runtime_count": 759,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "e2f05eb383047293364038ba346db44d72d58625f053bb4e52d0d5cf5d403983",
+  "governance_fingerprint": "b9d2b3c2a636a2b0ca58fb13a16b6aeee380c5762d0c5fb027496bf9cc197796",
   "planes": [
     {
       "compat": {
@@ -242,6 +242,7 @@
         "/control-plane",
         "/control-tower",
         "/control/testing",
+        "/controls",
         "/dev",
         "/enterprise-controls",
         "/exceptions",
@@ -553,6 +554,13 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
+      "GET /controls",
+      "GET /controls/dashboard",
+      "GET /controls/{ctl_id}",
+      "GET /controls/{ctl_id}/audit",
+      "GET /controls/{ctl_id}/evidence",
+      "GET /controls/{ctl_id}/reviews",
+      "GET /controls/{ctl_id}/risk-links",
       "GET /enterprise-controls/catalog",
       "GET /enterprise-controls/crosswalk",
       "GET /enterprise-controls/frameworks",
@@ -723,6 +731,7 @@
       "PATCH /admin/billing/meters/{meter_code}",
       "PATCH /admin/subscriptions/contracts/{contract_id}/status",
       "PATCH /admin/subscriptions/items/{item_id}/status",
+      "PATCH /controls/{ctl_id}",
       "PATCH /field-assessment/engagements/{engagement_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}",
       "PATCH /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
@@ -843,6 +852,14 @@
       "POST /control-plane/v2/terminal/execute",
       "POST /control-tower/posture/compute",
       "POST /control/testing/runs/register",
+      "POST /controls",
+      "POST /controls/maintenance/freshness",
+      "POST /controls/maintenance/review-sweep",
+      "POST /controls/{ctl_id}/evidence",
+      "POST /controls/{ctl_id}/reviews",
+      "POST /controls/{ctl_id}/reviews/{review_id}/complete",
+      "POST /controls/{ctl_id}/risk-links",
+      "POST /controls/{ctl_id}/verify",
       "POST /dev/emit",
       "POST /dev/seed",
       "POST /enterprise-controls/tenant-state",
