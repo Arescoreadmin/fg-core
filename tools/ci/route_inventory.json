@@ -11057,6 +11057,91 @@
         "auth",
         "tenant"
       ],
+      "file": "api/risk_governance.py",
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/approvals",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/approvals",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/approvals/{approval_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/approvals/{approval_id}/audit",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/approvals/{approval_id}/decision",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/risk_acceptance.py",
       "method": "GET",
       "path": "/risk-acceptances/{ra_id}/audit",
@@ -11065,6 +11150,108 @@
       "scoped": true,
       "scopes": [
         "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/escalations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/escalations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/reviews",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/reviews",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/reviews/{review_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/reviews/{review_id}/complete",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -11099,6 +11286,108 @@
       "scoped": true,
       "scopes": [
         "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "GET",
+      "path": "/risk-governance/dashboard",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "POST",
+      "path": "/risk-governance/maintenance/expire-approvals",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "POST",
+      "path": "/risk-governance/maintenance/mark-overdue-reviews",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "GET",
+      "path": "/risk-governance/policies",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "POST",
+      "path": "/risk-governance/policies",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/risk_governance.py",
+      "method": "GET",
+      "path": "/risk-governance/policies/{policy_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -12411,7 +12700,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-20T20:11:15.243055+00:00",
+  "generated_at": "2026-06-20T23:58:21.550563+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -543,3 +543,50 @@ RISK_INVALID_TRANSITIONS_TOTAL = Counter(
     "Total rejected risk acceptance status transition attempts",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 14.2 — Risk Governance Engine metrics
+# No tenant or user labels; bounded cardinality only.
+# ---------------------------------------------------------------------------
+
+RISK_REVIEWS_TOTAL = Counter(
+    "frostgate_risk_reviews_total",
+    "Total risk acceptance governance reviews created",
+    [],
+)
+
+RISK_REVIEWS_COMPLETED_TOTAL = Counter(
+    "frostgate_risk_reviews_completed_total",
+    "Total risk acceptance governance reviews completed or waived",
+    [],
+)
+
+RISK_REVIEWS_OVERDUE_TOTAL = Counter(
+    "frostgate_risk_reviews_overdue_total",
+    "Total risk acceptance governance reviews marked overdue",
+    [],
+)
+
+RISK_APPROVALS_TOTAL = Counter(
+    "frostgate_risk_approvals_total",
+    "Total risk acceptance approvals created",
+    [],
+)
+
+RISK_APPROVALS_GRANTED_TOTAL = Counter(
+    "frostgate_risk_approvals_granted_total",
+    "Total risk acceptance approvals granted",
+    [],
+)
+
+RISK_APPROVALS_REJECTED_TOTAL = Counter(
+    "frostgate_risk_approvals_rejected_total",
+    "Total risk acceptance approvals rejected",
+    [],
+)
+
+RISK_GOVERNANCE_ESCALATIONS_TOTAL = Counter(
+    "frostgate_risk_governance_escalations_total",
+    "Total risk governance escalations raised",
+    [],
+)

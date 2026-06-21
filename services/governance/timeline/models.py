@@ -24,6 +24,7 @@ class SourceType(str, Enum):
     EXPORT = "EXPORT"
     EVIDENCE = "EVIDENCE"
     FIELD_ASSESSMENT = "FIELD_ASSESSMENT"
+    RISK_GOVERNANCE = "RISK_GOVERNANCE"
 
 
 # ---------------------------------------------------------------------------

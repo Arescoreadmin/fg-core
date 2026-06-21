@@ -236,6 +236,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_risk_acceptance"
     )  # PR 14.1: Risk Acceptance Governance
+    importlib.import_module(
+        "api.db_models_risk_governance"
+    )  # PR 14.2: Risk Governance Engine
 
 
 def _get_base():
