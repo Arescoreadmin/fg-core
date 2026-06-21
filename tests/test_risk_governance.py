@@ -77,6 +77,8 @@ Coverage:
   RAA-73  Metrics increment: RISK_APPROVALS_TOTAL on create
   RAA-74  Metrics increment: RISK_REVIEWS_TOTAL on create
   RAA-75  Full governance workflow: create → approve → review → escalate
+  RAA-76  APPROVED → REVOKED transition succeeds via decision endpoint
+  RAA-77  Malformed review_due_at returns 422
 """
 
 from __future__ import annotations
@@ -472,9 +474,12 @@ def test_raa_12_decide_invalid_decision(client, db_session):
             f"/risk-acceptances/{ra_id}/approvals", json=_approval_body()
         ).json()
     )["id"]
+    # "expired" is a valid ApprovalStatus enum value but the guard blocks manual
+    # expiration via the decision endpoint — expirations only go through the
+    # maintenance sweep.
     r = client.post(
         f"/risk-acceptances/{ra_id}/approvals/{approval_id}/decision",
-        json={"decision": "revoked"},
+        json={"decision": "expired"},
     )
     assert r.status_code == 422
 
@@ -1613,3 +1618,41 @@ def test_raa_75_full_governance_workflow(client, db_session):
         client.get(f"/risk-acceptances/{ra_id}/approvals/{approval_id}/audit").json()
     )
     assert audit["total"] >= 2
+
+
+# ---------------------------------------------------------------------------
+# RAA-76: APPROVED → REVOKED transition succeeds
+# ---------------------------------------------------------------------------
+
+
+def test_raa_76_approved_to_revoked(client, db_session):
+    ra_id = _create_ra(client, db_session, _TENANT_A)
+    approval_id = _json(
+        client.post(
+            f"/risk-acceptances/{ra_id}/approvals", json=_approval_body()
+        ).json()
+    )["id"]
+    client.post(
+        f"/risk-acceptances/{ra_id}/approvals/{approval_id}/decision",
+        json={"decision": "approved"},
+    )
+    r = client.post(
+        f"/risk-acceptances/{ra_id}/approvals/{approval_id}/decision",
+        json={"decision": "revoked", "reason": "Authority rescinded."},
+    )
+    assert r.status_code == 200
+    assert _json(r.json())["status"] == "revoked"
+
+
+# ---------------------------------------------------------------------------
+# RAA-77: Malformed review_due_at returns 422
+# ---------------------------------------------------------------------------
+
+
+def test_raa_77_invalid_review_due_at(client, db_session):
+    ra_id = _create_ra(client, db_session, _TENANT_A)
+    r = client.post(
+        f"/risk-acceptances/{ra_id}/reviews",
+        json=_review_body(review_due_at="2026/06/01"),
+    )
+    assert r.status_code == 422

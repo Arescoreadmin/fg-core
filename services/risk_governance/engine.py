@@ -207,9 +207,9 @@ class GovernanceEngine:
         current = ApprovalStatus(approval.status)
         target = request.decision
 
-        if target not in {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED}:
+        if target not in {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.REVOKED}:
             raise ApprovalInvalidTransition(
-                f"decision must be APPROVED or REJECTED, got {target.value!r}."
+                f"decision must be APPROVED, REJECTED, or REVOKED, got {target.value!r}."
             )
         if current in TERMINAL_APPROVAL_STATUSES:
             raise ApprovalInvalidTransition(
@@ -224,25 +224,26 @@ class GovernanceEngine:
         now = _now()
         approval.status = target.value
         approval.updated_at = now
+        if request.comments:
+            approval.comments = request.comments
         if target == ApprovalStatus.APPROVED:
             approval.approved_at = now
-            if request.comments:
-                approval.comments = request.comments
             RISK_APPROVALS_GRANTED_TOTAL.inc()
-        else:
-            if request.comments:
-                approval.comments = request.comments
+        elif target == ApprovalStatus.REJECTED:
             RISK_APPROVALS_REJECTED_TOTAL.inc()
 
         self._db.flush()
 
+        if target == ApprovalStatus.APPROVED:
+            audit_event = GovernanceEventType.APPROVAL_GRANTED.value
+        elif target == ApprovalStatus.REJECTED:
+            audit_event = GovernanceEventType.APPROVAL_REJECTED.value
+        else:
+            audit_event = GovernanceEventType.APPROVAL_REVOKED.value
+
         self._emit_approval_audit(
             approval,
-            event_type=(
-                GovernanceEventType.APPROVAL_GRANTED.value
-                if target == ApprovalStatus.APPROVED
-                else GovernanceEventType.APPROVAL_REJECTED.value
-            ),
+            event_type=audit_event,
             actor=actor,
             old_state=old_state,
             new_state=snapshot_approval(approval),
@@ -250,30 +251,28 @@ class GovernanceEngine:
         )
         self._emit_timeline(
             risk_acceptance_id=risk_acceptance_id,
-            event_type=(
-                GovernanceEventType.APPROVAL_GRANTED.value
-                if target == ApprovalStatus.APPROVED
-                else GovernanceEventType.APPROVAL_REJECTED.value
-            ),
+            event_type=audit_event,
             payload={"approval_id": approval.id, "decision": target.value},
         )
 
         if notification_recipient:
-            trigger = (
-                NotificationTrigger.RISK_APPROVAL_GRANTED
-                if target == ApprovalStatus.APPROVED
-                else NotificationTrigger.RISK_APPROVAL_REJECTED
-            )
-            try:
-                ne = NotificationEngine(self._db, tenant_id=self._tenant_id)
-                ne.notify(
-                    task_id=risk_acceptance_id,
-                    trigger=trigger,
-                    recipient=notification_recipient,
-                    metadata={"approval_id": approval.id},
-                )
-            except Exception:
-                pass
+            if target == ApprovalStatus.APPROVED:
+                trigger = NotificationTrigger.RISK_APPROVAL_GRANTED
+            elif target == ApprovalStatus.REJECTED:
+                trigger = NotificationTrigger.RISK_APPROVAL_REJECTED
+            else:
+                trigger = None
+            if trigger is not None:
+                try:
+                    ne = NotificationEngine(self._db, tenant_id=self._tenant_id)
+                    ne.notify(
+                        task_id=risk_acceptance_id,
+                        trigger=trigger,
+                        recipient=notification_recipient,
+                        metadata={"approval_id": approval.id},
+                    )
+                except Exception:
+                    pass
 
         return self._approval_response(approval)
 

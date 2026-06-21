@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +177,19 @@ class CreateReviewRequest(BaseModel):
     reviewer: str | None = Field(default=None, max_length=255)
     review_due_at: str = Field(..., description="ISO 8601 datetime")
     review_notes: str | None = None
+
+    @field_validator("review_due_at")
+    @classmethod
+    def _validate_review_due_at(cls, v: str) -> str:
+        from datetime import datetime
+
+        try:
+            datetime.fromisoformat(v)
+        except ValueError:
+            raise ValueError(
+                f"review_due_at must be a valid ISO 8601 datetime, got {v!r}."
+            )
+        return v
 
 
 class CompleteReviewRequest(BaseModel):
