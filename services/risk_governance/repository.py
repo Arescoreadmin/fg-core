@@ -87,7 +87,12 @@ def fetch_approvals(
     )
     if status is not None:
         q = q.filter(RiskAcceptanceApproval.status == status)
-    return q.order_by(RiskAcceptanceApproval.created_at.asc()).limit(limit).offset(offset).all()
+    return (
+        q.order_by(RiskAcceptanceApproval.created_at.asc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
 
 
 def count_approvals(
@@ -137,8 +142,11 @@ def fetch_expired_pending_approvals(
 
     result = []
     for approval in candidates:
+        expires_at = approval.expires_at
+        if expires_at is None:
+            continue
         try:
-            exp_dt = datetime.fromisoformat(approval.expires_at)
+            exp_dt = datetime.fromisoformat(expires_at)
             if exp_dt.tzinfo is None:
                 exp_dt = exp_dt.replace(tzinfo=timezone.utc)
             if exp_dt <= now_dt:
@@ -193,9 +201,7 @@ def fetch_approval_audits(
     )
 
 
-def count_approval_audits(
-    db: Session, *, tenant_id: str, approval_id: str
-) -> int:
+def count_approval_audits(db: Session, *, tenant_id: str, approval_id: str) -> int:
     return (
         db.query(RiskAcceptanceApprovalAudit)
         .filter(
@@ -240,12 +246,15 @@ def fetch_policies(
     q = db.query(RiskApprovalPolicy).filter(RiskApprovalPolicy.tenant_id == tenant_id)
     if active_only:
         q = q.filter(RiskApprovalPolicy.active.is_(True))
-    return q.order_by(RiskApprovalPolicy.created_at.desc()).limit(limit).offset(offset).all()
+    return (
+        q.order_by(RiskApprovalPolicy.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
 
 
-def count_policies(
-    db: Session, *, tenant_id: str, active_only: bool = False
-) -> int:
+def count_policies(db: Session, *, tenant_id: str, active_only: bool = False) -> int:
     q = db.query(RiskApprovalPolicy).filter(RiskApprovalPolicy.tenant_id == tenant_id)
     if active_only:
         q = q.filter(RiskApprovalPolicy.active.is_(True))
@@ -262,9 +271,7 @@ def insert_review(db: Session, *, review: RiskReview) -> None:
     db.flush()
 
 
-def fetch_review(
-    db: Session, *, tenant_id: str, review_id: str
-) -> RiskReview | None:
+def fetch_review(db: Session, *, tenant_id: str, review_id: str) -> RiskReview | None:
     return (
         db.query(RiskReview)
         .filter(
@@ -388,7 +395,12 @@ def fetch_escalations(
     )
     if resolved is not None:
         q = q.filter(RiskGovernanceEscalation.resolved == resolved)
-    return q.order_by(RiskGovernanceEscalation.created_at.desc()).limit(limit).offset(offset).all()
+    return (
+        q.order_by(RiskGovernanceEscalation.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
 
 
 def count_escalations(

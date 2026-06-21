@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -30,9 +30,18 @@ class ApprovalStatus(str, Enum):
     REVOKED = "revoked"
 
 
-TERMINAL_APPROVAL_STATUSES = {ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED, ApprovalStatus.REVOKED}
+TERMINAL_APPROVAL_STATUSES = {
+    ApprovalStatus.REJECTED,
+    ApprovalStatus.EXPIRED,
+    ApprovalStatus.REVOKED,
+}
 APPROVAL_ALLOWED_TRANSITIONS: dict[ApprovalStatus, set[ApprovalStatus]] = {
-    ApprovalStatus.PENDING: {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.EXPIRED, ApprovalStatus.REVOKED},
+    ApprovalStatus.PENDING: {
+        ApprovalStatus.APPROVED,
+        ApprovalStatus.REJECTED,
+        ApprovalStatus.EXPIRED,
+        ApprovalStatus.REVOKED,
+    },
     ApprovalStatus.APPROVED: {ApprovalStatus.REVOKED},
     ApprovalStatus.REJECTED: set(),
     ApprovalStatus.EXPIRED: set(),
@@ -177,6 +186,19 @@ class CreateReviewRequest(BaseModel):
     reviewer: str | None = Field(default=None, max_length=255)
     review_due_at: str = Field(..., description="ISO 8601 datetime")
     review_notes: str | None = None
+
+    @field_validator("review_due_at")
+    @classmethod
+    def _validate_review_due_at(cls, v: str) -> str:
+        from datetime import datetime
+
+        try:
+            datetime.fromisoformat(v)
+        except ValueError:
+            raise ValueError(
+                f"review_due_at must be a valid ISO 8601 datetime, got {v!r}."
+            )
+        return v
 
 
 class CompleteReviewRequest(BaseModel):

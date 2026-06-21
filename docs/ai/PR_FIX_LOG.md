@@ -6,6 +6,20 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-20 — PR 14.2 bot fixes: P2 review from governance engine
+
+**Issues (bot review):**
+
+1. **APPROVED → REVOKED blocked** — `decide_approval()` guard only accepted `{APPROVED, REJECTED}`, making `APPROVED → REVOKED` impossible despite `APPROVAL_ALLOWED_TRANSITIONS` explicitly permitting it. An approved record could never be revoked.
+   - Fix: Expanded guard to `{APPROVED, REJECTED, REVOKED}`. Refactored status/metric/audit branching to handle REVOKED as distinct case: no metric increment, emits `APPROVAL_REVOKED` audit event type, skips notification trigger.
+
+2. **`review_due_at` accepted arbitrary strings** — No validation on `CreateReviewRequest.review_due_at`; malformed dates (e.g. `"2026/06/01"`) persisted with HTTP 201, and `fetch_overdue_pending_reviews()` silently skipped them on `ValueError`.
+   - Fix: Added `@field_validator("review_due_at")` calling `datetime.fromisoformat(v)` and raising `ValueError` for invalid inputs. Pydantic converts this to a 422 response.
+
+**Tests added:** RAA-76 (APPROVED→REVOKED succeeds), RAA-77 (malformed `review_due_at` → 422).
+
+---
+
 ### 2026-06-20 — PR 14.2 implementation: Risk Governance Engine
 
 **Summary:** Implemented PR 14.2 — Risk Governance Engine. New bounded context `services/risk_governance/` with formal approval lifecycle (single, multi-approver, committee, delegated, emergency), review scheduling, escalation signals, governance policies, and governance intelligence dashboard. 5 new ORM models, 75 tests passing. All plane registry, contract, and SOC artifact gates passed.
