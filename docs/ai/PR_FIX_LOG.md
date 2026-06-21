@@ -6,6 +6,12 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-20 — PR 14.2 implementation: Risk Governance Engine
+
+**Summary:** Implemented PR 14.2 — Risk Governance Engine. New bounded context `services/risk_governance/` with formal approval lifecycle (single, multi-approver, committee, delegated, emergency), review scheduling, escalation signals, governance policies, and governance intelligence dashboard. 5 new ORM models, 75 tests passing. All plane registry, contract, and SOC artifact gates passed.
+
+---
+
 ### 2026-06-20 — PR 14.1 guard fix: plane registry route ownership for /risk-acceptances
 
 **Issue:** Guard failed with `unexpected-route gap` for all 7 `/risk-acceptances` routes because the prefix was not registered in `services/plane_registry/registry.py`. The `control` plane's `route_prefixes` did not include `/risk-acceptances`, causing `check_plane_registry.py` to treat these routes as unowned.

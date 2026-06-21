@@ -2424,6 +2424,108 @@
         "title": "ApprovalActionBody",
         "type": "object"
       },
+      "ApprovalAuditListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalAuditResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ApprovalAuditListResponse",
+        "type": "object"
+      },
+      "ApprovalAuditResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "approval_id": {
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "event_at": {
+            "title": "Event At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "new_state": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New State"
+          },
+          "old_state": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old State"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "risk_acceptance_id": {
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "approval_id",
+          "risk_acceptance_id",
+          "event_type",
+          "actor",
+          "old_state",
+          "new_state",
+          "reason",
+          "event_at"
+        ],
+        "title": "ApprovalAuditResponse",
+        "type": "object"
+      },
       "ApprovalAuthority": {
         "enum": [
           "ciso",
@@ -2495,6 +2597,64 @@
         "title": "ApprovalCreateRequest",
         "type": "object"
       },
+      "ApprovalDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "comments": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comments"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/ApprovalStatus",
+            "description": "APPROVED or REJECTED"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "ApprovalDecisionRequest",
+        "type": "object"
+      },
+      "ApprovalListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ApprovalListResponse",
+        "type": "object"
+      },
       "ApprovalRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2532,6 +2692,193 @@
         ],
         "title": "ApprovalRequest",
         "type": "object"
+      },
+      "ApprovalResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_authority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Authority"
+          },
+          "approval_type": {
+            "title": "Approval Type",
+            "type": "string"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approver_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Email"
+          },
+          "approver_name": {
+            "title": "Approver Name",
+            "type": "string"
+          },
+          "approver_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Role"
+          },
+          "comments": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comments"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_required": {
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "quorum_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Position"
+          },
+          "quorum_required": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Required"
+          },
+          "risk_acceptance_id": {
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "risk_acceptance_id",
+          "approver_name",
+          "approver_email",
+          "approver_role",
+          "approval_authority",
+          "approval_type",
+          "status",
+          "comments",
+          "approved_at",
+          "expires_at",
+          "quorum_required",
+          "quorum_position",
+          "is_required",
+          "created_at",
+          "updated_at",
+          "schema_version"
+        ],
+        "title": "ApprovalResponse",
+        "type": "object"
+      },
+      "ApprovalStatus": {
+        "enum": [
+          "pending",
+          "approved",
+          "rejected",
+          "expired",
+          "revoked"
+        ],
+        "title": "ApprovalStatus",
+        "type": "string"
+      },
+      "ApprovalThreshold": {
+        "enum": [
+          "single",
+          "majority",
+          "unanimous",
+          "quorum"
+        ],
+        "title": "ApprovalThreshold",
+        "type": "string"
+      },
+      "ApprovalType": {
+        "enum": [
+          "single",
+          "multi_approver",
+          "committee",
+          "delegated",
+          "emergency"
+        ],
+        "title": "ApprovalType",
+        "type": "string"
       },
       "ApprovalVerifyRequest": {
         "properties": {
@@ -4742,6 +5089,53 @@
         "title": "CompensatingControlResponse",
         "type": "object"
       },
+      "CompleteReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Notes"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReviewStatus",
+            "description": "COMPLETED or WAIVED"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "CompleteReviewRequest",
+        "type": "object"
+      },
       "CompleteWorkflowRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5652,6 +6046,113 @@
           "monitoring_run_id"
         ],
         "title": "CreateAlertRunRequest",
+        "type": "object"
+      },
+      "CreateApprovalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_authority": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Authority"
+          },
+          "approval_type": {
+            "$ref": "#/components/schemas/ApprovalType",
+            "default": "single"
+          },
+          "approver_email": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Email"
+          },
+          "approver_name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Approver Name",
+            "type": "string"
+          },
+          "approver_role": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Role"
+          },
+          "comments": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comments"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "is_required": {
+            "default": true,
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "quorum_position": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Position"
+          },
+          "quorum_required": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Required"
+          }
+        },
+        "required": [
+          "approver_name"
+        ],
+        "title": "CreateApprovalRequest",
         "type": "object"
       },
       "CreateAssessmentRequest": {
@@ -6716,6 +7217,93 @@
         "title": "CreateOrgRequest",
         "type": "object"
       },
+      "CreatePolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_threshold": {
+            "$ref": "#/components/schemas/ApprovalThreshold",
+            "default": "single"
+          },
+          "auto_expire_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Expire Days"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "policy_name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Policy Name",
+            "type": "string"
+          },
+          "quorum_percentage": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Percentage"
+          },
+          "required_count": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Required Count",
+            "type": "integer"
+          },
+          "required_roles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Roles"
+          },
+          "review_frequency_days": {
+            "default": 90,
+            "minimum": 1.0,
+            "title": "Review Frequency Days",
+            "type": "integer"
+          },
+          "sequential": {
+            "default": false,
+            "title": "Sequential",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "policy_name"
+        ],
+        "title": "CreatePolicyRequest",
+        "type": "object"
+      },
       "CreatePortalGrantRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6863,6 +7451,48 @@
           "retention_days"
         ],
         "title": "CreateRetentionPolicyRequest",
+        "type": "object"
+      },
+      "CreateReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "review_due_at": {
+            "description": "ISO 8601 datetime",
+            "title": "Review Due At",
+            "type": "string"
+          },
+          "review_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Notes"
+          },
+          "review_type": {
+            "$ref": "#/components/schemas/ReviewType",
+            "default": "periodic"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer"
+          }
+        },
+        "required": [
+          "review_due_at"
+        ],
+        "title": "CreateReviewRequest",
         "type": "object"
       },
       "CreateRiskAcceptanceRequest": {
@@ -9384,6 +10014,141 @@
         "title": "EscalationItemResponse",
         "type": "object"
       },
+      "EscalationLevel": {
+        "enum": [
+          "info",
+          "warning",
+          "high",
+          "critical"
+        ],
+        "title": "EscalationLevel",
+        "type": "string"
+      },
+      "EscalationListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EscalationResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "EscalationListResponse",
+        "type": "object"
+      },
+      "EscalationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "boolean"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "risk_acceptance_id": {
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "risk_acceptance_id",
+          "trigger",
+          "level",
+          "details",
+          "actor",
+          "resolved",
+          "resolved_at",
+          "resolved_by",
+          "created_at",
+          "schema_version"
+        ],
+        "title": "EscalationResponse",
+        "type": "object"
+      },
+      "EscalationTrigger": {
+        "enum": [
+          "missed_review",
+          "missed_approval",
+          "expired_acceptance",
+          "expired_approval",
+          "critical_residual_risk",
+          "review_overdue",
+          "approval_rejected"
+        ],
+        "title": "EscalationTrigger",
+        "type": "string"
+      },
       "EvidenceAnchorCreate": {
         "additionalProperties": false,
         "properties": {
@@ -11605,6 +12370,50 @@
           "action_state"
         ],
         "title": "GovernanceActionBody",
+        "type": "object"
+      },
+      "GovernanceDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "expired_risks": {
+            "title": "Expired Risks",
+            "type": "integer"
+          },
+          "governance_debt_score": {
+            "title": "Governance Debt Score",
+            "type": "integer"
+          },
+          "overdue_reviews": {
+            "title": "Overdue Reviews",
+            "type": "integer"
+          },
+          "pending_approvals": {
+            "title": "Pending Approvals",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "unresolved_escalations": {
+            "title": "Unresolved Escalations",
+            "type": "integer"
+          },
+          "upcoming_expirations_30d": {
+            "title": "Upcoming Expirations 30D",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "pending_approvals",
+          "overdue_reviews",
+          "unresolved_escalations",
+          "expired_risks",
+          "upcoming_expirations_30d",
+          "governance_debt_score"
+        ],
+        "title": "GovernanceDashboardResponse",
         "type": "object"
       },
       "GovernanceExceptionCreateBody": {
@@ -15245,6 +16054,28 @@
         "title": "PolicyExceptionResponse",
         "type": "object"
       },
+      "PolicyListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PolicyListResponse",
+        "type": "object"
+      },
       "PolicyPinRequest": {
         "additionalProperties": false,
         "properties": {
@@ -15273,6 +16104,121 @@
           "version_hash"
         ],
         "title": "PolicyPinRequest",
+        "type": "object"
+      },
+      "PolicyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "approval_threshold": {
+            "title": "Approval Threshold",
+            "type": "string"
+          },
+          "auto_expire_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Expire Days"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "policy_name": {
+            "title": "Policy Name",
+            "type": "string"
+          },
+          "quorum_percentage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Percentage"
+          },
+          "required_count": {
+            "title": "Required Count",
+            "type": "integer"
+          },
+          "required_roles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Roles"
+          },
+          "review_frequency_days": {
+            "title": "Review Frequency Days",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "sequential": {
+            "title": "Sequential",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "policy_name",
+          "description",
+          "active",
+          "approval_threshold",
+          "required_roles",
+          "required_count",
+          "quorum_percentage",
+          "auto_expire_days",
+          "review_frequency_days",
+          "sequential",
+          "created_at",
+          "updated_at",
+          "schema_version"
+        ],
+        "title": "PolicyResponse",
         "type": "object"
       },
       "PolicyRollbackRequest": {
@@ -18451,6 +19397,38 @@
         "title": "RetryWorkflowRequest",
         "type": "object"
       },
+      "ReviewListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ReviewListResponse",
+        "type": "object"
+      },
+      "ReviewOutcome": {
+        "enum": [
+          "continue",
+          "revoke",
+          "modify",
+          "escalate"
+        ],
+        "title": "ReviewOutcome",
+        "type": "string"
+      },
       "ReviewRequest": {
         "properties": {
           "reviewed_by": {
@@ -18463,6 +19441,128 @@
         ],
         "title": "ReviewRequest",
         "type": "object"
+      },
+      "ReviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "review_completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Completed At"
+          },
+          "review_due_at": {
+            "title": "Review Due At",
+            "type": "string"
+          },
+          "review_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Notes"
+          },
+          "review_type": {
+            "title": "Review Type",
+            "type": "string"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer"
+          },
+          "risk_acceptance_id": {
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "risk_acceptance_id",
+          "review_type",
+          "reviewer",
+          "status",
+          "review_due_at",
+          "review_completed_at",
+          "review_notes",
+          "outcome",
+          "created_at",
+          "updated_at",
+          "schema_version"
+        ],
+        "title": "ReviewResponse",
+        "type": "object"
+      },
+      "ReviewStatus": {
+        "enum": [
+          "pending",
+          "completed",
+          "overdue",
+          "waived"
+        ],
+        "title": "ReviewStatus",
+        "type": "string"
+      },
+      "ReviewType": {
+        "enum": [
+          "periodic",
+          "triggered",
+          "emergency",
+          "compliance"
+        ],
+        "title": "ReviewType",
+        "type": "string"
       },
       "RevokeGrantResponse": {
         "properties": {
@@ -60939,6 +62039,435 @@
         ]
       }
     },
+    "/risk-acceptances/{ra_id}/approvals": {
+      "get": {
+        "operationId": "list_approvals_risk_acceptances__ra_id__approvals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Approvals",
+        "tags": [
+          "risk-governance"
+        ]
+      },
+      "post": {
+        "operationId": "create_approval_risk_acceptances__ra_id__approvals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Approval",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}/approvals/{approval_id}": {
+      "get": {
+        "operationId": "get_approval_risk_acceptances__ra_id__approvals__approval_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Approval",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}/approvals/{approval_id}/audit": {
+      "get": {
+        "operationId": "get_approval_audit_risk_acceptances__ra_id__approvals__approval_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalAuditListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Approval Audit",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}/approvals/{approval_id}/decision": {
+      "post": {
+        "operationId": "decide_approval_risk_acceptances__ra_id__approvals__approval_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Approval",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
     "/risk-acceptances/{ra_id}/audit": {
       "get": {
         "operationId": "get_risk_acceptance_audit_risk_acceptances__ra_id__audit_get",
@@ -61017,6 +62546,530 @@
         "summary": "Get Risk Acceptance Audit",
         "tags": [
           "risk-acceptance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}/escalations": {
+      "get": {
+        "operationId": "list_escalations_risk_acceptances__ra_id__escalations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resolved",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolved"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EscalationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Escalations",
+        "tags": [
+          "risk-governance"
+        ]
+      },
+      "post": {
+        "operationId": "create_escalation_route_risk_acceptances__ra_id__escalations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trigger",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EscalationTrigger"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EscalationLevel"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EscalationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Escalation Route",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}/reviews": {
+      "get": {
+        "operationId": "list_reviews_risk_acceptances__ra_id__reviews_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Reviews",
+        "tags": [
+          "risk-governance"
+        ]
+      },
+      "post": {
+        "operationId": "create_review_risk_acceptances__ra_id__reviews_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Review",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}/reviews/{review_id}": {
+      "get": {
+        "operationId": "get_review_risk_acceptances__ra_id__reviews__review_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-acceptances/{ra_id}/reviews/{review_id}/complete": {
+      "post": {
+        "operationId": "complete_review_risk_acceptances__ra_id__reviews__review_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ra_id",
+            "required": true,
+            "schema": {
+              "title": "Ra Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notify_recipient",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notify Recipient"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Review",
+        "tags": [
+          "risk-governance"
         ]
       }
     },
@@ -61157,6 +63210,352 @@
         "summary": "Transition Risk Acceptance",
         "tags": [
           "risk-acceptance"
+        ]
+      }
+    },
+    "/risk-governance/dashboard": {
+      "get": {
+        "operationId": "governance_dashboard_risk_governance_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Governance Dashboard",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-governance/maintenance/expire-approvals": {
+      "post": {
+        "operationId": "expire_overdue_approvals_risk_governance_maintenance_expire_approvals_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Expire Overdue Approvals Risk Governance Maintenance Expire Approvals Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Expire Overdue Approvals",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-governance/maintenance/mark-overdue-reviews": {
+      "post": {
+        "operationId": "mark_overdue_reviews_risk_governance_maintenance_mark_overdue_reviews_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Mark Overdue Reviews Risk Governance Maintenance Mark Overdue Reviews Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark Overdue Reviews",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-governance/policies": {
+      "get": {
+        "operationId": "list_policies_risk_governance_policies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Policies",
+        "tags": [
+          "risk-governance"
+        ]
+      },
+      "post": {
+        "operationId": "create_policy_risk_governance_policies_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Policy",
+        "tags": [
+          "risk-governance"
+        ]
+      }
+    },
+    "/risk-governance/policies/{policy_id}": {
+      "get": {
+        "operationId": "get_policy_risk_governance_policies__policy_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "risk-governance"
         ]
       }
     },

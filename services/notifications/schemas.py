@@ -58,6 +58,15 @@ class NotificationTrigger(str, Enum):
     RISK_EXPIRING_SOON = "risk_expiring_soon"
     RISK_EXPIRED = "risk_expired"
     RISK_REVOKED = "risk_revoked"
+    # PR 14.2 — Risk Governance Engine
+    RISK_APPROVAL_PENDING = "risk_approval_pending"
+    RISK_APPROVAL_GRANTED = "risk_approval_granted"
+    RISK_APPROVAL_REJECTED = "risk_approval_rejected"
+    RISK_REVIEW_DUE = "risk_review_due"
+    RISK_REVIEW_OVERDUE = "risk_review_overdue"
+    RISK_REVIEW_COMPLETED = "risk_review_completed"
+    RISK_EXPIRING = "risk_expiring"
+    RISK_ESCALATED = "risk_escalated"
 
 
 class NotificationPreference(str, Enum):

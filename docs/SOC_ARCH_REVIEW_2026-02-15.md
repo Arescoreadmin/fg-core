@@ -2821,3 +2821,35 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `make contract-authority-refresh`: OK
 - `PYTHONPATH=. pytest tests/test_risk_acceptance.py`: 58/58 passed
 - `make fg-fast`: All checks passed
+
+---
+
+## 2026-06-20 — PR 14.2 Risk Governance Engine (plane registry + route inventory)
+
+**Reviewer:** Codex | **Classification:** SOC-P2 (new tenant-scoped governance routes registered under control plane; no auth or middleware changes)
+
+**Change:** PR 14.2 added a new `services/risk_governance/` bounded context implementing formal approval lifecycle, multi-approver governance, review scheduling, escalation signals, governance policies, and governance intelligence dashboard APIs. All routes are tenant-scoped via `require_bound_tenant()` and gated on `governance:read` or `governance:write` scopes. No auth middleware, OPA policy, or `.github/workflows/` files were modified.
+
+`/risk-governance` was added to the `control` plane's `route_prefixes` in `services/plane_registry/registry.py`. `RISK_GOVERNANCE` source type was added to `services/governance/timeline/models.py` (additive, non-breaking enum change).
+
+The following `tools/ci/` files were regenerated as a routine consequence:
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `route_inventory_summary.json`, `topology.sha256`
+
+### Files Changed
+
+- `api/db_models_risk_governance.py` — 5 new ORM models
+- `api/risk_governance.py` — new FastAPI routes, all tenant-scoped
+- `services/risk_governance/` — engine, repository, schemas (new bounded context)
+- `services/plane_registry/registry.py` — `/risk-governance` added to control plane route_prefixes
+- `services/governance/timeline/models.py` — RISK_GOVERNANCE source type added (additive)
+- `services/notifications/schemas.py` — 8 new notification triggers added (additive)
+- `api/observability/metrics.py` — 7 new Prometheus counters (bounded cardinality; no tenant labels)
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `route_inventory_summary.json`, `topology.sha256` — regenerated via `make route-inventory-generate`
+
+### Validation
+
+- `make check_plane_registry`: OK (no unexpected-route gaps)
+- `make route-inventory-generate`: OK
+- `make contract-authority-refresh`: OK
+- `PYTHONPATH=. pytest tests/test_risk_governance.py`: 75/75 passed
+- `make fg-fast`: All checks passed
