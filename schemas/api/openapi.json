@@ -46231,6 +46231,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -46288,6 +46294,12 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -46615,6 +46627,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -46664,6 +46682,12 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -47000,6 +47024,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -47066,6 +47096,12 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -47165,6 +47201,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -47233,6 +47275,12 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -47303,6 +47351,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -47369,6 +47423,12 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -47437,6 +47497,12 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -47513,6 +47579,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -47580,6 +47652,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -47638,6 +47716,12 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -47707,6 +47791,12 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
           },
           "422": {
             "content": {

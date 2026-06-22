@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 614,
+    "contract_count": 629,
     "contract_only": [],
-    "runtime_count": 780,
+    "runtime_count": 795,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "cade3573275e0accf8d21fbd725bde666869d1b3dc6c7403e614615f02732c01",
+  "governance_fingerprint": "f86ebc51e7905890a980e16744840b0d165d4e415df93c9fda96b9ee2c764cbb",
   "planes": [
     {
       "compat": {
@@ -1041,29 +1041,44 @@
       "POST /ingest/assessment/{assessment_id}/submit"
     ],
     "evidence": [
+      "DELETE /evidence/{ev_id}/ownership/{ownership_id}",
       "GET /approvals/{subject_type}/{subject_id}",
       "GET /audit/exam-snapshot",
       "GET /audit/exams",
       "GET /audit/exams/{exam_id}/export",
       "GET /audit/export",
       "GET /audit/sessions",
+      "GET /evidence",
       "GET /evidence/anchors",
       "GET /evidence/bundles/{bundle_id}",
+      "GET /evidence/by-entity/{entity_type}/{entity_id}",
+      "GET /evidence/dashboard",
       "GET /evidence/runs",
       "GET /evidence/runs/{run_id}",
+      "GET /evidence/{ev_id}",
+      "GET /evidence/{ev_id}/audit",
+      "GET /evidence/{ev_id}/ownership",
+      "GET /evidence/{ev_id}/relationships",
+      "GET /evidence/{ev_id}/trust",
       "GET /forensics/audit_trail/{event_id}",
       "GET /forensics/chain/verify",
       "GET /forensics/snapshot/{event_id}",
+      "PATCH /evidence/{ev_id}",
       "POST /approvals",
       "POST /approvals/verify",
       "POST /audit/cycle/run",
       "POST /audit/exams/run",
       "POST /audit/exams/{exam_id}/reproduce",
       "POST /audit/reproduce",
+      "POST /evidence",
       "POST /evidence/anchors",
       "POST /evidence/bundles",
       "POST /evidence/runs/register",
-      "POST /evidence/verify"
+      "POST /evidence/verify",
+      "POST /evidence/{ev_id}/lifecycle",
+      "POST /evidence/{ev_id}/ownership",
+      "POST /evidence/{ev_id}/relationships",
+      "POST /evidence/{ev_id}/verify"
     ],
     "rbac": [
       "DELETE /rbac/assignments/{key_id}",

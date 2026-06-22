@@ -84,6 +84,7 @@ def _actor_type(request: Request) -> str:
     "/evidence/dashboard",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=EvidenceDashboardResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def evidence_dashboard(request: Request) -> EvidenceDashboardResponse:
     """Evidence posture dashboard for the tenant."""
@@ -103,6 +104,7 @@ def evidence_dashboard(request: Request) -> EvidenceDashboardResponse:
     "/evidence/by-entity/{entity_type}/{entity_id}",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=EvidenceRelationshipListResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def list_evidence_for_entity(
     entity_type: str,
@@ -127,6 +129,7 @@ def list_evidence_for_entity(
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=EvidenceResponse,
     status_code=201,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def create_evidence(
     req: CreateEvidenceRequest,
@@ -156,6 +159,7 @@ def create_evidence(
     "/evidence",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=EvidenceListResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def list_evidence(
     request: Request,
@@ -192,6 +196,7 @@ def list_evidence(
     "/evidence/{ev_id}",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=EvidenceResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def get_evidence(ev_id: str, request: Request) -> EvidenceResponse:
     """Get a single evidence record by ID."""
@@ -214,6 +219,7 @@ def get_evidence(ev_id: str, request: Request) -> EvidenceResponse:
     "/evidence/{ev_id}",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=EvidenceResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def update_evidence_metadata(
     ev_id: str,
@@ -246,6 +252,7 @@ def update_evidence_metadata(
     "/evidence/{ev_id}/lifecycle",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=EvidenceResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def transition_lifecycle(
     ev_id: str,
@@ -292,6 +299,7 @@ def transition_lifecycle(
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=EvidenceOwnershipResponse,
     status_code=201,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def assign_ownership(
     ev_id: str,
@@ -317,6 +325,7 @@ def assign_ownership(
     "/evidence/{ev_id}/ownership/{ownership_id}",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=EvidenceOwnershipResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def revoke_ownership(
     ev_id: str,
@@ -347,6 +356,7 @@ def revoke_ownership(
     "/evidence/{ev_id}/ownership",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=EvidenceOwnershipListResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def list_ownership(
     ev_id: str,
@@ -373,6 +383,7 @@ def list_ownership(
     "/evidence/{ev_id}/verify",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=EvidenceTrustHistoryResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def verify_evidence(
     ev_id: str,
@@ -400,6 +411,7 @@ def verify_evidence(
     "/evidence/{ev_id}/trust",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=EvidenceTrustHistoryResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def query_trust_state(ev_id: str, request: Request) -> EvidenceTrustHistoryResponse:
     """Query the trust state and full trust event history for an evidence record."""
@@ -423,6 +435,7 @@ def query_trust_state(ev_id: str, request: Request) -> EvidenceTrustHistoryRespo
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=EvidenceRelationshipResponse,
     status_code=201,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def link_relationship(
     ev_id: str,
@@ -450,6 +463,7 @@ def link_relationship(
     "/evidence/{ev_id}/relationships",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=EvidenceRelationshipListResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def list_relationships(
     ev_id: str,
@@ -476,6 +490,7 @@ def list_relationships(
     "/evidence/{ev_id}/audit",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=EvidenceAuditListResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
 def list_audit_events(
     ev_id: str,
