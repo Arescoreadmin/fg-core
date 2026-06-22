@@ -77,6 +77,8 @@ class NotificationTrigger(str, Enum):
     CONTROL_EFFECTIVENESS_CHANGED = "control_effectiveness_changed"
     CONTROL_LINKED_TO_RISK = "control_linked_to_risk"
     CONTROL_EVIDENCE_ADDED = "control_evidence_added"
+    # PR 14.4 — Governance Portal
+    PORTAL_ACK_CREATED = "portal_ack_created"
 
 
 class NotificationPreference(str, Enum):

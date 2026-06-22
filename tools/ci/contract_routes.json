@@ -2948,6 +2948,72 @@
     },
     {
       "method": "GET",
+      "path": "/portal/governance/acknowledgements",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/governance/acknowledgements",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/acknowledgements/{ack_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/controls",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/controls/{ctl_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/evidence/{evidence_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/risks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/risks/{risk_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/portal/grants",
       "scopes": [],
       "source": "contract"
@@ -3559,7 +3625,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-21T15:54:01.609673+00:00",
+  "generated_at": "2026-06-22T00:13:16.805383+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
