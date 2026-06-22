@@ -631,3 +631,44 @@ CONTROLS_EVIDENCE_LINKS_TOTAL = Counter(
     "Total evidence records linked to controls",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 14.4 — Governance Portal metrics
+# No tenant or user labels; bounded cardinality only.
+# ---------------------------------------------------------------------------
+
+GOVERNANCE_PORTAL_VIEWS_TOTAL = Counter(
+    "frostgate_governance_portal_views_total",
+    "Total governance portal dashboard views",
+    [],
+)
+
+GOVERNANCE_PORTAL_RISKS_TOTAL = Counter(
+    "frostgate_governance_portal_risks_total",
+    "Total governance portal risk read operations",
+    [],
+)
+
+GOVERNANCE_PORTAL_CONTROLS_TOTAL = Counter(
+    "frostgate_governance_portal_controls_total",
+    "Total governance portal control read operations",
+    [],
+)
+
+GOVERNANCE_PORTAL_EVIDENCE_TOTAL = Counter(
+    "frostgate_governance_portal_evidence_total",
+    "Total governance portal evidence read operations",
+    [],
+)
+
+GOVERNANCE_PORTAL_ACKNOWLEDGEMENTS_TOTAL = Counter(
+    "frostgate_governance_portal_acknowledgements_total",
+    "Total governance portal acknowledgements created",
+    [],
+)
+
+GOVERNANCE_PORTAL_EXPORTS_TOTAL = Counter(
+    "frostgate_governance_portal_exports_total",
+    "Total governance portal export operations",
+    [],
+)

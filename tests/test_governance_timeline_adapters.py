@@ -1482,3 +1482,72 @@ class TestAdapterRegistryPR143:
     def test_all_source_types_registered_including_control_registry(self):
         for source_type in SourceType:
             assert source_type in TIMELINE_ADAPTERS, f"{source_type} not in registry"
+
+
+# ---------------------------------------------------------------------------
+# TestAdapterRegistryPR144 — GOVERNANCE_PORTAL source type
+# ---------------------------------------------------------------------------
+
+
+class TestAdapterRegistryPR144:
+    def test_governance_portal_registered(self):
+        assert SourceType.GOVERNANCE_PORTAL in TIMELINE_ADAPTERS
+
+    def test_governance_portal_adapter_callable(self):
+        from services.governance.timeline.adapters import (
+            governance_portal_to_timeline_event,
+        )
+
+        evt = governance_portal_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="ack-abc123",
+            event_type="portal.acknowledgement_created",
+            occurred_at="2026-06-21T00:00:00.000Z",
+            payload={"entity_type": "accepted_risk", "entity_id": "risk-001"},
+        )
+        assert evt.source_type == SourceType.GOVERNANCE_PORTAL
+        assert evt.source_id == "ack-abc123"
+        assert evt.event_type == "portal.acknowledgement_created"
+        assert evt.tenant_id == "tenant-a"
+
+    def test_governance_portal_event_id_deterministic(self):
+        from services.governance.timeline.adapters import (
+            governance_portal_to_timeline_event,
+        )
+
+        e1 = governance_portal_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="ack-001",
+            event_type="portal.acknowledgement_created",
+            occurred_at="2026-06-21T00:00:00.000Z",
+        )
+        e2 = governance_portal_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="ack-001",
+            event_type="portal.acknowledgement_created",
+            occurred_at="2026-06-21T00:00:00.000Z",
+        )
+        assert e1.event_id == e2.event_id
+
+    def test_governance_portal_event_id_differs_across_tenants(self):
+        from services.governance.timeline.adapters import (
+            governance_portal_to_timeline_event,
+        )
+
+        ea = governance_portal_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="ack-001",
+            event_type="portal.acknowledgement_created",
+            occurred_at="2026-06-21T00:00:00.000Z",
+        )
+        eb = governance_portal_to_timeline_event(
+            tenant_id="tenant-b",
+            source_id="ack-001",
+            event_type="portal.acknowledgement_created",
+            occurred_at="2026-06-21T00:00:00.000Z",
+        )
+        assert ea.event_id != eb.event_id
+
+    def test_all_source_types_registered_including_governance_portal(self):
+        for source_type in SourceType:
+            assert source_type in TIMELINE_ADAPTERS, f"{source_type} not in registry"

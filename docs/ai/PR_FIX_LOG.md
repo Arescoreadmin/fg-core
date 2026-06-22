@@ -15610,3 +15610,100 @@ Resolution order in `check_capability()` (fully backward-compatible):
 - `pytest -m "smoke or contract or security" --collect-only`: 398/10503 selected (unchanged).
 
 **Remaining risk:** If fg-fast grows beyond ~327 tests of similar weight (327 × 0.7s avg × 2.2 = 720s), CI will timeout again. Mitigation: monitor `artifacts/ci/fg_fast_duration.json` in CI artifacts after each PR; the warn threshold at 660s gives early signal before breach.
+
+---
+
+## PR 14.4 — Governance Portal Integration & Client Trust Layer
+
+**Branch:** `feature/pr-14-4-governance-portal`
+**Date:** 2026-06-22
+
+### Fix 1: Risk creation 422 — extra field `status`
+
+**Symptom:** `POST /risks` returned 422 in tests when `_make_risk` included `status` in request body.
+
+**Root cause:** `CreateRiskAcceptanceRequest` uses `model_config = ConfigDict(extra="forbid")`. The `status` field is server-assigned on creation, not a valid input field.
+
+**Fix:** Removed `status` from the base body dict in `_make_risk()`.
+
+---
+
+### Fix 2: Risk creation 422 — `assessment_id not found`
+
+**Symptom:** `POST /risks` returned 422 with detail `assessment_id not found` even with valid UUID.
+
+**Root cause:** `RiskAcceptanceEngine.create_risk_acceptance()` calls `assert_assessment_exists()` and `assert_finding_belongs_to_tenant()` — both require real DB rows. Tests were passing a fabricated UUID with no corresponding `FaEngagement` or `FaNormalizedFinding` row.
+
+**Fix:** Added `_new_engagement(db, tenant_id)` and `_new_finding(db, tenant_id, engagement_id)` DB helper functions to the test file. Updated `_make_risk(client, db, tenant_id)` signature to require `db` session. All tests that call `_make_risk` now take the `db_session` fixture. `FaEngagement` is in `api.db_models_field_assessment`, not `api.db_models`.
+
+---
+
+### Fix 3: Control verify 422 — extra fields
+
+**Symptom:** `POST /controls/{ctl_id}/verify` returned 422 when test body included `verified_by` and `verification_method`.
+
+**Root cause:** `VerifyControlRequest` only has a `notes` field (`extra="forbid"`).
+
+**Fix:** Changed verify call to `{"notes": "Verified by portal test."}`.
+
+---
+
+### Fix 4: Evidence freshness AGING state unreachable
+
+**Symptom:** Tests for `EvidenceFreshnessState.AGING` returned `EXPIRING_SOON` instead.
+
+**Root cause:** Original implementation used a fixed `_AGING_DAYS = 60` threshold. For a 90-day `review_frequency_days` cycle: elapsed ≥ 60 → remaining = 30 → meets `remaining_days <= 30` EXPIRING_SOON check first. AGING was unreachable because the fixed threshold coincided with the expiring-soon window.
+
+**Fix:** Replaced fixed threshold with proportional: `aging_threshold = freq // 2` (= 45 for 90-day cycle). For default 90-day cycle: FRESH (0–44 days elapsed), AGING (45–59 days), EXPIRING_SOON (60–89 days, i.e. remaining ≤ 30), EXPIRED (≥ 90 days or no `last_verified_at`). All 4 states are now reachable for any `review_frequency_days` value.
+
+**Fix to test date constants:** `_AGING_VERIFIED` was `"2026-04-15"` (~67 days from 2026-06-22 → hits EXPIRING_SOON). Corrected to `"2026-05-02"` (~50 days → hits AGING with aging_threshold=45).
+
+---
+
+### Fix 5: Ruff lint failures
+
+**Symptom:** `make format-check` / `make lint` failed with F401 unused import warnings.
+
+**Root cause:** Auto-import of `AcknowledgementEntityType`, `PortalAcknowledgementNotFound` in `engine.py` and `typing.Any` in `repository.py` and `schemas.py` were included speculatively but not used.
+
+**Fix:** `ruff --fix` auto-removed the unused imports in all three files.
+
+---
+
+### Fix 6: Duplicate `db_session` fixture
+
+**Symptom:** Pytest error `fixture 'db_session' defined twice` in `test_governance_portal.py`.
+
+**Root cause:** Test file had two definitions of `db_session` — one at the top and a second accidentally included during copy-paste scaffold.
+
+**Fix:** Removed the duplicate definition, keeping only the first.
+
+---
+
+### Fix 7: Contract authority mismatch after adding 11 routes
+
+**Symptom:** `make fg-fast` failed at `contract-authority` gate with SHA256 mismatch.
+
+**Root cause:** `BLUEPRINT_STAGED.md` SHA256 reflects the pre-PR 14.4 OpenAPI spec. Adding 11 new routes to `api/governance_portal.py` changes the spec without re-running `make contract-authority-refresh`.
+
+**Fix:** Ran `make contract-authority-refresh`. New SHA256: `fadf87231a9eb074720c0471c42a8551c7ed01250614c58d8157e612fa9fa198`. Updated `BLUEPRINT_STAGED.md`, `contracts/core/openapi.json`, `schemas/api/openapi.json`, `CONTRACT.md`.
+
+---
+
+### Fix 8: Route inventory stale
+
+**Symptom:** `make fg-fast` failed at `route-inventory` gate — plane_registry_snapshot and route_inventory hashes didn't match.
+
+**Root cause:** `services/plane_registry/registry.py` was updated to register `/portal/governance` prefix, but the 5 CI artifact files were not regenerated.
+
+**Fix:** Ran `make route-inventory-generate`. Updated `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`, `tools/ci/contract_routes.json`.
+
+---
+
+### Fix 9: soc-review-sync gate failure
+
+**Symptom:** `make fg-fast` failed at `soc-review-sync` gate — `tools/ci/` files changed but `docs/SOC_EXECUTION_GATES_2026-02-15.md` not updated.
+
+**Root cause:** `tools/ci/check_soc_review_sync.py` uses `git status --porcelain` to detect changes to `CRITICAL_PREFIXES` (`tools/ci/`, `.github/workflows/`, `api/security/`) and requires one of `SOC_DOCS` to also appear as modified. The 5 regenerated CI artifacts triggered the gate.
+
+**Fix:** Added PR 14.4 entry to `docs/SOC_EXECUTION_GATES_2026-02-15.md` describing the 11 new routes, bounded context isolation, append-only tables, timeline/notification additions, and evidence freshness engine.

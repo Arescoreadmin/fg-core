@@ -614,6 +614,7 @@
         "/risk-governance",
         "/field-assessment",
         "/portal",
+        "/portal/governance",
         "/config",
         "/planes",
         "/health",
@@ -1156,7 +1157,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-21T15:54:01.603899+00:00",
+  "generated_at": "2026-06-22T09:05:54.319377+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
