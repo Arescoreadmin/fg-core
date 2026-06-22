@@ -48,6 +48,7 @@ from api.evidence_index import router as evidence_index_router
 from api.exception_breakglass import router as exception_breakglass_router
 from api.feed import router as feed_router
 from api.forensics import router as forensics_router
+from api.framework_authority import router as framework_authority_router
 from api.ingest import router as ingest_router
 from api.keys import router as keys_router
 from api.planes import router as planes_router
@@ -564,6 +565,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ai_plane_extension_router)
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
+    app.include_router(framework_authority_router)
 
     if not _is_production_runtime():
         app.include_router(ui_router)
@@ -891,6 +893,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
         app.include_router(ai_plane_extension_router)
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
+    app.include_router(framework_authority_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)

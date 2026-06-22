@@ -1,3 +1,45 @@
+
+### 2026-06-22 — PR 14.6.3 / 14.6.4: Framework Authority & Control Framework Mapping Foundation
+
+**Branch:** `feat/14-6-3-14-6-4-framework-authority`
+
+**Area:** Governance; control intelligence foundation; framework authority; contract inventory.
+
+**Root cause:** FrostGate had no canonical, tenant-safe framework registry or control-to-framework mapping layer. Control coverage and future reporting depended on ad hoc crosswalks rather than an auditable bounded context.
+
+**Files changed:**
+- `services/framework_authority/__init__.py` (new) — bounded-context public exports.
+- `services/framework_authority/schemas.py` (new) — request/response models, enums, deterministic transition rules, reporting DTO fields.
+- `services/framework_authority/repository.py` (new) — tenant-safe persistence, control ownership validation against existing enterprise control registry, deterministic coverage rollups, append-only audit writes.
+- `services/framework_authority/engine.py` (new) — service orchestration plus bounded Prometheus counters.
+- `api/framework_authority.py` (new) — `/frameworks`, `/controls/{control_id}/framework-mappings`, `/control-framework-mappings/*` API surface.
+- `api/db_models_framework_authority.py` (new) — ORM models for `fa_frameworks`, `fa_framework_controls`, `control_framework_mappings`, `control_framework_mapping_audits`.
+- `api/db.py` (modified) — model registration and sqlite append-only triggers for mapping audits.
+- `api/main.py` (modified) — router registration in runtime and contract apps.
+- `services/plane_registry/registry.py` (modified) — control-plane ownership for `/frameworks`, `/controls`, `/control-framework-mappings`.
+- `migrations/postgres/0052_framework_authority.sql` (new) — schema, RLS, append-only enforcement.
+- `tests/test_framework_authority.py` (new) — 114 deterministic tests.
+- `tests/test_control_registry.py` (new) — compatibility smoke test for existing control registry coexistence.
+- `tests/test_governance_reporting.py` (new) — reporting DTO contract smoke test.
+- `tests/test_governance_timeline_adapters.py` (new) — audit-event lifecycle coverage smoke test.
+- `scripts/ci/enforce_pr_fix_log.sh` (modified) — local validation now falls back to `HEAD~1...HEAD` when `origin/main` exists but has no merge base with the current branch, preserving CI behavior while unblocking detached-base local runs.
+
+**Design invariants:**
+- Framework scope is explicit: `SYSTEM` or `TENANT`.
+- Tenant ownership comes from the bound auth context only; request payload `tenant_id` is never authoritative.
+- Control mappings are many-to-many and reuse the existing enterprise control registry rather than duplicating control data.
+- Coverage is derived only from explicit mappings; no fuzzy or AI-generated inference.
+- Mapping audit rows are append-only and record old/new state for every create, update, and transition.
+- Evidence bounded contexts were intentionally left untouched to avoid overlap with PR 14.6.1.
+
+**Validation:**
+- `.venv/bin/python -m pytest tests/test_framework_authority.py -v` → 114 passed
+- `.venv/bin/python -m pytest tests/test_control_registry.py -v tests/test_governance_reporting.py -v tests/test_governance_timeline_adapters.py -v` → 3 passed
+- `make fg-contract` → PASS
+- `make fg-security` → PASS
+- `make fg-fast` required SOC review sync update after route artifact regeneration; documentation updated accordingly before rerun.
+
+
 # PR Fix Log (Strict)
 
 ## Purpose

@@ -1,3 +1,39 @@
+
+## 2026-06-22 — SOC-HIGH-002 — Framework Authority route and plane-registry artifact refresh
+
+**Issue:** Control-plane governance artifacts changed as part of PR 14.6.3 / 14.6.4 (`/frameworks`, `/controls/{control_id}/framework-mappings`, `/control-framework-mappings/*`) and the repo requires an explicit SOC review note whenever `tools/ci/*` route or plane-registry artifacts drift.
+
+**Resolution:** Added a new tenant-bound framework authority bounded context with governance-scoped routes, regenerated route inventory and plane-registry artifacts, and verified the new control-plane paths remain scope-protected, tenant-bound, and deterministic. No evidence-lifecycle files were modified.
+
+**Files changed:**
+- `api/framework_authority.py` (new) — tenant-bound governance API for framework registry, framework controls, control mappings, coverage, and audit.
+- `api/db_models_framework_authority.py` (new) — ORM models for `fa_frameworks`, `fa_framework_controls`, `control_framework_mappings`, `control_framework_mapping_audits`.
+- `services/framework_authority/` (new package) — schemas, repository, engine, metrics.
+- `api/main.py` (modified) — router registration for framework authority.
+- `api/db.py` (modified) — model import + sqlite append-only trigger bootstrap for mapping audits.
+- `services/plane_registry/registry.py` (modified) — classifies `/frameworks`, `/controls`, and `/control-framework-mappings` under the control plane.
+- `migrations/postgres/0052_framework_authority.sql` (new) — framework authority schema, RLS policies, append-only audit trigger wiring.
+- `tools/ci/contract_routes.json` (regenerated)
+- `tools/ci/plane_registry_snapshot.json` (regenerated)
+- `tools/ci/route_inventory.json` (regenerated)
+- `tools/ci/route_inventory_summary.json` (regenerated)
+- `tools/ci/topology.sha256` (regenerated)
+- `scripts/ci/enforce_pr_fix_log.sh` (modified) — local-only merge-base fallback for PR fix-log diff computation when detached-base branches have no `origin/main` merge base; CI behavior unchanged when a merge base exists.
+
+**Security posture:**
+- All new routes require `require_bound_tenant()` and governance scopes.
+- Cross-tenant access resolves to deterministic 404s.
+- Mapping lifecycle transitions resolve to deterministic 422s on illegal state changes.
+- Mapping audit rows are append-only in sqlite bootstrap and Postgres migration.
+- SYSTEM frameworks are readable cross-tenant but write-protected unless admin-scoped.
+
+**Validation:**
+- `.venv/bin/python -m pytest tests/test_framework_authority.py -v` → 114 passed
+- `.venv/bin/python -m pytest tests/test_control_registry.py -v tests/test_governance_reporting.py -v tests/test_governance_timeline_adapters.py -v` → 3 passed
+- `make fg-contract` → PASS after venv resync to pinned contract toolchain
+- `make fg-security` → PASS
+
+
 ## 2026-05-15 — SOC-HIGH-002 — Enterprise observability middleware and route inventory
 
 **Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (api/middleware changes)

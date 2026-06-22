@@ -557,6 +557,9 @@
         "/compliance",
         "/compliance-cp",
         "/enterprise-controls",
+        "/frameworks",
+        "/controls",
+        "/control-framework-mappings",
         "/exceptions",
         "/breakglass",
         "/governance",
@@ -1029,7 +1032,7 @@
       ]
     }
   ],
-  "generated_at": "2026-05-16T19:02:54.398012+00:00",
+  "generated_at": "2026-06-22T17:46:17.396637+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

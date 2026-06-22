@@ -167,6 +167,7 @@ def _ensure_models_imported() -> None:
     """
     importlib.import_module("api.db_models")
     importlib.import_module("api.db_models_cp_v2")
+    importlib.import_module("api.db_models_framework_authority")
 
 
 def _get_base():
@@ -649,6 +650,26 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             )
             """
         )
+
+        if "control_framework_mapping_audits" in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TRIGGER IF NOT EXISTS control_framework_mapping_audits_append_only_update
+                BEFORE UPDATE ON control_framework_mapping_audits
+                BEGIN
+                    SELECT RAISE(ABORT, 'control_framework_mapping_audits is append-only');
+                END
+                """
+            )
+            conn.exec_driver_sql(
+                """
+                CREATE TRIGGER IF NOT EXISTS control_framework_mapping_audits_append_only_delete
+                BEFORE DELETE ON control_framework_mapping_audits
+                BEGIN
+                    SELECT RAISE(ABORT, 'control_framework_mapping_audits is append-only');
+                END
+                """
+            )
 
         conn.exec_driver_sql(
             """
