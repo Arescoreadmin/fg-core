@@ -713,3 +713,44 @@ GOVERNANCE_REPORTING_SUPERSEDED_TOTAL = Counter(
     "Total reports superseded",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 14.6.1 — Canonical Evidence Authority metrics
+# No tenant_id labels — high cardinality.
+# ---------------------------------------------------------------------------
+
+EVIDENCE_CREATED_TOTAL = Counter(
+    "frostgate_evidence_created_total",
+    "Total canonical evidence records created",
+    [],
+)
+
+EVIDENCE_VERIFIED_TOTAL = Counter(
+    "frostgate_evidence_verified_total",
+    "Total evidence records transitioned to VERIFIED lifecycle state",
+    [],
+)
+
+EVIDENCE_REJECTED_TOTAL = Counter(
+    "frostgate_evidence_rejected_total",
+    "Total evidence records rejected",
+    [],
+)
+
+EVIDENCE_SUPERSEDED_TOTAL = Counter(
+    "frostgate_evidence_superseded_total",
+    "Total evidence records superseded",
+    [],
+)
+
+EVIDENCE_EXPIRED_TOTAL = Counter(
+    "frostgate_evidence_expired_total",
+    "Total evidence records transitioned to EXPIRED lifecycle state",
+    [],
+)
+
+EVIDENCE_ARCHIVED_TOTAL = Counter(
+    "frostgate_evidence_archived_total",
+    "Total evidence records archived",
+    [],
+)

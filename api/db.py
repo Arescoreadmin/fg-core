@@ -248,6 +248,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_reporting"
     )  # PR 14.5: Governance Reporting & Attestation
+    importlib.import_module(
+        "api.db_models_evidence_authority"
+    )  # PR 14.6.1: Canonical Evidence Authority
 
 
 def _get_base():
