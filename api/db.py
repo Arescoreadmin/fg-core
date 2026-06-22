@@ -1570,6 +1570,26 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             "ON tenant_identity_governance_actions (tenant_id, dimension, created_at)"
         )
 
+        for table in ("control_framework_mapping_audits",):
+            conn.exec_driver_sql(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {table}_append_only_update
+                BEFORE UPDATE ON {table}
+                BEGIN
+                    SELECT RAISE(ABORT, '{table} is append-only');
+                END;
+                """
+            )
+            conn.exec_driver_sql(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {table}_append_only_delete
+                BEFORE DELETE ON {table}
+                BEGIN
+                    SELECT RAISE(ABORT, '{table} is append-only');
+                END;
+                """
+            )
+
 
 # ---------------------------------------------------------------------
 # Public API
