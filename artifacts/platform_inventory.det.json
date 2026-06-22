@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 593,
+    "contract_count": 604,
     "contract_only": [],
-    "runtime_count": 759,
+    "runtime_count": 770,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "b9d2b3c2a636a2b0ca58fb13a16b6aeee380c5762d0c5fb027496bf9cc197796",
+  "governance_fingerprint": "fe46f27a51cdb04cd27ceda8ed3af0ff7d996fea8c219669e9b28c0218fa9430",
   "planes": [
     {
       "compat": {
@@ -253,6 +253,7 @@
         "/metrics",
         "/planes",
         "/portal",
+        "/portal/governance",
         "/rag",
         "/remediation",
         "/risk-acceptances",
@@ -688,6 +689,16 @@
       "GET /health/ready",
       "GET /metrics",
       "GET /planes",
+      "GET /portal/governance/acknowledgements",
+      "GET /portal/governance/acknowledgements/{ack_id}",
+      "GET /portal/governance/audit",
+      "GET /portal/governance/controls",
+      "GET /portal/governance/controls/{ctl_id}",
+      "GET /portal/governance/dashboard",
+      "GET /portal/governance/evidence",
+      "GET /portal/governance/evidence/{evidence_id}",
+      "GET /portal/governance/risks",
+      "GET /portal/governance/risks/{risk_id}",
       "GET /portal/grants",
       "GET /portal/me",
       "GET /portal/remediation",
@@ -932,6 +943,7 @@
       "POST /governance/workflows/{workflow_id}/evidence",
       "POST /internal/connectors/{connector_id}/ingest",
       "POST /portal/authenticate",
+      "POST /portal/governance/acknowledgements",
       "POST /portal/grants",
       "POST /portal/identity/login",
       "POST /portal/remediation/tasks/{task_id}/acknowledge",

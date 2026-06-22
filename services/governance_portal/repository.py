@@ -82,15 +82,11 @@ def fetch_risks(
 
 def count_risks(db: Session, *, tenant_id: str) -> int:
     return (
-        db.query(RiskAcceptance)
-        .filter(RiskAcceptance.tenant_id == tenant_id)
-        .count()
+        db.query(RiskAcceptance).filter(RiskAcceptance.tenant_id == tenant_id).count()
     )
 
 
-def fetch_risk_by_id(
-    db: Session, *, tenant_id: str, risk_id: str
-) -> RiskAcceptance:
+def fetch_risk_by_id(db: Session, *, tenant_id: str, risk_id: str) -> RiskAcceptance:
     row = (
         db.query(RiskAcceptance)
         .filter(
@@ -203,7 +199,9 @@ def fetch_portal_controls(
         q = q.filter(ControlRegistry.control_status == control_status)
     if verification_status is not None:
         q = q.filter(ControlRegistry.verification_status == verification_status)
-    return q.order_by(ControlRegistry.created_at.desc()).limit(limit).offset(offset).all()
+    return (
+        q.order_by(ControlRegistry.created_at.desc()).limit(limit).offset(offset).all()
+    )
 
 
 def count_portal_controls(
@@ -237,9 +235,7 @@ def fetch_portal_control_by_id(
     return row
 
 
-def count_evidence_for_control(
-    db: Session, *, tenant_id: str, control_id: str
-) -> int:
+def count_evidence_for_control(db: Session, *, tenant_id: str, control_id: str) -> int:
     return (
         db.query(ControlEvidenceLink)
         .filter(
@@ -263,12 +259,15 @@ def fetch_portal_evidence(
     limit: int = 50,
     offset: int = 0,
 ) -> list[ControlEvidenceLink]:
-    q = db.query(ControlEvidenceLink).filter(
-        ControlEvidenceLink.tenant_id == tenant_id
-    )
+    q = db.query(ControlEvidenceLink).filter(ControlEvidenceLink.tenant_id == tenant_id)
     if control_id is not None:
         q = q.filter(ControlEvidenceLink.control_id == control_id)
-    return q.order_by(ControlEvidenceLink.linked_at.desc()).limit(limit).offset(offset).all()
+    return (
+        q.order_by(ControlEvidenceLink.linked_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
 
 
 def count_portal_evidence(
@@ -277,9 +276,7 @@ def count_portal_evidence(
     tenant_id: str,
     control_id: str | None = None,
 ) -> int:
-    q = db.query(ControlEvidenceLink).filter(
-        ControlEvidenceLink.tenant_id == tenant_id
-    )
+    q = db.query(ControlEvidenceLink).filter(ControlEvidenceLink.tenant_id == tenant_id)
     if control_id is not None:
         q = q.filter(ControlEvidenceLink.control_id == control_id)
     return q.count()
@@ -332,10 +329,16 @@ def count_evidence_with_freshness(
 
     count = 0
     for ev in evidence_links:
-        ctrl = control_map.get(ev.control_id)
+        linked_control = control_map.get(ev.control_id)
+        last_verified_at = (
+            linked_control.last_verified_at if linked_control is not None else None
+        )
+        review_frequency_days = (
+            linked_control.review_frequency_days if linked_control is not None else None
+        )
         freshness = _compute_evidence_freshness(
-            ctrl.last_verified_at if ctrl else None,
-            ctrl.review_frequency_days if ctrl else None,
+            last_verified_at,
+            review_frequency_days,
             now_dt,
         )
         if freshness in target_states:
@@ -412,9 +415,7 @@ def fetch_acknowledgement_by_id(
     return row
 
 
-def count_acknowledgements_since(
-    db: Session, *, tenant_id: str, since_iso: str
-) -> int:
+def count_acknowledgements_since(db: Session, *, tenant_id: str, since_iso: str) -> int:
     """Count acknowledgements created on or after since_iso."""
     return (
         db.query(PortalAcknowledgement)

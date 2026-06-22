@@ -157,7 +157,9 @@ class GovernancePortalEngine:
         recent_acknowledgements = count_acknowledgements_since(
             self._db, tenant_id=self._tenant_id, since_iso=thirty_days_ago
         )
-        pending_acknowledgements = max(0, total_risks + total_controls - recent_acknowledgements)
+        pending_acknowledgements = max(
+            0, total_risks + total_controls - recent_acknowledgements
+        )
 
         # Governance health score 0-100
         # Weighted: verified ratio (40%), fresh evidence ratio (30%), active risk ratio (30%)
@@ -198,9 +200,7 @@ class GovernancePortalEngine:
     # Risk visibility
     # -----------------------------------------------------------------------
 
-    def list_risks(
-        self, *, limit: int = 50, offset: int = 0
-    ) -> PortalRiskListResponse:
+    def list_risks(self, *, limit: int = 50, offset: int = 0) -> PortalRiskListResponse:
         risks = fetch_risks(
             self._db, tenant_id=self._tenant_id, limit=limit, offset=offset
         )
@@ -229,10 +229,10 @@ class GovernancePortalEngine:
             items=items, total=total, limit=limit, offset=offset
         )
 
-    def get_risk(self, risk_id: str, *, actor: str = "unknown") -> PortalRiskDetailResponse:
-        risk = fetch_risk_by_id(
-            self._db, tenant_id=self._tenant_id, risk_id=risk_id
-        )
+    def get_risk(
+        self, risk_id: str, *, actor: str = "unknown"
+    ) -> PortalRiskDetailResponse:
+        risk = fetch_risk_by_id(self._db, tenant_id=self._tenant_id, risk_id=risk_id)
         approvals = fetch_approvals_for_risk(
             self._db, tenant_id=self._tenant_id, risk_id=risk_id
         )
@@ -406,6 +406,7 @@ class GovernancePortalEngine:
         # Preload controls for freshness calculation
         control_ids = {e.control_id for e in evidence_links}
         from api.db_models_control_registry import ControlRegistry
+
         ctrl_map: dict[str, Any] = {}
         for ctrl in (
             self._db.query(ControlRegistry)
@@ -419,10 +420,18 @@ class GovernancePortalEngine:
 
         items = []
         for ev in evidence_links:
-            ctrl = ctrl_map.get(ev.control_id)
+            linked_control = ctrl_map.get(ev.control_id)
+            last_verified_at = (
+                linked_control.last_verified_at if linked_control is not None else None
+            )
+            review_frequency_days = (
+                linked_control.review_frequency_days
+                if linked_control is not None
+                else None
+            )
             freshness = _compute_evidence_freshness(
-                ctrl.last_verified_at if ctrl else None,
-                ctrl.review_frequency_days if ctrl else None,
+                last_verified_at,
+                review_frequency_days,
                 now_dt,
             )
             items.append(
@@ -729,9 +738,7 @@ def _compute_health_score(
     """
     verified_ratio = (verified_controls / total_controls) if total_controls > 0 else 0.0
     fresh_ratio = (fresh_evidence / total_evidence) if total_evidence > 0 else 1.0
-    managed_ratio = (
-        (1.0 - (active_risks / total_risks)) if total_risks > 0 else 1.0
-    )
+    managed_ratio = (1.0 - (active_risks / total_risks)) if total_risks > 0 else 1.0
 
     raw = (verified_ratio * 40) + (fresh_ratio * 30) + (managed_ratio * 30)
     return max(0, min(100, round(raw)))
