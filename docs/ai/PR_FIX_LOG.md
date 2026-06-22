@@ -15758,3 +15758,75 @@ Resolution order in `check_capability()` (fully backward-compatible):
 **Root cause:** `tools/ci/check_soc_review_sync.py` uses `git status --porcelain` to detect changes to `CRITICAL_PREFIXES` (`tools/ci/`, `.github/workflows/`, `api/security/`) and requires one of `SOC_DOCS` to also appear as modified. The 5 regenerated CI artifacts triggered the gate.
 
 **Fix:** Added PR 14.4 entry to `docs/SOC_EXECUTION_GATES_2026-02-15.md` describing the 11 new routes, bounded context isolation, append-only tables, timeline/notification additions, and evidence freshness engine.
+
+---
+
+## PR 14.6.3/14.6.4 — Framework Authority Mapping Foundation
+
+### Fix 1: Merge conflict — no shared history with origin/main
+
+**Symptom:** GitHub PR page showed "This branch has conflicts that must be resolved" on 15+ files (BLUEPRINT_STAGED.md, CONTRACT.md, api/db.py, api/main.py, contracts, tools/ci/, etc.).
+
+**Root cause:** Branch was cut from a divergent starting point with no common ancestor with origin/main. All conflicts were add/add (both branches independently introduced the same files).
+
+**Fix:** Merged `origin/main` with `--allow-unrelated-histories`. Accepted main's version for all infrastructure/contract files. Re-applied branch-specific additions: framework authority router registration in `api/main.py`, model import in `api/db.py`, route prefixes in `services/plane_registry/registry.py`, and test coexistence/audit-event assertions.
+
+---
+
+### Fix 2: Vercel deployment failures — missing apps/ directory
+
+**Symptom:** All three Vercel deployments failed: `api.frostgate.ai`, `app.frostgate.ai`, `console.frostgate.ai`. Root directories configured as `apps/console` and `apps/portal` but branch had `console/` at root with no `apps/`.
+
+**Root cause:** Branch predated the `apps/` monorepo restructure on main.
+
+**Fix:** `git mv console apps/console` to preserve branch's console content. `git checkout origin/main -- apps/portal apps/web` to add portal and web apps.
+
+---
+
+### Fix 3: P1 — RLS context cleared after db.commit() before db.refresh()
+
+**Symptom:** On PostgreSQL, `tenant_db_required` sets `app.tenant_id` transaction-locally via `set_config(..., true)`. After `db.commit()`, the transaction-local setting is cleared. `db.refresh(row)` then starts a new transaction without RLS context, causing "row not visible" failures under FORCE RLS.
+
+**Root cause:** All 5 write handlers in `api/framework_authority.py` used the pattern `db.commit(); db.refresh(row); return Model.model_validate(row)`.
+
+**Fix:** Changed to `db.flush(); result = Model.model_validate(row); db.commit(); return result`. The `flush()` sends SQL to DB within the current transaction (RLS active). `model_validate(row)` accesses all attributes in-transaction before commit.
+
+---
+
+### Fix 4: P1 — seed_minimal() commits session in assert_control_owned_by_tenant()
+
+**Symptom:** `EnterpriseControlsService.seed_minimal(db)` ends with `db.commit()`, clearing the transaction-local `app.tenant_id` RLS setting. Subsequent queries against `tenant_control_state` in the same method see no rows under FORCE RLS.
+
+**Root cause:** `seed_minimal()` was designed for read-after-seed patterns where the commit was acceptable. In `assert_control_owned_by_tenant()` the commit happened mid-method before tenant-scoped queries.
+
+**Fix:** Added `set_tenant_context(db, tenant_id)` call after `seed_minimal(db)` in `repository.py` to re-bind RLS context after the implicit commit.
+
+---
+
+### Fix 5: P2 — SYSTEM scope writes blocked by FORCE RLS tenant-only write policy
+
+**Symptom:** `fa_frameworks_tenant_write` and `fa_framework_controls_tenant_write` RLS policies only admit rows where `scope_type = 'TENANT'`. The API supports `scope_type = 'SYSTEM'` when `_allow_system_write()` is true (admin:write or control-plane:admin scope). PostgreSQL FORCE RLS rejects system-scope creates/updates even for superusers.
+
+**Root cause:** Migration 0052 only had tenant-write policies. No write path existed for system-scope rows under FORCE RLS.
+
+**Fix:** Added `fa_frameworks_system_write` and `fa_framework_controls_system_write` policies to `migrations/postgres/0052_framework_authority.sql` gated on `app.allow_system_write = 'true'`. Added `_set_system_write_context(db, allow)` helper to `api/framework_authority.py` and called it before each write that may need system access.
+
+---
+
+### Fix 6: SQLite append-only triggers missing for control_framework_mapping_audits
+
+**Symptom:** `test_mapping_audit_table_is_append_only` expected `sqlite3.DatabaseError` on UPDATE/DELETE against `control_framework_mapping_audits` but no error was raised.
+
+**Root cause:** PostgreSQL migration 0052 creates append-only triggers via `fg_append_only_enforcer()`. SQLite does not run Postgres migrations — the test uses the SQLite DB from `api/db.py` which had no `RAISE(ABORT)` triggers for this table.
+
+**Fix:** Added `control_framework_mapping_audits` to the append-only trigger loop in `_auto_migrate_sqlite()` in `api/db.py`, matching the pattern used for other audit tables.
+
+---
+
+### Fix 7: pr-fix-log-guard gate failure
+
+**Symptom:** CI reported "docs/ai/PR_FIX_LOG.md was not updated" even though the file exists and contains entries.
+
+**Root cause:** The git diff from origin/main to branch HEAD showed no net change to PR_FIX_LOG.md because the merge commit adopted main's version of the file. The enterprise policy requires a structured entry appended for any PR touching tracked source files.
+
+**Fix:** Added this PR 14.6.3/14.6.4 entry to docs/ai/PR_FIX_LOG.md.
