@@ -11,6 +11,7 @@ All DB writes go through the engine. Caller (API layer) owns db.commit().
 from __future__ import annotations
 
 import hashlib
+import html as _html
 import json
 import uuid
 from io import BytesIO
@@ -115,45 +116,50 @@ def _section_hash(obj: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _e(value: object) -> str:
+    """HTML-escape a value for safe interpolation into the report document."""
+    return _html.escape(str(value) if value is not None else "")
+
+
 def _build_html(detail: GovernanceReportDetail) -> str:
     """Generate a complete HTML governance report document."""
     risk = detail.risk_section
     approval_rows = "".join(
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
-            a.approver_name,
-            a.approver_role or "",
-            a.approval_type,
-            a.status,
-            a.approved_at or "",
+            _e(a.approver_name),
+            _e(a.approver_role or ""),
+            _e(a.approval_type),
+            _e(a.status),
+            _e(a.approved_at or ""),
         )
         for a in detail.approval_chain
     )
     review_rows = "".join(
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
-            r.review_type,
-            r.reviewer or "",
-            r.status,
-            r.review_due_at,
-            r.review_completed_at or "",
-            r.outcome or "",
+            _e(r.review_type),
+            _e(r.reviewer or ""),
+            _e(r.status),
+            _e(r.review_due_at),
+            _e(r.review_completed_at or ""),
+            _e(r.outcome or ""),
         )
         for r in detail.review_history
     )
     control_rows = "".join(
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
-            c.control_id,
-            c.title,
-            c.control_type,
-            c.control_status,
-            c.effectiveness_rating,
-            c.verification_status,
-            c.evidence_count,
+            _e(c.control_id),
+            _e(c.title),
+            _e(c.control_type),
+            _e(c.control_status),
+            _e(c.effectiveness_rating),
+            _e(c.verification_status),
+            _e(c.evidence_count),
         )
         for c in detail.compensating_controls
     )
     timeline_rows = "".join(
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
-            t.occurred_at, t.source, t.event_type, t.actor or ""
+            _e(t.occurred_at), _e(t.source), _e(t.event_type), _e(t.actor or "")
         )
         for t in detail.governance_timeline
     )
@@ -251,34 +257,34 @@ def _build_html(detail: GovernanceReportDetail) -> str:
         '  Manifest Hash: <span class="hash">{manifest_hash}</span>\n'
         "</div>\n</body>\n</html>"
     ).format(
-        title=risk.title,
-        report_id=detail.id,
-        version=detail.report_version,
-        generated_at=detail.generated_at,
-        generated_by=detail.generated_by,
-        status=detail.status,
-        schema_version=detail.schema_version,
-        report_hash=detail.report_hash,
-        risk_title=risk.title,
-        risk_status=risk.status,
-        accepted_by=risk.accepted_by,
-        accepted_at=risk.accepted_at or "N/A",
-        expires_at=risk.expires_at or "N/A",
-        next_review_at=risk.next_review_at or "N/A",
-        inherent_risk=risk.inherent_risk or "N/A",
-        residual_risk=risk.residual_risk or "N/A",
-        business_justification=risk.business_justification,
-        risk_rationale=risk.risk_rationale,
-        approval_count=detail.approval_count,
+        title=_e(risk.title),
+        report_id=_e(detail.id),
+        version=_e(detail.report_version),
+        generated_at=_e(detail.generated_at),
+        generated_by=_e(detail.generated_by),
+        status=_e(detail.status),
+        schema_version=_e(detail.schema_version),
+        report_hash=_e(detail.report_hash),
+        risk_title=_e(risk.title),
+        risk_status=_e(risk.status),
+        accepted_by=_e(risk.accepted_by),
+        accepted_at=_e(risk.accepted_at or "N/A"),
+        expires_at=_e(risk.expires_at or "N/A"),
+        next_review_at=_e(risk.next_review_at or "N/A"),
+        inherent_risk=_e(risk.inherent_risk or "N/A"),
+        residual_risk=_e(risk.residual_risk or "N/A"),
+        business_justification=_e(risk.business_justification),
+        risk_rationale=_e(risk.risk_rationale),
+        approval_count=_e(detail.approval_count),
         approval_section=approval_section,
-        review_count=detail.review_count,
+        review_count=_e(detail.review_count),
         review_section=review_section,
-        control_count=detail.control_count,
-        evidence_count=detail.evidence_count,
+        control_count=_e(detail.control_count),
+        evidence_count=_e(detail.evidence_count),
         controls_section=controls_section,
-        timeline_count=len(detail.governance_timeline),
+        timeline_count=_e(len(detail.governance_timeline)),
         timeline_section=timeline_section,
-        manifest_hash=detail.manifest_hash or "N/A",
+        manifest_hash=_e(detail.manifest_hash or "N/A"),
     )
     return html
 
@@ -1417,8 +1423,8 @@ class GovernanceReportingEngine:
                 fresh_review_hash,
                 fresh_control_hash,
                 fresh_timeline_hash,
-                _,
-                _,
+                _fresh_overall_hash,
+                fresh_report_hash,
             ) = self._compute_section_hashes(
                 risk_section,
                 approval_chain,
@@ -1442,6 +1448,11 @@ class GovernanceReportingEngine:
             if mismatches:
                 result_str = VerificationResult.INVALID.value
                 details["mismatched_sections"] = mismatches
+            elif fresh_report_hash != report.report_hash:
+                # Section hashes match but the stored report_hash differs:
+                # the report row's report_hash column was modified after generation.
+                result_str = VerificationResult.TAMPERED.value
+                details["report_hash_integrity"] = "FAILED: report_hash mismatch"
             else:
                 details["verified_sections"] = [
                     "risk_section",
