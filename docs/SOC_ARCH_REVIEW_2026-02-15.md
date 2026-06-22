@@ -2853,3 +2853,73 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `make contract-authority-refresh`: OK
 - `PYTHONPATH=. pytest tests/test_risk_governance.py`: 75/75 passed
 - `make fg-fast`: All checks passed
+
+---
+
+## 2026-06-22 — PR 14.6.1 Canonical Evidence Authority (plane registry + route inventory + contract drift)
+
+**Reviewer:** Codex | **Classification:** SOC-P2 (new tenant-scoped evidence authority routes registered under evidence plane; no auth or middleware changes; ValidationError schema drift from fastapi 0.120.4 → 0.136.3 upgrade)
+
+**Change:** PR 14.6.1 added the Canonical Evidence Authority bounded context (`services/evidence_authority/`). All 15 routes under `/evidence` are tenant-scoped via `require_bound_tenant()` and gated on `governance:read` or `governance:write` scopes. No auth middleware, OPA policy, or `.github/workflows/` files were modified.
+
+Additionally, the local venv had stale fastapi==0.120.4 / starlette==0.49.1 while `requirements-shared.txt` pins fastapi==0.136.3 / starlette==1.1.0. Regenerating contracts with the correct toolchain version produced additional drift in the `ValidationError` schema (`ctx` and `input` fields added; `format: binary` → `contentMediaType: application/octet-stream` for file uploads). This is a schema serialization change in pydantic 2.9, not a functional change.
+
+All 15 routes now declare `responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}}` to satisfy the `OPENAPI_SECURITY_401_403_REQUIRED` gate.
+
+The following `tools/ci/` files were regenerated as a routine consequence:
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `route_inventory_summary.json`, `topology.sha256`
+- `artifacts/platform_inventory.det.json` — contract_count and runtime_count updated
+
+### Files Changed
+
+- `api/db_models_evidence_authority.py` — 5 new ORM models (fa_evidence, fa_evidence_ownership, fa_evidence_relationships, fa_evidence_trust_events, fa_evidence_audit_events)
+- `api/evidence_authority.py` — 15 new FastAPI routes, all tenant-scoped; 401/403 responses declared on all routes
+- `services/evidence_authority/` — engine, repository, models, schemas (new bounded context)
+- `migrations/postgres/0123_canonical_evidence_authority.sql` — 5 new tables with append-only guards
+- `api/db.py` — `db_models_evidence_authority` registered in `_ensure_models_imported()`
+- `api/main.py` — `evidence_authority_router` registered in both `build_app()` and `build_contract_app()`
+- `api/observability/metrics.py` — 6 new Prometheus counters (bounded cardinality; no tenant labels)
+- `contracts/admin/openapi.json` — ValidationError schema updated (ctx + input fields; fastapi 0.136.3)
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` — same ValidationError drift + binary→contentMediaType
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` — contract authority SHA256 updated
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `route_inventory_summary.json`, `topology.sha256` — regenerated via `make route-inventory-generate`
+- `artifacts/platform_inventory.det.json` — regenerated (contract_count +15, runtime_count +15)
+
+### Validation
+
+- `make contract-authority-refresh`: OK
+- `make route-inventory-generate`: OK
+- `make fg-contract`: Contract diff OK (admin/core/artifacts)
+- `pytest tests/test_ea_canonical_14_6_1.py`: 117/117 passed
+- `make fg-fast`: All checks passed
+
+---
+
+## 2026-06-22 — PR 14.6.1 Canonical Evidence Authority — scope family correction (evidence plane)
+
+**Reviewer:** Codex | **Classification:** SOC-P2 (scope correction on new evidence authority routes; no auth mechanism change; no privilege escalation; route ownership unchanged)
+
+**Change:** PR 14.6.1 initially gated all `/evidence` routes on `governance:read/write` scopes. The plane registry assigns the `/evidence` prefix to the `evidence` plane, which requires scope prefixes from `{audit:, attestation:, forensics:, admin:, compliance:}`. The `governance:` family is valid only for the `control` plane. No user-visible functionality changed; the scope correction makes the evidence authority consistent with existing `/audit` routes (`audit:read`, `audit:write`).
+
+Scopes changed in `api/evidence_authority.py`:
+- `governance:read` → `audit:read` (all read routes)
+- `governance:write` → `audit:write` (all write routes)
+
+Test fixtures in `tests/test_ea_canonical_14_6_1.py` updated to mint `audit:read/audit:write` keys (was `governance:read/governance:write`). All 117 tests pass.
+
+The following `tools/ci/` files were regenerated as a routine consequence:
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `topology.sha256`
+
+### Files Changed
+
+- `api/evidence_authority.py` — scopes corrected (governance → audit)
+- `tests/test_ea_canonical_14_6_1.py` — test key scopes corrected
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated
+
+### Validation
+
+- `make contract-authority-refresh`: OK
+- `make route-inventory-generate`: OK
+- `make fg-contract`: Contract diff OK
+- `pytest tests/test_ea_canonical_14_6_1.py`: 117/117 passed
+- `make fg-fast`: All checks passed
