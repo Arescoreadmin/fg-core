@@ -1479,6 +1479,7 @@ def test_framework_authority_and_enterprise_controls_routes_coexist() -> None:
     import warnings
     from api.main import build_app
     from pydantic.warnings import PydanticDeprecatedSince20
+
     app = build_app(auth_enabled=False)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", PydanticDeprecatedSince20)

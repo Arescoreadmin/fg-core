@@ -48,7 +48,9 @@ def _set_system_write_context(db: Session, allow: bool) -> None:
     if bind is None or getattr(bind.dialect, "name", "") != "postgresql":
         return
     value = "true" if allow else "false"
-    db.execute(text("SELECT set_config('app.allow_system_write', :v, true)"), {"v": value})
+    db.execute(
+        text("SELECT set_config('app.allow_system_write', :v, true)"), {"v": value}
+    )
 
 
 def _translate_error(exc: Exception) -> HTTPException:
