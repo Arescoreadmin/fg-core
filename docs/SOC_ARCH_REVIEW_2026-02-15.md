@@ -2892,3 +2892,34 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `make fg-contract`: Contract diff OK (admin/core/artifacts)
 - `pytest tests/test_ea_canonical_14_6_1.py`: 117/117 passed
 - `make fg-fast`: All checks passed
+
+---
+
+## 2026-06-22 — PR 14.6.1 Canonical Evidence Authority — scope family correction (evidence plane)
+
+**Reviewer:** Codex | **Classification:** SOC-P2 (scope correction on new evidence authority routes; no auth mechanism change; no privilege escalation; route ownership unchanged)
+
+**Change:** PR 14.6.1 initially gated all `/evidence` routes on `governance:read/write` scopes. The plane registry assigns the `/evidence` prefix to the `evidence` plane, which requires scope prefixes from `{audit:, attestation:, forensics:, admin:, compliance:}`. The `governance:` family is valid only for the `control` plane. No user-visible functionality changed; the scope correction makes the evidence authority consistent with existing `/audit` routes (`audit:read`, `audit:write`).
+
+Scopes changed in `api/evidence_authority.py`:
+- `governance:read` → `audit:read` (all read routes)
+- `governance:write` → `audit:write` (all write routes)
+
+Test fixtures in `tests/test_ea_canonical_14_6_1.py` updated to mint `audit:read/audit:write` keys (was `governance:read/governance:write`). All 117 tests pass.
+
+The following `tools/ci/` files were regenerated as a routine consequence:
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `topology.sha256`
+
+### Files Changed
+
+- `api/evidence_authority.py` — scopes corrected (governance → audit)
+- `tests/test_ea_canonical_14_6_1.py` — test key scopes corrected
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated
+
+### Validation
+
+- `make contract-authority-refresh`: OK
+- `make route-inventory-generate`: OK
+- `make fg-contract`: Contract diff OK
+- `pytest tests/test_ea_canonical_14_6_1.py`: 117/117 passed
+- `make fg-fast`: All checks passed

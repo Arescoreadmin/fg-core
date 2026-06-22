@@ -82,7 +82,7 @@ def _actor_type(request: Request) -> str:
 
 @router.get(
     "/evidence/dashboard",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(require_scopes("audit:read"))],
     response_model=EvidenceDashboardResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -102,7 +102,7 @@ def evidence_dashboard(request: Request) -> EvidenceDashboardResponse:
 
 @router.get(
     "/evidence/by-entity/{entity_type}/{entity_id}",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(require_scopes("audit:read"))],
     response_model=EvidenceRelationshipListResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -126,7 +126,7 @@ def list_evidence_for_entity(
 
 @router.post(
     "/evidence",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(require_scopes("audit:write"))],
     response_model=EvidenceResponse,
     status_code=201,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
@@ -157,7 +157,7 @@ def create_evidence(
 
 @router.get(
     "/evidence",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(require_scopes("audit:read"))],
     response_model=EvidenceListResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -194,7 +194,7 @@ def list_evidence(
 
 @router.get(
     "/evidence/{ev_id}",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(require_scopes("audit:read"))],
     response_model=EvidenceResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -217,7 +217,7 @@ def get_evidence(ev_id: str, request: Request) -> EvidenceResponse:
 
 @router.patch(
     "/evidence/{ev_id}",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(require_scopes("audit:write"))],
     response_model=EvidenceResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -250,7 +250,7 @@ def update_evidence_metadata(
 
 @router.post(
     "/evidence/{ev_id}/lifecycle",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(require_scopes("audit:write"))],
     response_model=EvidenceResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -296,7 +296,7 @@ def transition_lifecycle(
 
 @router.post(
     "/evidence/{ev_id}/ownership",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(require_scopes("audit:write"))],
     response_model=EvidenceOwnershipResponse,
     status_code=201,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
@@ -323,7 +323,7 @@ def assign_ownership(
 
 @router.delete(
     "/evidence/{ev_id}/ownership/{ownership_id}",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(require_scopes("audit:write"))],
     response_model=EvidenceOwnershipResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -354,7 +354,7 @@ def revoke_ownership(
 
 @router.get(
     "/evidence/{ev_id}/ownership",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(require_scopes("audit:read"))],
     response_model=EvidenceOwnershipListResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -381,7 +381,7 @@ def list_ownership(
 
 @router.post(
     "/evidence/{ev_id}/verify",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(require_scopes("audit:write"))],
     response_model=EvidenceTrustHistoryResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -409,7 +409,7 @@ def verify_evidence(
 
 @router.get(
     "/evidence/{ev_id}/trust",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(require_scopes("audit:read"))],
     response_model=EvidenceTrustHistoryResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -432,7 +432,7 @@ def query_trust_state(ev_id: str, request: Request) -> EvidenceTrustHistoryRespo
 
 @router.post(
     "/evidence/{ev_id}/relationships",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(require_scopes("audit:write"))],
     response_model=EvidenceRelationshipResponse,
     status_code=201,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
@@ -461,7 +461,7 @@ def link_relationship(
 
 @router.get(
     "/evidence/{ev_id}/relationships",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(require_scopes("audit:read"))],
     response_model=EvidenceRelationshipListResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )
@@ -488,7 +488,7 @@ def list_relationships(
 
 @router.get(
     "/evidence/{ev_id}/audit",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(require_scopes("audit:read"))],
     response_model=EvidenceAuditListResponse,
     responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
 )

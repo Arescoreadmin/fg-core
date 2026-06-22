@@ -10,7 +10,7 @@ Coverage map:
   EA-6    Create evidence with engagement_id stores it
   EA-7    Create evidence with expires_at stores it
   EA-8    Duplicate titles produce unique evidence_refs (UUID suffix)
-  EA-9    Create requires governance:write scope
+  EA-9    Create requires audit:write scope
   EA-10   Missing required fields → 422
   EA-11   Invalid collected_at format → 422
   EA-12   Get evidence by ID → 200
@@ -32,7 +32,7 @@ Coverage map:
   EA-28   Update metadata on immutable (VERIFIED) state → 409
   EA-29   Update metadata on REVOKED state → 409
   EA-30   Update metadata on ARCHIVED state → 409
-  EA-31   Update metadata requires governance:write scope
+  EA-31   Update metadata requires audit:write scope
   EA-32   Lifecycle: COLLECTED → SUBMITTED succeeds
   EA-33   Lifecycle: SUBMITTED → UNDER_REVIEW succeeds
   EA-34   Lifecycle: UNDER_REVIEW → VERIFIED succeeds; sets verified_at
@@ -48,7 +48,7 @@ Coverage map:
   EA-44   Lifecycle: REVOKED transition sets revoked_at
   EA-45   Lifecycle: ARCHIVED transition sets archived_at
   EA-46   Lifecycle: SUBMITTED sets submitted_at
-  EA-47   Lifecycle requires governance:write scope
+  EA-47   Lifecycle requires audit:write scope
   EA-48   Trust: UNVERIFIED → PARTIALLY_VERIFIED succeeds
   EA-49   Trust: UNVERIFIED → VERIFIED succeeds
   EA-50   Trust: VERIFIED → HIGH_CONFIDENCE succeeds
@@ -63,8 +63,8 @@ Coverage map:
   EA-59   Trust transition creates audit event
   EA-60   Trust on non-existent evidence → 404
   EA-61   Trust query returns full event history
-  EA-62   Trust verify requires governance:write scope
-  EA-63   Trust query requires governance:read scope
+  EA-62   Trust verify requires audit:write scope
+  EA-63   Trust query requires audit:read scope
   EA-64   Ownership: assign OWNER role
   EA-65   Ownership: assigning OWNER updates evidence.owner_id
   EA-66   Ownership: assign REVIEWER role
@@ -109,7 +109,7 @@ Coverage map:
   EA-105  Schema version 1.0 on created evidence
   EA-106  Schema version 1.0 in list results
   EA-107  Cross-tenant list isolation
-  EA-108  Dashboard requires governance:read scope
+  EA-108  Dashboard requires audit:read scope
   EA-109  By-entity endpoint returns relationships for given entity
   EA-110  Trust confidence_score stored on trust event
   EA-111  Trust chain hash-link is linear across multiple transitions
@@ -220,28 +220,28 @@ def _link(
 @pytest.fixture()
 def client(build_app):
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_A)
+    key = mint_key("audit:read", "audit:write", tenant_id=_TENANT_A)
     return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
 def client_b(build_app):
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_B)
+    key = mint_key("audit:read", "audit:write", tenant_id=_TENANT_B)
     return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
 def readonly_client(build_app):
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:read", tenant_id=_TENANT_A)
+    key = mint_key("audit:read", tenant_id=_TENANT_A)
     return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
 def writeonly_client(build_app):
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:write", tenant_id=_TENANT_A)
+    key = mint_key("audit:write", tenant_id=_TENANT_A)
     return TestClient(app, headers={"X-API-Key": key})
 
 

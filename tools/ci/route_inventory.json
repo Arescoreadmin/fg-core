@@ -6143,7 +6143,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:read"
+        "audit:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6161,7 +6161,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "audit:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6249,7 +6249,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:read"
+        "audit:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6267,7 +6267,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:read"
+        "audit:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6356,7 +6356,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:read"
+        "audit:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6374,7 +6374,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "audit:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6392,7 +6392,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:read"
+        "audit:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6410,7 +6410,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "audit:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6428,7 +6428,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:read"
+        "audit:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6446,7 +6446,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "audit:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6464,7 +6464,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "audit:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6482,7 +6482,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:read"
+        "audit:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6500,7 +6500,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "audit:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6518,7 +6518,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:read"
+        "audit:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -6536,7 +6536,7 @@
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "audit:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -13599,7 +13599,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-22T17:59:07.405044+00:00",
+  "generated_at": "2026-06-22T19:26:18.425756+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
