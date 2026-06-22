@@ -245,6 +245,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_portal"
     )  # PR 14.4: Governance Portal Integration
+    importlib.import_module(
+        "api.db_models_governance_reporting"
+    )  # PR 14.5: Governance Reporting & Attestation
 
 
 def _get_base():

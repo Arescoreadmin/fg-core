@@ -672,3 +672,44 @@ GOVERNANCE_PORTAL_EXPORTS_TOTAL = Counter(
     "Total governance portal export operations",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 14.5 — Governance Reporting & Attestation metrics
+# No tenant_id labels — high cardinality.
+# ---------------------------------------------------------------------------
+
+GOVERNANCE_REPORTING_REPORTS_TOTAL = Counter(
+    "frostgate_governance_reporting_reports_total",
+    "Total governance reports generated",
+    [],
+)
+
+GOVERNANCE_REPORTING_ATTESTATIONS_TOTAL = Counter(
+    "frostgate_governance_reporting_attestations_total",
+    "Total report attestations created",
+    [],
+)
+
+GOVERNANCE_REPORTING_VERIFICATIONS_TOTAL = Counter(
+    "frostgate_governance_reporting_verifications_total",
+    "Total report integrity verifications",
+    [],
+)
+
+GOVERNANCE_REPORTING_EXPORTS_TOTAL = Counter(
+    "frostgate_governance_reporting_exports_total",
+    "Total report exports",
+    [],
+)
+
+GOVERNANCE_REPORTING_VIEWS_TOTAL = Counter(
+    "frostgate_governance_reporting_views_total",
+    "Total governance report read operations",
+    [],
+)
+
+GOVERNANCE_REPORTING_SUPERSEDED_TOTAL = Counter(
+    "frostgate_governance_reporting_superseded_total",
+    "Total reports superseded",
+    [],
+)

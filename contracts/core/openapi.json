@@ -316,6 +316,15 @@
         "title": "AcknowledgementResponse",
         "type": "object"
       },
+      "ActorType": {
+        "enum": [
+          "HUMAN",
+          "AGENT",
+          "SYSTEM"
+        ],
+        "title": "ActorType",
+        "type": "string"
+      },
       "AddCommentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2735,6 +2744,123 @@
         "title": "ApprovalDecisionRequest",
         "type": "object"
       },
+      "ApprovalEntry": {
+        "properties": {
+          "approval_authority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Authority"
+          },
+          "approval_type": {
+            "title": "Approval Type",
+            "type": "string"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approver_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Email"
+          },
+          "approver_name": {
+            "title": "Approver Name",
+            "type": "string"
+          },
+          "approver_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Role"
+          },
+          "comments": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comments"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_required": {
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "quorum_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Position"
+          },
+          "quorum_required": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Required"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "approver_name",
+          "approver_email",
+          "approver_role",
+          "approval_authority",
+          "approval_type",
+          "status",
+          "comments",
+          "approved_at",
+          "quorum_required",
+          "quorum_position",
+          "is_required"
+        ],
+        "title": "ApprovalEntry",
+        "type": "object"
+      },
       "ApprovalListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3927,116 +4053,48 @@
         "title": "AttestationHealthResponse",
         "type": "object"
       },
-      "AttestationResponse": {
+      "AttestationListResponse": {
         "properties": {
-          "asset_id": {
-            "title": "Asset Id",
-            "type": "string"
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_reporting__schemas__AttestationResponse"
+            },
+            "title": "Items",
+            "type": "array"
           },
-          "attestation_hash": {
-            "title": "Attestation Hash",
-            "type": "string"
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
           },
-          "attestation_id": {
-            "title": "Attestation Id",
-            "type": "string"
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
           },
-          "attestation_type": {
-            "title": "Attestation Type",
-            "type": "string"
-          },
-          "attested_version_hash": {
-            "title": "Attested Version Hash",
-            "type": "string"
-          },
-          "chain_signature": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chain Signature"
-          },
-          "completed_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Completed At"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "due_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Due At"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "owner_email": {
-            "title": "Owner Email",
-            "type": "string"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "statement": {
-            "title": "Statement",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
+          "total": {
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
-          "attestation_id",
-          "asset_id",
-          "tenant_id",
-          "owner_email",
-          "attestation_type",
-          "attested_version_hash",
-          "statement",
-          "attestation_hash",
-          "chain_signature",
-          "status",
-          "due_at",
-          "completed_at",
-          "notes",
-          "schema_version",
-          "created_at"
+          "items",
+          "total",
+          "limit",
+          "offset"
         ],
-        "title": "AttestationResponse",
+        "title": "AttestationListResponse",
         "type": "object"
+      },
+      "AttestationType": {
+        "enum": [
+          "OWNER",
+          "RISK_OWNER",
+          "APPROVER",
+          "REVIEWER",
+          "EXECUTIVE",
+          "AUDITOR"
+        ],
+        "title": "AttestationType",
+        "type": "string"
       },
       "AuditListResponse": {
         "additionalProperties": false,
@@ -6122,6 +6180,120 @@
         "title": "ControlDashboardResponse",
         "type": "object"
       },
+      "ControlEntry": {
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "control_status": {
+            "title": "Control Status",
+            "type": "string"
+          },
+          "control_type": {
+            "title": "Control Type",
+            "type": "string"
+          },
+          "criticality": {
+            "title": "Criticality",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "effectiveness_rating": {
+            "title": "Effectiveness Rating",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceEntry"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "review_frequency_days": {
+            "title": "Review Frequency Days",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "verification_status": {
+            "title": "Verification Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "control_id",
+          "title",
+          "description",
+          "control_type",
+          "control_status",
+          "effectiveness_rating",
+          "verification_status",
+          "criticality",
+          "owner",
+          "last_verified_at",
+          "review_frequency_days",
+          "evidence_count",
+          "evidence",
+          "rationale"
+        ],
+        "title": "ControlEntry",
+        "type": "object"
+      },
       "ControlEvidenceLinkListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -6814,6 +6986,48 @@
           "name"
         ],
         "title": "CreateAssetRequest",
+        "type": "object"
+      },
+      "CreateAttestationRequest": {
+        "properties": {
+          "actor_type": {
+            "$ref": "#/components/schemas/ActorType",
+            "default": "HUMAN"
+          },
+          "attestation_statement": {
+            "maxLength": 4096,
+            "minLength": 10,
+            "title": "Attestation Statement",
+            "type": "string"
+          },
+          "attestation_type": {
+            "$ref": "#/components/schemas/AttestationType"
+          },
+          "attestor": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Attestor",
+            "type": "string"
+          },
+          "attestor_role": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attestor Role"
+          }
+        },
+        "required": [
+          "attestor",
+          "attestation_type",
+          "attestation_statement"
+        ],
+        "title": "CreateAttestationRequest",
         "type": "object"
       },
       "CreateBillingAccountRequest": {
@@ -10824,6 +11038,46 @@
         "title": "EvidenceBundleCreateResponse",
         "type": "object"
       },
+      "EvidenceEntry": {
+        "properties": {
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "linked_at": {
+            "title": "Linked At",
+            "type": "string"
+          },
+          "linked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked By"
+          }
+        },
+        "required": [
+          "id",
+          "evidence_id",
+          "evidence_type",
+          "linked_by",
+          "linked_at"
+        ],
+        "title": "EvidenceEntry",
+        "type": "object"
+      },
       "EvidenceFreshnessRecordResponse": {
         "properties": {
           "control_id": {
@@ -12829,25 +13083,6 @@
         "title": "GenerateGovernanceReportRequest",
         "type": "object"
       },
-      "GenerateReportRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "assessment_id": {
-            "title": "Assessment Id",
-            "type": "string"
-          },
-          "prompt_type": {
-            "default": "executive",
-            "title": "Prompt Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "assessment_id"
-        ],
-        "title": "GenerateReportRequest",
-        "type": "object"
-      },
       "GenerateReportResponse": {
         "properties": {
           "report_id": {
@@ -13187,6 +13422,170 @@
         "title": "GovernanceOverrideResponse",
         "type": "object"
       },
+      "GovernanceReportDetail": {
+        "properties": {
+          "approval_chain": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalEntry"
+            },
+            "title": "Approval Chain",
+            "type": "array"
+          },
+          "approval_count": {
+            "title": "Approval Count",
+            "type": "integer"
+          },
+          "compensating_controls": {
+            "items": {
+              "$ref": "#/components/schemas/ControlEntry"
+            },
+            "title": "Compensating Controls",
+            "type": "array"
+          },
+          "control_count": {
+            "title": "Control Count",
+            "type": "integer"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "generated_by": {
+            "title": "Generated By",
+            "type": "string"
+          },
+          "governance_timeline": {
+            "items": {
+              "$ref": "#/components/schemas/ReportTimelineEntry"
+            },
+            "title": "Governance Timeline",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Hash"
+          },
+          "report_hash": {
+            "title": "Report Hash",
+            "type": "string"
+          },
+          "report_version": {
+            "title": "Report Version",
+            "type": "integer"
+          },
+          "review_count": {
+            "title": "Review Count",
+            "type": "integer"
+          },
+          "review_history": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewEntry"
+            },
+            "title": "Review History",
+            "type": "array"
+          },
+          "risk_acceptance_id": {
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "risk_section": {
+            "$ref": "#/components/schemas/RiskSection"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "snapshot_timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Timestamp"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "risk_acceptance_id",
+          "report_version",
+          "generated_at",
+          "generated_by",
+          "report_hash",
+          "manifest_hash",
+          "schema_version",
+          "snapshot_timestamp",
+          "status",
+          "risk_section",
+          "approval_chain",
+          "review_history",
+          "compensating_controls",
+          "governance_timeline",
+          "evidence_count",
+          "control_count",
+          "approval_count",
+          "review_count"
+        ],
+        "title": "GovernanceReportDetail",
+        "type": "object"
+      },
+      "GovernanceReportListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GovernanceReportSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "GovernanceReportListResponse",
+        "type": "object"
+      },
       "GovernanceReportResponse": {
         "properties": {
           "assessment_id": {
@@ -13273,6 +13672,74 @@
           "is_finalized"
         ],
         "title": "GovernanceReportResponse",
+        "type": "object"
+      },
+      "GovernanceReportSummary": {
+        "properties": {
+          "approval_count": {
+            "title": "Approval Count",
+            "type": "integer"
+          },
+          "control_count": {
+            "title": "Control Count",
+            "type": "integer"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "generated_by": {
+            "title": "Generated By",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "report_hash": {
+            "title": "Report Hash",
+            "type": "string"
+          },
+          "report_version": {
+            "title": "Report Version",
+            "type": "integer"
+          },
+          "review_count": {
+            "title": "Review Count",
+            "type": "integer"
+          },
+          "risk_acceptance_id": {
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "risk_acceptance_id",
+          "report_version",
+          "generated_at",
+          "generated_by",
+          "report_hash",
+          "status",
+          "schema_version",
+          "evidence_count",
+          "control_count",
+          "approval_count",
+          "review_count"
+        ],
+        "title": "GovernanceReportSummary",
         "type": "object"
       },
       "GrantEntitlementRequest": {
@@ -14573,6 +15040,54 @@
           "hash"
         ],
         "title": "LogAnchorRequest",
+        "type": "object"
+      },
+      "ManifestResponse": {
+        "properties": {
+          "approval_chain_hash": {
+            "title": "Approval Chain Hash",
+            "type": "string"
+          },
+          "control_evidence_hash": {
+            "title": "Control Evidence Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "overall_hash": {
+            "title": "Overall Hash",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "review_history_hash": {
+            "title": "Review History Hash",
+            "type": "string"
+          },
+          "risk_acceptance_hash": {
+            "title": "Risk Acceptance Hash",
+            "type": "string"
+          },
+          "timeline_hash": {
+            "title": "Timeline Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "report_id",
+          "risk_acceptance_hash",
+          "approval_chain_hash",
+          "review_history_hash",
+          "control_evidence_hash",
+          "timeline_hash",
+          "overall_hash"
+        ],
+        "title": "ManifestResponse",
         "type": "object"
       },
       "MaturityBlockerResponse": {
@@ -20449,6 +20964,72 @@
         "title": "ReportQaApproveResponse",
         "type": "object"
       },
+      "ReportTimelineEntry": {
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "details": {
+            "title": "Details",
+            "type": "object"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_type",
+          "source",
+          "actor",
+          "occurred_at",
+          "details"
+        ],
+        "title": "ReportTimelineEntry",
+        "type": "object"
+      },
+      "ReportTimelineResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportTimelineEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ReportTimelineResponse",
+        "type": "object"
+      },
       "ReproduceRequest": {
         "properties": {
           "session_id": {
@@ -20806,6 +21387,82 @@
           }
         },
         "title": "RetryWorkflowRequest",
+        "type": "object"
+      },
+      "ReviewEntry": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "review_completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Completed At"
+          },
+          "review_due_at": {
+            "title": "Review Due At",
+            "type": "string"
+          },
+          "review_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Notes"
+          },
+          "review_type": {
+            "title": "Review Type",
+            "type": "string"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "review_type",
+          "reviewer",
+          "status",
+          "review_due_at",
+          "review_completed_at",
+          "outcome",
+          "review_notes"
+        ],
+        "title": "ReviewEntry",
         "type": "object"
       },
       "ReviewListResponse": {
@@ -21724,6 +22381,121 @@
           "computed_at"
         ],
         "title": "RiskScoreResponse",
+        "type": "object"
+      },
+      "RiskSection": {
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "accepted_by": {
+            "title": "Accepted By",
+            "type": "string"
+          },
+          "business_justification": {
+            "title": "Business Justification",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inherent_risk": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inherent Risk"
+          },
+          "next_review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Review At"
+          },
+          "residual_risk": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Risk"
+          },
+          "review_frequency_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Frequency Days"
+          },
+          "risk_rationale": {
+            "title": "Risk Rationale",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "business_justification",
+          "risk_rationale",
+          "residual_risk",
+          "inherent_risk",
+          "status",
+          "accepted_by",
+          "accepted_at",
+          "expires_at",
+          "next_review_at",
+          "review_frequency_days",
+          "schema_version"
+        ],
+        "title": "RiskSection",
         "type": "object"
       },
       "RoleDetail": {
@@ -25585,6 +26357,64 @@
         "title": "VerificationBundleResponse",
         "type": "object"
       },
+      "VerificationResponse": {
+        "properties": {
+          "approval_count": {
+            "title": "Approval Count",
+            "type": "integer"
+          },
+          "control_count": {
+            "title": "Control Count",
+            "type": "integer"
+          },
+          "details": {
+            "title": "Details",
+            "type": "object"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "manifest_hash": {
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "report_hash": {
+            "title": "Report Hash",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "result": {
+            "title": "Result",
+            "type": "string"
+          },
+          "review_count": {
+            "title": "Review Count",
+            "type": "integer"
+          },
+          "verified_at": {
+            "title": "Verified At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result",
+          "report_id",
+          "report_hash",
+          "manifest_hash",
+          "verified_at",
+          "evidence_count",
+          "control_count",
+          "approval_count",
+          "review_count",
+          "details"
+        ],
+        "title": "VerificationResponse",
+        "type": "object"
+      },
       "VerifyControlRequest": {
         "additionalProperties": false,
         "properties": {
@@ -26053,6 +26883,117 @@
         "title": "AssignOwnerRequest",
         "type": "object"
       },
+      "api__governance_assets__AttestationResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "attestation_hash": {
+            "title": "Attestation Hash",
+            "type": "string"
+          },
+          "attestation_id": {
+            "title": "Attestation Id",
+            "type": "string"
+          },
+          "attestation_type": {
+            "title": "Attestation Type",
+            "type": "string"
+          },
+          "attested_version_hash": {
+            "title": "Attested Version Hash",
+            "type": "string"
+          },
+          "chain_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain Signature"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "owner_email": {
+            "title": "Owner Email",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attestation_id",
+          "asset_id",
+          "tenant_id",
+          "owner_email",
+          "attestation_type",
+          "attested_version_hash",
+          "statement",
+          "attestation_hash",
+          "chain_signature",
+          "status",
+          "due_at",
+          "completed_at",
+          "notes",
+          "schema_version",
+          "created_at"
+        ],
+        "title": "AttestationResponse",
+        "type": "object"
+      },
       "api__governance_timeline_manager__TimelineEventResponse": {
         "properties": {
           "classification": {
@@ -26397,6 +27338,25 @@
           "control_name"
         ],
         "title": "CreateControlRequest",
+        "type": "object"
+      },
+      "api__reports_engine__GenerateReportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "prompt_type": {
+            "default": "executive",
+            "title": "Prompt Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessment_id"
+        ],
+        "title": "GenerateReportRequest",
         "type": "object"
       },
       "services__control_registry__schemas__ControlResponse": {
@@ -26820,6 +27780,109 @@
           "offset"
         ],
         "title": "PortalEvidenceListResponse",
+        "type": "object"
+      },
+      "services__governance_reporting__schemas__AttestationResponse": {
+        "properties": {
+          "actor_type": {
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "attestation_statement": {
+            "title": "Attestation Statement",
+            "type": "string"
+          },
+          "attestation_type": {
+            "title": "Attestation Type",
+            "type": "string"
+          },
+          "attested_at": {
+            "title": "Attested At",
+            "type": "string"
+          },
+          "attestor": {
+            "title": "Attestor",
+            "type": "string"
+          },
+          "attestor_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attestor Role"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "signature_hash": {
+            "title": "Signature Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "report_id",
+          "attestor",
+          "attestor_role",
+          "attestation_type",
+          "attested_at",
+          "attestation_statement",
+          "signature_hash",
+          "schema_version",
+          "actor_type",
+          "created_at"
+        ],
+        "title": "AttestationResponse",
+        "type": "object"
+      },
+      "services__governance_reporting__schemas__GenerateReportRequest": {
+        "properties": {
+          "generated_by": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Generated By",
+            "type": "string"
+          },
+          "risk_acceptance_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "snapshot_timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Timestamp"
+          }
+        },
+        "required": [
+          "risk_acceptance_id",
+          "generated_by"
+        ],
+        "title": "GenerateReportRequest",
         "type": "object"
       },
       "services__ops_governance__models__EnvironmentLifecycleState": {
@@ -55388,6 +56451,667 @@
         ]
       }
     },
+    "/governance-reports": {
+      "get": {
+        "operationId": "list_reports_governance_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "risk_acceptance_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Risk Acceptance Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceReportListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Reports",
+        "tags": [
+          "governance-reporting"
+        ]
+      },
+      "post": {
+        "operationId": "generate_report_governance_reports_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__governance_reporting__schemas__GenerateReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceReportDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Report",
+        "tags": [
+          "governance-reporting"
+        ]
+      }
+    },
+    "/governance-reports/{report_id}": {
+      "get": {
+        "operationId": "get_report_governance_reports__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceReportDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report",
+        "tags": [
+          "governance-reporting"
+        ]
+      }
+    },
+    "/governance-reports/{report_id}/attest": {
+      "post": {
+        "operationId": "create_attestation_governance_reports__report_id__attest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAttestationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_reporting__schemas__AttestationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Attestation",
+        "tags": [
+          "governance-reporting"
+        ]
+      }
+    },
+    "/governance-reports/{report_id}/attestations": {
+      "get": {
+        "operationId": "list_attestations_governance_reports__report_id__attestations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttestationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Attestations",
+        "tags": [
+          "governance-reporting"
+        ]
+      }
+    },
+    "/governance-reports/{report_id}/export/html": {
+      "post": {
+        "operationId": "export_html_governance_reports__report_id__export_html_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Html",
+        "tags": [
+          "governance-reporting"
+        ]
+      }
+    },
+    "/governance-reports/{report_id}/export/pdf": {
+      "post": {
+        "operationId": "export_pdf_governance_reports__report_id__export_pdf_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Pdf",
+        "tags": [
+          "governance-reporting"
+        ]
+      }
+    },
+    "/governance-reports/{report_id}/manifest": {
+      "get": {
+        "operationId": "get_manifest_governance_reports__report_id__manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManifestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Manifest",
+        "tags": [
+          "governance-reporting"
+        ]
+      }
+    },
+    "/governance-reports/{report_id}/timeline": {
+      "get": {
+        "operationId": "get_report_timeline_governance_reports__report_id__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportTimelineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Timeline",
+        "tags": [
+          "governance-reporting"
+        ]
+      }
+    },
+    "/governance-reports/{report_id}/verify": {
+      "post": {
+        "operationId": "verify_report_governance_reports__report_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Report",
+        "tags": [
+          "governance-reporting"
+        ]
+      }
+    },
     "/governance/assets": {
       "get": {
         "operationId": "list_assets_governance_assets_get",
@@ -56005,7 +57729,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/AttestationResponse"
+                    "$ref": "#/components/schemas/api__governance_assets__AttestationResponse"
                   },
                   "title": "Response List Attestations Governance Assets  Asset Id  Attestations Get",
                   "type": "array"
@@ -56074,7 +57798,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AttestationResponse"
+                  "$ref": "#/components/schemas/api__governance_assets__AttestationResponse"
                 }
               }
             },
@@ -59628,7 +61352,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GenerateReportRequest"
+                "$ref": "#/components/schemas/api__reports_engine__GenerateReportRequest"
               }
             }
           },

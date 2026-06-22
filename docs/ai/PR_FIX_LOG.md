@@ -15613,6 +15613,31 @@ Resolution order in `check_capability()` (fully backward-compatible):
 
 ---
 
+## PR 14.5 — Governance Reporting & Attestation Engine
+
+**Branch:** `feature/pr-14-5-governance-reporting`
+**Date:** 2026-06-22
+
+### Fix 1: Table name collision with existing `governance_reports` table
+
+**Symptom:** SQLAlchemy `InvalidRequestError: Table 'governance_reports' is already defined` during test `init_db()`.
+
+**Root cause:** The existing assessment reporting bounded context already owns a `governance_reports` table. The new governance reporting bounded context initially used the same table name.
+
+**Fix:** Prefixed all 4 new tables with `risk_governance_`: `risk_governance_reports`, `risk_governance_report_manifests`, `risk_governance_attestations`, `risk_governance_report_audits`.
+
+---
+
+### Fix 2: SOC doc prepended instead of appended
+
+**Symptom:** `soc-review-sync` gate showed PR 14.5 entry at line 1 of the SOC doc instead of at the bottom (after PR 14.4 entry), breaking the chronological order of the document.
+
+**Root cause:** The implementation agent wrote the new entry to the top of the file rather than appending after the last entry.
+
+**Fix:** Removed the prepended entry and appended it correctly after the PR 14.4 entry at the end of `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+
+---
+
 ## PR 14.4 — Governance Portal Integration & Client Trust Layer
 
 **Branch:** `feature/pr-14-4-governance-portal`

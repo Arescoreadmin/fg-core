@@ -1551,3 +1551,72 @@ class TestAdapterRegistryPR144:
     def test_all_source_types_registered_including_governance_portal(self):
         for source_type in SourceType:
             assert source_type in TIMELINE_ADAPTERS, f"{source_type} not in registry"
+
+
+# ---------------------------------------------------------------------------
+# TestAdapterRegistryPR145 — GOVERNANCE_REPORTING source type
+# ---------------------------------------------------------------------------
+
+
+class TestAdapterRegistryPR145:
+    def test_governance_reporting_registered(self):
+        assert SourceType.GOVERNANCE_REPORTING in TIMELINE_ADAPTERS
+
+    def test_governance_reporting_adapter_callable(self):
+        from services.governance.timeline.adapters import (
+            governance_reporting_to_timeline_event,
+        )
+
+        evt = governance_reporting_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="report-abc123",
+            event_type="governance_report.generated",
+            occurred_at="2026-06-22T00:00:00.000Z",
+            payload={"risk_acceptance_id": "risk-001", "report_version": 1},
+        )
+        assert evt.source_type == SourceType.GOVERNANCE_REPORTING
+        assert evt.source_id == "report-abc123"
+        assert evt.event_type == "governance_report.generated"
+        assert evt.tenant_id == "tenant-a"
+
+    def test_governance_reporting_event_id_deterministic(self):
+        from services.governance.timeline.adapters import (
+            governance_reporting_to_timeline_event,
+        )
+
+        e1 = governance_reporting_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="report-001",
+            event_type="governance_report.generated",
+            occurred_at="2026-06-22T00:00:00.000Z",
+        )
+        e2 = governance_reporting_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="report-001",
+            event_type="governance_report.generated",
+            occurred_at="2026-06-22T00:00:00.000Z",
+        )
+        assert e1.event_id == e2.event_id
+
+    def test_governance_reporting_event_id_differs_across_tenants(self):
+        from services.governance.timeline.adapters import (
+            governance_reporting_to_timeline_event,
+        )
+
+        ea = governance_reporting_to_timeline_event(
+            tenant_id="tenant-a",
+            source_id="report-001",
+            event_type="governance_report.generated",
+            occurred_at="2026-06-22T00:00:00.000Z",
+        )
+        eb = governance_reporting_to_timeline_event(
+            tenant_id="tenant-b",
+            source_id="report-001",
+            event_type="governance_report.generated",
+            occurred_at="2026-06-22T00:00:00.000Z",
+        )
+        assert ea.event_id != eb.event_id
+
+    def test_all_source_types_registered_including_governance_reporting(self):
+        for source_type in SourceType:
+            assert source_type in TIMELINE_ADAPTERS, f"{source_type} not in registry"

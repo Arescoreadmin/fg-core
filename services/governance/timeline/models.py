@@ -27,6 +27,7 @@ class SourceType(str, Enum):
     RISK_GOVERNANCE = "RISK_GOVERNANCE"
     CONTROL_REGISTRY = "CONTROL_REGISTRY"
     GOVERNANCE_PORTAL = "GOVERNANCE_PORTAL"
+    GOVERNANCE_REPORTING = "GOVERNANCE_REPORTING"
 
 
 # ---------------------------------------------------------------------------
