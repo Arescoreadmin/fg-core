@@ -784,23 +784,23 @@ class GovernanceReportingEngine:
                 )
             )
 
-        for audit in risk_audits:
+        for risk_audit in risk_audits:
             _add_event(
                 source="risk_acceptance",
-                row_id=audit.id,
-                event_type=audit.event_type,
-                occurred_at=audit.event_at,
-                actor=audit.actor,
+                row_id=risk_audit.id,
+                event_type=risk_audit.event_type,
+                occurred_at=risk_audit.event_at,
+                actor=risk_audit.actor,
                 details={},
             )
 
-        for audit in approval_audits:
+        for approval_audit in approval_audits:
             _add_event(
                 source="approval",
-                row_id=audit.id,
-                event_type=audit.event_type,
-                occurred_at=audit.event_at,
-                actor=audit.actor,
+                row_id=approval_audit.id,
+                event_type=approval_audit.event_type,
+                occurred_at=approval_audit.event_at,
+                actor=approval_audit.actor,
                 details={},
             )
 

@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 604,
+    "contract_count": 614,
     "contract_only": [],
-    "runtime_count": 770,
+    "runtime_count": 780,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "fe46f27a51cdb04cd27ceda8ed3af0ff7d996fea8c219669e9b28c0218fa9430",
+  "governance_fingerprint": "cade3573275e0accf8d21fbd725bde666869d1b3dc6c7403e614615f02732c01",
   "planes": [
     {
       "compat": {
@@ -248,6 +248,7 @@
         "/exceptions",
         "/field-assessment",
         "/governance",
+        "/governance-reports",
         "/health",
         "/internal",
         "/metrics",
@@ -649,6 +650,11 @@
       "GET /field-assessment/etcc/overview",
       "GET /field-assessment/interview-templates",
       "GET /field-assessment/reports/verify/{report_hash}",
+      "GET /governance-reports",
+      "GET /governance-reports/{report_id}",
+      "GET /governance-reports/{report_id}/attestations",
+      "GET /governance-reports/{report_id}/manifest",
+      "GET /governance-reports/{report_id}/timeline",
       "GET /governance/assets",
       "GET /governance/assets/attestation-health",
       "GET /governance/assets/continuity-gaps",
@@ -924,6 +930,11 @@
       "POST /field-assessment/engagements/{engagement_id}/tim/evaluate",
       "POST /field-assessment/engagements/{engagement_id}/trust-arc/rebuild",
       "POST /field-assessment/engagements/{engagement_id}/verification-bundle/generate",
+      "POST /governance-reports",
+      "POST /governance-reports/{report_id}/attest",
+      "POST /governance-reports/{report_id}/export/html",
+      "POST /governance-reports/{report_id}/export/pdf",
+      "POST /governance-reports/{report_id}/verify",
       "POST /governance/assets",
       "POST /governance/assets/{asset_id}/attestations",
       "POST /governance/assets/{asset_id}/decommission",
