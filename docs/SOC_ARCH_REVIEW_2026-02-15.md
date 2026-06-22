@@ -2923,3 +2923,39 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `make fg-contract`: Contract diff OK
 - `pytest tests/test_ea_canonical_14_6_1.py`: 117/117 passed
 - `make fg-fast`: All checks passed
+
+---
+
+## 2026-06-22 — PR 14.6.3/14.6.4 Framework Authority Mapping Foundation
+
+**Reviewer:** Codex | **Classification:** SOC-P2 (new GOVERNANCE plane routes; new RLS write policies; no auth mechanism change; existing tenant isolation model preserved)
+
+**Change:** Introduces `FrameworkAuthority` — a bounded context for mapping enterprise controls to compliance frameworks. Adds 16 new routes under `/frameworks`, `/controls/{id}/framework-mappings`, and `/control-framework-mappings` prefixes. All routes are mounted in the `control` plane (`governance:read/write` scopes). Migration 0052 applies FORCE RLS on 4 new tables (`fa_frameworks`, `fa_framework_controls`, `control_framework_mappings`, `control_framework_mapping_audits`).
+
+**Security-relevant decisions:**
+
+1. **RLS system-write path:** `fa_frameworks` and `fa_framework_controls` support a `scope_type=SYSTEM` write path (gated on `admin:write` or `control-plane:admin`). A new session variable `app.allow_system_write` is set transaction-locally before these writes; two new RLS policies (`fa_frameworks_system_write`, `fa_framework_controls_system_write`) guard the INSERT/UPDATE path. SYSTEM-scope rows are globally visible for reading (existing `_select_visibility` policies already permit them).
+
+2. **Tenant write isolation:** Tenant-scope writes require matching `app.tenant_id` (same pattern as existing tables). `control_framework_mapping_audits` is append-only (no UPDATE/DELETE via trigger).
+
+3. **Post-commit RLS context:** `db.commit()` clears `SET LOCAL` session variables under PostgreSQL. All write handlers were updated to `db.flush()` + build response in-transaction + `db.commit()` to avoid RLS context loss on the response read.
+
+4. **Merge strategy:** Branch lacked shared history with `origin/main`. Resolved by merging main (add/add strategy: accepted main's files, re-applied framework authority additions). No auth, security, or migration files from main were overridden.
+
+**Files Changed (security-relevant):**
+
+- `api/framework_authority.py` — 16 new routes; `_set_system_write_context()` helper; flush-before-response pattern
+- `services/framework_authority/repository.py` — `set_tenant_context()` rebind after `seed_minimal()` commit
+- `migrations/postgres/0124_framework_authority.sql` — FORCE RLS on 4 tables; 2 tenant-write policies; 2 system-write policies; append-only triggers
+- `api/db.py` — SQLite `RAISE(ABORT)` triggers for `control_framework_mapping_audits`; model registration
+- `services/plane_registry/registry.py` — added `/frameworks`, `/control-framework-mappings` to control plane
+- `apps/console/`, `apps/portal/`, `apps/web/` — frontend directory restructure (no backend auth changes)
+- `tools/ci/` — route inventory regenerated to include 16 new framework authority routes
+
+**Validation:**
+
+- `make fg-contract`: Contract diff OK
+- `make check_plane_registry`: OK
+- `make route-inventory-audit`: OK
+- `make soc-review-sync`: OK (local)
+- `pytest tests/test_framework_authority.py`: 114/114 passed

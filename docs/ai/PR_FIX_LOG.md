@@ -15809,7 +15809,7 @@ Resolution order in `check_capability()` (fully backward-compatible):
 
 **Root cause:** Migration 0052 only had tenant-write policies. No write path existed for system-scope rows under FORCE RLS.
 
-**Fix:** Added `fa_frameworks_system_write` and `fa_framework_controls_system_write` policies to `migrations/postgres/0052_framework_authority.sql` gated on `app.allow_system_write = 'true'`. Added `_set_system_write_context(db, allow)` helper to `api/framework_authority.py` and called it before each write that may need system access.
+**Fix:** Added `fa_frameworks_system_write` and `fa_framework_controls_system_write` policies to `migrations/postgres/0124_framework_authority.sql` gated on `app.allow_system_write = 'true'`. Added `_set_system_write_context(db, allow)` helper to `api/framework_authority.py` and called it before each write that may need system access.
 
 ---
 
