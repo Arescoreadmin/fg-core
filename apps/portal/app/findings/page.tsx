@@ -1,0 +1,408 @@
+'use client';
+
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import {
+  portalApi,
+  PortalApiError,
+  type FindingSummary,
+  type FindingExplanation,
+} from '@/lib/portalApi';
+import { getStoredEngagementId } from '@/lib/engagementStore';
+
+const SEVERITY_ORDER: Record<string, number> = {
+  critical: 0, high: 1, medium: 2, low: 3, info: 4,
+};
+
+const SEVERITY_CLASS: Record<string, string> = {
+  critical: 'border-red-500/40 bg-red-500/10 text-red-300',
+  high: 'border-orange-500/40 bg-orange-500/10 text-orange-300',
+  medium: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
+  low: 'border-blue-500/40 bg-blue-500/10 text-blue-300',
+  info: 'border-border bg-surface-2 text-muted',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  open: 'Open',
+  accepted: 'Accepted',
+  resolved: 'Resolved',
+  in_progress: 'In Progress',
+  deferred: 'Deferred',
+};
+
+const PAGE_SIZE = 20;
+
+function SeverityBadge({ severity }: { severity: string }) {
+  const cls = SEVERITY_CLASS[severity] ?? SEVERITY_CLASS.info;
+  return (
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs border font-medium ${cls}`}>
+      {severity.charAt(0).toUpperCase() + severity.slice(1)}
+    </span>
+  );
+}
+
+function FindingCard({
+  finding,
+  engagementId,
+}: {
+  finding: FindingSummary;
+  engagementId: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [explanation, setExplanation] = useState<FindingExplanation | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [explainFailed, setExplainFailed] = useState(false);
+  const [showTechnical, setShowTechnical] = useState(false);
+
+  async function handleExpand() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !explanation && !explainLoading && !explainFailed) {
+      setExplainLoading(true);
+      try {
+        const result = await portalApi.explainFinding(engagementId, finding.finding_id);
+        setExplanation(result);
+      } catch {
+        setExplainFailed(true);
+      } finally {
+        setExplainLoading(false);
+      }
+    }
+  }
+
+  return (
+    <div
+      className="rounded border border-border bg-surface-2 p-3 space-y-2"
+      aria-expanded={expanded}
+    >
+      <div
+        className="flex flex-wrap items-start gap-2 cursor-pointer hover:opacity-90"
+        onClick={handleExpand}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && handleExpand()}
+      >
+        <SeverityBadge severity={finding.severity} />
+        <span className="flex-1 min-w-0 text-sm font-medium text-foreground">{finding.title}</span>
+        <span className="text-xs text-muted">{STATUS_LABEL[finding.status] ?? finding.status}</span>
+        <span className="text-muted text-sm">{expanded ? '▲' : '▼'}</span>
+      </div>
+
+      <div className="text-xs text-muted font-mono">{finding.finding_id}</div>
+
+      {expanded && (
+        <div className="pt-1 space-y-3">
+          {explainLoading && (
+            <div className="space-y-2" aria-busy="true">
+              <div className="h-3 w-4/5 rounded bg-surface-3 animate-pulse" />
+              <div className="h-3 w-3/5 rounded bg-surface-3 animate-pulse" />
+              <div className="h-3 w-2/5 rounded bg-surface-3 animate-pulse" />
+            </div>
+          )}
+
+          {explanation && !explainLoading && (
+            <div className="space-y-2">
+              <p className="text-sm text-foreground">{explanation.plain_summary}</p>
+              <p className="text-xs text-muted">{explanation.what_it_means}</p>
+
+              {explanation.affected_entities.length > 0 && (
+                <ul className="space-y-0.5 pl-3">
+                  {explanation.affected_entities.map((e, i) => (
+                    <li key={i} className="text-xs text-muted list-disc">
+                      <span className="font-semibold text-foreground">{e.count}</span>{' '}
+                      {e.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {explanation.framework_impact.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {explanation.framework_impact.map((fw) => (
+                    <span key={fw} className="rounded px-1.5 py-0.5 text-[11px] border border-blue-500/20 bg-blue-500/5 text-blue-300 font-medium">
+                      {fw}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {explanation.remediation_steps.length > 0 && (
+                <div className="rounded border border-border bg-surface-3 p-3 space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted uppercase tracking-wider">
+                    Remediation steps
+                  </p>
+                  <ol className="space-y-1.5 pl-1">
+                    {explanation.remediation_steps.map((step, i) => (
+                      <li key={i} className="flex gap-2 text-xs text-foreground leading-relaxed">
+                        <span className="shrink-0 font-semibold text-muted w-4">{i + 1}.</span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              {explanation.explanation_confidence < 0.7 && (
+                <p className="text-[11px] text-amber-300">
+                  Explanation based on finding metadata — limited scan evidence available.
+                </p>
+              )}
+
+              {explanation.signals_used.length > 0 && (
+                <p className="text-[11px] text-muted">
+                  Based on {explanation.signals_used.length} scan signal{explanation.signals_used.length !== 1 ? 's' : ''}.
+                </p>
+              )}
+
+              <button
+                type="button"
+                className="text-xs text-muted hover:text-foreground transition-colors"
+                onClick={() => setShowTechnical((v) => !v)}
+              >
+                {showTechnical ? '▲ Hide technical details' : '▼ Technical details'}
+              </button>
+
+              {showTechnical && (
+                <div className="rounded border border-border bg-surface-3 p-2.5 space-y-2 text-xs">
+                  {finding.nist_ai_rmf_mappings.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {finding.nist_ai_rmf_mappings.map((m) => (
+                        <span key={m} className="rounded px-1.5 py-0.5 border border-blue-500/20 bg-blue-500/5 text-blue-300">
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {finding.framework_mappings.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {finding.framework_mappings.map((m) => (
+                        <span key={m} className="rounded px-1.5 py-0.5 border border-border bg-surface-3 text-muted">
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {explanation.registry_recommendation && (
+                    <p className="text-muted">
+                      <span className="text-foreground font-medium">Recommendation: </span>
+                      {explanation.registry_recommendation}
+                    </p>
+                  )}
+                  {finding.remediation_hint && (
+                    <p className="text-muted">
+                      <span className="text-foreground font-medium">Guidance: </span>
+                      {finding.remediation_hint}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {explainFailed && !explainLoading && (
+            <p className="text-[11px] text-muted italic">
+              Plain-language explanation unavailable — technical details shown below.
+            </p>
+          )}
+
+          {!explanation && !explainLoading && (
+            <div className="space-y-2 text-xs">
+              {finding.nist_ai_rmf_mappings.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {finding.nist_ai_rmf_mappings.map((m) => (
+                    <span key={m} className="rounded px-1.5 py-0.5 border border-blue-500/20 bg-blue-500/5 text-blue-300">
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {finding.framework_mappings.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {finding.framework_mappings.map((m) => (
+                    <span key={m} className="rounded px-1.5 py-0.5 border border-border bg-surface-3 text-muted">
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {finding.remediation_hint && (
+                <p className="text-muted">
+                  <span className="text-foreground font-medium">Guidance: </span>
+                  {finding.remediation_hint}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FindingsPageInner() {
+  const params = useSearchParams();
+  const engagementId = params.get('e') || getStoredEngagementId();
+
+  const [findings, setFindings] = useState<FindingSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [severityFilter, setSeverityFilter] = useState('');
+
+  const load = useCallback(
+    async (offset: number, severity: string) => {
+      if (!engagementId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await portalApi.listFindings(engagementId, {
+          limit: PAGE_SIZE,
+          offset,
+          severity: severity || undefined,
+        });
+        const sorted = [...result.items].sort(
+          (a, b) =>
+            (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9),
+        );
+        setFindings(sorted);
+        setTotal(result.total_count);
+      } catch (e) {
+        if (e instanceof PortalApiError && e.status === 404) {
+          setError('Engagement not found.');
+        } else {
+          setError('Failed to load findings. Please try again.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [engagementId],
+  );
+
+  useEffect(() => {
+    setPage(0);
+    load(0, severityFilter);
+  }, [engagementId, severityFilter, load]);
+
+  function handlePage(newPage: number) {
+    setPage(newPage);
+    load(newPage * PAGE_SIZE, severityFilter);
+  }
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  if (!engagementId) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <p className="text-sm font-semibold text-foreground">No engagement selected</p>
+        <p className="mt-1 text-xs text-muted">
+          <Link href="/" className="underline hover:text-foreground transition-colors">
+            Select an engagement from the dashboard.
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
+  const criticalCount = findings.filter((f) => f.severity === 'critical').length;
+  const highCount = findings.filter((f) => f.severity === 'high').length;
+  const openCount = findings.filter((f) => f.status === 'open').length;
+
+  return (
+    <div className="space-y-4" aria-label="findings-page">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Findings</h2>
+          {!loading && total > 0 && (
+            <p className="text-xs text-muted mt-0.5">
+              {total} total · {criticalCount + highCount} critical/high · {openCount} open
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted" htmlFor="severity-filter">Severity</label>
+          <select
+            id="severity-filter"
+            className="rounded border border-border bg-surface-2 text-xs px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value)}
+          >
+            <option value="">All</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="info">Info</option>
+          </select>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="space-y-2" aria-busy="true">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-14 rounded border border-border bg-surface-2 animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && findings.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center text-muted">
+          <p className="text-sm font-medium">No findings</p>
+          <p className="text-xs mt-1">
+            {severityFilter
+              ? 'No findings match the selected severity filter.'
+              : 'No findings have been recorded for this engagement. If scans have not been run yet, your operator will add them during or after the assessment session.'}
+          </p>
+        </div>
+      )}
+
+      {!loading && findings.length > 0 && (
+        <>
+          <div className="space-y-2">
+            {findings.map((f) => (
+              <FindingCard key={f.finding_id} finding={f} engagementId={engagementId} />
+            ))}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 text-xs text-muted pt-2">
+              <button
+                className="px-2 py-1 rounded border border-border hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={() => handlePage(page - 1)}
+                disabled={page === 0}
+                aria-label="Previous page"
+              >
+                ‹ Prev
+              </button>
+              <span>{page + 1} / {totalPages}</span>
+              <button
+                className="px-2 py-1 rounded border border-border hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={() => handlePage(page + 1)}
+                disabled={page >= totalPages - 1}
+                aria-label="Next page"
+              >
+                Next ›
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function FindingsPage() {
+  return (
+    <Suspense fallback={<div className="space-y-2" aria-busy="true">{[1,2,3].map(i=><div key={i} className="h-14 rounded border border-border bg-surface-2 animate-pulse"/>)}</div>}>
+      <FindingsPageInner />
+    </Suspense>
+  );
+}

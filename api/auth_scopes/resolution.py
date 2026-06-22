@@ -7,6 +7,7 @@ import os
 import re
 import sqlite3
 import time
+from datetime import datetime
 from typing import Callable, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request
@@ -394,8 +395,11 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="no_key_provided")
 
+    _db_backend = (os.getenv("FG_DB_BACKEND") or "").strip().lower()
+    _is_postgres = _db_backend == "postgres"
+
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
-    if not sqlite_path:
+    if not _is_postgres and not sqlite_path:
         _log_auth_event(
             "auth_attempt",
             success=False,
@@ -405,7 +409,23 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="no_db_configured")
 
-    def _row_for(prefix: str, lookup_hash: Optional[str], legacy_hash: Optional[str]):
+    def _row_for(
+        prefix: str,
+        lookup_hash: Optional[str],
+        legacy_hash: Optional[str],
+        tenant_id_hint: Optional[str] = None,
+    ):
+        if _is_postgres:
+            from .store import get_key_row as _pg_get_key_row
+
+            return _pg_get_key_row(
+                prefix=prefix,
+                lookup_hash=lookup_hash,
+                legacy_hash=legacy_hash,
+                tenant_id_hint=tenant_id_hint,
+            )
+
+        # SQLite path (unchanged)
         con = sqlite3.connect(sqlite_path)
         try:
             try:
@@ -501,7 +521,12 @@ def verify_api_key_detailed(
                 valid=False, reason="key_expired_token", key_prefix=key_prefix
             )
 
-        row, identifier_col, col_names = _row_for(key_prefix, key_lookup, key_hash)
+        _tid_hint = (
+            (token_payload.get("tenant_id") or "") if token_payload else ""
+        ) or None
+        row, identifier_col, col_names = _row_for(
+            key_prefix, key_lookup, key_hash, tenant_id_hint=_tid_hint
+        )
         if row:
             scopes_csv = row.get("scopes_csv")
             enabled = row.get("enabled")
@@ -574,18 +599,29 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="key_disabled", key_prefix=key_prefix)
 
-    if (
-        check_expiration
-        and identifier_col
-        and key_prefix
-        and (key_lookup or key_hash)
-        and _check_db_expiration(
-            sqlite_path,
-            key_prefix,
-            identifier_col,
-            key_lookup if identifier_col == "key_lookup" else key_hash,
-        )
-    ):
+    _db_expired = False
+    if check_expiration and identifier_col and key_prefix:
+        if _is_postgres:
+            # Postgres row already contains expires_at as a datetime or None.
+            _expires_at_pg = row.get("expires_at") if row else None
+            if _expires_at_pg is not None:
+                _now_ts = int(time.time())
+                if isinstance(_expires_at_pg, datetime):
+                    _db_expired = _now_ts > int(_expires_at_pg.timestamp())
+                elif isinstance(_expires_at_pg, (int, float)):
+                    _db_expired = _now_ts > int(_expires_at_pg)
+        else:
+            _db_expired = bool(
+                (key_lookup or key_hash)
+                and _check_db_expiration(
+                    sqlite_path,
+                    key_prefix,
+                    identifier_col,
+                    key_lookup if identifier_col == "key_lookup" else key_hash,
+                )
+            )
+
+    if _db_expired:
         _log_auth_event(
             "auth_attempt",
             success=False,
@@ -617,7 +653,8 @@ def verify_api_key_detailed(
                 scopes=have,
             )
 
-        if hash_alg != "argon2id":
+        if hash_alg != "argon2id" and not _is_postgres:
+            # Legacy hash upgrade is SQLite-only; Postgres keys are always argon2id.
             if (
                 "hash_alg" in col_names
                 and "hash_params" in col_names
@@ -679,7 +716,13 @@ def verify_api_key_detailed(
     if identifier_col and (key_lookup or key_hash):
         _key_val = key_lookup if identifier_col == "key_lookup" else key_hash
         if _key_val is not None:
-            _update_key_usage(sqlite_path, key_prefix, identifier_col, _key_val)
+            _update_key_usage(
+                sqlite_path,
+                key_prefix,
+                identifier_col,
+                _key_val,
+                tenant_id=tenant_id,
+            )
 
     _log_auth_event(
         "auth_attempt",

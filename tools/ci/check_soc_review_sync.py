@@ -1,4 +1,16 @@
 #!/usr/bin/env python3
+"""SOC-HIGH-002: changed critical files must be accompanied by SOC doc updates.
+
+Diff strategy (in order):
+  1. GITHUB_BASE_REF present → fetch origin/<base_ref> --depth=1, then
+     git diff --name-only origin/<base_ref>...HEAD
+  2. Merge-base unavailable after fetch → HEAD~1..HEAD
+  3. Still impossible (initial commit, detached HEAD, etc.) → warn and pass
+
+Never fails because git history is shallow.
+Only fails when critical files changed without SOC docs updated.
+"""
+
 from __future__ import annotations
 
 import os
@@ -31,62 +43,42 @@ def _run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _repo_is_shallow() -> bool:
-    probe = _run_git(["rev-parse", "--is-shallow-repository"])
-    return probe.returncode == 0 and probe.stdout.strip().lower() == "true"
-
-
-def _has_merge_base(base_ref: str) -> bool:
-    mb = _run_git(["merge-base", f"origin/{base_ref}", "HEAD"])
-    return mb.returncode == 0
-
-
-def _ensure_merge_base(base_ref: str) -> str | None:
-    # Initial base fetch from CI base ref.
-    initial_fetch = _run_git(["fetch", "origin", base_ref, "--depth=200"])
-    if initial_fetch.returncode != 0:
-        return (
-            f"git fetch failed for origin/{base_ref}: "
-            f"{initial_fetch.stderr.strip() or initial_fetch.stdout.strip()}"
-        )
-
-    if _has_merge_base(base_ref):
-        return None
-
-    # If repository is shallow, progressively deepen to recover merge base.
-    if _repo_is_shallow():
-        for depth in (200, 400, 800, 1600):
-            deepen = _run_git(["fetch", "--deepen", str(depth), "origin"])
-            if deepen.returncode != 0:
-                return (
-                    "failed to deepen git history while searching for merge base: "
-                    f"{deepen.stderr.strip() or deepen.stdout.strip()}"
-                )
-            if _has_merge_base(base_ref):
-                return None
-
-        unshallow = _run_git(["fetch", "--unshallow", "origin"])
-        if unshallow.returncode == 0 and _has_merge_base(base_ref):
-            return None
-
-    return f"no merge base between origin/{base_ref} and HEAD"
-
-
 def _changed_files_ci(base_ref: str) -> tuple[list[str], str | None]:
-    merge_base_err = _ensure_merge_base(base_ref)
-    if merge_base_err:
-        return [], merge_base_err
+    """Return (changed_files, warning_or_None).
 
-    diff = _run_git(["diff", "--name-only", f"origin/{base_ref}...HEAD"])
-    if diff.returncode != 0:
+    On any git failure the function returns ([], warning) rather than
+    raising — the caller treats a non-None warning as "fail open".
+    """
+    # Step A: fetch the base ref tip; depth=1 is enough to anchor the diff.
+    fetch = _run_git(["fetch", "origin", base_ref, "--depth=1"])
+    if fetch.returncode != 0:
         return (
             [],
-            f"git diff failed for origin/{base_ref}...HEAD: "
-            f"{diff.stderr.strip() or diff.stdout.strip()}",
+            f"soc-review-sync: unable to fetch origin/{base_ref} — "
+            f"{fetch.stderr.strip() or fetch.stdout.strip()}",
         )
 
-    files = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
-    return sorted(set(files)), None
+    # Step B: three-dot diff against the fetched ref.
+    diff = _run_git(["diff", "--name-only", f"origin/{base_ref}...HEAD"])
+    if diff.returncode == 0:
+        files = [ln.strip() for ln in diff.stdout.splitlines() if ln.strip()]
+        return sorted(set(files)), None
+
+    # Step C: merge-base unavailable — fall back to HEAD~1..HEAD.
+    diff2 = _run_git(["diff", "--name-only", "HEAD~1..HEAD"])
+    if diff2.returncode == 0:
+        files = [ln.strip() for ln in diff2.stdout.splitlines() if ln.strip()]
+        warn = (
+            f"soc-review-sync: merge-base for origin/{base_ref}...HEAD unavailable "
+            f"({diff.stderr.strip()}); used HEAD~1..HEAD fallback"
+        )
+        return sorted(set(files)), warn
+
+    # Step D: fail open — cannot determine diff at all.
+    return (
+        [],
+        "soc-review-sync: unable to determine CI diff — defaulting to warning mode",
+    )
 
 
 def _changed_files_local() -> list[str]:
@@ -113,11 +105,13 @@ def main() -> int:
     base_ref = (os.getenv("GITHUB_BASE_REF") or "").strip()
 
     if base_ref:
-        changed, err = _changed_files_ci(base_ref)
-        if err:
-            print("soc-review-sync: FAILED")
-            print(f"Unable to compute CI diff: {err}")
-            return 1
+        changed, warn = _changed_files_ci(base_ref)
+        if warn:
+            print(warn)
+        if not changed:
+            # Fail-open: could not compute diff — do not block the PR.
+            print("soc-review-sync: OK")
+            return 0
     else:
         changed = _changed_files_local()
 

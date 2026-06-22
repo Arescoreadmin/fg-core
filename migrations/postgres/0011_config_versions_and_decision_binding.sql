@@ -44,10 +44,20 @@ ALTER TABLE decisions
 CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created
     ON decisions (tenant_id, config_hash, created_at DESC);
 
-ALTER TABLE decisions
-    ADD CONSTRAINT fk_decisions_config_version
-    FOREIGN KEY (tenant_id, config_hash)
-    REFERENCES config_versions(tenant_id, config_hash)
-    ON UPDATE RESTRICT ON DELETE RESTRICT;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_decisions_config_version'
+          AND conrelid = 'decisions'::regclass
+    ) THEN
+        ALTER TABLE decisions
+            ADD CONSTRAINT fk_decisions_config_version
+            FOREIGN KEY (tenant_id, config_hash)
+            REFERENCES config_versions(tenant_id, config_hash)
+            ON UPDATE RESTRICT ON DELETE RESTRICT;
+    END IF;
+END $$;
 
 COMMENT ON INDEX ix_decisions_tenant_config_created IS 'used for decision→config forensic joins; do not drop without replacing';

@@ -211,6 +211,22 @@
         "title": "AuditExportRequest",
         "type": "object"
       },
+      "BindBody": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "maxLength": 512,
+            "minLength": 16,
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "BindBody",
+        "type": "object"
+      },
       "CSRFTokenResponse": {
         "description": "CSRF token response.",
         "properties": {
@@ -228,6 +244,96 @@
           "header_name"
         ],
         "title": "CSRFTokenResponse",
+        "type": "object"
+      },
+      "CallbackBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "email": {
+            "default": "",
+            "title": "Email",
+            "type": "string"
+          },
+          "email_verified": {
+            "default": false,
+            "title": "Email Verified",
+            "type": "boolean"
+          },
+          "identity_type": {
+            "title": "Identity Type",
+            "type": "string"
+          },
+          "issuer": {
+            "default": "",
+            "title": "Issuer",
+            "type": "string"
+          },
+          "organization_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Id"
+          },
+          "provider": {
+            "default": "",
+            "title": "Provider",
+            "type": "string"
+          },
+          "state": {
+            "maxLength": 512,
+            "minLength": 16,
+            "title": "State",
+            "type": "string"
+          },
+          "subject": {
+            "default": "",
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "identity_type"
+        ],
+        "title": "CallbackBody",
         "type": "object"
       },
       "EndpointCreate": {
@@ -603,6 +709,47 @@
         "title": "ProductUpdate",
         "type": "object"
       },
+      "StartAuthBody": {
+        "additionalProperties": false,
+        "properties": {
+          "requested_connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Connection Id"
+          },
+          "requested_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Provider"
+          },
+          "return_url": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Url"
+          }
+        },
+        "title": "StartAuthBody",
+        "type": "object"
+      },
       "TestConnectionResult": {
         "description": "Response model for connection test.",
         "properties": {
@@ -772,6 +919,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -2111,7 +2265,7 @@
     },
     "/auth/token-exchange": {
       "post": {
-        "description": "Exchange a bearer token for a gateway session cookie.\n\nAccepts an OIDC access token in the Authorization header and issues a\nsigned session cookie. The original validated bearer token is stored in\nthe session (for future token refresh / user-info use) but is NOT\nforwarded to core \u2014 all gateway\u2192core proxy calls use the internal trust\ncredential (AG_CORE_INTERNAL_TOKEN), not the user bearer token.\n\nHeaders:\n    Authorization: Bearer <access_token>\n\nReturns:\n    JSON {\"session_id\", \"expires_in\", \"user_id\"} and sets Set-Cookie.",
+        "description": "Exchange a bearer token for a gateway session cookie.\n\nAccepts an OIDC access token in the Authorization header and issues a\nauthentication-only signed session cookie. Raw provider tokens and\ntenant authorization claims are not stored in the session. All\ngateway\u2192core proxy calls use the internal trust\ncredential (AG_CORE_INTERNAL_TOKEN), not the user bearer token.\n\nHeaders:\n    Authorization: Bearer <access_token>\n\nReturns:\n    JSON {\"session_id\", \"expires_in\", \"user_id\"} and sets Set-Cookie.",
         "operationId": "token_exchange_auth_token_exchange_post",
         "responses": {
           "200": {
@@ -2338,6 +2492,282 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/identity/invitations/{invitation_id}/bind": {
+      "post": {
+        "operationId": "bind_identity_invitations__invitation_id__bind_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bind",
+        "tags": [
+          "identity-enforcement"
+        ]
+      }
+    },
+    "/identity/invitations/{invitation_id}/callback": {
+      "post": {
+        "operationId": "callback_identity_invitations__invitation_id__callback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallbackBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Callback Identity Invitations  Invitation Id  Callback Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Callback",
+        "tags": [
+          "identity-enforcement"
+        ]
+      }
+    },
+    "/identity/invitations/{invitation_id}/requirements": {
+      "get": {
+        "operationId": "invitation_requirements_identity_invitations__invitation_id__requirements_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Invitation Requirements Identity Invitations  Invitation Id  Requirements Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invitation Requirements",
+        "tags": [
+          "identity-enforcement"
+        ]
+      }
+    },
+    "/identity/invitations/{invitation_id}/start-auth": {
+      "post": {
+        "operationId": "start_auth_identity_invitations__invitation_id__start_auth_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAuthBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Start Auth Identity Invitations  Invitation Id  Start Auth Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Auth",
+        "tags": [
+          "identity-enforcement"
+        ]
+      }
+    },
+    "/identity/session/current": {
+      "get": {
+        "operationId": "current_session_identity_session_current_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Current Session Identity Session Current Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Current Session",
+        "tags": [
+          "identity-enforcement"
+        ]
+      }
+    },
+    "/identity/session/logout": {
+      "post": {
+        "operationId": "logout_identity_session_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "identity-enforcement"
+        ]
       }
     },
     "/version": {

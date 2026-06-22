@@ -46,6 +46,7 @@ from admin_gateway.routers import (
     admin_router,
     auth_router,
     core_proxy_router,
+    identity_router,
     products_router,
 )
 from admin_gateway.auth.config import enforce_prod_auth_safety
@@ -270,6 +271,7 @@ def build_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(products_router)
     app.include_router(core_proxy_router)
+    app.include_router(identity_router)
 
     @app.get("/health")
     async def health(request: Request) -> dict[str, Any]:

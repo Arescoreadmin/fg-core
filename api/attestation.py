@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models import ApprovalLog, EvidenceBundle, ModuleRegistry
+from api.entitlements import require_capability
 from api.signed_artifacts import (
     GENESIS_CHAIN_HASH,
     canonical_hash,
@@ -80,7 +81,11 @@ class EvidenceVerifyResponse(BaseModel):
     reason: str | None = None
 
 
-@router.post("/evidence/bundles", response_model=EvidenceBundleCreateResponse)
+@router.post(
+    "/evidence/bundles",
+    response_model=EvidenceBundleCreateResponse,
+    dependencies=[Depends(require_capability("verification.download"))],
+)
 def create_evidence_bundle(
     req: EvidenceBundleCreateRequest, db: Session = Depends(_attestation_db)
 ) -> EvidenceBundleCreateResponse:
@@ -128,7 +133,10 @@ def create_evidence_bundle(
     )
 
 
-@router.get("/evidence/bundles/{bundle_id}")
+@router.get(
+    "/evidence/bundles/{bundle_id}",
+    dependencies=[Depends(require_capability("verification.download"))],
+)
 def get_evidence_bundle(
     bundle_id: str, db: Session = Depends(_attestation_db)
 ) -> dict[str, Any]:

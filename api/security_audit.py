@@ -98,6 +98,13 @@ class EventType(str, Enum):
     PHI_CLASSIFICATION_DETECTED = "phi_classification_detected"
     PHI_CLASSIFICATION_ENFORCED_BLOCK = "phi_classification_enforced_block"
 
+    # P1.3: Capability enforcement
+    CAPABILITY_CHECK = "capability_check"
+    CAPABILITY_GRANTED = "capability_granted"
+    CAPABILITY_DENIED = "capability_denied"
+    CAPABILITY_DEPENDENCY_FAILURE = "capability_dependency_failure"
+    CAPABILITY_UNKNOWN = "capability_unknown"
+
 
 class Severity(str, Enum):
     """Severity levels for audit events."""

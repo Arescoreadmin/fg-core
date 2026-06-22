@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
@@ -41,6 +42,15 @@ def _allow_system_write(request: Request) -> bool:
     return "admin:write" in scopes or "control-plane:admin" in scopes
 
 
+def _set_system_write_context(db: Session, allow: bool) -> None:
+    """Set transaction-local system-write signal for RLS on PostgreSQL."""
+    bind = getattr(db, "bind", None)
+    if bind is None or getattr(bind.dialect, "name", "") != "postgresql":
+        return
+    value = "true" if allow else "false"
+    db.execute(text("SELECT set_config('app.allow_system_write', :v, true)"), {"v": value})
+
+
 def _translate_error(exc: Exception) -> HTTPException:
     if isinstance(exc, FrameworkAuthorityNotFound):
         return HTTPException(status_code=404, detail=str(exc))
@@ -64,17 +74,20 @@ def create_framework(
     db: Session = Depends(tenant_db_required),
 ) -> FrameworkResponse:
     tenant_id = require_bound_tenant(request)
+    allow_sys = _allow_system_write(request)
     try:
+        _set_system_write_context(db, allow_sys)
         row = engine.create_framework(
             db,
             tenant_id=tenant_id,
             actor=_actor_from_request(request),
-            allow_system_write=_allow_system_write(request),
+            allow_system_write=allow_sys,
             payload=payload,
         )
+        db.flush()
+        result = FrameworkResponse.model_validate(row)
         db.commit()
-        db.refresh(row)
-        return FrameworkResponse.model_validate(row)
+        return result
     except Exception as exc:
         db.rollback()
         raise _translate_error(exc) from exc
@@ -124,17 +137,20 @@ def update_framework(
     db: Session = Depends(tenant_db_required),
 ) -> FrameworkResponse:
     tenant_id = require_bound_tenant(request)
+    allow_sys = _allow_system_write(request)
     try:
+        _set_system_write_context(db, allow_sys)
         row = engine.update_framework(
             db,
             tenant_id=tenant_id,
             framework_id=framework_id,
-            allow_system_write=_allow_system_write(request),
+            allow_system_write=allow_sys,
             payload=payload,
         )
+        db.flush()
+        result = FrameworkResponse.model_validate(row)
         db.commit()
-        db.refresh(row)
-        return FrameworkResponse.model_validate(row)
+        return result
     except Exception as exc:
         db.rollback()
         raise _translate_error(exc) from exc
@@ -152,17 +168,20 @@ def transition_framework(
     db: Session = Depends(tenant_db_required),
 ) -> FrameworkResponse:
     tenant_id = require_bound_tenant(request)
+    allow_sys = _allow_system_write(request)
     try:
+        _set_system_write_context(db, allow_sys)
         row = engine.transition_framework(
             db,
             tenant_id=tenant_id,
             framework_id=framework_id,
-            allow_system_write=_allow_system_write(request),
+            allow_system_write=allow_sys,
             payload=payload,
         )
+        db.flush()
+        result = FrameworkResponse.model_validate(row)
         db.commit()
-        db.refresh(row)
-        return FrameworkResponse.model_validate(row)
+        return result
     except Exception as exc:
         db.rollback()
         raise _translate_error(exc) from exc
@@ -180,17 +199,20 @@ def create_framework_control(
     db: Session = Depends(tenant_db_required),
 ) -> FrameworkControlResponse:
     tenant_id = require_bound_tenant(request)
+    allow_sys = _allow_system_write(request)
     try:
+        _set_system_write_context(db, allow_sys)
         row = engine.create_framework_control(
             db,
             tenant_id=tenant_id,
             framework_id=framework_id,
-            allow_system_write=_allow_system_write(request),
+            allow_system_write=allow_sys,
             payload=payload,
         )
+        db.flush()
+        result = FrameworkControlResponse.model_validate(row)
         db.commit()
-        db.refresh(row)
-        return FrameworkControlResponse.model_validate(row)
+        return result
     except Exception as exc:
         db.rollback()
         raise _translate_error(exc) from exc
@@ -253,18 +275,21 @@ def update_framework_control(
     db: Session = Depends(tenant_db_required),
 ) -> FrameworkControlResponse:
     tenant_id = require_bound_tenant(request)
+    allow_sys = _allow_system_write(request)
     try:
+        _set_system_write_context(db, allow_sys)
         row = engine.update_framework_control(
             db,
             tenant_id=tenant_id,
             framework_id=framework_id,
             framework_control_id=framework_control_id,
-            allow_system_write=_allow_system_write(request),
+            allow_system_write=allow_sys,
             payload=payload,
         )
+        db.flush()
+        result = FrameworkControlResponse.model_validate(row)
         db.commit()
-        db.refresh(row)
-        return FrameworkControlResponse.model_validate(row)
+        return result
     except Exception as exc:
         db.rollback()
         raise _translate_error(exc) from exc
@@ -290,10 +315,12 @@ def create_control_framework_mapping(
             actor=_actor_from_request(request),
             payload=payload,
         )
-        db.commit()
-        return ControlFrameworkMappingResponse.model_validate(
+        db.flush()
+        result = ControlFrameworkMappingResponse.model_validate(
             engine.get_mapping(db, tenant_id=tenant_id, mapping_id=row.id)
         )
+        db.commit()
+        return result
     except Exception as exc:
         db.rollback()
         raise _translate_error(exc) from exc

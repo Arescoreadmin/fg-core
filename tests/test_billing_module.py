@@ -278,7 +278,12 @@ def test_reproduce_mismatch_detection(build_app) -> None:
     assert reproduce.status_code == 409
 
 
-def test_evidence_export_contains_manifest_and_attestation(build_app) -> None:
+def test_evidence_export_contains_manifest_and_attestation(
+    build_app, monkeypatch
+) -> None:
+    monkeypatch.setenv(
+        "FG_BILLING_EVIDENCE_HMAC_KEY", "test-billing-hmac-key-32-bytes-x"
+    )
     client, headers = _client_with_key(
         build_app, "admin:read", "admin:write", tenant_id="t-1"
     )

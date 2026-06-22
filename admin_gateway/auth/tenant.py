@@ -17,9 +17,6 @@ if TYPE_CHECKING:
 # Tenant ID validation pattern: alphanumeric, dash, underscore, max 128 chars
 TENANT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 
-# Default tenant for single-tenant setups
-DEFAULT_TENANT = "default"
-
 
 @dataclass
 class TenantContext:
@@ -61,34 +58,10 @@ class TenantContext:
 
 
 def get_allowed_tenants(session: "Session") -> Set[str]:
-    """Extract allowed tenants from session.
-
-    Looks for:
-    1. allowed_tenants claim from OIDC token
-    2. tenant_id single value (legacy support)
-    3. Falls back to DEFAULT_TENANT if none specified
-    """
-    allowed: Set[str] = set()
-
-    # Check for allowed_tenants claim (list)
-    if session.claims:
-        tenants_claim = session.claims.get("allowed_tenants")
-        if isinstance(tenants_claim, list):
-            allowed.update(str(t) for t in tenants_claim)
-        elif isinstance(tenants_claim, str):
-            # Single tenant as string
-            allowed.add(tenants_claim)
-
-        # Also check for single tenant_id claim
-        tenant_id = session.claims.get("tenant_id")
-        if tenant_id:
-            allowed.add(str(tenant_id))
-
-    # If no tenants specified, use default
-    if not allowed:
-        allowed.add(DEFAULT_TENANT)
-
-    return allowed
+    """Return the tenant authorized by an Admin Gateway governed session."""
+    if not session.tenant_governed or not session.tenant_id:
+        return set()
+    return {session.tenant_id}
 
 
 def validate_tenant_access(
@@ -110,6 +83,14 @@ def validate_tenant_access(
         HTTPException: If validation fails
     """
     allowed = get_allowed_tenants(session)
+    if not allowed:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "SESSION_CONTEXT_REQUIRED",
+                "message": "Admin Gateway tenant session required",
+            },
+        )
 
     resolved_tenant = tenant_id
     if not resolved_tenant and not is_write and len(allowed) == 1:

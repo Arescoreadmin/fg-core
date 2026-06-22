@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 from pathlib import Path
 
@@ -9,9 +8,18 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from unittest.mock import Mock
 
+import uuid
+
 from api.auth_scopes import mint_key
-from api.db import init_db, reset_engine_cache
+from api.db import get_sessionmaker, init_db, reset_engine_cache
+from api.db_models import (
+    Capability,
+    PolicyBundle,
+    PolicyBundleCapability,
+    TenantBundleAssignment,
+)
 from api.main import build_app
+from services.capability_bundles.resolver import invalidate_cache
 from services.enterprise_controls_extension.service import EnterpriseControlsService
 
 
@@ -27,6 +35,39 @@ def _setup_client(tmp_path: Path) -> tuple[TestClient, str, str]:
     os.environ["FG_COMPLIANCE_HMAC_KEY_ID_CURRENT"] = "v1"
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
+
+    # Grant identity.sso to both tenants so enterprise routes (e.g. federation)
+    # pass capability enforcement introduced in P1.3D.
+    db = get_sessionmaker(sqlite_path=str(db_path))()
+    cap = Capability(
+        id=str(uuid.uuid4()),
+        capability_key="identity.sso",
+        capability_name="identity.sso",
+        capability_category="identity",
+        active=True,
+    )
+    db.add(cap)
+    db.flush()
+    bundle = PolicyBundle(
+        id=str(uuid.uuid4()),
+        bundle_key="ent_ext_bundle",
+        bundle_name="ent_ext_bundle",
+        active=True,
+    )
+    db.add(bundle)
+    db.flush()
+    db.add(PolicyBundleCapability(bundle_id=bundle.id, capability_id=cap.id))
+    for tid in ["tenant-a", "tenant-b"]:
+        db.add(
+            TenantBundleAssignment(
+                id=str(uuid.uuid4()), tenant_id=tid, bundle_id=bundle.id
+            )
+        )
+    db.commit()
+    db.close()
+    invalidate_cache("tenant-a")
+    invalidate_cache("tenant-b")
+
     key_a = mint_key(
         "admin:write", "compliance:read", "governance:write", tenant_id="tenant-a"
     )
@@ -117,23 +158,57 @@ def test_evidence_anchor_happy_tenant_isolation_and_error_code(tmp_path: Path) -
     assert body["detail"]["error_code"] == "evidence_anchor_artifact_not_found"
 
 
-def test_federation_error_and_happy(tmp_path: Path) -> None:
+def test_federation_error_and_happy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    import jwt as _jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from jwt.algorithms import RSAAlgorithm
+
     client, key_a, _ = _setup_client(tmp_path)
+
+    # No bearer → 401 before any token inspection
     no_bearer = client.post("/auth/federation/validate", headers={"X-API-Key": key_a})
     assert no_bearer.status_code == 401
 
-    payload = {
-        "iss": "https://issuer.example",
-        "sub": "user-1",
-        "tenant_id": "tenant-a",
-        "groups": ["ops"],
-    }
-    p = (
-        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
-        .decode("utf-8")
-        .rstrip("=")
+    # Build an RS256 key pair and matching JWKS
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+    jwk_dict = json.loads(RSAAlgorithm.to_jwk(public_key))
+    jwk_dict["kid"] = "test-key-1"
+    jwk_dict["use"] = "sig"
+    jwks = {"keys": [jwk_dict]}
+
+    # Configure required env vars (cleaned up by monkeypatch after the test)
+    monkeypatch.setenv(
+        "FG_FEDERATION_JWKS_URL", "https://idp.example.com/.well-known/jwks.json"
     )
-    token = f"x.{p}.y"
+    monkeypatch.setenv("FG_FEDERATION_ISSUER", "https://idp.example.com/")
+    monkeypatch.setenv("FG_FEDERATION_AUDIENCE", "https://api.frostgate.ai")
+
+    # Pre-seed the module-level service's JWKS cache to avoid network calls
+    import api.auth_federation as _fed_mod
+
+    monkeypatch.setattr(_fed_mod.service.cache, "_doc", jwks)
+    monkeypatch.setattr(_fed_mod.service.cache, "_exp", time.time() + 3600)
+
+    now = int(time.time())
+    token = _jwt.encode(
+        {
+            "sub": "user-1",
+            "iss": "https://idp.example.com/",
+            "aud": "https://api.frostgate.ai",
+            "tenant_id": "tenant-a",
+            "groups": ["ops"],
+            "exp": now + 300,
+            "iat": now,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "test-key-1"},
+    )
     resp = client.post(
         "/auth/federation/validate",
         headers={"X-API-Key": key_a, "Authorization": f"Bearer {token}"},

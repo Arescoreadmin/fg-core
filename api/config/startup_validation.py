@@ -265,6 +265,7 @@ class StartupValidator:
         self._check_cors(report)
         self._check_security_headers(report)
         self._check_auth_enabled(report)
+        self._check_auth_store(report)
         self._check_key_ttl(report)
         self._check_brute_force_protection(report)
         self._check_audit_logging(report)
@@ -278,6 +279,8 @@ class StartupValidator:
         self._check_localhost_urls(report)
         self._check_migrations_required(report)
         self._check_connectors_router_wiring(report)
+        self._check_report_signing_key(report)
+        self._check_billing_hmac_key(report)
 
         return report
 
@@ -680,6 +683,126 @@ class StartupValidator:
                 severity="info",
             )
 
+    def _check_auth_store(self, report: StartupValidationReport) -> None:
+        """Validate auth store prerequisites when FG_AUTH_ENABLED=true.
+
+        Runs at every environment level — missing pepper or path makes auth
+        impossible regardless of dev/prod distinction. Both are errors, not warnings.
+
+        Postgres mode (FG_DB_BACKEND=postgres):
+          - Requires FG_KEY_PEPPER and FG_DB_URL.
+          - Does NOT require FG_SQLITE_PATH.
+          - Runs Postgres auth-store connectivity check.
+
+        SQLite mode (FG_DB_BACKEND=sqlite or unset):
+          - Requires FG_KEY_PEPPER and FG_SQLITE_PATH (PR 16 behavior unchanged).
+        """
+        auth_enabled_str = os.getenv("FG_AUTH_ENABLED")
+        api_key = _env_str("FG_API_KEY", "")
+        if auth_enabled_str is not None:
+            auth_enabled = _env_bool("FG_AUTH_ENABLED", False)
+        else:
+            auth_enabled = bool(api_key)
+
+        if not auth_enabled:
+            return
+
+        # FG_KEY_PEPPER required in ALL auth-enabled modes (pepper is cryptographic,
+        # not a storage concern).
+        pepper = _env_str("FG_KEY_PEPPER", "")
+        if not pepper:
+            report.add(
+                name="auth_store_pepper_missing",
+                passed=False,
+                message=(
+                    "FG_KEY_PEPPER is required when FG_AUTH_ENABLED=true. "
+                    "Key lookup HMAC cannot function without it — all scoped key "
+                    "verification will fail. Set FG_KEY_PEPPER to a random string "
+                    "of at least 32 characters."
+                ),
+                severity="error",
+            )
+        else:
+            report.add(
+                name="auth_store_pepper",
+                passed=True,
+                message="FG_KEY_PEPPER is set.",
+                severity="info",
+            )
+
+        db_backend = _env_str("FG_DB_BACKEND", "").lower()
+
+        if db_backend == "postgres":
+            db_url = _env_str("FG_DB_URL", "")
+            if not db_url:
+                report.add(
+                    name="auth_store_db_url_missing",
+                    passed=False,
+                    message=(
+                        "FG_DB_URL is required when FG_DB_BACKEND=postgres and "
+                        "FG_AUTH_ENABLED=true. Auth resolver cannot connect to "
+                        "Postgres api_keys without a database URL."
+                    ),
+                    severity="error",
+                )
+            else:
+                # Connectivity check: confirm api_keys table is reachable.
+                try:
+                    from api.auth_scopes.store import probe_auth_store
+
+                    ok, reason = probe_auth_store()
+                    if ok:
+                        report.add(
+                            name="auth_store_backend_ok",
+                            passed=True,
+                            message="Postgres auth store connectivity verified.",
+                            severity="info",
+                        )
+                    else:
+                        report.add(
+                            name="auth_store_backend_unreachable",
+                            passed=False,
+                            message=(
+                                f"Postgres auth store check failed: {reason}. "
+                                "Ensure api_keys table exists and FG_DB_URL is correct."
+                            ),
+                            severity="error",
+                        )
+                except Exception as exc:
+                    report.add(
+                        name="auth_store_backend_unreachable",
+                        passed=False,
+                        message=(
+                            f"Postgres auth store connectivity check raised "
+                            f"{type(exc).__name__}. "
+                            "Ensure FG_DB_URL is correct and api_keys table exists."
+                        ),
+                        severity="error",
+                    )
+        else:
+            # SQLite mode — PR 16 behavior unchanged.
+            sqlite_path = _env_str("FG_SQLITE_PATH", "")
+            if not sqlite_path:
+                report.add(
+                    name="auth_store_path_missing",
+                    passed=False,
+                    message=(
+                        "FG_SQLITE_PATH is required when FG_AUTH_ENABLED=true. "
+                        "The auth resolver has no database to query — all API key "
+                        "verification will fail. "
+                        "Set FG_SQLITE_PATH=/var/lib/frostgate/state/frostgate.db "
+                        "pointing to a persisted volume."
+                    ),
+                    severity="error",
+                )
+            else:
+                report.add(
+                    name="auth_store_path",
+                    passed=True,
+                    message=f"FG_SQLITE_PATH is set: {sqlite_path}",
+                    severity="info",
+                )
+
     def _check_key_ttl(self, report: StartupValidationReport) -> None:
         """Check API key TTL configuration."""
         default_ttl = _env_int("FG_KEY_DEFAULT_TTL", 24 * 3600)  # 24 hours default
@@ -949,6 +1072,62 @@ class StartupValidator:
                 name="dos_hardening",
                 passed=True,
                 message="DoS hardening checks completed.",
+                severity="info",
+            )
+
+    def _check_report_signing_key(self, report: StartupValidationReport) -> None:
+        signing_key = _env_str("FG_REPORT_SIGNING_KEY", "")
+        pub_key = _env_str("FG_REPORT_SIGNING_PUBLIC_KEY", "")
+        if not signing_key and not pub_key:
+            report.add(
+                name="report_signing_key_missing",
+                passed=False,
+                message=(
+                    "FG_REPORT_SIGNING_KEY is not set. "
+                    "Report generation will fail with HTTP 503 until this is configured. "
+                    'Generate with: python -c "import secrets; print(secrets.token_hex(32))"'
+                ),
+                severity="error" if self.is_production else "warning",
+            )
+        else:
+            try:
+                import reportlab  # noqa: F401
+
+                report.add(
+                    name="report_signing_and_pdf",
+                    passed=True,
+                    message="Report signing key and reportlab are configured.",
+                    severity="info",
+                )
+            except ImportError:
+                report.add(
+                    name="reportlab_missing",
+                    passed=False,
+                    message=(
+                        "reportlab is not installed. PDF export will return HTTP 501. "
+                        "Install with: pip install reportlab"
+                    ),
+                    severity="warning",
+                )
+
+    def _check_billing_hmac_key(self, report: StartupValidationReport) -> None:
+        billing_key = _env_str("FG_BILLING_EVIDENCE_HMAC_KEY", "")
+        if not billing_key:
+            report.add(
+                name="billing_hmac_key_missing",
+                passed=False,
+                message=(
+                    "FG_BILLING_EVIDENCE_HMAC_KEY is not set. "
+                    "Billing evidence export will raise an error at call time. "
+                    'Generate with: python -c "import secrets; print(secrets.token_hex(32))"'
+                ),
+                severity="error" if self.is_production else "warning",
+            )
+        else:
+            report.add(
+                name="billing_hmac_key",
+                passed=True,
+                message="Billing evidence HMAC key configured.",
                 severity="info",
             )
 

@@ -312,11 +312,10 @@ class TestCanonicalTesterHTTP:
         assert body.get("user_id") == _TESTER_USER
         assert "fg_admin_session" in resp.cookies
 
-    def test_canonical_tester_session_admin_me_returns_canonical_tenant(
+    def test_generic_oidc_session_admin_me_has_no_tenant_authority(
         self, oidc_client: TestClient
     ) -> None:
-        """Session from canonical tester token must show tenant-seed-primary in /admin/me,
-        including current_tenant (requires tenant_id claim in token)."""
+        """Generic OIDC authentication must not grant tenant authority."""
         claims = _canonical_claims()
         with _patch_verify(claims):
             exchange = oidc_client.post(
@@ -328,14 +327,8 @@ class TestCanonicalTesterHTTP:
         me = oidc_client.get("/admin/me")
         assert me.status_code == 200, me.text
         body = me.json()
-        assert _CANONICAL_TENANT in body.get("tenants", []), (
-            f"/admin/me must include {_CANONICAL_TENANT!r} in tenants; got: {body.get('tenants')}"
-        )
-        assert body.get("current_tenant") == _CANONICAL_TENANT, (
-            f"/admin/me current_tenant must be {_CANONICAL_TENANT!r}; "
-            f"got: {body.get('current_tenant')!r} — "
-            f"ensure fg-tester client emits tenant_id claim via protocol mapper"
-        )
+        assert body.get("tenants") == []
+        assert body.get("current_tenant") is None
 
     def test_canonical_tester_session_does_not_fall_back_to_default_tenant(
         self, oidc_client: TestClient
@@ -352,8 +345,8 @@ class TestCanonicalTesterHTTP:
             )
         assert exchange.status_code == 200, exchange.text
 
-        # No tenant claims → get_allowed_tenants returns {"default"} fallback
-        # Requesting tenant-seed-primary must be denied (not in allowed set)
+        # Generic OIDC authentication is not a governed tenant session.
+        # Requesting tenant-seed-primary must be denied by Admin Gateway.
         resp = oidc_client.get(
             f"/admin/audit/search?tenant_id={_CANONICAL_TENANT}&page_size=5"
         )
@@ -362,10 +355,10 @@ class TestCanonicalTesterHTTP:
             f"got HTTP {resp.status_code}"
         )
 
-    def test_canonical_tester_audit_search_succeeds_for_canonical_tenant(
+    def test_generic_oidc_claims_cannot_authorize_tenant_audit_search(
         self, oidc_client: TestClient
     ) -> None:
-        """Canonical tester session must succeed on /admin/audit/search for tenant-seed-primary."""
+        """Generic OIDC tenant and scope claims are not tenant authorization."""
         claims = _canonical_claims()
         with _patch_verify(claims):
             oidc_client.post(
@@ -376,8 +369,7 @@ class TestCanonicalTesterHTTP:
         resp = oidc_client.get(
             f"/admin/audit/search?tenant_id={_CANONICAL_TENANT}&page_size=5"
         )
-        assert resp.status_code == 200, resp.text
-        assert "items" in resp.json()
+        assert resp.status_code == 403, resp.text
 
     def test_canonical_tester_audit_search_denied_for_wrong_tenant(
         self, oidc_client: TestClient
@@ -425,7 +417,7 @@ class TestGatewayCoreProxyContract:
     Verifies:
     - AG_CORE_INTERNAL_TOKEN activates is_internal=True proxy headers
     - AG_CORE_API_KEY fallback used only when AG_CORE_INTERNAL_TOKEN is absent
-    - User upstream_access_token is stored in session but NOT forwarded to core
+    - User provider tokens are never stored in the gateway session or forwarded to core
     - proxy headers include X-Admin-Gateway-Internal when internal token is used
     """
 
@@ -520,7 +512,7 @@ class TestGatewayCoreProxyContract:
         session = Session(
             user_id="fg-tester-admin",
             tenant_id="tenant-seed-primary",
-            upstream_access_token="user-oidc-bearer-token-must-not-be-forwarded",
+            claims={"provider_token_marker": "not-a-raw-provider-token"},
         )
 
         headers = _core_proxy_headers(

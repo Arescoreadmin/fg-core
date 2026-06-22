@@ -5,8 +5,10 @@
 Before proposing or implementing any change, Codex MUST:
 1) Read `CODEX.md`
 2) Read `CLAUDE.md`
-3) Read `docs/ai/PR_FIX_LOG.md` (if present)
-4) Read `docs/ai/GOTCHAS.md` (if present)
+3) Read `SYSTEM.md` — authoritative product state (architecture, what is built, tech stack)
+4) Read `ROADMAP.md` — living PR tracker (what is done, what is next, client readiness blockers)
+5) Read `docs/ai/PR_FIX_LOG.md` (if present)
+6) Read `docs/ai/GOTCHAS.md` (if present)
 
 If a relevant prior fix, invariant, or constraint exists:
 - Reuse it
@@ -14,6 +16,15 @@ If a relevant prior fix, invariant, or constraint exists:
 - Do NOT re-derive the same solution
 
 Failure to consult repo memory is considered a correctness failure.
+
+## Roadmap maintenance (required on every PR)
+
+When a change ships a feature, closes a gap, or changes the product story:
+- Add a row to the relevant phase table in `ROADMAP.md`
+- If it closes a P0/P1 Phase 2 item, update that row's Status and PR columns
+- If it introduces something not on the plan, add it — do not leave it untracked
+
+`ROADMAP.md` and `SYSTEM.md` updates do NOT require a `PR_FIX_LOG.md` entry.
 
 ## Output Rule (Hard)
 Codex must return ONLY:
@@ -138,5 +149,5 @@ When modifying behavior that intersects a prior logged fix:
 Never leave stale or misleading fix records.
 
 ---
-Last reviewed: YYYY-MM-DD
+Last reviewed: 2026-05-27
 Owner: FrostGate Core Maintainers

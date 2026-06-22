@@ -147,7 +147,7 @@ async def test_verify_id_token_algorithm_mismatch(monkeypatch):
     }
     token = jwt.encode(
         claims,
-        "secret",
+        "test-hmac-secret-at-least-32-bytes-long",
         algorithm="HS256",
         headers={"kid": "alg", "alg": "HS256"},
     )

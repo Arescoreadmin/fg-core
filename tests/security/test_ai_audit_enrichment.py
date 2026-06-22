@@ -310,6 +310,7 @@ def _setup_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient
     monkeypatch.setenv("FG_AZURE_OPENAI_ENDPOINT", "https://azure.example.test")
     monkeypatch.setenv("FG_AZURE_OPENAI_DEPLOYMENT", "fg-test")
     monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    monkeypatch.setenv("FG_ENTITLEMENT_ENFORCEMENT", "false")
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
     return TestClient(build_app(auth_enabled=True))

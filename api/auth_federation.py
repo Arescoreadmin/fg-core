@@ -3,7 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.auth_scopes import require_bound_tenant, require_scopes
+from api.entitlements import require_capability
 from services.federation_extension import FederationService
+from services.federation_extension.service import FederationValidationError
 
 router = APIRouter(tags=["auth-federation"])
 service = FederationService()
@@ -11,7 +13,10 @@ service = FederationService()
 
 @router.post(
     "/auth/federation/validate",
-    dependencies=[Depends(require_scopes("admin:write"))],
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_capability("identity.sso")),
+    ],
 )
 def validate_federated_identity(request: Request) -> dict[str, object]:
     bound_tenant = require_bound_tenant(request)
@@ -26,24 +31,14 @@ def validate_federated_identity(request: Request) -> dict[str, object]:
         )
     token = bearer.split(" ", 1)[1].strip()
     try:
-        claims = service.validate_token(token)
-    except ValueError as exc:
+        principal = service.validate_token(token)
+    except FederationValidationError as exc:
         raise HTTPException(
             status_code=401,
-            detail={"error_code": str(exc), "reason": "token validation failed"},
+            detail={"error_code": exc.error_code, "reason": exc.reason},
         ) from exc
 
-    tenant_id = str(claims.get("tenant_id") or claims.get("tid") or "")
-    if not tenant_id:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error_code": "federation_missing_tenant_claim",
-                "reason": "tenant claim required",
-            },
-        )
-
-    if tenant_id != bound_tenant:
+    if principal.tenant_id != bound_tenant:
         raise HTTPException(
             status_code=403,
             detail={
@@ -52,13 +47,11 @@ def validate_federated_identity(request: Request) -> dict[str, object]:
             },
         )
 
-    _groups_raw = claims.get("groups")
-    groups: list[object] = _groups_raw if isinstance(_groups_raw, list) else []
-    mapped_roles = service.map_roles([str(g) for g in groups])
+    mapped_roles = service.map_roles(principal.groups)
     return {
-        "tenant_id": tenant_id,
-        "subject": claims.get("sub"),
-        "issuer": claims.get("iss"),
+        "tenant_id": principal.tenant_id,
+        "subject": principal.subject,
+        "issuer": principal.issuer,
         "roles": mapped_roles,
         "privileged_session": bool(mapped_roles),
     }

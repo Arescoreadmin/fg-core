@@ -1,0 +1,1 @@
+"""FrostGate governance service package."""

@@ -119,12 +119,15 @@ async def callback(
         tokens = await oidc.exchange_code(code, state)
         session = await oidc.create_session_from_tokens(tokens)
 
-        # Store the upstream token in session for future use (token refresh,
-        # user-info lookups). It is NOT forwarded to core — gateway→core
-        # proxied /admin calls use AG_CORE_INTERNAL_TOKEN exclusively.
-        access_token = tokens.get("access_token")
-        if access_token:
-            session.upstream_access_token = access_token
+        # Generic OIDC authentication is not tenant authorization. Only the
+        # /identity invitation binding flow may issue a tenant-scoped session.
+        session.tenant_id = None
+        session.scopes = set()
+        session.claims = {
+            k: v
+            for k, v in session.claims.items()
+            if k not in {"tenant_id", "allowed_tenants", "roles", "fg_scopes"}
+        }
 
         return_to = "/admin/me"
         pending_returns = getattr(request.app.state, "pending_returns", {})
@@ -179,9 +182,9 @@ async def token_exchange(
     """Exchange a bearer token for a gateway session cookie.
 
     Accepts an OIDC access token in the Authorization header and issues a
-    signed session cookie. The original validated bearer token is stored in
-    the session (for future token refresh / user-info use) but is NOT
-    forwarded to core — all gateway→core proxy calls use the internal trust
+    authentication-only signed session cookie. Raw provider tokens and
+    tenant authorization claims are not stored in the session. All
+    gateway→core proxy calls use the internal trust
     credential (AG_CORE_INTERNAL_TOKEN), not the user bearer token.
 
     Headers:
@@ -209,15 +212,17 @@ async def token_exchange(
         # Any failure raises HTTPException(401) — no fallback path.
         claims = await oidc.verify_access_token(access_token)
 
-        scopes = oidc.extract_scopes_from_claims(claims)
         session = session_manager.create_session(
             user_id=claims["sub"],
             email=claims.get("email"),
             name=claims.get("name") or claims.get("preferred_username"),
-            scopes=scopes,
-            claims=claims,
-            tenant_id=claims.get("tenant_id"),
-            upstream_access_token=access_token,
+            scopes=set(),
+            claims={
+                k: v
+                for k, v in claims.items()
+                if k not in {"tenant_id", "allowed_tenants", "roles", "fg_scopes"}
+            },
+            tenant_id=None,
         )
 
         response = JSONResponse(

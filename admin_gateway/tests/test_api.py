@@ -13,6 +13,7 @@ def test_list_tenants_returns_allowed(app_no_bypass, session_cookie):
         scopes={"console:admin", "keys:read"},
         claims={"allowed_tenants": ["tenant-a"]},
         tenant_id="tenant-a",
+        tenant_governed=True,
     )
     cookie_name, cookie_value = session_cookie(session)
     with TestClient(app_no_bypass) as client:
@@ -34,6 +35,7 @@ def test_list_keys_returns_empty(app_no_bypass, session_cookie):
         scopes={"console:admin", "keys:read"},
         claims={"allowed_tenants": ["tenant-a"]},
         tenant_id="tenant-a",
+        tenant_governed=True,
     )
     cookie_name, cookie_value = session_cookie(session)
     with TestClient(app_no_bypass) as client:
@@ -56,6 +58,7 @@ def test_dashboard_returns_stats(app_no_bypass, session_cookie):
         scopes={"console:admin", "keys:read"},
         claims={"allowed_tenants": ["tenant-a"]},
         tenant_id="tenant-a",
+        tenant_governed=True,
     )
     cookie_name, cookie_value = session_cookie(session)
     with TestClient(app_no_bypass) as client:

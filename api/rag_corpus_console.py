@@ -31,6 +31,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes, verify_api_key
+from api.entitlements import require_capability
 from api.deps import tenant_db_required
 from api.rag_corpus_store import (
     INGESTION_RECEIVED,
@@ -91,6 +92,7 @@ router = APIRouter(
     dependencies=[
         Depends(verify_api_key),
         Depends(require_scopes("governance:write")),
+        Depends(require_capability("ai.rag")),
     ],
 )
 

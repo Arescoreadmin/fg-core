@@ -6,7 +6,7 @@
 
 -- ─── Question bank ────────────────────────────────────────────────────────────
 
-INSERT INTO assessment_schemas (schema_version, profile_type, is_current, questions)
+INSERT INTO assessment_schemas (schema_version, profile_type, is_current, questions, created_at)
 VALUES (
   'v2025.1-base',
   'base',
@@ -252,7 +252,8 @@ VALUES (
       "type": "boolean",
       "weight": 1.1
     }
-  ]'::jsonb
+  ]'::jsonb,
+  now()
 )
 ON CONFLICT (schema_version) DO NOTHING;
 

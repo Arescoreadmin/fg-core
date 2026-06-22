@@ -23,7 +23,7 @@ from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
 )
-from api.db import get_engine, init_db
+from api.db import _ensure_api_keys_sqlite, get_engine, get_sessionmaker, init_db
 from api.attestation import router as attestation_router
 from api.audit import router as audit_router
 from api.auth_federation import router as auth_federation_router
@@ -37,6 +37,10 @@ from api.deployment_manager import router as deployment_manager_router
 from api.ops_governance_manager import router as ops_governance_router
 from api.provisioning_manager import router as provisioning_router
 from api.readiness_manager import router as readiness_router
+from api.readiness_gap_analysis_manager import router as readiness_gap_analysis_router
+from api.readiness_alerting_manager import router as readiness_alerting_router
+from api.readiness_monitoring_manager import router as readiness_monitoring_router
+from api.readiness_simulation_manager import router as readiness_simulation_router
 from api.control_plane_v2 import router as control_plane_v2_router
 from api.control_tower_snapshot import router as control_tower_snapshot_router
 from api.decisions import router as decisions_router
@@ -48,7 +52,6 @@ from api.evidence_index import router as evidence_index_router
 from api.exception_breakglass import router as exception_breakglass_router
 from api.feed import router as feed_router
 from api.forensics import router as forensics_router
-from api.framework_authority import router as framework_authority_router
 from api.ingest import router as ingest_router
 from api.keys import router as keys_router
 from api.planes import router as planes_router
@@ -69,14 +72,50 @@ from api.agent_enrollment import router as agent_enrollment_router
 from api.agent_phase2 import admin_router as agent_phase2_admin_router
 from api.agent_phase2 import router as agent_phase2_router
 from api.agent_tokens import router as agent_tokens_router
+from api.workforce import router as workforce_router
+from api.admin_identity import router as admin_identity_router
 from api.assessments import router as assessments_router
 from api.rag_retrieval_policy import router as rag_retrieval_policy_router
 from api.rag_corpus_console import router as rag_corpus_console_router
 from api.rag_corpus_ingestion import router as rag_corpus_ingestion_router
+from api.governance_report_manager import router as governance_report_router
+from api.governance_timeline_manager import router as governance_timeline_router
+from api.governance_assets import audit_router as governance_assets_audit_router
+from api.governance_assets import router as governance_assets_router
+from api.governance_asset_candidates import router as governance_candidates_router
+from api.governance_graph import router as governance_graph_router
+from api.governance_workflows import router as governance_workflows_router
+from api.connectors_msgraph_report import router as connectors_msgraph_report_router
+from api.field_assessment import router as field_assessment_router
+from api.remediation import router as remediation_router
+from api.trust_arc import router as trust_arc_router
+from api.trust_monitoring import router as trust_monitoring_router
+from api.executive_trust import router as executive_trust_router
+from api.quarterly_briefs import router as quarterly_briefs_router
+from api.clm import router as clm_router
+from api.control_tower import router as control_tower_router
+from api.portal import portal_router
+from api.portal_remediation import portal_remediation_router
+from api.control_registry import router as control_registry_router
+from api.governance_portal import router as governance_portal_router
+from api.governance_reporting import router as governance_reporting_router
+from api.evidence_authority import router as evidence_authority_router
+from api.framework_authority import router as framework_authority_router
+from api.risk_acceptance import router as risk_acceptance_router
+from api.risk_governance import router as risk_governance_router
+from api.entitlements import (
+    router as entitlements_router,
+    ui_router as entitlements_ui_router,
+)
+from api.subscriptions import router as subscriptions_router
+from api.billing_v2 import router as billing_v2_router
 from api.reports_engine import router as reports_engine_router
+from api.signing import router as signing_router
 from api.stripe_webhooks import router as stripe_webhooks_router
 from api.tenant_rbac_router import router as tenant_rbac_router
+from api.auth_scopes.resolution import authz_scope
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
+from api.middleware.portal_scope import PortalClientScopeMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.exception_shield import FGExceptionShieldMiddleware
 from api.middleware.logging import RequestLoggingMiddleware
@@ -210,7 +249,31 @@ ring_router = _optional_router("api.ring_router", "router")
 roe_router = _optional_router("api.roe_engine", "router")
 
 
+def _init_sentry() -> None:
+    dsn = os.getenv("SENTRY_DSN", "").strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk  # noqa: PLC0415
+        from sentry_sdk.integrations.fastapi import FastApiIntegration  # noqa: PLC0415
+        from sentry_sdk.integrations.starlette import StarletteIntegration  # noqa: PLC0415
+        from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
+
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=os.getenv("FG_ENV", "unknown"),
+            release=APP_VERSION,
+            traces_sample_rate=0.0,  # errors only — no performance tracing
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            ignore_errors=[_HTTPException],  # 4xx client errors are not bugs
+        )
+        log.info("sentry initialized env=%s", os.getenv("FG_ENV", "unknown"))
+    except ImportError:
+        log.warning("sentry-sdk not installed; error reporting disabled")
+
+
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
+    _init_sentry()
     resolved_auth_enabled = (
         _resolve_auth_enabled_from_env() if auth_enabled is None else bool(auth_enabled)
     )
@@ -257,17 +320,50 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 raise
 
         try:
-            if not (os.getenv("FG_DB_URL") or "").strip():
-                sqlite_path = _sqlite_path_from_env()
-                Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+            _auth_sqlite_path = _sqlite_path_from_env()
+            _db_backend = (os.getenv("FG_DB_BACKEND") or "").strip().lower()
+
+            if _db_backend != "postgres":
+                # SQLite mode: ensure parent directory and auth store file.
+                if _auth_sqlite_path:
+                    Path(_auth_sqlite_path).parent.mkdir(parents=True, exist_ok=True)
 
             init_db()
+
+            # In Postgres mode, _ensure_api_keys_sqlite must not run.
+            # In SQLite mode, initialize the auth store file so the readiness
+            # probe finds it on the first health check.
+            if resolved_auth_enabled and _db_backend != "postgres":
+                if _auth_sqlite_path:
+                    _ensure_api_keys_sqlite(_auth_sqlite_path)
+
             app.state.db_init_ok = True
             app.state.db_init_error = None
         except Exception as exc:
             app.state.db_init_ok = False
             app.state.db_init_error = f"{type(exc).__name__}: {exc}"
             log.exception("DB init failed")
+            if is_production or is_strict_env_required():
+                raise
+
+        try:
+            from services.capability_bundles import seed_bundle_catalog
+
+            _seed_db = get_sessionmaker()()
+            try:
+                seed_bundle_catalog(_seed_db)
+            finally:
+                _seed_db.close()
+        except Exception as exc:
+            log.warning("Bundle catalog seed failed (non-fatal): %s", exc)
+
+        try:
+            from services.capability_enforcement import validate_graph
+
+            validate_graph()
+            log.info("capability_enforcement.graph_validated")
+        except ValueError as exc:
+            log.error("capability_enforcement.invalid_graph error=%s", exc)
             if is_production or is_strict_env_required():
                 raise
 
@@ -348,7 +444,12 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                         },
                     },
                 )
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+        errs = [dict(e) for e in exc.errors()]
+        for e in errs:
+            ctx = e.get("ctx")
+            if isinstance(ctx, dict) and isinstance(ctx.get("error"), Exception):
+                e["ctx"] = dict(ctx, error=str(ctx["error"]))
+        return JSONResponse(status_code=422, content={"detail": errs})
 
     if not hasattr(app.state, "_ui_single_use_used"):
         app.state._ui_single_use_used = set()
@@ -538,6 +639,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     except Exception:
         pass
 
+    _add_middleware(app, PortalClientScopeMiddleware)
     _add_middleware(
         app,
         AuthGateMiddleware,
@@ -555,6 +657,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(config_control_router)
     app.include_router(billing_router)
     app.include_router(audit_router)
+    app.include_router(entitlements_router)
+    app.include_router(subscriptions_router)
+    app.include_router(billing_v2_router)
     app.include_router(compliance_router)
     app.include_router(compliance_cp_extension_router)
     app.include_router(enterprise_controls_router)
@@ -565,7 +670,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ai_plane_extension_router)
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
-    app.include_router(framework_authority_router)
+    app.include_router(workforce_router)
+    app.include_router(admin_identity_router)
 
     if not _is_production_runtime():
         app.include_router(ui_router)
@@ -577,6 +683,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ui_compliance_dashboard_router)
         app.include_router(ui_ai_router)
         app.include_router(ui_ai_admin_router)
+        app.include_router(entitlements_ui_router)
         if _testing_control_tower_enabled():
             app.include_router(ui_testing_control_tower_router)
 
@@ -587,6 +694,31 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
+    app.include_router(signing_router)
+    app.include_router(governance_report_router)
+    app.include_router(governance_timeline_router)
+    app.include_router(governance_assets_router)
+    app.include_router(governance_assets_audit_router)
+    app.include_router(governance_candidates_router)
+    app.include_router(governance_graph_router)
+    app.include_router(governance_workflows_router)
+    app.include_router(field_assessment_router)
+    app.include_router(remediation_router)
+    app.include_router(trust_arc_router)
+    app.include_router(trust_monitoring_router)
+    app.include_router(executive_trust_router)
+    app.include_router(quarterly_briefs_router)
+    app.include_router(clm_router)
+    app.include_router(control_tower_router)
+    app.include_router(portal_router)
+    app.include_router(portal_remediation_router)
+    app.include_router(risk_acceptance_router)
+    app.include_router(risk_governance_router)
+    app.include_router(control_registry_router)
+    app.include_router(governance_portal_router)
+    app.include_router(governance_reporting_router)
+    app.include_router(evidence_authority_router)
+    app.include_router(framework_authority_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
     app.include_router(rag_corpus_ingestion_router)
@@ -597,6 +729,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(provisioning_router)
     app.include_router(ops_governance_router)
     app.include_router(readiness_router)
+    app.include_router(readiness_gap_analysis_router)
+    app.include_router(readiness_monitoring_router)
+    app.include_router(readiness_alerting_router)
+    app.include_router(readiness_simulation_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)
     app.include_router(control_tower_snapshot_router)
@@ -625,16 +761,18 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     if _env_bool("FG_METRICS_ENABLED", default=True):
 
         @app.get("/metrics", include_in_schema=False)
-        async def metrics_endpoint():  # type: ignore[return]
+        async def metrics_endpoint(
+            _auth: None = Depends(authz_scope("admin:read")),
+        ) -> None:  # type: ignore[return]
             from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
             from fastapi.responses import PlainTextResponse
 
-            return PlainTextResponse(
+            return PlainTextResponse(  # type: ignore[return-value]
                 content=generate_latest().decode("utf-8"),
                 media_type=CONTENT_TYPE_LATEST,
             )
 
-    @app.get("/health")
+    @app.get("/health", operation_id="health_get")
     async def health(request: Request) -> dict[str, Any]:
         return {
             "status": "ok",
@@ -645,6 +783,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             "auth_enabled": bool(request.app.state.auth_enabled),
             "app_instance_id": request.app.state.app_instance_id,
         }
+
+    @app.head("/health", include_in_schema=False)
+    async def health_head() -> None:
+        return None
 
     @app.get(
         "/health/live",
@@ -686,6 +828,99 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                     status_code=503, detail=f"DB missing: {sqlite_path}"
                 )
             deps_status["db"] = "sqlite"
+
+        # Auth store readiness check — backend-aware.
+        # Uses the resolved auth state from build_app() so test harnesses with
+        # auth_enabled=False and FG_API_KEY-fallback contexts are handled correctly.
+        if bool(app.state.auth_enabled):
+            _ready_db_backend = (os.getenv("FG_DB_BACKEND") or "").strip().lower()
+
+            if _ready_db_backend == "postgres":
+                # Postgres mode: probe api_keys table via the shared engine.
+                try:
+                    from api.auth_scopes.store import probe_auth_store
+
+                    _pg_ok, _pg_reason = probe_auth_store()
+                    if not _pg_ok:
+                        raise HTTPException(status_code=503, detail=_pg_reason)
+                    deps_status["auth_store"] = "ok"
+                except HTTPException:
+                    raise
+                except Exception as exc:
+                    log.warning(
+                        "auth_store_readiness_check_failed: %s", type(exc).__name__
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"auth_store_backend_error:{type(exc).__name__}",
+                    )
+            else:
+                # SQLite mode: existing file/schema/writable-dir checks (PR 16).
+                import sqlite3 as _sqlite3
+
+                _REQUIRED_AUTH_COLS = frozenset(
+                    {
+                        "prefix",
+                        "key_hash",
+                        "key_lookup",
+                        "hash_alg",
+                        "hash_params",
+                        "scopes_csv",
+                        "enabled",
+                        "tenant_id",
+                        "expires_at",
+                    }
+                )
+                _auth_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
+                if not _auth_path:
+                    raise HTTPException(
+                        status_code=503, detail="auth_store_path_missing"
+                    )
+                if not os.path.exists(_auth_path):
+                    raise HTTPException(
+                        status_code=503,
+                        detail="auth_store_unreachable: path does not exist",
+                    )
+                # Verify the parent directory is writable. The container runs
+                # read_only: true; only volume-mounted paths are writable.
+                _auth_parent = os.path.dirname(_auth_path) or "."
+                if not os.access(_auth_parent, os.W_OK):
+                    raise HTTPException(
+                        status_code=503,
+                        detail=(
+                            "auth_store_dir_not_writable: key minting will fail. "
+                            "Ensure FG_SQLITE_PATH is on a writable volume mount."
+                        ),
+                    )
+                try:
+                    _acon = _sqlite3.connect(_auth_path, timeout=1.0)
+                    try:
+                        _present = {
+                            r[1]
+                            for r in _acon.execute(
+                                "PRAGMA table_info(api_keys)"
+                            ).fetchall()
+                        }
+                        _missing = _REQUIRED_AUTH_COLS - _present
+                        if _missing:
+                            raise HTTPException(
+                                status_code=503,
+                                detail=(
+                                    f"auth_store_schema_incomplete: "
+                                    f"missing columns {sorted(_missing)}"
+                                ),
+                            )
+                    finally:
+                        _acon.close()
+                except HTTPException:
+                    raise
+                except (_sqlite3.Error, OSError) as exc:
+                    log.warning("auth_store_readiness_check_failed: %s", exc)
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"auth_store_unreachable: {type(exc).__name__}",
+                    )
+                deps_status["auth_store"] = "ok"
 
         checker = None
         try:
@@ -814,43 +1049,38 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         return result
 
     @app.get("/_debug/routes")
-    async def debug_routes(request: Request) -> dict[str, Any]:
-        try:
-            require_status_auth(request)
+    async def debug_routes(
+        request: Request,
+        _auth: None = Depends(authz_scope("admin:read")),
+    ) -> dict[str, Any]:
+        # HTTPException (401/403) from require_status_auth must propagate so
+        # that unauthenticated callers receive a proper error response rather
+        # than a 200 {"ok": False}.
+        require_status_auth(request)
 
-            routes: list[dict[str, Any]] = []
-            for route in request.app.router.routes:
-                path = getattr(route, "path", None)
-                if not path:
-                    continue
-                endpoint = getattr(route, "endpoint", None)
-                module_name = (
-                    getattr(endpoint, "__module__", None) if endpoint else None
-                )
-                func_name = getattr(endpoint, "__name__", None) if endpoint else None
-                methods = sorted(list(getattr(route, "methods", []) or []))
+        routes: list[dict[str, Any]] = []
+        for route in request.app.router.routes:
+            path = getattr(route, "path", None)
+            if not path:
+                continue
+            endpoint = getattr(route, "endpoint", None)
+            module_name = getattr(endpoint, "__module__", None) if endpoint else None
+            func_name = getattr(endpoint, "__name__", None) if endpoint else None
+            methods = sorted(list(getattr(route, "methods", []) or []))
 
-                routes.append(
-                    {
-                        "path": path,
-                        "methods": methods,
-                        "endpoint": f"{module_name}.{func_name}"
-                        if module_name and func_name
-                        else None,
-                        "name": getattr(route, "name", None),
-                    }
-                )
+            routes.append(
+                {
+                    "path": path,
+                    "methods": methods,
+                    "endpoint": f"{module_name}.{func_name}"
+                    if module_name and func_name
+                    else None,
+                    "name": getattr(route, "name", None),
+                }
+            )
 
-            routes.sort(key=lambda item: (str(item["path"]), ",".join(item["methods"])))
-            return {"ok": True, "error": None, "routes": routes}
-        except HTTPException as exc:
-            return {
-                "ok": False,
-                "error": f"{exc.status_code}: {exc.detail}",
-                "routes": [],
-            }
-        except Exception as exc:
-            return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "routes": []}
+        routes.sort(key=lambda item: (str(item["path"]), ",".join(item["methods"])))
+        return {"ok": True, "error": None, "routes": routes}
 
     return app
 
@@ -893,7 +1123,8 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
         app.include_router(ai_plane_extension_router)
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
-    app.include_router(framework_authority_router)
+    app.include_router(workforce_router)
+    app.include_router(admin_identity_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)
@@ -901,6 +1132,32 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
+    app.include_router(signing_router)
+    app.include_router(governance_report_router)
+    app.include_router(governance_timeline_router)
+    app.include_router(governance_assets_router)
+    app.include_router(governance_assets_audit_router)
+    app.include_router(governance_candidates_router)
+    app.include_router(governance_graph_router)
+    app.include_router(governance_workflows_router)
+    app.include_router(field_assessment_router)
+    app.include_router(remediation_router)
+    app.include_router(trust_arc_router)
+    app.include_router(trust_monitoring_router)
+    app.include_router(executive_trust_router)
+    app.include_router(quarterly_briefs_router)
+    app.include_router(clm_router)
+    app.include_router(control_tower_router)
+    app.include_router(portal_router)
+    app.include_router(portal_remediation_router)
+    app.include_router(risk_acceptance_router)
+    app.include_router(risk_governance_router)
+    app.include_router(control_registry_router)
+    app.include_router(governance_portal_router)
+    app.include_router(governance_reporting_router)
+    app.include_router(evidence_authority_router)
+    app.include_router(framework_authority_router)
+    app.include_router(connectors_msgraph_report_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
     app.include_router(rag_corpus_ingestion_router)
@@ -911,6 +1168,10 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(provisioning_router)
     app.include_router(ops_governance_router)
     app.include_router(readiness_router)
+    app.include_router(readiness_gap_analysis_router)
+    app.include_router(readiness_monitoring_router)
+    app.include_router(readiness_alerting_router)
+    app.include_router(readiness_simulation_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)
     app.include_router(control_tower_snapshot_router)
@@ -927,13 +1188,10 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     if governance_router is not None:
         app.include_router(governance_router)
 
-    @app.get("/health")
-    async def health() -> dict[str, str]:
-        return {
-            "status": "ok",
-            "service": app.state.service,
-            "version": app.state.app_version,
-        }
+    app.include_router(entitlements_router)
+    app.include_router(entitlements_ui_router)
+    app.include_router(subscriptions_router)
+    app.include_router(billing_v2_router)
 
     @app.get("/health/live")
     async def health_live() -> dict[str, str]:

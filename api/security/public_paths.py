@@ -10,7 +10,6 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/forensics/chain/verify",
     "/forensics/snapshot",
     "/forensics/audit-trail",
-    "/metrics",
     "/status",
     "/v1/status",
     "/stats/debug",
@@ -28,14 +27,21 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/agent/log/anchor",
     "/agent/config",
     "/ingest/assessment/webhooks/stripe",
+    "/billing/webhooks/stripe",
+    # Single-use invite-token exchange: no prior auth exists; token IS the credential.
+    # Tenant binding is enforced via tenant_db_required + DB lookup on the token itself.
+    "/workforce/users/accept-invite",
+    # Public key endpoint — external auditors need this to verify report signatures
+    # without possessing the private key.
+    "/signing/public-key",
 )
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (
     "/health/",
-    "/_debug",
     "/missions",
     "/rings",
     "/roe",
     "/_legacy",
     "/ui",
+    "/field-assessment/reports/verify/",
 )

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_engine
 from api.db_models import SecurityAuditLog
+from api.entitlements import require_capability
 
 router = APIRouter(
     tags=["ui-forensics"], dependencies=[Depends(require_scopes("ui:read"))]
@@ -146,7 +147,10 @@ def ui_forensics_trace(
     }
 
 
-@router.get("/ui/forensics/events/export")
+@router.get(
+    "/ui/forensics/events/export",
+    dependencies=[Depends(require_capability("audit.forensics"))],
+)
 def ui_forensics_export(
     request: Request,
     from_: Optional[str] = Query(default=None, alias="from"),

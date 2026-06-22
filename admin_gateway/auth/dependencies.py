@@ -9,6 +9,8 @@ import logging
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_gateway.auth.config import AuthConfig, get_auth_config
 from admin_gateway.auth.csrf import CSRFProtection
@@ -16,6 +18,7 @@ from admin_gateway.auth.dev_bypass import get_dev_bypass_session
 from admin_gateway.auth.scopes import Scope, has_scope
 from admin_gateway.auth.session import Session, SessionManager
 from admin_gateway.auth.tenant import TenantContext, validate_tenant_access
+from admin_gateway.db.session import get_db
 
 log = logging.getLogger("admin-gateway.auth")
 
@@ -169,4 +172,121 @@ async def require_admin(
             status_code=403,
             detail="Admin access required",
         )
+    return session
+
+
+_VERSION_CHECK_SQL = text(
+    "SELECT membership_version, active, identity_binding_status "
+    "FROM tenant_users "
+    "WHERE id = :mid AND tenant_id = :tid LIMIT 1"
+)
+
+
+async def require_governed_session(
+    session: Session = Depends(get_current_session),
+    db: Optional[AsyncSession] = Depends(get_db),
+) -> Session:
+    """Require a tenant-governed session with current membership_version.
+
+    A governed session is created only after the OIDC callback resolves an
+    active bound membership in tenant_users. Ungoverned sessions (e.g. from
+    dev bypass or pre-membership logins) are denied.
+
+    For governed sessions the membership_version embedded at issuance is
+    validated against the live DB value — a mismatch means the membership
+    was changed (deactivated, role-changed, etc.) since the session was issued.
+
+    Raises:
+        HTTPException 403: SESSION_NOT_GOVERNED — no active membership bound
+        HTTPException 401: SESSION_REVOKED — membership_version mismatch
+    """
+    if not session.tenant_governed:
+        log.warning(
+            "governed_session_required",
+            extra={
+                "user_id": session.user_id,
+                "tenant_id": session.tenant_id,
+                "membership_id": session.membership_id,
+            },
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "SESSION_NOT_GOVERNED",
+                "message": "Active tenant membership is required for this operation.",
+            },
+        )
+
+    # Governed sessions issued before P1.1 carry membership_version=0 (sentinel).
+    # Deny them explicitly — they were issued without version binding and cannot
+    # be retroactively validated. Forces re-authentication after deployment.
+    if session.membership_version == 0:
+        log.warning(
+            "governed_session.no_version",
+            extra={"user_id": session.user_id, "membership_id": session.membership_id},
+        )
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "SESSION_REVOKED",
+                "message": "Session issued before membership versioning. Please log in again.",
+            },
+        )
+
+    if isinstance(db, AsyncSession) and session.membership_id and session.tenant_id:
+        row = (
+            await db.execute(
+                _VERSION_CHECK_SQL,
+                {"mid": session.membership_id, "tid": session.tenant_id},
+            )
+        ).one_or_none()
+
+        if row is None:
+            log.warning(
+                "governed_session.membership_missing",
+                extra={"membership_id": session.membership_id},
+            )
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "code": "SESSION_REVOKED",
+                    "message": "Membership record not found. Please log in again.",
+                },
+            )
+
+        if int(row.membership_version) != session.membership_version:
+            log.warning(
+                "governed_session.version_mismatch",
+                extra={
+                    "membership_id": session.membership_id,
+                    "session_version": session.membership_version,
+                    "current_version": int(row.membership_version),
+                },
+            )
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "code": "SESSION_REVOKED",
+                    "message": "Session revoked: membership has changed. Please log in again.",
+                },
+            )
+
+        if not row.active:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "MEMBERSHIP_INACTIVE",
+                    "message": "Membership is deactivated.",
+                },
+            )
+
+        if row.identity_binding_status != "bound":
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "MEMBERSHIP_NOT_BOUND",
+                    "message": "Membership identity binding is not active.",
+                },
+            )
+
     return session

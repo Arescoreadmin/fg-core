@@ -1,3 +1,13 @@
-from services.federation_extension.service import FederationService, JWKSCache
+from services.federation_extension.service import (
+    FederationPrincipal,
+    FederationService,
+    FederationValidationError,
+    JWKSCache,
+)
 
-__all__ = ["FederationService", "JWKSCache"]
+__all__ = [
+    "FederationPrincipal",
+    "FederationService",
+    "FederationValidationError",
+    "JWKSCache",
+]

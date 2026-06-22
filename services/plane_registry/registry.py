@@ -37,22 +37,31 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/compliance-cp",
             "/enterprise-controls",
             "/frameworks",
-            "/controls",
             "/control-framework-mappings",
             "/exceptions",
             "/breakglass",
             "/governance",
+            "/remediation",
+            "/controls",
+            "/risk-acceptances",
+            "/risk-governance",
+            "/field-assessment",
+            "/portal",
+            "/portal/governance",
             "/config",
             "/planes",
             "/health",
             "/status",
             "/internal",
             "/admin",
+            "/subscriptions",
             "/_debug",
             "/_legacy",
             "/dev",
             "/rag",
             "/metrics",
+            "/signing",
+            "/governance-reports",
         ),
         allowed_dependency_categories=("auth", "tenant", "db", "rate", "breakglass"),
         required_make_targets=("control-plane-check", "plane-registry-spot"),
@@ -79,6 +88,12 @@ PLANE_REGISTRY: list[PlaneDef] = [
         ),
         public_routes=(
             ex("GET", "/health", "public", "Unauthenticated health probe."),
+            ex(
+                "HEAD",
+                "/health",
+                "public",
+                "Unauthenticated health probe for uptime monitoring.",
+            ),
             ex("GET", "/health/live", "public", "Kubernetes liveness probe."),
             ex("GET", "/health/ready", "public", "Kubernetes readiness probe."),
             ex("GET", "/health/detailed", "public", "Detailed health probe endpoint."),
@@ -91,6 +106,14 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "Prometheus scrape endpoint. Internal infrastructure only — "
                 "no auth, no tenant data, no customer PII. "
                 "Must not be exposed on the public customer-facing ingress.",
+            ),
+            ex(
+                "GET",
+                "/signing/public-key",
+                "public",
+                "Public Ed25519 report signing key endpoint. Required for external "
+                "auditor/client verification of signed reports. Returns no tenant data, "
+                "no customer data, no secrets, and no private key material.",
             ),
         ),
         global_routes=(
@@ -133,6 +156,13 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ),
             ex(
                 "GET",
+                "/admin/bundles",
+                "global_admin",
+                "Bundle catalog listing is global platform operator metadata — "
+                "lists all policy bundles, not tenant-scoped.",
+            ),
+            ex(
+                "GET",
                 "/admin/tenants/{tenant_id}",
                 "global_admin",
                 "Tenant inspection is global platform operator metadata.",
@@ -172,6 +202,24 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "/_legacy/ui_feed/_disabled",
                 "bootstrap",
                 "Legacy disabled route; blocked in prod-like mode.",
+            ),
+            ex(
+                "POST",
+                "/admin/billing/meters",
+                "global_admin",
+                "P1.5 usage meter catalog creation — global operator action, no tenant scope.",
+            ),
+            ex(
+                "GET",
+                "/admin/billing/meters",
+                "global_admin",
+                "P1.5 usage meter catalog listing — global operator metadata.",
+            ),
+            ex(
+                "PATCH",
+                "/admin/billing/meters/{meter_code}",
+                "global_admin",
+                "P1.5 usage meter catalog update — global operator action, no tenant scope.",
             ),
         ),
     ),
@@ -234,6 +282,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "defend:",
                 "stats:",
                 "admin:",
+                "billing:",
             ),
             require_any_scope=True,
             tenant_binding_required=True,
@@ -308,6 +357,19 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "/ingest/assessment/webhooks/stripe",
                 "auth_exempt",
                 "External Stripe webhook verified by HMAC signature; cannot carry API key credentials.",
+            ),
+            ex(
+                "POST",
+                "/billing/webhooks/stripe",
+                "auth_exempt",
+                "P1.5 billing webhook — verified by Stripe HMAC signature; cannot carry API key credentials.",
+            ),
+            ex(
+                "POST",
+                "/billing/usage/events",
+                "auth_exempt",
+                "P1.5 usage event submission — tenant-bound via require_bound_tenant; "
+                "no additional scope needed beyond tenant key.",
             ),
         ),
     ),
@@ -576,6 +638,33 @@ PLANE_REGISTRY: list[PlaneDef] = [
         ),
     ),
     PlaneDef(
+        plane_id="workforce",
+        route_prefixes=("/workforce",),
+        allowed_dependency_categories=("auth", "tenant", "db", "rate"),
+        required_make_targets=("soc-invariants",),
+        required_ci_gates=COMMON_GATES,
+        maturity_tag="production-grade",
+        required_route_invariants=("auth", "tenant_bound"),
+        auth_class=AuthClass(
+            required_scope_prefixes=("admin:",),
+            require_any_scope=True,
+            tenant_binding_required=True,
+        ),
+        public_routes=(
+            ex(
+                "POST",
+                "/workforce/users/accept-invite",
+                "auth_exempt",
+                "Invite-token exchange: the invite token IS the credential. "
+                "32-byte URL-safe random, 72h TTL, single-use (cleared on acceptance). "
+                "Tenant isolation enforced implicitly: DB lookup returns nothing for "
+                "tokens not belonging to the caller's tenant. Role assigned by the "
+                "inviting admin at creation time; accepting user cannot escalate.",
+                permanent=True,
+            ),
+        ),
+    ),
+    PlaneDef(
         plane_id="ui",
         route_prefixes=("/ui",),
         allowed_dependency_categories=("auth", "tenant", "rate"),
@@ -612,6 +701,12 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "/ui/token",
                 "bootstrap",
                 "Token bootstrap endpoint before tenant-bound flow.",
+            ),
+            ex(
+                "GET",
+                "/ui/entitlements/registry",
+                "bootstrap",
+                "Capability registry: static list of all capabilities/namespaces. Public for feature-discovery pre-auth.",
             ),
         ),
         global_routes=(
@@ -661,6 +756,8 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ),
         ),
     ),
+    # P0-11 CGCT routes live under /control-tower, already owned by the
+    # control plane above. No separate PlaneDef required.
 ]
 
 

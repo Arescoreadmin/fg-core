@@ -34,7 +34,7 @@ jobs:
   fg_guard:
     name: Guard (paths + syntax + fg-fast)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
     env:
@@ -53,7 +53,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Detect changed paths
         id: filter
@@ -168,7 +168,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
@@ -498,7 +498,7 @@ jobs:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: |
-            console/package-lock.json
+            apps/console/package-lock.json
             package-lock.json
 
       - name: Generate CI secrets

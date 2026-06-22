@@ -320,6 +320,18 @@
     },
     {
       "method": "POST",
+      "path": "/billing/usage/events",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/billing/webhooks/stripe",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/breakglass/sessions",
       "scopes": [],
       "source": "contract"
@@ -830,6 +842,48 @@
     },
     {
       "method": "GET",
+      "path": "/control-plane/readiness/alerting/alerts",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/alerting/alerts/{alert_instance_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/readiness/alerting/alerts/{alert_instance_id}/lifecycle",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/readiness/alerting/alerts/{alert_instance_id}/suppress",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/alerting/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/readiness/alerting/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/alerting/runs/{run_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-plane/readiness/assessments",
       "scopes": [],
       "source": "contract"
@@ -855,6 +909,12 @@
     {
       "method": "POST",
       "path": "/control-plane/readiness/assessments/{assessment_id}/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/assessments/{assessment_id}/gap-analysis",
       "scopes": [],
       "source": "contract"
     },
@@ -889,8 +949,20 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/control-plane/readiness/controls/{control_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/control-plane/readiness/domains",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/domains/{domain_id}",
       "scopes": [],
       "source": "contract"
     },
@@ -961,6 +1033,30 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/control-plane/readiness/maturity-tiers/{tier_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/readiness/monitoring/run",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/monitoring/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/monitoring/runs/{run_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/control-plane/readiness/scoring-contracts",
       "scopes": [],
@@ -969,6 +1065,36 @@
     {
       "method": "GET",
       "path": "/control-plane/readiness/scoring-contracts/{contract_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/simulation/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/readiness/simulation/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/simulation/runs/{run_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/simulation/runs/{run_id}/events",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/simulation/runs/{run_id}/replay",
       "scopes": [],
       "source": "contract"
     },
@@ -1118,7 +1244,121 @@
     },
     {
       "method": "GET",
+      "path": "/control-tower/actions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/authority-matrix",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/certifications",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/decisions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/drift",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/executive",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/graph",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/overview",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/posture",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-tower/posture/compute",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/risks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-tower/snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-tower/timeline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/controls",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/controls",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/controls/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/controls/maintenance/freshness",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/controls/maintenance/review-sweep",
       "scopes": [],
       "source": "contract"
     },
@@ -1137,6 +1377,72 @@
     {
       "method": "POST",
       "path": "/controls/{control_id}/framework-mappings",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/controls/{ctl_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/controls/{ctl_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/controls/{ctl_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/controls/{ctl_id}/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/controls/{ctl_id}/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/controls/{ctl_id}/reviews",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/controls/{ctl_id}/reviews",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/controls/{ctl_id}/reviews/{review_id}/complete",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/controls/{ctl_id}/risk-links",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/controls/{ctl_id}/risk-links",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/controls/{ctl_id}/verify",
       "scopes": [],
       "source": "contract"
     },
@@ -1184,6 +1490,18 @@
     },
     {
       "method": "GET",
+      "path": "/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/evidence/anchors",
       "scopes": [],
       "source": "contract"
@@ -1208,6 +1526,18 @@
     },
     {
       "method": "GET",
+      "path": "/evidence/by-entity/{entity_type}/{entity_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/evidence/runs",
       "scopes": [],
       "source": "contract"
@@ -1227,6 +1557,72 @@
     {
       "method": "POST",
       "path": "/evidence/verify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/evidence/{ev_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence/{ev_id}/lifecycle",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}/ownership",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence/{ev_id}/ownership",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/evidence/{ev_id}/ownership/{ownership_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}/relationships",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence/{ev_id}/relationships",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}/trust",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence/{ev_id}/verify",
       "scopes": [],
       "source": "contract"
     },
@@ -1257,6 +1653,852 @@
     {
       "method": "HEAD",
       "path": "/feed/stream",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{eid}/certifications",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{eid}/certifications",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{eid}/certifications/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}/attest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}/health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}/history",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}/impact",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}/lineage",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}/renew",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}/review",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{eid}/certifications/{cert_id}/transition",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/ai-vendor-governance",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/ai-vendor-governance/decisions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/ai-vendor-governance/{record_id}/transition",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/artifacts",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/artifacts/{artifact_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/audit-events",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/baseline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/ai-vendor-governance/run",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/dns-email/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/entra-governance/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/network-scan/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/oauth-inventory/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/oauth-risk/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/sharepoint/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/web-headers/initiate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/{run_id}/status",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-schedules",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-schedules",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/document-analyses",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/document-analyses",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/drift-report",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/drift-report/correlation/{finding_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/drift-velocity",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/board",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/board/generate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/board/{report_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/generate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/approve",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/deliver",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/explain",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/export",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/briefs/{brief_id}/review",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/certification",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/certification/history",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/decisions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/drilldown/certification/{cert_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/drilldown/drift/{event_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/monitoring",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/posture",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/reports/drift",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/reports/quarterly",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/reports/risk",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/reports/summary",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/risks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/timeline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/etcc/trends",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/evidence-links",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/evidence-links",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/exceptions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/exceptions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/exceptions/{exception_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/execution-state",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/findings",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/findings/{finding_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/findings/{finding_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/findings/{finding_id}/explain",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/findings/{finding_id}/remediation",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/governance-decisions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/governance-decisions/{decision_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/next-actions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/observations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/observations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/observations/bulk",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/field-assessment/engagements/{engagement_id}/observations/{observation_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/observations/{observation_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/portal-grants/{grant_id}/rotate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/promote",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/coverage",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/responses/{control_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/submit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/readiness-drift",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/remediation-roadmap",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/reports",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/reports",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-approve",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{version}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{version}/export",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{version}/verify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/risk-acceptances",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/risk-acceptances",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/risk-acceptances/{acceptance_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-jobs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-jobs/{job_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-results",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-results",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/status",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/summary",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/tim/certification-status",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/tim/drift",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/tim/drift/{event_id}/acknowledge",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/tim/evaluate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/tim/posture",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/tim/risks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/tim/timeline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/trust-arc/certification",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/trust-arc/intelligence-snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/trust-arc/proof-package",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/trust-arc/rebuild",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/verification-bundle",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/verification-bundle/download",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/verification-bundle/generate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/verification-bundle/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/etcc/briefs/history",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/etcc/overview",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/interview-templates",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/reports/verify/{report_hash}",
       "scopes": [],
       "source": "contract"
     },
@@ -1346,6 +2588,252 @@
     },
     {
       "method": "GET",
+      "path": "/governance-reports",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-reports",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-reports/{report_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-reports/{report_id}/attest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-reports/{report_id}/attestations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-reports/{report_id}/export/html",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-reports/{report_id}/export/pdf",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-reports/{report_id}/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-reports/{report_id}/timeline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-reports/{report_id}/verify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/attestation-health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/continuity-gaps",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/shadow",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/summary",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/governance/assets/{asset_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/attestations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/attestations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/blast-radius",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/decommission",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/owners",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/owners",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/governance/assets/{asset_id}/owners/{ownership_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/relationships",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/relationships",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/risk",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/risk/recompute",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/versions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/versions/{version_hash}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/audit/chain/verify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/candidates",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/candidates/inbox",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/candidates/promote-batch",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/candidates/{candidate_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/candidates/{candidate_id}/promote",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/candidates/{candidate_id}/reject",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/candidates/{candidate_id}/review",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/governance/changes",
       "scopes": [],
       "source": "contract"
@@ -1364,7 +2852,121 @@
     },
     {
       "method": "GET",
-      "path": "/health",
+      "path": "/governance/graph/anomalies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/graph/anomalies/{anomaly_id}/resolve",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/coverage",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/edges",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/lineage/{node_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/nodes",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/nodes/{node_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/path",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/graph/rebuild",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/stats",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/graph/traverse",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/timeline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/timeline/{event_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/workflows",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/workflows",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/workflows/templates",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/workflows/{workflow_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/workflows/{workflow_id}/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/workflows/{workflow_id}/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/governance/workflows/{workflow_id}/transition",
       "scopes": [],
       "source": "contract"
     },
@@ -1417,6 +3019,36 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/ingest/assessment/reports/{report_id}/exports/{export_format}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/reports/{report_id}/finalize",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/reports/{report_id}/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/reports/{report_id}/regenerate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/reports/{report_id}/replay-verify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/ingest/assessment/webhooks/stripe",
       "scopes": [],
@@ -1431,6 +3063,36 @@
     {
       "method": "POST",
       "path": "/ingest/assessment/{assessment_id}/checkout",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/{assessment_id}/governance-report",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/html",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/replay",
       "scopes": [],
       "source": "contract"
     },
@@ -1537,6 +3199,168 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/portal/authenticate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/acknowledgements",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/governance/acknowledgements",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/acknowledgements/{ack_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/controls",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/controls/{ctl_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/evidence/{evidence_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/risks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/governance/risks/{risk_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/grants",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/grants",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/portal/grants/{grant_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/identity/login",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/me",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/remediation",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/remediation/tasks/{task_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/remediation/tasks/{task_id}/acknowledge",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/remediation/tasks/{task_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/remediation/tasks/{task_id}/comments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/remediation/tasks/{task_id}/comments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/portal/remediation/tasks/{task_id}/comments/{comment_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/remediation/tasks/{task_id}/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/remediation/tasks/{task_id}/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/portal/sessions/{session_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/rag/corpora",
       "scopes": [],
@@ -1628,6 +3452,108 @@
     },
     {
       "method": "GET",
+      "path": "/remediation/tasks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation/tasks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/overdue",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/unassigned",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/remediation/tasks/{task_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/remediation/tasks/{task_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/allowed-transitions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/assign",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/close",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/due-date",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/notifications/{notification_id}/acknowledge",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/sla",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation/tasks/{task_id}/timeline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/transition",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation/tasks/{task_id}/unassign",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/rings/isolation",
       "scopes": [],
       "source": "contract"
@@ -1645,6 +3571,150 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/risk-acceptances",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-acceptances",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/risk-acceptances/{ra_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/approvals",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/approvals",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/approvals/{approval_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/approvals/{approval_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/approvals/{approval_id}/decision",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/escalations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/escalations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/reviews",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/reviews",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/reviews/{review_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/reviews/{review_id}/complete",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-acceptances/{ra_id}/transitions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-acceptances/{ra_id}/transitions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-governance/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-governance/maintenance/expire-approvals",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-governance/maintenance/mark-overdue-reviews",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-governance/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/risk-governance/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/risk-governance/policies/{policy_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/roe/evaluate",
       "scopes": [],
@@ -1653,6 +3723,12 @@
     {
       "method": "GET",
       "path": "/roe/policy",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/signing/public-key",
       "scopes": [],
       "source": "contract"
     },
@@ -1682,12 +3758,132 @@
     },
     {
       "method": "GET",
+      "path": "/subscriptions/explain-capability",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ui/entitlements",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ui/entitlements/registry",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/v1/status",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/alert-rules",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/alert-rules",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/workforce/alert-rules/{rule_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/workforce/alert-rules/{rule_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/alerts",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/alerts/{alert_id}/dismiss",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/keywords",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/keywords",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/keywords/preview",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/workforce/keywords/{keyword_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/risk-profiles",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/users",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/users",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/workforce/users/accept-invite",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/workforce/users/{user_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/users/{user_id}/activity",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/workforce/users/{user_id}/risk-history",
       "scopes": [],
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-22T17:46:17.399022+00:00",
+  "generated_at": "2026-06-22T20:58:07.971882+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

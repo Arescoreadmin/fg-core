@@ -178,6 +178,26 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_policies
         WHERE schemaname = 'public'
+          AND tablename = 'fa_frameworks'
+          AND policyname = 'fa_frameworks_system_write'
+    ) THEN
+        CREATE POLICY fa_frameworks_system_write
+            ON fa_frameworks
+            USING (
+                scope_type = 'SYSTEM'
+                AND tenant_id IS NULL
+                AND current_setting('app.allow_system_write', true) = 'true'
+            )
+            WITH CHECK (
+                scope_type = 'SYSTEM'
+                AND tenant_id IS NULL
+                AND current_setting('app.allow_system_write', true) = 'true'
+            );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
           AND tablename = 'fa_framework_controls'
           AND policyname = 'fa_framework_controls_select_visibility'
     ) THEN
@@ -214,6 +234,26 @@ BEGIN
                 AND scope_type = 'TENANT'
                 AND current_setting('app.tenant_id', true) IS NOT NULL
                 AND tenant_id = current_setting('app.tenant_id', true)
+            );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'fa_framework_controls'
+          AND policyname = 'fa_framework_controls_system_write'
+    ) THEN
+        CREATE POLICY fa_framework_controls_system_write
+            ON fa_framework_controls
+            USING (
+                scope_type = 'SYSTEM'
+                AND tenant_id IS NULL
+                AND current_setting('app.allow_system_write', true) = 'true'
+            )
+            WITH CHECK (
+                scope_type = 'SYSTEM'
+                AND tenant_id IS NULL
+                AND current_setting('app.allow_system_write', true) = 'true'
             );
     END IF;
 

@@ -41,6 +41,7 @@ def client(tmp_path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_AUTH_ENABLED", "1")
     monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+    monkeypatch.setenv("FG_ENTITLEMENT_ENFORCEMENT", "false")
     _set_signing_env(monkeypatch)
     reset_engine_cache()
     app = build_app(auth_enabled=True)

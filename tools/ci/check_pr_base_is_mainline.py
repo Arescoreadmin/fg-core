@@ -36,14 +36,17 @@ def main() -> int:
     is_ci = (os.getenv("CI") or "").strip().lower() in {"1", "true", "yes"}
 
     if not base_ref:
-        if is_ci:
+        # Push events (e.g. direct push to main) have no GITHUB_BASE_REF.
+        # This check is only meaningful for pull_request events.
+        is_push = (os.getenv("GITHUB_EVENT_NAME") or "").strip() == "push"
+        if is_ci and not is_push:
             print("pr-base-mainline: FAILED")
             print(" - GITHUB_BASE_REF is missing in CI; cannot validate PR base diff")
             return 1
-        print("pr-base-mainline: local mode (no GITHUB_BASE_REF), skipping")
+        print("pr-base-mainline: skipped (no base ref)")
         return 0
 
-    fetch = _run_git(["fetch", "origin", base_ref, "--depth=1"])
+    fetch = _run_git(["fetch", "origin", base_ref, "--prune"])
     if fetch.returncode != 0:
         print("pr-base-mainline: FAILED")
         print(

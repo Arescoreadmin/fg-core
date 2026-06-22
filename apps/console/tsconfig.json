@@ -1,0 +1,60 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./*"],
+      "@fg/ui": ["../../packages/ui/src/index.ts"],
+      "@fg/ui/*": ["../../packages/ui/src/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"],
+      "react/jsx-dev-runtime": ["./node_modules/@types/react/jsx-dev-runtime.d.ts"],
+      "class-variance-authority": ["./node_modules/class-variance-authority"],
+      "class-variance-authority/*": ["./node_modules/class-variance-authority/*"],
+      "clsx": ["./node_modules/clsx"],
+      "clsx/*": ["./node_modules/clsx/*"],
+      "tailwind-merge": ["./node_modules/tailwind-merge"],
+      "tailwind-merge/*": ["./node_modules/tailwind-merge/*"],
+      "lucide-react": ["./node_modules/lucide-react"],
+      "lucide-react/*": ["./node_modules/lucide-react/*"],
+      "@radix-ui/react-checkbox": ["./node_modules/@radix-ui/react-checkbox"],
+      "@radix-ui/react-label": ["./node_modules/@radix-ui/react-label"],
+      "@radix-ui/react-progress": ["./node_modules/@radix-ui/react-progress"],
+      "@radix-ui/react-select": ["./node_modules/@radix-ui/react-select"],
+      "@radix-ui/react-tabs": ["./node_modules/@radix-ui/react-tabs"],
+      "@radix-ui/react-dialog": ["./node_modules/@radix-ui/react-dialog"],
+      "@radix-ui/react-dropdown-menu": ["./node_modules/@radix-ui/react-dropdown-menu"],
+      "@radix-ui/react-separator": ["./node_modules/@radix-ui/react-separator"],
+      "@radix-ui/react-tooltip": ["./node_modules/@radix-ui/react-tooltip"]
+    },
+    "baseUrl": "."
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

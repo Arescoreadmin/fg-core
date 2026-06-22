@@ -24,21 +24,65 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from pydantic import BaseModel
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from api.auth_scopes.resolution import require_scopes
-from api.db import get_sessionmaker
+from api.assessments import _resolve_caller_tenant, _question_score
+from api.auth_scopes.resolution import require_bound_tenant, require_scopes
+from api.entitlements import require_capability
+from api.db import get_sessionmaker, set_tenant_context
 from api.db_models import AssessmentRecord, OrgProfile, PromptVersion, ReportRecord
 from api.report_jobs import (
     REPORT_GENERATION_FAILED,
     REPORT_GENERATION_TIMEOUT,
     ReportJobState,
 )
+from api.report_exports import (
+    EXPORT_AUDIT_DOWNLOADED,
+    EXPORT_AUDIT_FINALIZED,
+    EXPORT_AUDIT_GENERATED,
+    EXPORT_AUDIT_HASH_FAILED,
+    EXPORT_AUDIT_HASH_VERIFIED,
+    EXPORT_AUDIT_REGENERATED,
+    EXPORT_AUDIT_REPLAY_COMPLETED,
+    EXPORT_AUDIT_REPLAY_MISMATCH,
+    EXPORT_AUDIT_REPLAY_REQUESTED,
+    EXPORT_AUDIT_REVIEWER_ASSIGNED,
+    EXPORT_AUDIT_SUPERSEDED,
+    ExportUnavailableError,
+    ExportValidationError,
+    build_hashed_manifest,
+    emit_export_event,
+    load_assessment,
+    load_report_for_export,
+    populate_deterministic_export_sections,
+    render_html_export,
+    render_pdf_export,
+)
+from api.config.env import is_production_env
 from api.security_audit import AuditEvent, EventType, get_auditor
+from services.governance.timeline import TimelineStore
+from services.governance.timeline.adapters import (
+    export_to_timeline_event,
+    replay_verify_to_timeline_event,
+)
+from services.governance.timeline.records import (
+    ExportTimelineEntry,
+    ReplayTimelineEntry,
+)
 
 log = logging.getLogger("frostgate.reports")
+_timeline_store = TimelineStore()
 
 # Configurable generation timeout in seconds (default 300 s = 5 min).
 _REPORT_GENERATION_TIMEOUT_S = int(os.getenv("FG_REPORT_GENERATION_TIMEOUT_S", "300"))
@@ -134,13 +178,16 @@ def _domain_scores_text(scores: dict[str, float]) -> str:
         "data_governance": "Data Governance",
         "security_posture": "Security Posture",
         "ai_maturity": "AI Maturity",
+        "ai_trustworthiness": "AI Trustworthiness (Bias/Fairness/Explainability)",
         "infra_readiness": "Infrastructure Readiness",
         "compliance_awareness": "Compliance Awareness",
         "automation_potential": "Automation Potential",
     }
     lines = []
     for key, label in labels.items():
-        score = scores.get(key, 0.0)
+        score = scores.get(key)
+        if score is None:
+            continue
         if score < 25:
             band = "Critical"
         elif score < 50:
@@ -188,8 +235,8 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 
 def _validate_report_content(content: dict[str, Any]) -> dict[str, Any]:
-    """
-    Ensure required fields are present and values are sane.
+    """Ensure required fields are present and values are sane.
+
     Fills defaults rather than raising — we never want to lose a generated report
     over a minor schema mismatch.
     """
@@ -197,26 +244,52 @@ def _validate_report_content(content: dict[str, Any]) -> dict[str, Any]:
     content.setdefault("key_strengths", [])
     content.setdefault("critical_gaps", [])
     content.setdefault("domain_findings", {})
+    content["domain_findings"].setdefault("ai_trustworthiness", "")
+    content.setdefault(
+        "nist_function_findings",
+        {
+            "GOVERN": "",
+            "MAP": "",
+            "MEASURE": "",
+            "MANAGE": "",
+        },
+    )
+    content.setdefault(
+        "risk_quantification",
+        {
+            "estimated_breach_cost": "",
+            "regulatory_exposure": "",
+            "insurance_impact": "",
+        },
+    )
     content.setdefault("roadmap", {"days_30": [], "days_60": [], "days_90": []})
     content.setdefault("framework_alignments", [])
     content.setdefault(
         "disclaimer",
         "This report reflects alignment with, not certification to, referenced frameworks. "
-        "It is intended as an advisory tool to support internal risk management decisions.",
+        "It is intended as an advisory tool to support internal risk management decisions. "
+        "FrostGate AI Governance Assessment.",
     )
+    # nist_control_matrix is injected deterministically by the caller — do not default it here.
 
-    # Enforce AIEG language discipline: never say "certified"
+    # Enforce language discipline: never say "certified"
     exec_summary = content["executive_summary"]
     if "certified" in exec_summary.lower():
         content["executive_summary"] = re.sub(
             r"\bcertified\b", "aligned with", exec_summary, flags=re.IGNORECASE
         )
 
-    # Cap strengths and gaps per AIEG spec
+    # Cap strengths and gaps
     content["key_strengths"] = content["key_strengths"][:3]
     content["critical_gaps"] = content["critical_gaps"][:5]
 
-    return content
+    # Normalize roadmap items — ensure estimated_cost and owner exist
+    for phase in ("days_30", "days_60", "days_90"):
+        for item in content["roadmap"].get(phase, []):
+            item.setdefault("estimated_cost", "")
+            item.setdefault("owner", "")
+
+    return populate_deterministic_export_sections(content)
 
 
 def _emit_report_event(
@@ -260,19 +333,19 @@ def _emit_report_event(
         )
 
 
-async def _generate_report_core_async(report_id: str) -> None:
+async def _generate_report_core_async(report_id: str, tenant_id: str) -> None:
     """Pure async wrapper — no semaphore; timeout-guarded executor call only."""
     loop = asyncio.get_event_loop()
     try:
         await asyncio.wait_for(
-            loop.run_in_executor(None, _do_generate_report, report_id),
+            loop.run_in_executor(None, _do_generate_report, report_id, tenant_id),
             timeout=_REPORT_GENERATION_TIMEOUT_S,
         )
     except asyncio.TimeoutError:
-        _handle_timeout(report_id)
+        _handle_timeout(report_id, tenant_id)
 
 
-def _handle_timeout(report_id: str) -> None:
+def _handle_timeout(report_id: str, tenant_id: str) -> None:
     """Mark the report as failed due to timeout and emit the failure audit event.
 
     Guards against overwriting a terminal state that may have been written
@@ -281,6 +354,7 @@ def _handle_timeout(report_id: str) -> None:
     SessionLocal = get_sessionmaker()
     db = SessionLocal()
     try:
+        set_tenant_context(db, tenant_id)
         report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
         if report:
             # Terminal-state guard: never overwrite a final outcome.
@@ -314,17 +388,18 @@ def _handle_timeout(report_id: str) -> None:
         db.close()
 
 
-def _do_generate_report(report_id: str) -> None:
+def _do_generate_report(report_id: str, tenant_id: str) -> None:
     """
     Blocking report generation — called via BackgroundTasks executor.
     Opens its own DB session (the request session is closed by the time this runs).
+    tenant_id is passed by the caller so RLS GUC can be set before the first query.
     """
     SessionLocal = get_sessionmaker()
     db = SessionLocal()
     start_ms = int(time.monotonic() * 1000)
-    tenant_id: str = "unknown"
     assessment_id: str | None = None
     try:
+        set_tenant_context(db, tenant_id)
         report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
         if report is None:
             log.error("reports.generate report_not_found id=%s", report_id)
@@ -340,7 +415,7 @@ def _do_generate_report(report_id: str) -> None:
             )
             return
 
-        tenant_id = report.tenant_id or "unknown"
+        tenant_id = report.tenant_id or tenant_id
         assessment_id = report.assessment_id
 
         report.status = "generating"
@@ -396,6 +471,27 @@ def _do_generate_report(report_id: str) -> None:
             raise ValueError("No active prompt template found — run database seeds")
 
         domain_scores = assessment.scores or {}
+
+        # Build deterministic NIST AI RMF control matrix from assessment data.
+        # Import here to avoid a circular import at module load time.
+        from services.governance.report.framework_mappings import (
+            build_nist_control_matrix,
+            nist_coverage_text,
+        )
+
+        # We need the question bank to score per control. Load it from the schema.
+        try:
+            from api.assessments import _load_questions
+
+            questions_list = _load_questions(db)
+        except Exception:
+            questions_list = []
+
+        responses_raw = dict(assessment.responses or {})
+        nist_matrix = build_nist_control_matrix(
+            questions_list, responses_raw, _question_score
+        )
+
         context = {
             "org_name": org_name,
             "industry": industry,
@@ -405,6 +501,7 @@ def _do_generate_report(report_id: str) -> None:
             else "0",
             "risk_band": (assessment.risk_band or "unknown").title(),
             "domain_scores": _domain_scores_text(domain_scores),
+            "nist_coverage": nist_coverage_text(nist_matrix),
         }
 
         user_prompt = _render_prompt(prompt_rec.user_prompt_template, context)
@@ -428,6 +525,9 @@ def _do_generate_report(report_id: str) -> None:
 
         content = _extract_json(raw_text)
         content = _validate_report_content(content)
+
+        # Inject deterministic NIST control matrix — authoritative, not AI-generated.
+        content["nist_control_matrix"] = nist_matrix
 
         report.content = content
         report.status = "complete"
@@ -455,8 +555,10 @@ def _do_generate_report(report_id: str) -> None:
         log.exception("reports.generate_failed report_id=%s error=%s", report_id, exc)
         duration_ms = int(time.monotonic() * 1000) - start_ms
         try:
-            report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
-            if report:
+            # Use the in-scope report object when available. Re-querying here can
+            # exhaust mocked query side effects in tests and is unnecessary for
+            # normal failure handling.
+            if "report" in locals() and report:
                 # Terminal-state guard: do not overwrite a state already set by
                 # the timeout handler or a concurrent path.
                 if report.status not in ("complete", "failed"):
@@ -474,12 +576,15 @@ def _do_generate_report(report_id: str) -> None:
                 duration_ms=duration_ms,
             )
         except Exception:
-            pass
+            log.exception(
+                "reports.failure_audit_emit_failed report_id=%s",
+                report_id,
+            )
     finally:
         db.close()
 
 
-def _generate_report_sync(report_id: str) -> None:
+def _generate_report_sync(report_id: str, tenant_id: str) -> None:
     """
     BackgroundTask entry point: acquires the concurrency semaphore in thread
     context (loop-safe), manages counters, then drives async generation.
@@ -503,7 +608,7 @@ def _generate_report_sync(report_id: str) -> None:
         _queued_count -= 1
         _running_count += 1
     try:
-        asyncio.run(_generate_report_core_async(report_id))
+        asyncio.run(_generate_report_core_async(report_id, tenant_id))
     finally:
         with _STATUS_LOCK:
             _running_count -= 1
@@ -514,6 +619,8 @@ def _generate_report_sync(report_id: str) -> None:
 
 
 class GenerateReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     assessment_id: str
     prompt_type: str = "executive"
 
@@ -523,11 +630,26 @@ class GenerateReportResponse(BaseModel):
     status: str
 
 
+class FinalizeReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_ref: str
+
+
+class RegenerateReportResponse(BaseModel):
+    report_id: str
+    previous_report_id: str
+    status: str
+
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 
 @router.post(
-    "/reports/generate", response_model=GenerateReportResponse, status_code=202
+    "/reports/generate",
+    response_model=GenerateReportResponse,
+    status_code=202,
+    dependencies=[Depends(require_capability("reports.executive"))],
 )
 def generate_report(
     body: GenerateReportRequest,
@@ -545,11 +667,17 @@ def generate_report(
             detail="prompt_type must be one of: executive, technical, compliance",
         )
 
-    assessment = (
-        db.query(AssessmentRecord)
-        .filter(AssessmentRecord.id == body.assessment_id)
-        .first()
+    caller_tenant = _resolve_caller_tenant(request)
+    assessment_q = db.query(AssessmentRecord).filter(
+        AssessmentRecord.id == body.assessment_id
     )
+    if caller_tenant:
+        assessment_q = assessment_q.filter(AssessmentRecord.tenant_id == caller_tenant)
+    else:
+        assessment_q = assessment_q.filter(
+            AssessmentRecord.tenant_id == f"lead:{body.assessment_id}"
+        )
+    assessment = assessment_q.first()
     if assessment is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
     if assessment.status not in ("scored", "submitted"):
@@ -580,7 +708,7 @@ def generate_report(
         state=ReportJobState.QUEUED,
     )
 
-    background_tasks.add_task(_generate_report_sync, report_id)
+    background_tasks.add_task(_generate_report_sync, report_id, tenant_id)
 
     log.info(
         "reports.enqueued report_id=%s assessment_id=%s type=%s tenant_id=%s",
@@ -593,18 +721,39 @@ def generate_report(
     return GenerateReportResponse(report_id=report_id, status="pending")
 
 
-@router.get("/reports/{report_id}")
-def get_report(report_id: str, request: Request, db: Session = Depends(_get_db)):
+@router.get(
+    "/reports/{report_id}",
+    dependencies=[Depends(require_capability("reports.executive"))],
+)
+def get_report(
+    report_id: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(
+        default=None,
+        alias="X-Assessment-Id",
+        description=(
+            "Required for pre-tenant (unbound) callers. "
+            "Must match the assessment_id that owns this report. "
+            "Not required for tenant-bound API keys."
+        ),
+    ),
+):
     """Poll report status and retrieve content when complete."""
-    report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
+    caller_tenant = _resolve_caller_tenant(request)
+    # Tenant isolation: fail-closed. Wrong-tenant and missing-tenant both 404
+    # to avoid enumeration. Pre-tenant callers must supply X-Assessment-Id to
+    # prove lead-namespace ownership; tenant-bound callers use strict predicate.
+    q = db.query(ReportRecord).filter(ReportRecord.id == report_id)
+    if caller_tenant:
+        q = q.filter(ReportRecord.tenant_id == caller_tenant)
+    else:
+        assessment_token = (x_assessment_id or "").strip()
+        if not assessment_token:
+            raise HTTPException(status_code=404, detail="Report not found")
+        q = q.filter(ReportRecord.tenant_id == f"lead:{assessment_token}")
+    report = q.first()
     if report is None:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    # Tenant isolation: wrong tenant gets 404 (not 403) to avoid enumeration.
-    caller_tenant: str | None = getattr(
-        getattr(request, "state", None), "tenant_id", None
-    )
-    if caller_tenant and report.tenant_id and caller_tenant != report.tenant_id:
         raise HTTPException(status_code=404, detail="Report not found")
 
     overall_score: float | None = None
@@ -633,14 +782,458 @@ def get_report(report_id: str, request: Request, db: Session = Depends(_get_db))
     }
 
 
-@router.get("/reports/{report_id}/download")
-def download_report(report_id: str, db: Session = Depends(_get_db)):
+@router.get(
+    "/reports/{report_id}/manifest",
+    dependencies=[Depends(require_capability("report.manifest"))],
+)
+def get_report_manifest(
+    report_id: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Return the canonical governance export manifest and SHA-256 hash."""
+    require_bound_tenant(request)
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    try:
+        hashed = build_hashed_manifest(report, load_assessment(db, report))
+    except ExportValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    report.manifest_hash = hashed["manifest_hash"]
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_GENERATED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=hashed["manifest_hash"],
+    )
+    return hashed
+
+
+_SIGNATURE_VERSION = "report-signature-v1"
+_SIGNATURE_ALGORITHM = "ed25519"
+
+
+def _build_signing_payload(report: ReportRecord) -> str:
+    """Return the canonical JSON string that is signed and stored on the report.
+
+    The payload is deterministic over stable report fields only. Transport
+    metadata, response headers, and timestamps are excluded. The manifest_hash
+    used here is the finalized value — either finalized_manifest_hash (after
+    finalize_report) or manifest_hash (during generation if not yet finalized).
+    """
+    return json.dumps(
+        {
+            "report_id": report.id,
+            "manifest_hash": report.finalized_manifest_hash or report.manifest_hash,
+            "report_version": report.report_version,
+            "signature_version": _SIGNATURE_VERSION,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _persist_report_signature(report: ReportRecord) -> None:
+    """Sign the canonical report payload and write metadata onto the report object.
+
+    In prod/staging: raises RuntimeError if the signing key is absent or signing fails.
+    In dev/test: logs a warning and leaves signature fields None.
+    Callers must db.commit() after this returns.
+    """
+    import hashlib as _hl
+
+    from services.governance.report.signing import (
+        ReportSigningKeyError,
+        get_public_key_hex,
+        sign_report,
+    )
+
+    payload = _build_signing_payload(report)
+    try:
+        sig = sign_report(payload)
+        pub_hex = get_public_key_hex()
+        report.signature = sig
+        report.signature_algorithm = _SIGNATURE_ALGORITHM
+        report.signature_key_id = _hl.sha256(bytes.fromhex(pub_hex)).hexdigest()[:16]
+        report.signed_at = datetime.now(timezone.utc)
+        report.signature_payload_hash = _hl.sha256(payload.encode("utf-8")).hexdigest()
+        report.signature_version = _SIGNATURE_VERSION
+    except ReportSigningKeyError:
+        if is_production_env():
+            raise RuntimeError(
+                f"report.signing_key_missing report_id={report.id} — "
+                "FG_REPORT_SIGNING_KEY must be set in prod/staging; "
+                "refusing to finalize unsigned report"
+            ) from None
+        log.warning(
+            "report.signing_key_missing report_id=%s — signature not persisted",
+            report.id,
+        )
+
+
+@router.get(
+    "/reports/{report_id}/exports/{export_format}",
+    dependencies=[Depends(require_capability("report.export"))],
+)
+def export_report_artifact(
+    report_id: str,
+    export_format: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Return deterministic PDF or HTML governance artifact bytes."""
+    require_bound_tenant(request)
+    if export_format not in {"pdf", "html"}:
+        raise HTTPException(status_code=400, detail="export_format must be pdf or html")
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    try:
+        hashed = build_hashed_manifest(report, load_assessment(db, report))
+    except ExportValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    manifest = hashed["manifest"]
+    digest = hashed["manifest_hash"]
+    report.manifest_hash = digest
+    try:
+        set_tenant_context(db, report.tenant_id)
+        _tl_entry = ExportTimelineEntry(
+            tenant_id=report.tenant_id,
+            export_id=f"export-{digest[:16]}",
+            report_id=report.id,
+            assessment_id=report.assessment_id,
+            export_format=export_format,
+            manifest_hash=digest,
+            export_version=getattr(report, "export_version", None)
+            or "governance-export-v1",
+            exported_at_iso=datetime.now(timezone.utc).isoformat(),
+        )
+        _timeline_store.record(db, export_to_timeline_event(_tl_entry))
+    except Exception:
+        log.warning("export.timeline_emit_failed report_id=%s", report.id)
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_DOWNLOADED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=digest,
+    )
+    if export_format == "html":
+        return Response(
+            content=render_html_export(manifest, digest),
+            media_type="text/html; charset=utf-8",
+            headers={"X-FrostGate-Manifest-Hash": digest},
+        )
+    try:
+        pdf_bytes = render_pdf_export(manifest, digest)
+    except ExportUnavailableError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+
+    pdf_headers: dict[str, str] = {"X-FrostGate-Manifest-Hash": digest}
+
+    if report.signature:
+        # Prefer the persisted signing event recorded at finalization time.
+        pdf_headers["X-Report-Signature"] = report.signature
+        if report.signature_key_id:
+            pdf_headers["X-Report-Public-Key-Id"] = report.signature_key_id
+    elif not is_production_env():
+        # Dev/test only: sign on the fly so unsigned legacy reports can be
+        # tested without a full finalize cycle. Never allowed in production.
+        import hashlib as _hl
+
+        from services.governance.report.signing import (
+            ReportSigningKeyError as _RskErr,
+            get_public_key_hex as _gpkh,
+            sign_report as _sign,
+        )
+
+        try:
+            _sig = _sign(json.dumps(manifest, sort_keys=True, separators=(",", ":")))
+            pdf_headers["X-Report-Signature"] = _sig
+            _pub = _gpkh()
+            pdf_headers["X-Report-Public-Key-Id"] = _hl.sha256(
+                bytes.fromhex(_pub)
+            ).hexdigest()[:16]
+        except _RskErr:
+            pass
+    else:
+        # Production: report was never finalized or was created before 0104.
+        # Omit signing headers rather than producing an unanchored signature.
+        log.warning(
+            "report.export_unsigned report_id=%s — no persisted signature; "
+            "omitting X-Report-Signature (legacy or unfinalized report)",
+            report.id,
+        )
+
+    return Response(
+        content=pdf_bytes, media_type="application/pdf", headers=pdf_headers
+    )
+
+
+@router.post(
+    "/reports/{report_id}/finalize",
+    dependencies=[Depends(require_capability("reports.executive"))],
+)
+def finalize_report(
+    report_id: str,
+    body: FinalizeReportRequest,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Preserve reviewer approval and freeze the current canonical manifest hash."""
+    require_bound_tenant(request)
+    reviewer_ref = body.reviewer_ref.strip()
+    if not reviewer_ref:
+        raise HTTPException(status_code=400, detail="reviewer_ref is required")
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    if report.finalized_at is not None:
+        raise HTTPException(status_code=409, detail="Report already finalized")
+    from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
+        derive_engagement_trust_inputs,
+        enforce_report_finalization,
+    )
+    from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
+        TrustEnforcementError,
+    )
+
+    _trust = derive_engagement_trust_inputs(
+        db, tenant_id=report.tenant_id, engagement_id=report.assessment_id
+    )
+    try:
+        enforce_report_finalization(
+            db,
+            tenant_id=report.tenant_id,
+            engagement_id=report.assessment_id,
+            chain_valid=_trust.chain_valid,
+            signature_valid=_trust.signature_valid,
+            link_valid=_trust.link_valid,
+            replay_valid=_trust.replay_valid,
+            is_legacy=_trust.is_legacy,
+        )
+    except TrustEnforcementError as _te:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "TRUST_ENFORCEMENT_BLOCKED", "message": str(_te)},
+        ) from _te
+    report.reviewer_ref = reviewer_ref
+    report.approval_status = "finalized"
+    report.finalized_at = datetime.now(timezone.utc)
+    try:
+        hashed = build_hashed_manifest(report, load_assessment(db, report))
+    except ExportValidationError as exc:
+        report.reviewer_ref = None
+        report.approval_status = "unapproved"
+        report.finalized_at = None
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    report.manifest_hash = hashed["manifest_hash"]
+    report.finalized_manifest_hash = hashed["manifest_hash"]
+    _persist_report_signature(report)
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_REVIEWER_ASSIGNED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=hashed["manifest_hash"],
+    )
+    emit_export_event(
+        EXPORT_AUDIT_FINALIZED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=hashed["manifest_hash"],
+    )
+    return {
+        "report_id": report.id,
+        "approval_status": report.approval_status,
+        "reviewer_ref": report.reviewer_ref,
+        "finalized_at": report.finalized_at.isoformat(),
+        "manifest_hash": hashed["manifest_hash"],
+    }
+
+
+@router.post(
+    "/reports/{report_id}/replay-verify",
+    dependencies=[Depends(require_capability("report.replay"))],
+)
+def replay_verify_report(
+    report_id: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    expected_manifest_hash: str | None = Query(default=None),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Rebuild the canonical manifest and verify the report hash deterministically."""
+    require_bound_tenant(request)
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    emit_export_event(
+        EXPORT_AUDIT_REPLAY_REQUESTED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+    )
+    try:
+        hashed = build_hashed_manifest(report, load_assessment(db, report))
+    except ExportValidationError as exc:
+        emit_export_event(
+            EXPORT_AUDIT_HASH_FAILED,
+            report.tenant_id,
+            report.id,
+            report.assessment_id,
+            state=ReportJobState.FAILED,
+            reason_code=str(exc),
+        )
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    actual = hashed["manifest_hash"]
+    expected = (
+        expected_manifest_hash or report.finalized_manifest_hash or report.manifest_hash
+    )
+    if expected and actual != expected:
+        emit_export_event(
+            EXPORT_AUDIT_REPLAY_MISMATCH,
+            report.tenant_id,
+            report.id,
+            report.assessment_id,
+            state=ReportJobState.FAILED,
+            manifest_hash_value=actual,
+        )
+        raise HTTPException(status_code=409, detail="Manifest hash mismatch")
+    report.manifest_hash = actual
+    try:
+        set_tenant_context(db, report.tenant_id)
+        _tl_replay = ReplayTimelineEntry(
+            tenant_id=report.tenant_id,
+            replay_id=f"replay-{actual[:16]}",
+            report_id=report.id,
+            assessment_id=report.assessment_id,
+            actual_manifest_hash=actual,
+            expected_manifest_hash=expected,
+            verified=True,
+            replayed_at_iso=datetime.now(timezone.utc).isoformat(),
+            replay_contract_version="governance-export-v1",
+        )
+        _timeline_store.record(db, replay_verify_to_timeline_event(_tl_replay))
+    except Exception:
+        log.warning("replay.timeline_emit_failed report_id=%s", report.id)
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_HASH_VERIFIED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=actual,
+    )
+    emit_export_event(
+        EXPORT_AUDIT_REPLAY_COMPLETED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=actual,
+    )
+    return {"report_id": report.id, "manifest_hash": actual, "verified": True}
+
+
+@router.post(
+    "/reports/{report_id}/regenerate",
+    response_model=RegenerateReportResponse,
+    status_code=202,
+)
+def regenerate_report(
+    report_id: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Create a new report version instead of mutating a finalized artifact."""
+    require_bound_tenant(request)
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    if report.finalized_at is None:
+        raise HTTPException(status_code=409, detail="Report is not finalized")
+    new_report_id = str(uuid.uuid4())
+    new_report = ReportRecord(
+        id=new_report_id,
+        tenant_id=report.tenant_id,
+        assessment_id=report.assessment_id,
+        org_id=report.org_id,
+        org_profile_id=report.org_profile_id,
+        status="pending",
+        prompt_type=report.prompt_type,
+        previous_report_id=report.id,
+        report_version=(report.report_version or 1) + 1,
+    )
+    report.superseded_by_report_id = new_report_id
+    db.add(new_report)
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_SUPERSEDED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=report.finalized_manifest_hash,
+    )
+    emit_export_event(
+        EXPORT_AUDIT_REGENERATED,
+        new_report.tenant_id,
+        new_report.id,
+        new_report.assessment_id,
+    )
+    background_tasks.add_task(
+        _generate_report_sync, new_report_id, new_report.tenant_id
+    )
+    return RegenerateReportResponse(
+        report_id=new_report_id,
+        previous_report_id=report.id,
+        status="pending",
+    )
+
+
+@router.get(
+    "/reports/{report_id}/download",
+    dependencies=[Depends(require_capability("report.export"))],
+)
+def download_report(
+    report_id: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(
+        default=None,
+        alias="X-Assessment-Id",
+        description=(
+            "Required for pre-tenant (unbound) callers. "
+            "Must match the assessment_id that owns this report. "
+            "Not required for tenant-bound API keys."
+        ),
+    ),
+):
     """
     Return a download URL for the PDF version of the report.
     PDF generation via MinIO/S3 is a Stage 2 feature.
     For now, return a data URL hint so the frontend can render a fallback.
     """
-    report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
+    caller_tenant = _resolve_caller_tenant(request)
+    q = db.query(ReportRecord).filter(ReportRecord.id == report_id)
+    if caller_tenant:
+        q = q.filter(ReportRecord.tenant_id == caller_tenant)
+    else:
+        assessment_token = (x_assessment_id or "").strip()
+        if not assessment_token:
+            raise HTTPException(status_code=404, detail="Report not found")
+        q = q.filter(ReportRecord.tenant_id == f"lead:{assessment_token}")
+    report = q.first()
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
     if report.status != "complete":

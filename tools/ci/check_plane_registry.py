@@ -27,6 +27,22 @@ RUNTIME_ROUTE_ALIAS_ALLOWLIST: set[tuple[str, str]] = {
     ("POST", "/v1/defend"),
 }
 
+# Explicit public verification endpoints.
+# These are intentionally public, read-only integrity verification surfaces.
+EXACT_PUBLIC_ROUTE_EXCEPTIONS: set[tuple[str, str]] = {
+    ("GET", "/field-assessment/reports/verify/{report_hash}"),
+}
+
+EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
+    ("GET", "/field-assessment/reports/verify/{report_hash}"),
+    # C7 portal grant/session routes enforce tenant isolation through
+    # PortalGrantSession validation and PortalScopeMiddleware rather than
+    # standard tenant-bound route parameters.
+    ("POST", "/portal/authenticate"),
+    ("GET", "/portal/me"),
+    ("DELETE", "/portal/sessions/{session_id}"),
+}
+
 
 def _exception_health(
     route_ex, *, plane_id: str, pool_name: str, warnings: list[str], failures: list[str]
@@ -169,9 +185,12 @@ def main() -> int:
         if prod_like and path.startswith(("/dev", "/_debug", "/_legacy")):
             failures.append(f"prod-like forbidden debug/legacy route: {method} {path}")
 
+        route_key = (method, path)
+
         if (
             plane.auth_class.require_any_scope
             and not route.get("scoped")
+            and route_key not in EXACT_PUBLIC_ROUTE_EXCEPTIONS
             and "public" not in exception_classes
             and "bootstrap" not in exception_classes
             and "auth_exempt" not in exception_classes
@@ -183,6 +202,7 @@ def main() -> int:
         if (
             plane.auth_class.tenant_binding_required
             and not route.get("tenant_bound")
+            and route_key not in EXACT_TENANT_BINDING_EXCEPTIONS
             and not has_exception
         ):
             failures.append(

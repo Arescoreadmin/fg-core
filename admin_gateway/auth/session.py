@@ -34,10 +34,7 @@ class Session:
         scopes: Set of authorization scopes
         claims: Raw OIDC token claims
         tenant_id: Current active tenant
-        upstream_access_token: Original validated OIDC bearer token used to
-            create this gateway session. Stored for future use (e.g., token
-            refresh, user-info lookups). NOT forwarded to core — gateway→core
-            proxied /admin calls use AG_CORE_INTERNAL_TOKEN, not user JWTs.
+        tenant_governed: True only for a tenant session issued after verified membership binding.
         created_at: Session creation timestamp
         expires_at: Session expiration timestamp
         session_id: Unique session identifier
@@ -49,7 +46,15 @@ class Session:
     scopes: Set[str] = field(default_factory=set)
     claims: dict[str, Any] = field(default_factory=dict)
     tenant_id: Optional[str] = None
-    upstream_access_token: Optional[str] = None
+    membership_id: Optional[str] = None
+    membership_version: int = 0
+    identity_provider: Optional[str] = None
+    identity_issuer: Optional[str] = None
+    identity_subject: Optional[str] = None
+    identity_type: Optional[str] = None
+    role: Optional[str] = None
+    binding_status: Optional[str] = None
+    tenant_governed: bool = False
     created_at: float = field(default_factory=time.time)
     expires_at: float = 0
     session_id: str = field(default_factory=lambda: secrets.token_urlsafe(16))
@@ -80,7 +85,15 @@ class Session:
             "scopes": list(self.scopes),
             "claims": self.claims,
             "tenant_id": self.tenant_id,
-            "upstream_access_token": self.upstream_access_token,
+            "membership_id": self.membership_id,
+            "membership_version": self.membership_version,
+            "identity_provider": self.identity_provider,
+            "identity_issuer": self.identity_issuer,
+            "identity_subject": self.identity_subject,
+            "identity_type": self.identity_type,
+            "role": self.role,
+            "binding_status": self.binding_status,
+            "tenant_governed": self.tenant_governed,
             "created_at": self.created_at,
             "expires_at": self.expires_at,
             "session_id": self.session_id,
@@ -96,7 +109,15 @@ class Session:
             scopes=set(data.get("scopes", [])),
             claims=data.get("claims", {}),
             tenant_id=data.get("tenant_id"),
-            upstream_access_token=data.get("upstream_access_token"),
+            membership_id=data.get("membership_id"),
+            membership_version=int(data.get("membership_version", 0)),
+            identity_provider=data.get("identity_provider"),
+            identity_issuer=data.get("identity_issuer"),
+            identity_subject=data.get("identity_subject"),
+            identity_type=data.get("identity_type"),
+            role=data.get("role"),
+            binding_status=data.get("binding_status"),
+            tenant_governed=bool(data.get("tenant_governed", False)),
             created_at=data.get("created_at", time.time()),
             expires_at=data.get("expires_at", 0),
             session_id=data.get("session_id", secrets.token_urlsafe(16)),
@@ -220,7 +241,15 @@ class SessionManager:
         scopes: Optional[Set[str]] = None,
         claims: Optional[dict[str, Any]] = None,
         tenant_id: Optional[str] = None,
-        upstream_access_token: Optional[str] = None,
+        membership_id: Optional[str] = None,
+        membership_version: int = 0,
+        identity_provider: Optional[str] = None,
+        identity_issuer: Optional[str] = None,
+        identity_subject: Optional[str] = None,
+        identity_type: Optional[str] = None,
+        role: Optional[str] = None,
+        binding_status: Optional[str] = None,
+        tenant_governed: bool = False,
     ) -> Session:
         """Create a new session.
 
@@ -231,9 +260,7 @@ class SessionManager:
             scopes: Authorization scopes
             claims: OIDC token claims
             tenant_id: Default tenant
-            upstream_access_token: Original validated OIDC bearer token.
-                Stored for future use (token refresh, user-info). NOT
-                forwarded to core on proxied /admin calls.
+            tenant_governed: Whether verified membership binding authorized tenant access.
 
         Returns:
             New Session object
@@ -246,7 +273,15 @@ class SessionManager:
             scopes=scopes or set(),
             claims=claims or {},
             tenant_id=tenant_id,
-            upstream_access_token=upstream_access_token,
+            membership_id=membership_id,
+            membership_version=membership_version,
+            identity_provider=identity_provider,
+            identity_issuer=identity_issuer,
+            identity_subject=identity_subject,
+            identity_type=identity_type,
+            role=role,
+            binding_status=binding_status,
+            tenant_governed=tenant_governed,
             created_at=now,
             expires_at=now + self.config.session_ttl_seconds,
         )

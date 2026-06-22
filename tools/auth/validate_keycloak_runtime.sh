@@ -59,6 +59,10 @@ DATABASE_URL=postgres://ci:ci@localhost:5432/ci
 FG_SIGNING_SECRET=ci-signing-secret-32-bytes-minimum
 FG_INTERNAL_AUTH_SECRET=ci-internal-auth-secret-32-bytes
 FG_API_KEY=ci-api-key-placeholder
+FG_KEY_PEPPER=ci-test-pepper
+FG_REPORT_SIGNING_KEY=0000000000000000000000000000000000000000000000000000000000000000
+FG_DB_BACKEND=sqlite
+FG_SQLITE_PATH=/tmp/frostgate-idp-runtime-auth.sqlite
 FG_WEBHOOK_SECRET=ci-webhook-secret-placeholder
 REDIS_PASSWORD=ci-redis-password
 NATS_AUTH_TOKEN=ci-nats-token
@@ -67,6 +71,16 @@ POSTGRES_APP_PASSWORD=ci-postgres-password
 ENV
 
 # ---------------------------------------------------------------------------
+if [ ! -f "${FG_VALIDATE_ENV}" ]; then
+  echo "ERROR: FG_VALIDATE_ENV file not found: ${FG_VALIDATE_ENV}" >&2
+  exit 1
+fi
+
+if ! grep -q '^FG_KEY_PEPPER=' "${FG_VALIDATE_ENV}"; then
+  echo "ERROR: generated Keycloak validation env is missing FG_KEY_PEPPER" >&2
+  exit 1
+fi
+
 echo "==> [1] Starting fg-idp (Keycloak 24.0, profile: idp)"
 docker compose --env-file "${FG_VALIDATE_ENV}" --profile idp up -d fg-idp
 

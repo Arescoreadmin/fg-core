@@ -1,0 +1,10 @@
+{
+  "id": "ai_data_access_mapping",
+  "display_name": "AI Data Access Mapping",
+  "provider": "passive",
+  "capabilities": ["ingest"],
+  "required_scopes": [],
+  "allowed_auth_modes": [],
+  "webhook_support": false,
+  "version": "1.0.0"
+}

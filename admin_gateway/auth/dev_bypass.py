@@ -112,6 +112,14 @@ def create_dev_session(
             "allowed_tenants": allowed,
         },
         tenant_id=tenant_id,
+        membership_id=user_id,
+        identity_provider="dev-bypass",
+        identity_issuer="frostgate-local",
+        identity_subject=user_id,
+        identity_type="human",
+        role="admin",
+        binding_status="bound",
+        tenant_governed=True,
     )
 
 

@@ -142,7 +142,11 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["frostgate-admin"]
+      "realmRoles": [
+        "frostgate-admin"
+      ],
+      "firstName": "FrostGate",
+      "lastName": "Tester"
     }
   ],
   "roles": {

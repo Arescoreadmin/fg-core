@@ -1,0 +1,10 @@
+{
+  "id": "web_headers",
+  "display_name": "Web Security Headers Scanner",
+  "provider": "passive",
+  "capabilities": ["read", "ingest"],
+  "required_scopes": [],
+  "allowed_auth_modes": [],
+  "webhook_support": false,
+  "version": "1.0.0"
+}

@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -12,10 +13,14 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from api.db_models_field_assessment import FaEngagement, FaNormalizedFinding
+from services.field_assessment.playbooks import get_playbook
+
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
+from api.entitlements import require_capability
 from api.config.env import is_production_env
 from api.rag_retrieval_policy_store import rag_rules_from_db
 from api.config_versioning import canonicalize_config, hash_config
@@ -42,6 +47,297 @@ router = APIRouter(prefix="/ui", tags=["ui-ai"])
 admin_router = APIRouter(prefix="/admin", tags=["ui-ai-admin"])
 
 DEVICE_COOKIE = "fg_device_id"
+
+# ─── Workforce query attribution (PR 36) ─────────────────────────────────────
+
+_SUBJECT_KEYWORDS: dict[str, list[str]] = {
+    "legal": [
+        "lawsuit",
+        "litigation",
+        "attorney",
+        "counsel",
+        "contract",
+        "liability",
+        "subpoena",
+        "deposition",
+    ],
+    "financial": [
+        "budget",
+        "salary",
+        "compensation",
+        "bonus",
+        "payroll",
+        "revenue",
+        "profit",
+        "invoice",
+        "expense",
+    ],
+    "hr": [
+        "performance review",
+        "termination",
+        "hire",
+        "fired",
+        "resignation",
+        "benefits",
+        "hr",
+        "employee",
+    ],
+    "medical": [
+        "diagnosis",
+        "prescription",
+        "hipaa",
+        "patient",
+        "symptoms",
+        "treatment",
+        "medication",
+        "doctor",
+    ],
+    "competitor": [
+        "competitor",
+        "competing",
+        "rival",
+        "market share",
+        "vs ",
+        " vs.",
+        "compared to",
+        "better than",
+    ],
+    "compliance": [
+        "gdpr",
+        "ccpa",
+        "nist",
+        "sox",
+        "pci",
+        "hipaa",
+        "cmmc",
+        "ffiec",
+        "regulation",
+        "audit",
+    ],
+    "technical": [
+        "code",
+        "api",
+        "function",
+        "debug",
+        "error",
+        "deploy",
+        "database",
+        "server",
+        "algorithm",
+    ],
+    "personal": [
+        "my wife",
+        "my husband",
+        "my kids",
+        "my family",
+        "vacation",
+        "personal",
+        "dating",
+        "recipe",
+    ],
+}
+
+_SENSITIVITY_PATTERNS: dict[str, list[str]] = {
+    "contains_pii": [
+        "social security",
+        "ssn",
+        "date of birth",
+        "dob",
+        "passport",
+        "driver license",
+        "credit card",
+    ],
+    "competitor_mention": _SUBJECT_KEYWORDS["competitor"],
+    "medical_content": _SUBJECT_KEYWORDS["medical"],
+    "financial_sensitive": [
+        "salary",
+        "compensation",
+        "tax return",
+        "bank account",
+        "routing number",
+    ],
+    "hr_sensitive": [
+        "fired",
+        "termination",
+        "performance improvement",
+        "pip",
+        "layoff",
+    ],
+}
+
+
+def _keyword_matches(
+    text_val: str, kw: str, match_type: str, case_sensitive: bool
+) -> bool:
+    """Apply smart keyword matching. Returns True if kw matches text_val."""
+    flags = 0 if case_sensitive else re.IGNORECASE
+    t = text_val if case_sensitive else text_val.lower()
+    k = kw if case_sensitive else kw.lower()
+    if match_type == "contains":
+        return k in t
+    if match_type == "exact":
+        return t.strip() == k.strip()
+    if match_type == "prefix":
+        return t.startswith(k)
+    if match_type == "word_boundary":
+        try:
+            return bool(re.search(rf"\b{re.escape(kw)}\b", text_val, flags))
+        except re.error:
+            return False
+    if match_type == "regex":
+        try:
+            return bool(re.search(kw, text_val, flags))
+        except re.error:
+            return False
+    return k in t
+
+
+def _classify_query(
+    query_text: str,
+    tenant_keywords: list[dict] | None = None,
+) -> tuple[str, str, list[str]]:
+    """Lightweight heuristic classification — no network call.
+
+    tenant_keywords: rows from tenant_keywords table for the current tenant.
+    Tenant-defined rules extend (never replace) the built-in dictionaries.
+    """
+    lower = query_text.lower()
+
+    # Subject category — built-in first
+    subject_category = "other"
+    for category, keywords in _SUBJECT_KEYWORDS.items():
+        if any(kw in lower for kw in keywords):
+            subject_category = category
+            break
+
+    # Sensitivity flags — built-in first
+    flags: list[str] = []
+    for flag, patterns in _SENSITIVITY_PATTERNS.items():
+        if any(p in lower for p in patterns):
+            flags.append(flag)
+
+    # Apply tenant keyword overrides
+    if tenant_keywords:
+        for tkw in tenant_keywords:
+            if not _keyword_matches(
+                query_text,
+                tkw["keyword"],
+                tkw.get("match_type", "contains"),
+                bool(tkw.get("case_sensitive", False)),
+            ):
+                continue
+            flag_type = tkw.get("flag_type", "sensitivity")
+            flag_value = tkw.get("flag_value", "")
+            action = tkw.get("action", "flag")
+
+            if flag_type == "subject" and subject_category == "other":
+                subject_category = flag_value
+            elif flag_type in ("sensitivity", "custom"):
+                tag = flag_value
+                if action == "block":
+                    tag = f"blocked:{flag_value}"
+                elif action == "escalate":
+                    tag = f"escalate:{flag_value}"
+                if tag not in flags:
+                    flags.append(tag)
+
+    # Work relevance
+    if subject_category == "personal":
+        work_relevance = "personal"
+    elif subject_category in ("technical", "compliance", "legal", "financial"):
+        work_relevance = "on_task"
+    else:
+        work_relevance = "tangential"
+
+    return subject_category, work_relevance, flags
+
+
+def _load_tenant_keywords(db: Session, tenant_id: str) -> list[dict]:
+    """Load active tenant keyword rules from DB. Returns [] on any error."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT keyword, match_type, case_sensitive, flag_value, flag_type, action
+                FROM tenant_keywords
+                WHERE tenant_id = :t AND active = TRUE
+            """),
+            {"t": tenant_id},
+        ).fetchall()
+        return [
+            {
+                "keyword": r.keyword,
+                "match_type": r.match_type,
+                "case_sensitive": r.case_sensitive,
+                "flag_value": r.flag_value,
+                "flag_type": r.flag_type,
+                "action": r.action,
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+
+def _log_query(
+    db: Session,
+    *,
+    tenant_id: str,
+    user_id: str | None,
+    user_email: str | None,
+    session_id: str,
+    query_text: str,
+    response_text: str,
+    provider: str,
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    policy_decision: str,
+) -> None:
+    """Write one row to ai_query_log with heuristic classification."""
+    tenant_keywords = _load_tenant_keywords(db, tenant_id)
+    subject_category, work_relevance, sensitivity_flags = _classify_query(
+        query_text, tenant_keywords
+    )
+    try:
+        db.execute(
+            text("""
+                INSERT INTO ai_query_log
+                    (id, tenant_id, user_id, user_email, session_id,
+                     query_text, response_text, provider, model,
+                     prompt_tokens, completion_tokens, policy_decision,
+                     subject_category, work_relevance, sensitivity_flags,
+                     risk_signals, classified_at, created_at)
+                VALUES
+                    (:id, :tenant_id, :user_id, :user_email, :session_id,
+                     :query_text, :response_text, :provider, :model,
+                     :prompt_tokens, :completion_tokens, :policy_decision,
+                     :subject_category, :work_relevance, :sensitivity_flags,
+                     '{}', NOW(), NOW())
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "user_email": user_email,
+                "session_id": session_id,
+                "query_text": query_text,
+                "response_text": response_text,
+                "provider": provider,
+                "model": model,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "policy_decision": policy_decision,
+                "subject_category": subject_category,
+                "work_relevance": work_relevance,
+                "sensitivity_flags": json.dumps(sensitivity_flags),
+            },
+        )
+        db.commit()
+    except Exception:
+        # Non-fatal — never let logging failure break the chat response.
+        db.rollback()
+
+
 CONTRACTS_ROOT = Path("contracts/ai")
 
 
@@ -52,6 +348,7 @@ class AIChatRequest(BaseModel):
     device_id: str | None = None
     provider: str | None = None
     model: str | None = None
+    engagement_id: str | None = None
 
 
 class DeviceStateRequest(BaseModel):
@@ -282,6 +579,109 @@ def _contracts_bundle() -> dict[str, list[dict[str, Any]]]:
                 experience_id=exp["id"],
             )
     return {"experiences": experiences, "policies": policies, "themes": themes}
+
+
+def _build_engagement_system_prompt(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+) -> str | None:
+    """Build a grounded system prompt from the engagement's live assessment data.
+
+    Returns None if the engagement doesn't exist, doesn't belong to this tenant,
+    or doesn't have portal_ai_enabled set in its metadata (premium gate).
+    """
+    eng = db.execute(
+        select(FaEngagement).where(
+            FaEngagement.id == engagement_id,
+            FaEngagement.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if eng is None:
+        return None
+
+    # Premium gate: only engagements explicitly enabled get the AI assistant.
+    metadata = eng.engagement_metadata or {}
+    if not metadata.get("portal_ai_enabled"):
+        return None
+
+    assessment_type = eng.assessment_type or "comprehensive"
+    playbook = get_playbook(assessment_type)
+    framework_label = assessment_type.upper().replace("_", " ")
+
+    # Load findings — cap at 25 to stay within token budget.
+    SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+    findings = list(
+        db.execute(
+            select(FaNormalizedFinding)
+            .where(
+                FaNormalizedFinding.engagement_id == engagement_id,
+                FaNormalizedFinding.tenant_id == tenant_id,
+            )
+            .order_by(FaNormalizedFinding.created_at.desc())
+            .limit(60)
+        ).scalars()
+    )
+    findings.sort(
+        key=lambda f: (SEVERITY_ORDER.get(f.severity.lower(), 5), f.status != "open")
+    )
+    findings = findings[:25]
+
+    open_counts: dict[str, int] = {}
+    for f in findings:
+        if f.status == "open":
+            open_counts[f.severity.lower()] = open_counts.get(f.severity.lower(), 0) + 1
+
+    def _finding_line(f: FaNormalizedFinding) -> str:
+        hint = f" → {f.remediation_hint[:120]}" if f.remediation_hint else ""
+        mappings = ", ".join(str(m) for m in (f.framework_mappings or [])[:3])
+        fw_tag = f" [{mappings}]" if mappings else ""
+        return f"  • [{f.severity.upper()}] {f.title} ({f.status}){fw_tag}{hint}"
+
+    findings_block = (
+        "\n".join(_finding_line(f) for f in findings) or "  No findings recorded yet."
+    )
+
+    summary_parts = [f"{v} {k}" for k, v in open_counts.items() if v]
+    open_summary = ", ".join(summary_parts) if summary_parts else "none open"
+
+    domains = (
+        ", ".join(playbook.required_observation_domains)
+        if playbook.required_observation_domains
+        else "general"
+    )
+    doc_classes = (
+        ", ".join(playbook.required_document_classes)
+        if playbook.required_document_classes
+        else "standard"
+    )
+
+    return f"""You are a compliance and security assessment assistant for {eng.client_name}.
+
+This is a {framework_label} assessment (status: {eng.status}).
+
+Your role:
+- Help the client understand their findings, compliance gaps, and remediation priorities
+- Explain what specific findings mean in plain language and how to fix them
+- Answer questions about the data shown below — do not speculate beyond it
+- Do not discuss topics unrelated to this assessment or general security/compliance
+- If asked something outside the assessment data, say so clearly
+
+## Assessment Summary
+Client: {eng.client_name}
+Framework: {framework_label}
+Status: {eng.status}
+Open findings: {open_summary}
+
+## Findings (by priority)
+{findings_block}
+
+## Framework Requirements
+Required domains: {domains}
+Required document classes: {doc_classes}
+
+Answer concisely. Prioritize actionable guidance. Use plain language — the client is not necessarily a security expert."""
 
 
 def _resolve_experience(
@@ -655,7 +1055,13 @@ def _record_usage(
     db.commit()
 
 
-@router.get("/ai", dependencies=[Depends(require_scopes("ui:read"))])
+@router.get(
+    "/ai",
+    dependencies=[
+        Depends(require_scopes("ui:read")),
+        Depends(require_capability("ai.workspace")),
+    ],
+)
 def ui_ai_page() -> Response:
     html = """
 <!doctype html><html><head><meta charset='utf-8'><title>Enterprise AI Console</title></head>
@@ -684,7 +1090,13 @@ def ui_ai_page() -> Response:
     return Response(content=html, media_type="text/html")
 
 
-@router.get("/ai/experience", dependencies=[Depends(require_scopes("ui:read"))])
+@router.get(
+    "/ai/experience",
+    dependencies=[
+        Depends(require_scopes("ui:read")),
+        Depends(require_capability("ai.workspace")),
+    ],
+)
 def ai_experience(
     request: Request,
     response: Response,
@@ -733,7 +1145,13 @@ def ai_experience(
     }
 
 
-@router.get("/ai/usage", dependencies=[Depends(require_scopes("ui:read", "ai:chat"))])
+@router.get(
+    "/ai/usage",
+    dependencies=[
+        Depends(require_scopes("ui:read", "ai:chat")),
+        Depends(require_capability("ai.workspace")),
+    ],
+)
 def ai_usage(
     request: Request, db: Session = Depends(tenant_db_required)
 ) -> dict[str, Any]:
@@ -751,7 +1169,13 @@ def ai_usage(
     return {"tenant_id": tenant_id, "items": [dict(r) for r in rows]}
 
 
-@router.post("/ai/chat", dependencies=[Depends(require_scopes("ui:read", "ai:chat"))])
+@router.post(
+    "/ai/chat",
+    dependencies=[
+        Depends(require_scopes("ui:read", "ai:chat")),
+        Depends(require_capability("ai.chat")),
+    ],
+)
 def ai_chat(
     payload: AIChatRequest,
     request: Request,
@@ -765,6 +1189,16 @@ def ai_chat(
 
     persona = _extract_persona(request, payload.persona)
     experience, policy, _theme = _resolve_experience(tenant_id)
+
+    # Build grounded system prompt if caller provided an engagement_id and the
+    # engagement has portal_ai_enabled set (premium gate).
+    engagement_system_prompt: str | None = None
+    if payload.engagement_id:
+        engagement_system_prompt = _build_engagement_system_prompt(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=payload.engagement_id,
+        )
     try:
         ai_policy = resolve_ai_policy_for_tenant(
             tenant_id=tenant_id,
@@ -1000,6 +1434,7 @@ def ai_chat(
                 max_tokens=_max_tokens_per_request(policy, provider),
                 request_id=event_id,
                 tenant_id=tenant_id,
+                system_prompt=engagement_system_prompt,
             )
         except _ProviderCallError as exc:
             blocked_error = _error(503, exc.error_code, "provider call failed")
@@ -1196,6 +1631,24 @@ def ai_chat(
             "quota_charge_mode": quota_charge_mode,
         },
         request=request,
+    )
+
+    # Workforce attribution — log every successful query with user identity.
+    fg_user_id = request.headers.get("X-FG-User-ID") or None
+    fg_user_email = request.headers.get("X-FG-User-Email") or None
+    _log_query(
+        db,
+        tenant_id=tenant_id,
+        user_id=fg_user_id,
+        user_email=fg_user_email,
+        session_id=session_id,
+        query_text=payload.message,
+        response_text=output,
+        provider=provider,
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        policy_decision="allow",
     )
 
     return {

@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -18,6 +19,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -202,7 +204,7 @@ class AgentDeviceRegistry(Base):
         String(16), nullable=False, default="active", index=True
     )
     suspicious: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0")
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
@@ -239,7 +241,7 @@ class AgentDeviceKey(Base):
     )
     hmac_secret_enc: Mapped[Any] = mapped_column(Text, nullable=False)
     enabled: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("1")
+        Boolean, nullable=False, default=True, server_default=text("true")
     )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
@@ -390,10 +392,10 @@ class AgentUpdateRollout(Base):
     canary_error_budget: Mapped[Any] = mapped_column(Integer, nullable=False, default=5)
     canary_error_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
     paused: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0")
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     kill_switch: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0")
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
@@ -436,7 +438,7 @@ class AgentPolicyBundle(Base):
     )
     signature: Mapped[Any] = mapped_column(Text, nullable=False)
     revoked: Mapped[Any] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0")
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
@@ -1795,9 +1797,7 @@ class OrgProfile(Base):
     org_id: Mapped[Any] = mapped_column(
         Text, nullable=False, unique=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, default="public", index=True
-    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
     org_name: Mapped[Any] = mapped_column(Text, nullable=False)
     industry: Mapped[Any] = mapped_column(Text, nullable=False, default="other")
     employee_count: Mapped[Any] = mapped_column(Text, nullable=False, default="")
@@ -1831,7 +1831,10 @@ class AssessmentSchema(Base):
     questions: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
     is_current: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[Any] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
     )
 
 
@@ -1843,9 +1846,7 @@ class AssessmentRecord(Base):
     id: Mapped[Any] = mapped_column(
         Text, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, default="public", index=True
-    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
     org_profile_id: Mapped[Any] = mapped_column(
         Integer, ForeignKey("org_profiles.id", ondelete="SET NULL"), nullable=True
     )
@@ -1877,6 +1878,11 @@ class PromptVersion(Base):
     """AI prompt templates for report generation. Seeded by migration 0033."""
 
     __tablename__ = "prompt_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "prompt_key", "version", name="uq_prompt_versions_key_version"
+        ),
+    )
 
     id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
     prompt_key: Mapped[Any] = mapped_column(Text, nullable=False)
@@ -1885,7 +1891,10 @@ class PromptVersion(Base):
     user_prompt_template: Mapped[Any] = mapped_column(Text, nullable=False)
     is_active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[Any] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
     )
 
 
@@ -1897,9 +1906,7 @@ class ReportRecord(Base):
     id: Mapped[Any] = mapped_column(
         Text, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, default="public", index=True
-    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
     assessment_id: Mapped[Any] = mapped_column(
         Text, ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True
     )
@@ -1912,6 +1919,38 @@ class ReportRecord(Base):
     content: Mapped[Any] = mapped_column(JSON, nullable=True)
     error_message: Mapped[Any] = mapped_column(Text, nullable=True)
     pdf_storage_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    manifest_hash: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    manifest_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="governance-export-manifest-v1"
+    )
+    export_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="governance-export-v1"
+    )
+    report_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
+    reviewer_ref: Mapped[Any] = mapped_column(Text, nullable=True)
+    approval_status: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unapproved"
+    )
+    finalized_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    finalized_manifest_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    previous_report_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    superseded_by_report_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    evidence_snapshot_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="evidence-snapshot-v1"
+    )
+    scoring_contract_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="assessment-scoring-v1"
+    )
+    framework_mapping_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="framework-mapping-v1"
+    )
+    # PR-SIGN-5b: persisted signing event (set at finalization; null on legacy rows)
+    signature: Mapped[Any] = mapped_column(Text, nullable=True)
+    signature_algorithm: Mapped[Any] = mapped_column(Text, nullable=True)
+    signature_key_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    signature_payload_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    signature_version: Mapped[Any] = mapped_column(Text, nullable=True)
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -2853,7 +2892,9 @@ class OpsRetentionPolicyRecord(Base):
         DateTime(timezone=True), nullable=True
     )
     archived_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
-    legal_hold: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    legal_hold: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     legal_hold_reason: Mapped[Any] = mapped_column(Text, nullable=True)
     legal_hold_set_by: Mapped[Any] = mapped_column(Text, nullable=True)
     legal_hold_set_at: Mapped[Any] = mapped_column(
@@ -3493,3 +3534,445 @@ class ReadinessAuditEventRecord(Base):
     timestamp: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+# ─── Workforce Intelligence (PR 36) ──────────────────────────────────────────
+
+
+class TenantUser(Base):
+    __tablename__ = "tenant_users"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "email", name="uq_tenant_users_tenant_email"),
+        Index(
+            "uq_tenant_users_bound_identity",
+            "identity_provider",
+            "identity_issuer",
+            "identity_subject",
+            unique=True,
+            postgresql_where=text(
+                "identity_binding_status='bound' AND identity_subject IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "identity_binding_status='bound' AND identity_subject IS NOT NULL"
+            ),
+        ),
+        Index("ix_tenant_users_tenant_id", "tenant_id"),
+        Index("ix_tenant_users_invite_token", "invite_token"),
+        Index("ix_tenant_users_identity_subject", "tenant_id", "identity_subject"),
+        CheckConstraint(
+            "identity_binding_status IN ('unbound','pending','bound','disabled','failed')",
+            name="chk_tenant_users_identity_binding_status",
+        ),
+        CheckConstraint(
+            "identity_type IN ('human','service','agent','system')",
+            name="chk_tenant_users_identity_type",
+        ),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    email: Mapped[Any] = mapped_column(String(256), nullable=False)
+    display_name: Mapped[Any] = mapped_column(String(256), nullable=False)
+    role: Mapped[Any] = mapped_column(String(32), nullable=False, default="user")
+    invite_token: Mapped[Any] = mapped_column(String(128), nullable=True, unique=True)
+    invite_expires_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    active: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    last_active_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    identity_type: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="human", server_default=text("'human'")
+    )
+    identity_provider: Mapped[Any] = mapped_column(String(64), nullable=True)
+    identity_provider_record_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    identity_policy_config_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    identity_connection_id: Mapped[Any] = mapped_column(String(256), nullable=True)
+    identity_subject: Mapped[Any] = mapped_column(String(512), nullable=True)
+    identity_issuer: Mapped[Any] = mapped_column(String(512), nullable=True)
+    identity_email: Mapped[Any] = mapped_column(String(256), nullable=True)
+    identity_email_verified: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("'false'")
+    )
+    identity_bound_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    identity_binding_status: Mapped[Any] = mapped_column(
+        String(32),
+        nullable=False,
+        default="unbound",
+        server_default=text("'unbound'"),
+    )
+    identity_trust_level: Mapped[Any] = mapped_column(String(32), nullable=True)
+    identity_verification_level: Mapped[Any] = mapped_column(String(32), nullable=True)
+    identity_risk_state: Mapped[Any] = mapped_column(String(32), nullable=True)
+    identity_approved_by_user_id: Mapped[Any] = mapped_column(
+        String(128), nullable=True
+    )
+    identity_approved_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    identity_revoked_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_identity_login_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    membership_version: Mapped[Any] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default=text("1")
+    )
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class AIQueryLog(Base):
+    __tablename__ = "ai_query_log"
+    __table_args__ = (
+        Index("ix_ai_query_log_tenant_id", "tenant_id"),
+        Index("ix_ai_query_log_user_id", "user_id"),
+        Index("ix_ai_query_log_tenant_created", "tenant_id", "created_at"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    user_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    user_email: Mapped[Any] = mapped_column(String(256), nullable=True)
+    session_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    query_text: Mapped[Any] = mapped_column(Text, nullable=False)
+    response_text: Mapped[Any] = mapped_column(Text, nullable=True)
+    provider: Mapped[Any] = mapped_column(String(64), nullable=True)
+    model: Mapped[Any] = mapped_column(String(128), nullable=True)
+    prompt_tokens: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    completion_tokens: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    policy_decision: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="allow"
+    )
+    subject_category: Mapped[Any] = mapped_column(String(64), nullable=True)
+    work_relevance: Mapped[Any] = mapped_column(String(32), nullable=True)
+    sensitivity_flags: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    risk_signals: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    classified_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class RiskScoreSnapshot(Base):
+    __tablename__ = "risk_score_snapshots"
+    __table_args__ = (
+        Index("idx_risk_snapshot_user_date", "tenant_id", "user_id", "captured_at"),
+        # Expression-based unique index (per-user per-day) is created by migration 0070.
+        # Not representable as a SQLAlchemy UniqueConstraint.
+    )
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    user_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    risk_score: Mapped[Any] = mapped_column(Numeric(5, 1), nullable=False, default=0)
+    risk_band: Mapped[Any] = mapped_column(String(32), nullable=False, default="low")
+    total_queries: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    policy_violations: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    personal_ratio: Mapped[Any] = mapped_column(
+        Numeric(5, 3), nullable=False, default=0
+    )
+    sensitive_topic_count: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    pii_query_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    competitor_query_count: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    active_days: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    period_days: Mapped[Any] = mapped_column(Integer, nullable=False, default=30)
+    captured_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class TenantKeyword(Base):
+    __tablename__ = "tenant_keywords"
+    __table_args__ = (Index("idx_tenant_keyword_tenant", "tenant_id", "active"),)
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    keyword: Mapped[Any] = mapped_column(Text, nullable=False)
+    match_type: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="contains"
+    )
+    case_sensitive: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    flag_value: Mapped[Any] = mapped_column(Text, nullable=False)
+    flag_type: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="sensitivity"
+    )
+    action: Mapped[Any] = mapped_column(String(32), nullable=False, default="flag")
+    description: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Any] = mapped_column(String(256), nullable=True)
+    active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class RiskAlertRule(Base):
+    __tablename__ = "risk_alert_rules"
+    __table_args__ = (Index("idx_alert_rules_tenant", "tenant_id", "active"),)
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    name: Mapped[Any] = mapped_column(Text, nullable=False)
+    threshold_score: Mapped[Any] = mapped_column(Numeric(5, 1), nullable=True)
+    threshold_band: Mapped[Any] = mapped_column(Text, nullable=True)
+    cooldown_hours: Mapped[Any] = mapped_column(Integer, nullable=False, default=24)
+    active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class RiskAlertFired(Base):
+    __tablename__ = "risk_alerts_fired"
+    __table_args__ = (
+        Index("idx_alerts_fired_tenant", "tenant_id", "fired_at"),
+        Index("idx_alerts_fired_rule_user", "rule_id", "user_id", "fired_at"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    rule_id: Mapped[Any] = mapped_column(
+        String(128),
+        ForeignKey("risk_alert_rules.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    user_email: Mapped[Any] = mapped_column(String(256), nullable=True)
+    risk_score: Mapped[Any] = mapped_column(Numeric(5, 1), nullable=False)
+    risk_band: Mapped[Any] = mapped_column(String(32), nullable=False)
+    dismissed: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    dismissed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    fired_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class TenantEntitlement(Base):
+    """P0-5: Explicit capability grant for a tenant.
+
+    One row per (tenant_id, capability). External systems push grants here;
+    FrostGate enforces them. expires_at=None means the grant never expires.
+    """
+
+    __tablename__ = "tenant_entitlements"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "capability", name="uq_tenant_entitlements"),
+        Index("ix_tenant_entitlements_tenant", "tenant_id"),
+        Index("ix_tenant_entitlements_capability", "tenant_id", "capability"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    capability: Mapped[Any] = mapped_column(Text, nullable=False)
+    granted_by: Mapped[Any] = mapped_column(Text, nullable=False, default="system")
+    granted_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    reason: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# P1.2: Tenant Policy Bundles + Capability Framework
+# ---------------------------------------------------------------------------
+
+
+class TenantSubscription(Base):
+    """P1.2: Commercial subscription record for a tenant."""
+
+    __tablename__ = "tenant_subscriptions"
+    __table_args__ = (
+        Index("idx_tenant_subs_tenant", "tenant_id"),
+        Index("idx_tenant_subs_status", "tenant_id", "status"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    subscription_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    status: Mapped[Any] = mapped_column(Text, nullable=False, default="active")
+    effective_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class PolicyBundle(Base):
+    """P1.2: Named capability bundle (portal_only, enterprise, government, msp, …)."""
+
+    __tablename__ = "policy_bundles"
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    bundle_key: Mapped[Any] = mapped_column(Text, nullable=False, unique=True)
+    bundle_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    bundle_version: Mapped[Any] = mapped_column(Text, nullable=False, default="1.0")
+    active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    description: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class Capability(Base):
+    """P1.2: DB catalog of capability strings — mirrors CAPABILITY_REGISTRY."""
+
+    __tablename__ = "capabilities"
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    capability_key: Mapped[Any] = mapped_column(Text, nullable=False, unique=True)
+    capability_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    capability_category: Mapped[Any] = mapped_column(Text, nullable=False)
+    description: Mapped[Any] = mapped_column(Text, nullable=True)
+    active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    billing_category: Mapped[Any] = mapped_column(Text, nullable=True)
+    launch_stage: Mapped[Any] = mapped_column(Text, nullable=False, default="ga")
+    visibility: Mapped[Any] = mapped_column(Text, nullable=False, default="public")
+
+
+class CapabilityDependency(Base):
+    """P1.2: Soft prerequisite graph — capability_id requires requires_id."""
+
+    __tablename__ = "capability_dependencies"
+
+    capability_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("capabilities.id", ondelete="CASCADE"), primary_key=True
+    )
+    requires_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("capabilities.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class CapabilityMeterMapping(Base):
+    """P1.2: Maps a capability to a billing meter key for future usage-based billing."""
+
+    __tablename__ = "capability_meter_mappings"
+    __table_args__ = (
+        Index("idx_cap_meters_capability", "capability_id"),
+        UniqueConstraint("capability_id", "meter_key"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    capability_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("capabilities.id", ondelete="CASCADE"), nullable=False
+    )
+    meter_key: Mapped[Any] = mapped_column(Text, nullable=False)
+
+
+class PolicyBundleCapability(Base):
+    """P1.2: Many-to-many join — which capabilities belong to a bundle."""
+
+    __tablename__ = "policy_bundle_capabilities"
+
+    bundle_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("policy_bundles.id", ondelete="CASCADE"), primary_key=True
+    )
+    capability_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("capabilities.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class TenantCapabilityAssignment(Base):
+    """P1.2: Direct capability grant to a tenant (source = manual/trial/promotion/marketplace)."""
+
+    __tablename__ = "tenant_capability_assignments"
+    __table_args__ = (
+        Index("idx_tca_tenant", "tenant_id"),
+        Index("idx_tca_tenant_cap", "tenant_id", "capability_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    capability_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("capabilities.id"), nullable=False
+    )
+    source: Mapped[Any] = mapped_column(Text, nullable=False)
+    assigned_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    notes: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class TenantBundleAssignment(Base):
+    """P1.2: Which bundles a tenant has been assigned."""
+
+    __tablename__ = "tenant_bundle_assignments"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "bundle_id", name="uq_tenant_bundle_assignments"),
+        Index("idx_tba_tenant", "tenant_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    bundle_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("policy_bundles.id"), nullable=False
+    )
+    subscription_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("tenant_subscriptions.id"), nullable=True
+    )
+    assigned_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_by: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+# PR3 External AI Risk Register ORM registration for Base.metadata.create_all().
+import api.db_models_external_ai_risk  # noqa: F401,E402
+
+# P1.4 Subscription Assignment Engine ORM registration.
+import api.db_models_subscriptions  # noqa: F401,E402
+
+# P1.5 Billing Integration Layer ORM registration.
+import api.db_models_billing  # noqa: F401,E402

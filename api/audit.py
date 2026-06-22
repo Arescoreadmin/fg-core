@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
+from api.entitlements import require_capability
 from api.db_models import AuditLedgerRecord
 from api.security_audit import audit_admin_action
 from services.audit_engine import AuditEngine
@@ -114,7 +115,13 @@ def run_audit_cycle(body: CycleRunRequest, request: Request) -> dict[str, str]:
     return {"session_id": session_id, "cycle_kind": body.cycle_kind}
 
 
-@router.get("/audit/export", dependencies=[Depends(require_scopes("audit:export"))])
+@router.get(
+    "/audit/export",
+    dependencies=[
+        Depends(require_scopes("audit:export")),
+        Depends(require_capability("audit.export")),
+    ],
+)
 def audit_export(
     request: Request,
     start: str = Query(...),
@@ -235,6 +242,7 @@ def run_exam(request: Request, body: ExamRunRequest) -> dict[str, str]:
     dependencies=[
         Depends(require_scopes("audit:export")),
         Depends(require_bound_tenant),
+        Depends(require_capability("audit.export")),
     ],
 )
 def export_exam(exam_id: str, request: Request) -> dict[str, object]:

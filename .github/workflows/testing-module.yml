@@ -30,7 +30,7 @@ jobs:
   fg-fast:
     name: fg-fast
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15  # raised from 10 (PR 14.3 CI repair): Makefile budget is now 720s; job wall-clock must exceed the budget
     permissions:
       contents: read
 
@@ -180,7 +180,7 @@ jobs:
   fg-security:
     name: fg-security
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
 

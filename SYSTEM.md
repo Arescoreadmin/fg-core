@@ -1,10 +1,10 @@
 # FrostGate — Unified System Document
 
-**Version:** 1.0  
-**Last updated:** 2026-05-05  
-**Branch:** `claude/merge-frontend-fg-core-6fjVg`  
+**Version:** 1.2  
+**Last updated:** 2026-06-02  
+**Branch:** `main`  
 **Author:** Jason Cosat  
-**Status:** Active Development — Stage 1 complete, Stage 2 in progress
+**Status:** Active Development — Field Assessment complete through Phase 2 client readiness (PRs 1–45 + forensic audit); Phase 3 enterprise plan active (see ENTERPRISE_PLAN.md)
 
 ---
 
@@ -148,7 +148,7 @@ What was added from AIEG:
 │                         PostgreSQL 16                                  │
 │                         localhost:5432                                 │
 │                                                                        │
-│  33 migrations applied (0001–0033)                                     │
+│  77 migrations applied (0001–0077)                                     │
 │  New (0032): org_profiles, assessments, assessment_schemas,            │
 │              prompt_versions, reports                                  │
 │  RLS enforced on all tenant-owned tables                               │
@@ -358,7 +358,7 @@ Full contract: `contracts/core/openapi.json`
 
 ## 7. Database schema
 
-### Migrations applied: 0001–0033
+### Migrations applied: 0001–0077
 
 | Migration | Description |
 |-----------|-------------|
@@ -707,6 +707,8 @@ Never "certified" or "compliant with" until formal certification is obtained.
 
 ## 14. Build status — what is done
 
+> For PR-level detail see `ROADMAP.md`.
+
 ### Infrastructure ✅
 - [x] FastAPI backend with all middleware (auth, CORS, DoS guard, logging, resilience)
 - [x] PostgreSQL with RLS, append-only triggers, HMAC audit chain
@@ -714,7 +716,8 @@ Never "certified" or "compliant with" until formal certification is obtained.
 - [x] Docker Compose + Helm/K8s deployment configs
 - [x] CI/CD pipelines (GitHub Actions)
 - [x] Device agent (enrollment, telemetry, phase 2 enterprise)
-- [x] Migrations 0001–0033 (33 total)
+- [x] Migrations 0001–0077 (77 total)
+- [x] Postgres auth authority (persistent key store, multi-worker safe)
 
 ### Customer-facing (Tier 1) ✅
 - [x] Marketing landing page with pricing tiers and CTAs
@@ -724,6 +727,18 @@ Never "certified" or "compliant with" until formal certification is obtained.
 - [x] AI advisory report generation (Claude, BackgroundTask, polling)
 - [x] Report viewer (executive summary, strengths/gaps, roadmap, framework alignment)
 - [x] Assessment and report tables (migrations 0032 + 0033)
+
+### Field Assessment Layer ✅ (PRs 1–22)
+- [x] Engagement substrate — engagements, scan results, findings, evidence, field observations
+- [x] Playbook engine — AI governance, HIPAA (comprehensive fallback), readiness gates
+- [x] Connector framework — registry, driver interface, scan dispatch
+- [x] MS Graph connector — MSAL device-code flow, 39 NIST AI RMF control checks
+- [x] Governance asset registry — assets, attestations, continuity tracking
+- [x] Report engine — normalized findings, section hashes, manifest signing, PDF/JSON export
+- [x] Drift detection — config baseline snapshots, delta alerts
+- [x] Finding explainer — plain-language explanations, LRU cache, provenance manifest, framework impact
+- [x] Console UI — engagement list, finding list, report viewer, governance assets, attestation
+- [x] Portal (client-facing) — engagements, findings, attestation, continuity gaps, report viewer
 
 ### Dashboard / internal ✅
 - [x] Recharts dashboard (domain radar, request volume area chart)
@@ -745,95 +760,48 @@ Never "certified" or "compliant with" until formal certification is obtained.
 
 ## 15. What needs to be built next
 
-### Stage 1 — Complete the customer funnel (immediate)
+> For full roadmap with PR tracking see `ROADMAP.md`.
 
-- [ ] **Stripe checkout** — $299/$599/$999 tiers wired to `/onboarding` final step
-  - Add `stripe_session_id` to `assessments` table (migration 0034)
-  - Gate report generation behind payment confirmation
-  - Webhook handler for `checkout.session.completed`
+### Field Assessment — Phase 2 client readiness ✅ Complete (PRs 23–45)
 
-- [ ] **Email delivery** — Send completed report link via Resend
-  - Collect email in onboarding Step 1
-  - Trigger on `reports.status = complete` in `_generate_report_sync`
-  - Template: link to `/reports/{id}` + executive summary preview
+All Phase 2 P0 and P1 items are shipped. See `ROADMAP.md` Phase 2 section for the complete list.
 
-- [ ] **Production deployment** — VPS (DigitalOcean or Hetzner)
-  - Provision PostgreSQL, Redis, NATS, MinIO
-  - Apply migrations 0001–0033
-  - Set `FG_ENV=production`, `FG_AUTH_ENABLED=1`
-  - Configure domain + TLS
+Key deliverables shipped since SYSTEM.md v1.1:
+- [x] Portal authentication (HMAC-SHA256 session cookies, `/login`, `PORTAL_SESSION_SECRET`)
+- [x] Scan trigger UI (all 9 connectors, device-code + polling panels in console)
+- [x] NIST AI RMF questionnaire (69 controls, per-control evidence, auto-link to findings)
+- [x] HIPAA + SOC 2 + CMMC + ISO 27001 dedicated playbooks
+- [x] Executive PDF export (cover, AI summary, findings, remediation, framework coverage, manifest hash)
+- [x] Remediation closed loop (client marks resolved, evidence created, gates cleared)
+- [x] Risk posture dashboard (NIST coverage bar, severity strip, heatmap, immediate actions)
+- [x] QA approve UI, guided panel live refresh, tab navigation
+- [x] Auth0 OIDC console login (next-auth v5, middleware protection)
+- [x] Production deployment on Railway (FG_ENV=prod, all 20+ startup validators satisfied)
+- [x] All 9 scan connectors: MS Graph, OAuth Inventory, OAuth Risk, Endpoint Inventory,
+      Entra Governance, SharePoint + OneDrive, DNS + Email, Web Headers, Network Scan
+- [x] Workforce intelligence: AI query attribution, risk scoring, keyword triggers, alerting
 
-- [ ] **Profile-specific question banks** — Currently 35 base questions for all profiles
-  - Add 60-question midmarket bank (migration 0034)
-  - Add 110-question regulated bank (migration 0034)
-  - Add 130-question govcon bank (migration 0034)
-  - `GET /assessment/assessments/{id}/questions` already serves from schema table — no code change
+### Phase 3 — Enterprise (active)
 
-- [ ] **PDF export** — Currently returns a stub
-  - WeasyPrint or Playwright → PDF from report content
-  - Upload to MinIO, return signed URL from `GET /reports/{id}/download`
+**See `ENTERPRISE_PLAN.md` for the full phased specification.**
 
-### Stage 2 — Intelligence tier ($5K–15K/year)
+This is the authoritative document for all Phase 3 work. Summary gates:
 
-- [ ] **Auth system** — JWT + refresh tokens for multi-user access
-  - Users table (migration 0035)
-  - RBAC roles: exec, auditor, admin, operator, viewer
-  - Link assessments/reports to user who created them
+| Gate | Estimate |
+|------|----------|
+| Phase 0: Containment (C5 audio SSRF, C6 scanner SSRF, C7 portal model, H13 audit atomicity) | Weeks 1–2 |
+| Phase 1: Trusted Pilot (H11 drift RLS, H12 durable jobs, H14 RBAC, PI20 FA/Gov boundary) | Weeks 3–6 |
+| Phase 2: Enterprise Production (document pipeline, retention, workers, observability) | Weeks 7–14 |
+| Phase 3: Moat Layer (longitudinal evidence graph, verification bundles, benchmarks) | Months 3–6 |
+| Phase 4: Regulated Enterprise (SOC 2, FedRAMP, HITRUST, air-gap) | Months 4–12 |
 
-- [ ] **SAML/OIDC enterprise SSO** — Already have Keycloak config in `/keycloak/`
+### Autonomous Governance tiers (deferred until FA moat is built)
 
-- [ ] **RAG service** — Org policy document upload + retrieval
-  - `documents` + `document_chunks` tables (add to 0035)
-  - pgvector extension (text-embedding-3-small, 1536 dimensions)
-  - Upload endpoint → chunk → embed → store
-  - Retrieval in report generation to ground recommendations in org's own policies
-
-- [ ] **Benchmarking service** — Anonymous cross-org scoring
-  - Aggregate scores by profile_type + industry (no PII)
-  - Dashboard widget: "Your org vs. community banking median"
-
-- [ ] **Compliance mapping dashboard** — Per-framework control-level detail
-  - Map each question to specific control IDs per framework
-  - Store mapping in assessment_schemas questions (add `framework_mappings` field)
-
-- [ ] **Assessment delegation** — Department-level assessment splitting
-  - Allow assessment to be split into sections by department
-  - Each section has a separate share link (UUID)
-
-- [ ] **Trend tracking** — Risk score over time
-  - Multiple assessments per org → score history chart
-
-### Stage 3 — Control tier ($50K–100K/year)
-
-- [ ] **AI gateway proxy** — Drop-in Anthropic/OpenAI-compatible API
-  - Go/Fiber or Python FastAPI — new service or module in fg-core
-  - Employees point their AI tools at this endpoint instead of Anthropic directly
-  - fg-core's existing decision engine, OPA, and audit chain already support this
-
-- [ ] **Input classification** — Presidio for PII/PHI/CUI detection
-  - `services/phi_classifier/` already exists — extend it
-  - Block or redact before AI boundary
-
-- [ ] **PII tokenization** — Reversible tokens before AI boundary
-  - Token store in Redis (TTL-bound)
-  - De-tokenize in response before returning to client
-
-- [ ] **Provider routing** — Route to different models by classification
-  - Public → any provider
-  - PHI → HIPAA-approved only + BAA check (provider_baa_records already exists)
-  - CUI → air-gap mandatory
-
-- [ ] **Response validation** — Hallucination detection
-  - Grounding check against org's RAG context
-
-- [ ] **Expose audit chain to customers** — Dashboard for Tier 3 clients showing every AI request
-
-### Stage 4 — Autonomous tier
-
-- [ ] Continuous drift detection (fg-core has drift infra — surface to customers)
-- [ ] Auto-remediation suggestions
-- [ ] Predictive risk modeling
-- [ ] Custom compliance module builder
+These remain on the long-term roadmap but are explicitly deferred:
+- Tier 3 — AI Gateway proxy (PII/PHI tokenization, OPA enforcement, provider routing)
+- Tier 4 — Continuous monitoring, auto-remediation, predictive risk, custom compliance modules
+- Endpoint agent fleet, command bus, rings, missions, rules of engagement
+- Autonomous remediation agents, governed AI assistant, RAG retrieval product
 
 ---
 
@@ -914,18 +882,28 @@ fg-core/
 ├── api/
 │   ├── main.py                    FastAPI app, all router registration, middleware
 │   ├── db.py                      SQLAlchemy engine, session, tenant context
-│   ├── db_models.py               All ORM models (54 existing + 5 new assessment models)
+│   ├── db_models.py               All ORM models
 │   ├── deps.py                    FastAPI dependencies (get_db, tenant_db_required)
-│   ├── assessments.py             ★ NEW — assessment engine (org, questions, scoring)
-│   ├── reports_engine.py          ★ NEW — report generation (Anthropic, BackgroundTask)
+│   ├── field_assessment.py        Field assessment API (engagements, findings, reports, explain)
+│   ├── governance_assets.py       Governance asset registry + attestations
+│   ├── assessments.py             Assessment engine (org, questions, scoring)
+│   ├── reports_engine.py          Report generation (Anthropic, BackgroundTask)
 │   ├── decisions.py               Decision pipeline
 │   ├── audit.py                   Audit chain endpoints
 │   ├── compliance.py              Compliance registry
 │   ├── governance.py              Change approval workflow
 │   ├── ai_plane_extension.py      AI policy enforcement endpoints
-│   └── [28 other modules]
+│   └── [other modules]
 │
 ├── services/
+│   ├── field_assessment/
+│   │   ├── finding_explainer.py   Plain-language finding explanations (LRU cache, provenance)
+│   │   ├── playbooks.py           AI governance, HIPAA (comprehensive fallback), readiness gates
+│   │   └── [engagement, evidence, drift modules]
+│   ├── connectors/
+│   │   ├── msgraph/               MS Graph MSAL device-code connector (39 NIST AI RMF checks)
+│   │   ├── registry.py            Connector registry + driver interface
+│   │   └── runner.py              Scan dispatch
 │   ├── ai/
 │   │   ├── dispatch.py            call_provider() — single AI call boundary
 │   │   └── providers/
@@ -933,6 +911,7 @@ fg-core/
 │   │       ├── azure_openai_provider.py
 │   │       └── simulated_provider.py   Dev/test fallback
 │   ├── ai_plane_extension/        AI quota, policy, RAG context
+│   ├── governance/                Governance workflow services
 │   └── phi_classifier/            PII/PHI detection (Presidio-based)
 │
 ├── engine/
@@ -941,40 +920,43 @@ fg-core/
 │   └── types.py                   Core type definitions
 │
 ├── migrations/postgres/
-│   ├── 0001–0031_*.sql            Existing migrations (do not modify)
-│   ├── 0032_assessment_and_reports.sql  ★ NEW — assessment schema
-│   └── 0033_seed_assessment_data.sql    ★ NEW — question bank + prompts
+│   ├── 0001–0033_*.sql            Infrastructure + assessment schema migrations
+│   └── [FA layer migrations added per PR]
 │
 ├── policy/rego/
 │   ├── default.rego               Base OPA policy
 │   └── govcon.rego                CUI/ITAR overlay
 │
-├── console/
-│   ├── app/
-│   │   ├── page.tsx               ★ NEW — Landing page
-│   │   ├── layout.tsx             Root layout + QueryClientProvider
-│   │   ├── globals.css            Tailwind + CSS vars
-│   │   ├── onboarding/page.tsx    ★ NEW — Onboarding wizard
-│   │   ├── assessment/page.tsx    ★ NEW — Assessment wizard
-│   │   ├── reports/[reportId]/page.tsx  ★ NEW — Report viewer
-│   │   └── dashboard/
-│   │       ├── layout.tsx         ★ UPGRADED — Sidebar layout
-│   │       ├── page.tsx           ★ UPGRADED — Charts + stats
-│   │       └── [alignment, control-tower, decisions, forensics]/
+├── apps/
+│   ├── console/                   Operator-facing Next.js app
+│   │   ├── app/
+│   │   │   ├── field-assessment/  Engagement list, finding list, report viewer
+│   │   │   ├── governance/        Asset registry, attestation, continuity
+│   │   │   └── dashboard/         Charts, stats, control tower, decisions, forensics
+│   │   ├── components/field-assessment/  ReportViewer, StatusBadge, FindingRow
+│   │   └── lib/fieldAssessmentApi.ts     Typed BFF client
 │   │
-│   ├── components/
-│   │   ├── ui/                    ★ NEW — button, card, badge, progress, input,
-│   │   │                                   label, select, checkbox
-│   │   ├── layout/                ★ NEW — Sidebar, TopBar
-│   │   └── dashboard/             ★ NEW — DomainScores (Radar), RequestsChart (Area)
-│   │
-│   ├── lib/
-│   │   ├── assessmentApi.ts       ★ NEW — typed client → /api/core/assessment/*
-│   │   ├── reportApi.ts           ★ NEW — typed client → /api/core/assessment/reports/*
-│   │   ├── store.ts               ★ NEW — Zustand onboarding + assessment stores
-│   │   ├── providers.tsx          ★ NEW — QueryClientProvider
-│   │   └── cn.ts                  ★ NEW — clsx + tailwind-merge
-│   │
+│   └── portal/                    Client-facing Next.js app (per-tenant)
+│       ├── app/
+│       │   ├── api/core/[...path]/ BFF proxy (injects X-Tenant-ID server-side)
+│       │   ├── engagements/        Client engagement list
+│       │   ├── findings/           Client finding list + explain panel
+│       │   ├── reports/            Client report viewer + verify
+│       │   ├── attestation/        Attestation submit + health
+│       │   └── continuity/         Continuity gap view
+│       └── lib/portalApi.ts        Typed portal BFF client
+│
+├── packages/ui/                   Shared design system (Card, Badge, Alert, etc.)
+│
+├── console/                       Legacy console (pre-FA; dashboard, onboarding, assessment wizard)
+│
+├── SYSTEM.md                      ★ THIS FILE — unified system reference
+├── ROADMAP.md                     ★ Living PR tracker — update on every merge
+├── CLAUDE.md                      Repo rules (do not modify without calling it out)
+├── BLUEPRINT_STAGED.md            Governance compliance gates (authoritative)
+├── CODEX.md                       AI coding standards (authoritative)
+└── docker-compose.yml             PostgreSQL, Redis, NATS, MinIO, OPA
+│
 │   ├── tailwind.config.ts         ★ NEW — FrostGate brand tokens
 │   ├── postcss.config.js          ★ NEW
 │   └── package.json               ★ UPGRADED — added Tailwind, Radix, Zustand, Recharts, etc.

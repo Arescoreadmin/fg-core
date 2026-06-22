@@ -339,39 +339,59 @@ class OIDCClient:
 
         return claims
 
-    def parse_id_token_claims(self, id_token: str) -> dict[str, Any]:
-        """Parse claims from ID token (without signature verification).
+    async def verify_id_token(self, id_token: str) -> dict[str, Any]:
+        """Verify an OIDC ID token via JWKS and return its claims.
 
-        Note: In production, you should verify the JWT signature using the JWKS.
-        This is a simplified implementation for demonstration.
-
-        Args:
-            id_token: JWT ID token
-
-        Returns:
-            Token claims
+        Uses the same JWKS endpoint as verify_access_token() but validates
+        against client_id as audience (per OIDC spec for ID tokens).
+        Raises ValueError on any verification failure.
         """
-        import base64
         import json
 
+        import jwt
+        from jwt import InvalidTokenError
+        from jwt.algorithms import ECAlgorithm, RSAAlgorithm
+
+        if not self.config.oidc_issuer or not self.config.oidc_client_id:
+            raise ValueError("OIDC issuer or client_id not configured")
+
+        provider = await self.get_provider()
+
+        async with httpx.AsyncClient() as client:
+            jwks_resp = await client.get(provider.jwks_uri, timeout=10.0)
+            jwks_resp.raise_for_status()
+            jwks = jwks_resp.json()
+
         try:
-            # JWT format: header.payload.signature
-            parts = id_token.split(".")
-            if len(parts) != 3:
-                raise ValueError("Invalid JWT format")
+            header = jwt.get_unverified_header(id_token)
+        except InvalidTokenError as exc:
+            raise ValueError(f"id_token header decode failed: {exc}") from exc
 
-            # Decode payload (add padding)
-            payload = parts[1]
-            padding = 4 - len(payload) % 4
-            if padding != 4:
-                payload += "=" * padding
+        kid = header.get("kid")
+        alg = header.get("alg", "RS256")
+        keys = jwks.get("keys", [])
+        key_data = next((k for k in keys if k.get("kid") == kid), None)
+        if not key_data:
+            raise ValueError(f"no JWKS key for kid={kid!r}")
 
-            claims = json.loads(base64.urlsafe_b64decode(payload))
-            return claims
+        try:
+            if alg.startswith(("RS", "PS")):
+                public_key: Any = RSAAlgorithm.from_jwk(json.dumps(key_data))
+            elif alg.startswith("ES"):
+                public_key = ECAlgorithm.from_jwk(json.dumps(key_data))
+            else:
+                raise ValueError(f"unsupported alg {alg!r}")
 
-        except Exception as e:
-            log.warning("Failed to parse ID token: %s", e)
-            return {}
+            return jwt.decode(
+                id_token,
+                public_key,
+                algorithms=[alg],
+                audience=self.config.oidc_client_id,
+                issuer=self.config.oidc_issuer,
+                options={"require": ["sub", "exp", "iss", "aud"]},
+            )
+        except InvalidTokenError as exc:
+            raise ValueError(f"id_token verification failed: {exc}") from exc
 
     def extract_scopes_from_claims(self, claims: dict[str, Any]) -> Set[str]:
         """Extract admin scopes from OIDC claims.
@@ -415,41 +435,113 @@ class OIDCClient:
     async def create_session_from_tokens(
         self,
         tokens: dict[str, Any],
+        db: Any = None,
+        tenant_id: Optional[str] = None,
     ) -> Session:
-        """Create a session from OIDC token response.
+        """Create a governed session from an OIDC token response.
+
+        Verifies the ID token via JWKS (RS256/ES256). If db is provided,
+        resolves tenant_users membership and enforces:
+          - membership must exist (MEMBERSHIP_NOT_FOUND → no governed session)
+          - membership must be active (MEMBERSHIP_INACTIVE → ValueError raised)
+        Sets tenant_governed=True only when membership is verified active.
 
         Args:
-            tokens: Token response from exchange_code
+            tokens: Token response from exchange_code / Auth0 callback.
+            db: Optional SQLAlchemy Session for membership lookup.
+            tenant_id: Optional tenant to restrict membership resolution.
 
         Returns:
-            New Session object
-        """
-        # Parse ID token claims
-        id_token = tokens.get("id_token", "")
-        claims = self.parse_id_token_claims(id_token) if id_token else {}
+            Session with tenant_governed=True if membership verified, else False.
 
-        # Try to get additional info from userinfo
+        Raises:
+            ValueError: If ID token signature is invalid or membership is inactive.
+        """
+        id_token = tokens.get("id_token", "")
         access_token = tokens.get("access_token")
+
+        # Verify ID token cryptographically; fall back to userinfo on failure
+        claims: dict[str, Any] = {}
+        if id_token:
+            try:
+                claims = await self.verify_id_token(id_token)
+            except Exception as exc:
+                log.warning("id_token verification failed: %s", exc)
+                # Do NOT fall back silently for invalid tokens — re-raise so
+                # the OIDC callback handler can return a proper 401
+                raise ValueError(f"id_token_invalid: {exc}") from exc
+
+        # Supplement with userinfo (richer claims, always server-authoritative)
         if access_token:
             try:
                 userinfo = await self.get_userinfo(access_token)
                 claims.update(userinfo)
-            except Exception as e:
-                log.warning("Failed to fetch userinfo: %s", e)
+            except Exception as exc:
+                log.warning("userinfo fetch failed: %s", exc)
 
-        # Extract user info
-        user_id = claims.get("sub", "unknown")
-        email = claims.get("email")
-        name = claims.get("name") or claims.get("preferred_username")
-
-        # Extract scopes
+        user_id: str = str(claims.get("sub") or "")
+        email: Optional[str] = claims.get("email") or None
+        name: Optional[str] = (
+            claims.get("name") or claims.get("preferred_username") or None
+        )
         scopes = self.extract_scopes_from_claims(claims)
 
-        # Extract tenant info
-        tenant_id = claims.get("tenant_id")
-        allowed_tenants = claims.get("allowed_tenants", [])
-        if tenant_id and tenant_id not in allowed_tenants:
-            allowed_tenants.append(tenant_id)
+        # Membership resolution — requires db; no governed session without it
+        membership_id: Optional[str] = None
+        membership_version: int = 0
+        resolved_tenant: Optional[str] = tenant_id or claims.get("tenant_id") or None
+        role: Optional[str] = None
+        binding_status: Optional[str] = None
+        tenant_governed = False
+
+        if db is not None and user_id:
+            try:
+                from services.identity_resolver import (
+                    IdentityResolver,
+                    IdentityResolutionError,
+                )
+
+                issuer = self.config.oidc_issuer or ""
+                resolver = IdentityResolver()
+                try:
+                    principal = resolver.resolve_or_deny(
+                        db,
+                        provider="auth0",
+                        issuer=issuer,
+                        subject=user_id,
+                        tenant_id=resolved_tenant,
+                    )
+                    tenant_governed = True
+                    membership_id = principal.membership_id
+                    membership_version = principal.membership_version
+                    resolved_tenant = principal.tenant_id
+                    role = principal.roles[0] if principal.roles else None
+                    binding_status = principal.trust_level
+                    log.info(
+                        "oidc.session_governed",
+                        extra={
+                            "membership_id": membership_id,
+                            "tenant_id": resolved_tenant,
+                        },
+                    )
+                except IdentityResolutionError as exc:
+                    if exc.code == "MEMBERSHIP_NOT_FOUND":
+                        # No bound record — ungoverned session; callers may deny this
+                        log.warning(
+                            "oidc.membership_not_found",
+                            extra={"subject_prefix": user_id[:16]},
+                        )
+                    else:
+                        # Inactive/revoked — hard deny
+                        log.warning(
+                            "oidc.membership_denied",
+                            extra={"code": exc.code, "subject_prefix": user_id[:16]},
+                        )
+                        raise ValueError(exc.code) from exc
+            except ValueError:
+                raise
+            except Exception as exc:
+                log.warning("oidc.membership_lookup_error", extra={"exc": str(exc)})
 
         return Session(
             user_id=user_id,
@@ -457,5 +549,14 @@ class OIDCClient:
             name=name,
             scopes=scopes,
             claims=claims,
-            tenant_id=tenant_id,
+            tenant_id=resolved_tenant,
+            membership_id=membership_id,
+            membership_version=membership_version,
+            identity_provider="auth0",
+            identity_issuer=self.config.oidc_issuer,
+            identity_subject=user_id,
+            identity_type="human",
+            role=role,
+            binding_status=binding_status,
+            tenant_governed=tenant_governed,
         )

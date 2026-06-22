@@ -1,0 +1,702 @@
+# api/db_models_field_assessment.py
+"""SQLAlchemy ORM models for the Field Assessment Engagement Substrate.
+
+Infrastructure note (PR 103):
+  Extends Base.metadata with seven field assessment tables.
+  Imported by api.db._ensure_models_imported() so init_db() creates the tables.
+
+Tenant isolation:
+  All queries must include a tenant_id predicate.
+  No DEFAULT on tenant_id — store layer always provides an explicit value.
+
+Append-only contract:
+  fa_engagement_audit_events is append-only. No UPDATE or DELETE.
+  fa_scan_audit_events is append-only. No UPDATE or DELETE.
+  fa_evidence_lifecycle_events is append-only. No UPDATE or DELETE.
+  fa_evidence_provenance is append-only. No UPDATE or DELETE.
+  fa_evidence_report_links is append-only. No UPDATE or DELETE.
+
+Lifecycle states (H15):
+  Evidence tables carry lifecycle_state in ('collected', 'locked', 'legal_hold').
+  'collected' is the default; 'locked' is applied at QA approval via
+  EvidenceLifecycleService.lock_evidence_for_engagement(); 'legal_hold' is
+  operator-applied. Locked and legal-hold evidence cannot be mutated or deleted.
+
+Tables:
+  fa_engagements                 — top-level engagement tracking
+  fa_scan_results                — structured scan ingestion
+  fa_document_analyses           — document analysis records
+  fa_field_observations          — structured assessor observations
+  fa_normalized_findings         — core governance finding objects
+  fa_evidence_links              — evidence relationship graph
+  fa_engagement_audit_events     — append-only audit trail
+  fa_quarantined_scans           — rejected scan ingest attempts (audit trail)
+  fa_artifacts                   — artifact registry (audio, documents); storage keys never client-visible
+  fa_verified_targets            — C6: pre-validated scanner targets (SSRF-safe)
+  fa_scan_jobs                   — C6: durable job records (H12-ready)
+  fa_scan_audit_events           — C6: append-only scanner audit trail
+  fa_evidence_lifecycle_events   — H15: append-only chain-of-custody trail for lifecycle transitions
+  fa_legal_holds                 — H15: legal hold application and removal audit record
+  fa_evidence_provenance         — PR 1.1: append-only chain-of-custody provenance ledger
+  fa_evidence_report_links       — PR 1.4: append-only evidence-to-report link authority
+"""
+
+from __future__ import annotations
+
+from sqlalchemy import Boolean, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+try:
+    from sqlalchemy import JSON
+except ImportError:  # pragma: no cover
+    from sqlalchemy import JSON  # type: ignore[assignment]
+
+from api.db_models import Base
+
+
+class FaEngagement(Base):
+    """Top-level field assessment engagement record."""
+
+    __tablename__ = "fa_engagements"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    client_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    client_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    assessor_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    assessment_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="in_progress"
+    )
+    scheduled_date: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    client_access_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    engagement_metadata: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_engagements_tenant_status", "tenant_id", "status"),
+        Index("ix_fa_engagements_tenant_created", "tenant_id", "created_at"),
+    )
+
+
+class FaScanResult(Base):
+    """Structured scan ingestion record."""
+
+    __tablename__ = "fa_scan_results"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    collected_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="collected"
+    )
+    raw_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    normalized_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    object_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    finding_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "engagement_id",
+            "tenant_id",
+            "evidence_hash",
+            name="uq_fa_scan_evidence",
+        ),
+        Index("ix_fa_scan_results_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_scan_results_tenant_source", "tenant_id", "source_type"),
+    )
+
+
+class FaDocumentAnalysis(Base):
+    """Document analysis record."""
+
+    __tablename__ = "fa_document_analyses"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    document_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    document_classification: Mapped[str] = mapped_column(String(64), nullable=False)
+    document_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    version_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approval_date: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    freshness_date: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    analysis_findings: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    gaps_identified: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="collected"
+    )
+
+    __table_args__ = (
+        Index("ix_fa_doc_analyses_engagement_tenant", "engagement_id", "tenant_id"),
+    )
+
+
+class FaFieldObservation(Base):
+    """Structured assessor observation record."""
+
+    __tablename__ = "fa_field_observations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    domain: Mapped[str] = mapped_column(String(64), nullable=False)
+    observation_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    interview_role: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    structured_evidence: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    linked_finding_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    assessor_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    deleted_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="collected"
+    )
+
+    __table_args__ = (
+        Index("ix_fa_field_obs_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_field_obs_tenant_domain", "tenant_id", "domain"),
+    )
+
+
+class FaNormalizedFinding(Base):
+    """Core governance finding object — deduplicated via findings_hash."""
+
+    __tablename__ = "fa_normalized_findings"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    finding_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    findings_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False, default="open")
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    source_attribution: Mapped[str] = mapped_column(String(255), nullable=False)
+    confidence_score: Mapped[int] = mapped_column(Integer, nullable=False, default=80)
+    framework_mappings: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    nist_ai_rmf_mappings: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    evidence_ref_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    remediation_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    asset_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "findings_hash", name="uq_fa_finding_hash"),
+        Index("ix_fa_findings_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_findings_tenant_severity", "tenant_id", "severity"),
+        Index("ix_fa_findings_tenant_status", "tenant_id", "status"),
+        Index("ix_fa_findings_asset", "asset_id"),
+    )
+
+
+class FaEvidenceLink(Base):
+    """Evidence relationship graph edge."""
+
+    __tablename__ = "fa_evidence_links"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_entity_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_entity_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    link_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="collected"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "engagement_id",
+            "source_entity_id",
+            "source_entity_type",
+            "evidence_entity_id",
+            "evidence_entity_type",
+            name="uq_fa_evidence_link",
+        ),
+        Index("ix_fa_evidence_links_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_evidence_links_source_entity", "tenant_id", "source_entity_id"),
+        Index(
+            "ix_fa_evidence_links_evidence_entity", "tenant_id", "evidence_entity_id"
+        ),
+    )
+
+
+class FaEngagementAuditEvent(Base):
+    """Append-only audit event for engagement lifecycle mutations.
+
+    Schema v1.0: original columns only (transaction_id and friends are NULL).
+    Schema v2.0: emitted by AuditAtomicityService; all correlation columns populated.
+    """
+
+    __tablename__ = "fa_engagement_audit_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    # H13 transaction correlation columns (nullable; schema v2.0+ only)
+    transaction_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    correlation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    before_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    after_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    actor_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_fa_audit_events_engagement_tenant_time",
+            "engagement_id",
+            "tenant_id",
+            "created_at",
+        ),
+        Index("ix_fa_audit_events_tenant_type", "tenant_id", "event_type"),
+        Index("ix_fa_audit_events_entity", "entity_type", "entity_id"),
+    )
+
+
+class FaQuarantinedScan(Base):
+    """Audit record for scan ingest attempts rejected by validation or quarantine.
+
+    The raw payload is NOT stored — only its hash and the rejection metadata.
+    This preserves an audit trail without persisting untrusted / malicious data.
+
+    Schema note (PR 4): new table added to Base.metadata; auto-created by
+    init_db() → create_all() in both SQLite (tests) and Postgres (production).
+    No SQL migration file is needed for this table.
+    """
+
+    __tablename__ = "fa_quarantined_scans"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    quarantine_reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    quarantine_detail: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    schema_version_deprecated: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_quarantined_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_quarantined_tenant_reason", "tenant_id", "quarantine_reason"),
+    )
+
+
+class FaArtifact(Base):
+    """Artifact registry — opaque handle for evidence objects stored in blob storage.
+
+    The storage_key (blob URL) is never returned to client browsers. The proxy
+    route resolves artifact_id → storage_key server-side, issues a short-lived
+    signed download URL, and streams the content without exposing the key.
+
+    Retention columns mirror the Evidence Provenance Ledger spec from ENTERPRISE_PLAN.md.
+    """
+
+    __tablename__ = "fa_artifacts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    deleted_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    retention_class: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="standard_3y"
+    )
+    legal_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    scheduled_purge_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    purge_completed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (
+        Index("ix_fa_artifacts_tenant_engagement", "tenant_id", "engagement_id"),
+        Index("ix_fa_artifacts_tenant_type", "tenant_id", "artifact_type"),
+    )
+
+
+class FaVerifiedTarget(Base):
+    """C6: Pre-validated scanner target. Storage of the validation result prevents
+    re-validation on every scan and creates an immutable record that a target was
+    approved before any network activity. verification_method='platform_validation'
+    means SafeTargetValidationService cleared the target; future methods may include
+    'manual' (operator override) or 'dns_txt' (domain ownership proof)."""
+
+    __tablename__ = "fa_verified_targets"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    target: Mapped[str] = mapped_column(String(2048), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    verification_method: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="platform_validation"
+    )
+    verification_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="verified"
+    )
+    verified_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    verified_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    resolved_ips: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    rejection_reason: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    rejection_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ownership_evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_vt_tenant_engagement", "tenant_id", "engagement_id"),
+        Index("ix_fa_vt_tenant_status", "tenant_id", "verification_status"),
+    )
+
+
+class FaScanJob(Base):
+    """H12: Durable scan job record. All nine scan routes create a row before
+    launching a background task so job state survives process restarts.
+
+    Lifecycle states: queued → running → complete | failed | dead_letter | cancelled
+    Lease model: lease_owner (hostname:pid) + lease_expires_at guard against
+        orphaned workers. DurableJobService.recover_orphans() requeues or
+        dead-letters jobs whose leases have lapsed.
+    Retry policy: attempt_count < max_retries → requeue (retryable scanner types
+        only); otherwise → dead_letter.  next_retry_at carries the backoff target.
+    Idempotency: idempotency_key (unique, partial) prevents duplicate submissions."""
+
+    __tablename__ = "fa_scan_jobs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    verified_target_ids: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )  # JSON array; '[]' for MSAL scans
+    scanner_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_acquired_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    next_retry_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    started_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    completed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scan_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON blob
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_scan_jobs_tenant_engagement", "tenant_id", "engagement_id"),
+        Index("ix_fa_scan_jobs_tenant_status", "tenant_id", "status"),
+        Index("ix_fa_scan_jobs_engagement_status", "engagement_id", "status"),
+    )
+
+
+class FaScanAuditEvent(Base):
+    """C6: Append-only scanner audit trail. Written on every scan initiation,
+    validation rejection, completion, and failure. No UPDATE or DELETE permitted.
+    payload_summary stores lightweight metadata (no credentials, no raw findings)."""
+
+    __tablename__ = "fa_scan_audit_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    scan_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    target: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    resolved_ips: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    scanner_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    rejection_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload_summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_scan_audit_tenant_engagement", "tenant_id", "engagement_id"),
+        Index("ix_fa_scan_audit_tenant_event", "tenant_id", "event_type"),
+        Index("ix_fa_scan_audit_job", "scan_job_id"),
+    )
+
+
+class FaEvidenceLifecycleEvent(Base):
+    """H15: Append-only chain-of-custody trail for evidence lifecycle transitions.
+
+    One row per state transition. Written inside the same DB transaction as the
+    transition itself via AuditAtomicityService. No UPDATE or DELETE permitted.
+    """
+
+    __tablename__ = "fa_evidence_lifecycle_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    old_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    new_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    transaction_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index("ix_fa_lifecycle_events_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_lifecycle_events_evidence", "evidence_type", "evidence_id"),
+    )
+
+
+class FaLegalHold(Base):
+    """H15: Legal hold application and removal audit record.
+
+    One row per apply/remove action. The current hold state is encoded in the
+    evidence item's lifecycle_state column; this table is the authoritative
+    attribution record (who applied the hold and why).
+    """
+
+    __tablename__ = "fa_legal_holds"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)  # applied | removed
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    transaction_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index("ix_fa_legal_holds_engagement_tenant", "engagement_id", "tenant_id"),
+        Index("ix_fa_legal_holds_evidence", "evidence_type", "evidence_id"),
+    )
+
+
+class FaEvidenceProvenance(Base):
+    """PR 1.1: Append-only chain-of-custody provenance ledger for FA evidence.
+
+    Every provenance row answers: where did this evidence come from, who
+    collected it, when, what artifact backs it, has it been reviewed, and
+    was it used in a report?
+
+    Append-only. No UPDATE or DELETE permitted. Amendments (e.g. review
+    decisions) create a new row with previous_hash linking to the prior
+    record and chain_status='active'; the prior row is not mutated.
+    """
+
+    __tablename__ = "fa_evidence_provenance"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    finding_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_system: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_uri_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    artifact_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    collected_by_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    collected_by_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    collected_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    collection_method: Mapped[str] = mapped_column(String(64), nullable=False)
+    collection_context_json: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+
+    classification: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    retention_policy: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    freshness_at_collection: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    trust_level: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unverified"
+    )
+
+    review_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pending"
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reviewed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    chain_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="active"
+    )
+    used_in_report_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+    previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    # PR 1.3: Evidence Authority signing fields (null on legacy rows — not invalid)
+    signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signing_key_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    signature_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    authority_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_evidence_provenance_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index(
+            "ix_fa_evidence_provenance_tenant_evidence",
+            "tenant_id",
+            "evidence_id",
+        ),
+        Index(
+            "ix_fa_evidence_provenance_tenant_finding",
+            "tenant_id",
+            "finding_id",
+        ),
+        Index(
+            "ix_fa_evidence_provenance_tenant_review",
+            "tenant_id",
+            "review_status",
+        ),
+        Index(
+            "ix_fa_evidence_provenance_tenant_trust",
+            "tenant_id",
+            "trust_level",
+        ),
+        Index("ix_fa_evidence_provenance_artifact_hash", "artifact_hash"),
+        Index("ix_fa_evidence_provenance_event_hash", "event_hash"),
+    )
+
+
+class FaEvidenceReportLink(Base):
+    """PR 1.4: Append-only evidence-to-report link authority record.
+
+    Each row proves: evidence_id → report_id relationship, signed by
+    FrostGate authority. Append-only — amendments create new rows.
+    """
+
+    __tablename__ = "fa_evidence_report_links"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    provenance_record_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    report_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    report_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    linked_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    linked_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    authority_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    link_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    event_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signing_key_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    signature_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_evidence_report_links_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index(
+            "ix_fa_evidence_report_links_tenant_evidence",
+            "tenant_id",
+            "evidence_id",
+        ),
+        Index(
+            "ix_fa_evidence_report_links_tenant_report",
+            "tenant_id",
+            "report_id",
+        ),
+        Index("ix_fa_evidence_report_links_event_hash", "event_hash"),
+    )

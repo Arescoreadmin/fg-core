@@ -64,10 +64,14 @@ from services.readiness.store import (
     ScoringContractNotFound,
 )
 
+from services.governance.timeline import TimelineStore
+from services.governance.timeline.adapters import evidence_submitted_to_timeline_event
+
 log = logging.getLogger("frostgate.readiness")
 router = APIRouter(tags=["readiness"])
 
 _store = ReadinessStore()
+_timeline_store = TimelineStore()
 
 # ---------------------------------------------------------------------------
 # Error codes
@@ -1043,6 +1047,24 @@ def list_domains(
         raise _handle_store_error(exc)
 
 
+@router.get(
+    "/control-plane/readiness/domains/{domain_id}",
+    tags=["readiness"],
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+)
+def get_domain(
+    domain_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> DomainResponse:
+    tenant_id = _tenant_from_auth(request)
+    try:
+        domain = _store.get_domain(db, domain_id=domain_id, tenant_id=tenant_id)
+        return DomainResponse.from_domain(domain)
+    except ReadinessStoreError as exc:
+        raise _handle_store_error(exc)
+
+
 # ---------------------------------------------------------------------------
 # Control routes
 # ---------------------------------------------------------------------------
@@ -1111,6 +1133,24 @@ def list_controls(
         raise _handle_store_error(exc)
 
 
+@router.get(
+    "/control-plane/readiness/controls/{control_id}",
+    tags=["readiness"],
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+)
+def get_control(
+    control_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ControlResponse:
+    tenant_id = _tenant_from_auth(request)
+    try:
+        control = _store.get_control(db, control_id=control_id, tenant_id=tenant_id)
+        return ControlResponse.from_domain(control)
+    except ReadinessStoreError as exc:
+        raise _handle_store_error(exc)
+
+
 # ---------------------------------------------------------------------------
 # Maturity tier routes
 # ---------------------------------------------------------------------------
@@ -1170,6 +1210,24 @@ def list_maturity_tiers(
             offset=offset,
         )
         return [MaturityTierResponse.from_domain(t) for t in tiers]
+    except ReadinessStoreError as exc:
+        raise _handle_store_error(exc)
+
+
+@router.get(
+    "/control-plane/readiness/maturity-tiers/{tier_id}",
+    tags=["readiness"],
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+)
+def get_maturity_tier(
+    tier_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> MaturityTierResponse:
+    tenant_id = _tenant_from_auth(request)
+    try:
+        tier = _store.get_maturity_tier(db, tier_id=tier_id, tenant_id=tenant_id)
+        return MaturityTierResponse.from_domain(tier)
     except ReadinessStoreError as exc:
         raise _handle_store_error(exc)
 
@@ -1443,6 +1501,13 @@ def attach_evidence(
             control_ids=req.control_ids,
             notes=req.notes,
         )
+        try:
+            _tl_event = evidence_submitted_to_timeline_event(evidence)
+            _timeline_store.record(db, _tl_event)
+        except Exception:
+            log.warning(
+                "evidence.timeline_emit_failed evidence_id=%s", evidence.evidence_id
+            )
         db.commit()
         return EvidenceReferenceResponse.from_domain(evidence)
     except ReadinessStoreError as exc:

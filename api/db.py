@@ -75,6 +75,11 @@ def _db_url(*, sqlite_path: Optional[str] = None) -> str:
 
     db_url = (os.getenv("FG_DB_URL") or "").strip()
     if db_url:
+        # psycopg3 requires postgresql+psycopg:// scheme; normalize bare URLs
+        if db_url.startswith("postgres://"):
+            db_url = "postgresql+psycopg://" + db_url[len("postgres://") :]
+        elif db_url.startswith("postgresql://"):
+            db_url = "postgresql+psycopg://" + db_url[len("postgresql://") :]
         return db_url
 
     resolved = _resolve_sqlite_path(sqlite_path)
@@ -167,7 +172,88 @@ def _ensure_models_imported() -> None:
     """
     importlib.import_module("api.db_models")
     importlib.import_module("api.db_models_cp_v2")
-    importlib.import_module("api.db_models_framework_authority")
+    importlib.import_module("api.db_models_monitoring")  # PR 93: monitoring run table
+    importlib.import_module("api.db_models_alerting")  # PR 94: alerting tables
+    importlib.import_module("api.db_models_simulation")  # PR 95: simulation run table
+    importlib.import_module(
+        "api.db_models_governance_report"
+    )  # PR 98: governance reports
+    importlib.import_module("api.db_models_timeline")  # PR 99: governance timeline
+    importlib.import_module(
+        "api.db_models_field_assessment"
+    )  # PR 103: field assessment substrate
+    importlib.import_module(
+        "api.db_models_governance_assets"
+    )  # PR 3.5: governance asset registry
+    importlib.import_module(
+        "api.db_models_governance_asset_candidates"
+    )  # PR 4.5: asset candidates
+    importlib.import_module(
+        "api.db_models_governance_graph"
+    )  # PR 5: governance topology graph
+    importlib.import_module("api.db_models_drift")  # PR 5.5: drift detection
+    importlib.import_module(
+        "api.db_models_governance_workflows"
+    )  # PR 6: governance workflow engine
+    importlib.import_module(
+        "api.db_models_governance_promotion"
+    )  # PR 8: governance promotion record
+    importlib.import_module(
+        "api.db_models_questionnaire"
+    )  # PR 26: NIST AI RMF questionnaire
+    importlib.import_module("api.db_models_portal")  # C7: portal grant model
+    importlib.import_module(
+        "api.db_models_identity"
+    )  # tenant identity policy foundation
+    importlib.import_module(
+        "api.db_models_governance_decision"
+    )  # H14: governance decision ledger
+    importlib.import_module(
+        "api.db_models_verification_bundle"
+    )  # PR 52: verification bundle
+    importlib.import_module(
+        "api.db_models_external_ai_risk"
+    )  # PR 3: external AI risk register
+    importlib.import_module(
+        "api.db_models_ai_vendor_governance"
+    )  # PR 4: AI vendor governance workflow engine
+    importlib.import_module("api.db_models_trust_arc")  # P0-6A: trust arc persistence
+    importlib.import_module(
+        "api.db_models_tim"
+    )  # P0-7: TIM trust snapshots + drift events
+    importlib.import_module("api.db_models_qtb")  # P0-9: Quarterly Trust Briefs
+    importlib.import_module("api.db_models_clm")  # P0-10: CLM
+    importlib.import_module("api.db_models_cgct")  # P0-11: CGCT Control Tower
+    importlib.import_module(
+        "api.db_models_remediation"
+    )  # PR 13.1: Remediation Management
+    importlib.import_module(
+        "api.db_models_portal_remediation"
+    )  # PR 13.4: portal remediation
+    importlib.import_module(
+        "api.db_models_notifications"
+    )  # PR 13.7: notification records
+    importlib.import_module(
+        "api.db_models_risk_acceptance"
+    )  # PR 14.1: Risk Acceptance Governance
+    importlib.import_module(
+        "api.db_models_risk_governance"
+    )  # PR 14.2: Risk Governance Engine
+    importlib.import_module(
+        "api.db_models_control_registry"
+    )  # PR 14.3: Compensating Control Registry
+    importlib.import_module(
+        "api.db_models_governance_portal"
+    )  # PR 14.4: Governance Portal Integration
+    importlib.import_module(
+        "api.db_models_governance_reporting"
+    )  # PR 14.5: Governance Reporting & Attestation
+    importlib.import_module(
+        "api.db_models_evidence_authority"
+    )  # PR 14.6.1: Canonical Evidence Authority
+    importlib.import_module(
+        "api.db_models_framework_authority"
+    )  # PR 14.6.3/4: Framework Authority
 
 
 def _get_base():
@@ -583,6 +669,152 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             # PR 55 — PDF ingestion: content_type provenance column
             _sqlite_add_column_if_missing(conn, "rag_documents", "content_type", "TEXT")
 
+        # PR 13.2 — Remediation Workflow Engine: add reason column to audit table
+        if "remediation_task_audits" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "remediation_task_audits", "reason", "TEXT"
+            )
+
+        # PR 13.3 — Remediation Ownership + SLA: 9 new columns on remediation_tasks
+        if "remediation_tasks" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "assigned_user_id", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "assigned_user_email", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "assigned_display_name", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "assigned_at", "DATETIME"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "due_date", "DATETIME"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "sla_target_days", "INTEGER"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "sla_breach_at", "DATETIME"
+            )
+            # Backfill SLA fields for pre-existing rows (mirrors Postgres migration 0120)
+            conn.exec_driver_sql(
+                """
+                UPDATE remediation_tasks
+                SET sla_target_days = CASE priority
+                    WHEN 'critical' THEN 14
+                    WHEN 'high'     THEN 30
+                    WHEN 'medium'   THEN 60
+                    WHEN 'low'      THEN 90
+                    ELSE NULL
+                END
+                WHERE sla_target_days IS NULL
+                """
+            )
+            conn.exec_driver_sql(
+                """
+                UPDATE remediation_tasks
+                SET sla_breach_at = datetime(
+                    substr(created_at, 1, 19),
+                    '+' || CAST(sla_target_days AS TEXT) || ' days'
+                )
+                WHERE sla_target_days IS NOT NULL AND sla_breach_at IS NULL
+                """
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "ownership_reason", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "remediation_tasks", "last_assignment_change_at", "DATETIME"
+            )
+
+        # PR 13.4 — Portal Remediation: 3 new tables
+        if "portal_remediation_comments" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS portal_remediation_comments (
+                    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL, author TEXT NOT NULL,
+                    body TEXT NOT NULL, is_edited INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_portal_comments_tenant_task "
+                "ON portal_remediation_comments (tenant_id, task_id)"
+            )
+        if "portal_evidence_submissions" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS portal_evidence_submissions (
+                    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL, filename TEXT NOT NULL,
+                    content_type TEXT NOT NULL, sha256 TEXT NOT NULL,
+                    submitted_by TEXT NOT NULL, submitted_at TEXT NOT NULL,
+                    classification TEXT, description TEXT,
+                    verification_state TEXT NOT NULL DEFAULT 'pending',
+                    evidence_metadata TEXT NOT NULL DEFAULT '{}'
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_portal_evidence_tenant_task "
+                "ON portal_evidence_submissions (tenant_id, task_id)"
+            )
+            conn.exec_driver_sql(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_portal_evidence_sha256 "
+                "ON portal_evidence_submissions (tenant_id, task_id, sha256)"
+            )
+        if "portal_remediation_audit_events" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS portal_remediation_audit_events (
+                    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL, event_type TEXT NOT NULL,
+                    actor TEXT NOT NULL, event_at TEXT NOT NULL,
+                    event_metadata TEXT NOT NULL DEFAULT '{}'
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_portal_audit_tenant_task "
+                "ON portal_remediation_audit_events (tenant_id, task_id)"
+            )
+
+        # PR 13.7 — Notification records table
+        if "notifications" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    trigger_type TEXT NOT NULL,
+                    channel TEXT NOT NULL DEFAULT 'email',
+                    recipient TEXT NOT NULL,
+                    subject TEXT,
+                    delivery_status TEXT NOT NULL DEFAULT 'pending',
+                    sent_at TEXT,
+                    acknowledged_at TEXT,
+                    failure_reason TEXT,
+                    event_metadata TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_notifications_tenant_task ON notifications (tenant_id, task_id)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_notifications_tenant_status ON notifications (tenant_id, delivery_status)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_notifications_trigger_type ON notifications (tenant_id, trigger_type)"
+            )
+
         # (The rest of your large sqlite schema block continues unchanged)
         # NOTE: You pasted duplicated ai_policy_violations creation twice; leaving it as-is is sloppy.
         # If you want it fixed: remove the duplicate block.
@@ -650,26 +882,6 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             )
             """
         )
-
-        if "control_framework_mapping_audits" in tables:
-            conn.exec_driver_sql(
-                """
-                CREATE TRIGGER IF NOT EXISTS control_framework_mapping_audits_append_only_update
-                BEFORE UPDATE ON control_framework_mapping_audits
-                BEGIN
-                    SELECT RAISE(ABORT, 'control_framework_mapping_audits is append-only');
-                END
-                """
-            )
-            conn.exec_driver_sql(
-                """
-                CREATE TRIGGER IF NOT EXISTS control_framework_mapping_audits_append_only_delete
-                BEFORE DELETE ON control_framework_mapping_audits
-                BEGIN
-                    SELECT RAISE(ABORT, 'control_framework_mapping_audits is append-only');
-                END
-                """
-            )
 
         conn.exec_driver_sql(
             """
@@ -1282,6 +1494,82 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             "ON evaluation_query_items (tenant_id, item_ref)"
         )
 
+        # PR 104 — status simplification + client access code
+        if "fa_engagements" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "fa_engagements", "client_access_code", "TEXT"
+            )
+
+        # Sprint 3 — soft-delete + edit history for field observations
+        if "fa_field_observations" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "fa_field_observations", "updated_at", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "fa_field_observations", "deleted_at", "TEXT"
+            )
+
+        # Migration 0102 — identity approval workflow + governance snapshots
+        if "tenant_invitations" in tables:
+            _sqlite_add_column_if_missing(
+                conn,
+                "tenant_invitations",
+                "approval_required",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
+            _sqlite_add_column_if_missing(
+                conn,
+                "tenant_invitations",
+                "approval_state",
+                "TEXT NOT NULL DEFAULT 'not_required'",
+            )
+            _sqlite_add_column_if_missing(
+                conn, "tenant_invitations", "approval_reason", "TEXT"
+            )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_identity_governance_snapshots (
+                id          TEXT PRIMARY KEY,
+                tenant_id   TEXT NOT NULL,
+                score       INTEGER NOT NULL,
+                max_score   INTEGER NOT NULL,
+                percent     REAL NOT NULL,
+                grade       TEXT NOT NULL,
+                dimensions  TEXT NOT NULL DEFAULT '{}',
+                created_at  TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_tig_snapshots_tenant_created "
+            "ON tenant_identity_governance_snapshots (tenant_id, created_at)"
+        )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_identity_governance_actions (
+                id                  TEXT PRIMARY KEY,
+                tenant_id           TEXT NOT NULL,
+                dimension           TEXT NOT NULL,
+                action_state        TEXT NOT NULL,
+                actor_id            TEXT,
+                actor_email         TEXT,
+                actor_role          TEXT,
+                reason              TEXT,
+                outcome             TEXT,
+                deferred_until      TEXT,
+                snapshot_id         TEXT,
+                previous_action_id  TEXT,
+                created_at          TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_tiga_tenant_dim "
+            "ON tenant_identity_governance_actions (tenant_id, dimension, created_at)"
+        )
+
 
 # ---------------------------------------------------------------------
 # Public API
@@ -1311,9 +1599,17 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
             logger.exception("sqlite auto-migration failed (best effort)")
 
     elif engine.dialect.name == "postgresql":
-        if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
-            from api.db_migrations import assert_migrations_applied  # noqa
+        from api.db_migrations import apply_migrations, assert_migrations_applied  # noqa
 
+        # Create ORM-managed tables BEFORE running numbered migrations.
+        # Migrations 0073+ use ALTER TABLE on FA substrate tables that have no
+        # earlier CREATE TABLE migration — they rely on ORM create_all() to
+        # materialise the table first.  checkfirst=True makes this idempotent
+        # on existing databases where the tables are already present.
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+
+        apply_migrations(engine)
+        if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
             assert_migrations_applied(engine)
 
     # Optional sanity check

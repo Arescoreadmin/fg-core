@@ -29,7 +29,9 @@ FILTERS: dict[str, tuple[str, ...]] = {
         "scripts/**",
     ),
     "console": (
-        "console/**",
+        "apps/console/**",
+        "apps/portal/**",
+        "packages/ui/**",
         "package.json",
         "package-lock.json",
         ".github/**",

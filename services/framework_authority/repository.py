@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import and_, or_, select, text
 from sqlalchemy.orm import Session
 
+from api.db import set_tenant_context
 from api.db_models_framework_authority import (
     ControlFrameworkMappingAuditRecord,
     ControlFrameworkMappingRecord,
@@ -729,6 +730,7 @@ class FrameworkAuthorityRepository:
         self, db: Session, *, tenant_id: str, control_id: str
     ) -> None:
         self._seed_service.seed_minimal(db)
+        set_tenant_context(db, tenant_id)
         control_row = db.execute(
             text(
                 "SELECT 1 FROM enterprise_control_catalog WHERE control_id = :control_id"

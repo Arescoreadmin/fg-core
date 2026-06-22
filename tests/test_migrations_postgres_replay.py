@@ -12,6 +12,8 @@ from api.db_migrations import (
     assert_migrations_applied,
     migration_status,
 )
+from api.db_models import Base
+import api.db_models_field_assessment  # noqa: F401 — registers FA ORM tables on Base
 
 
 def test_postgres_migrations_replay_safe() -> None:
@@ -24,6 +26,10 @@ def test_postgres_migrations_replay_safe() -> None:
         pytest.skip("FG_DB_URL not configured")
 
     engine = create_engine(db_url, future=True)
+
+    # FA tables are ORM-managed (not created by SQL migrations) — must exist before
+    # SQL patches like ALTER TABLE fa_engagements run.
+    Base.metadata.create_all(engine)
 
     schema_hash_before = _schema_signature(engine)
     print(f"schema_hash_before={schema_hash_before}")

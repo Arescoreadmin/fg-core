@@ -1,0 +1,10 @@
+{
+  "id": "sharepoint_onedrive",
+  "display_name": "SharePoint & OneDrive",
+  "provider": "microsoft",
+  "capabilities": ["read", "ingest"],
+  "required_scopes": [],
+  "allowed_auth_modes": ["oauth2", "service_account"],
+  "webhook_support": false,
+  "version": "1.0.0"
+}

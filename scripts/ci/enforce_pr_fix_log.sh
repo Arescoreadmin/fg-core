@@ -16,12 +16,7 @@ echo "[pr-fix-log] Comparing against base: ${BASE_REF}"
 
 # Determine diff range
 if git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
-  if git merge-base "$BASE_REF" HEAD >/dev/null 2>&1; then
-    DIFF_RANGE="${BASE_REF}...HEAD"
-  else
-    echo "[pr-fix-log] No merge base with ${BASE_REF}; falling back to HEAD~1...HEAD"
-    DIFF_RANGE="HEAD~1...HEAD"
-  fi
+  DIFF_RANGE="${BASE_REF}...HEAD"
 else
   # Fallback for local runs
   DIFF_RANGE="HEAD~1...HEAD"

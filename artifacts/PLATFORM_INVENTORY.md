@@ -7,8 +7,10 @@
 - `control` targets=control-plane-check, plane-registry-spot
 - `data` targets=soc-invariants
 - `evidence` targets=audit-chain-verify
+- `rbac` targets=security-regression-gates
 - `security` targets=security-regression-gates
 - `ui` targets=test-quality-gate
+- `workforce` targets=soc-invariants
 
 ## Enterprise readiness checklist status
 - artifact_policy_enforced: PASS

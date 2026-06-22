@@ -33,12 +33,13 @@ jobs:
   fg-required:
     name: fg-required
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
 
     env:
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PIP_NO_PYTHON_VERSION_WARNING: "1"
+      FG_KEY_PEPPER: "ci-test-pepper"
 
     steps:
       - name: Checkout
@@ -111,7 +112,7 @@ jobs:
 
       - name: Run fg-required harness
         id: fg_required
-        timeout-minutes: 25
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail
@@ -124,7 +125,7 @@ jobs:
           # 480s budget was always insufficient. No tests removed; coverage
           # unchanged. See docs/ai/PR_FIX_LOG.md for full justification.
           .venv/bin/python tools/testing/harness/fg_required.py \
-            --global-budget-seconds 1200 \
+            --global-budget-seconds 2400 \
             --lane-timeout-seconds 1200 \
             2>&1 | tee artifacts/fg-required/fg-required.stdout.log
 

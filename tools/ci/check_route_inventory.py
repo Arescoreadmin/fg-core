@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from api.security.public_paths import PUBLIC_PATHS_EXACT, PUBLIC_PATHS_PREFIX
 from services.plane_registry import PLANE_REGISTRY
 from tools.ci.plane_registry_checks import (
     contract_routes,
@@ -96,6 +97,36 @@ ALLOWED_INTERNAL_PREFIXES: tuple[str, ...] = (
     "/control/testing/",
     "/_debug/",
     "/metrics",  # Prometheus scrape endpoint; internal-only, no tenant data
+)
+
+# Explicit route-level exceptions.  These are checked BEFORE prefix matching so
+# that adding a route here never implicitly allows deeper paths (e.g. allowing
+# "GET /health" does NOT allow "GET /health/debug" or "GET /health/internal").
+# Use this set for routes that don't belong to any internal-plane prefix family
+# and are structurally correct to be absent from the public contract.
+#
+#   GET /health, HEAD /health — liveness probe; no tenant data, no scopes.
+#     Absent from the public contract because load-balancer / infra tooling
+#     consumes it directly; it is not a customer-facing API.
+ALLOWED_RUNTIME_ONLY_ROUTES: set[str] = {
+    "GET /health",
+    "HEAD /health",
+}
+
+# Prefix families within ALLOWED_INTERNAL_PREFIXES that are intentionally also
+# publicly reachable (no API key required).  Any ALLOWED_INTERNAL_PREFIXES route
+# found in PUBLIC_PATHS_EXACT / PUBLIC_PATHS_PREFIX whose prefix does NOT appear
+# here is classified as invalid_drift — accidental auth bypass → HARD FAIL.
+#
+#   /metrics — Prometheus scrape; no tenant data; explicitly public by design.
+#   /ui/     — UI aggregation layer; session-level auth at the handler, not at
+#              the middleware level.  Public reachability is intentional.
+INTENTIONAL_PUBLIC_INTERNAL_PREFIXES: frozenset[str] = frozenset(
+    {
+        "/ui/",
+        # /metrics was here until P0-3 removed it from PUBLIC_PATHS_EXACT.
+        # Prometheus scrapers in production must now supply an API key.
+    }
 )
 
 
@@ -287,29 +318,68 @@ def _as_list_of_dicts(value: object, *, label: str) -> list[dict[str, Any]]:
     return out
 
 
+def _is_public_reachable(path: str) -> bool:
+    """Return True if path is bypassed by auth middleware (in public allowlists)."""
+    return path in PUBLIC_PATHS_EXACT or any(
+        path.startswith(pfx) for pfx in PUBLIC_PATHS_PREFIX
+    )
+
+
 def _classify_runtime_only(
     runtime_only: list[str],
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str]]:
     """
-    Classify runtime_only entries ("METHOD /path") against ALLOWED_INTERNAL_PREFIXES.
+    Classify runtime_only entries ("METHOD /path") into three explicit buckets.
 
-    Returns (allowed_internal, unauthorized):
-      allowed_internal  — path matches an explicit allowlisted prefix; informational only.
-      unauthorized      — path outside the allowlist; causes HARD FAIL in main().
+    Returns (public_exempt, internal_allowed, invalid_drift):
+      public_exempt    — intentionally public and not in OpenAPI contract.
+                         Either in ALLOWED_RUNTIME_ONLY_ROUTES (health probes)
+                         or matches ALLOWED_INTERNAL_PREFIXES AND is also reachable
+                         without auth (in PUBLIC_PATHS_EXACT / PUBLIC_PATHS_PREFIX).
+      internal_allowed — intentionally internal, auth-required, not in contract.
+                         Matches ALLOWED_INTERNAL_PREFIXES but not public allowlists.
+      invalid_drift    — not in contract and not explicitly classified.
+                         Causes HARD FAIL in main().
     """
-    allowed: list[str] = []
-    unauthorized: list[str] = []
+    public_exempt: list[str] = []
+    internal_allowed: list[str] = []
+    invalid_drift: list[str] = []
+
     for entry in runtime_only:
+        # Exact-route exceptions are always public-exempt (liveness probes).
+        # Matching here does NOT permit sub-paths.
+        if entry in ALLOWED_RUNTIME_ONLY_ROUTES:
+            public_exempt.append(entry)
+            continue
+
         parts = entry.split(" ", 1)
         path = parts[1] if len(parts) == 2 else entry
-        if any(
+
+        if not any(
             path.startswith(prefix) or path == prefix.rstrip("/")
             for prefix in ALLOWED_INTERNAL_PREFIXES
         ):
-            allowed.append(entry)
+            invalid_drift.append(entry)
+            continue
+
+        # Route is in an allowed-internal prefix family.
+        # If it is also publicly reachable, verify the overlap is intentional.
+        # Only prefixes listed in INTENTIONAL_PUBLIC_INTERNAL_PREFIXES are allowed
+        # to be both internal (not in contract) and public (no API key required).
+        # Any other overlap is an accidental auth bypass → hard fail (invalid_drift).
+        if _is_public_reachable(path):
+            is_intentional = any(
+                path.startswith(pfx) or path == pfx.rstrip("/")
+                for pfx in INTENTIONAL_PUBLIC_INTERNAL_PREFIXES
+            )
+            if is_intentional:
+                public_exempt.append(entry)
+            else:
+                invalid_drift.append(entry)
         else:
-            unauthorized.append(entry)
-    return sorted(allowed), sorted(unauthorized)
+            internal_allowed.append(entry)
+
+    return sorted(public_exempt), sorted(internal_allowed), sorted(invalid_drift)
 
 
 # -----------------------------
@@ -453,7 +523,7 @@ def _summary_payload(
     runtime_only_list = sorted(
         [f"{m} {p}" for (m, p) in (runtime_keys - contract_keys)]
     )
-    allowed_internal, unauthorized_runtime_only = _classify_runtime_only(
+    public_exempt, internal_allowed, unauthorized_runtime_only = _classify_runtime_only(
         runtime_only_list
     )
     return {
@@ -461,7 +531,10 @@ def _summary_payload(
         "runtime_count": len(cur),
         "contract_count": len(contract_list),
         "runtime_only": runtime_only_list,
-        "allowed_internal": allowed_internal,
+        "public_exempt": public_exempt,
+        "internal_allowed": internal_allowed,
+        # backward-compat alias — equals public_exempt + internal_allowed
+        "allowed_internal": sorted(public_exempt + internal_allowed),
         "unauthorized_runtime_only": unauthorized_runtime_only,
         "contract_only": sorted(
             [f"{m} {p}" for (m, p) in (contract_keys - runtime_keys)]
@@ -632,16 +705,36 @@ def main() -> int:
     if runtime_only:
         # Reclassify at check time so enforcement is correct even when the
         # summary was written by an older tool version.
-        allowed_internal, unauthorized = _classify_runtime_only(runtime_only)
-        if allowed_internal:
+        public_exempt, internal_allowed, invalid_drift = _classify_runtime_only(
+            runtime_only
+        )
+        if public_exempt:
+            print(
+                f"route inventory: INFO public_exempt runtime_only "
+                f"({len(public_exempt)} routes are public but not in contract)"
+            )
+        if internal_allowed:
             print(
                 f"route inventory: INFO allowed_internal runtime_only "
-                f"({len(allowed_internal)} routes match ALLOWED_INTERNAL_PREFIXES)"
+                f"({len(internal_allowed)} routes match ALLOWED_INTERNAL_PREFIXES)"
             )
-        if unauthorized:
+        # Guard: internal_allowed routes must not be publicly reachable without auth.
+        # By construction this should be empty (public-reachable routes are classified
+        # as public_exempt), but validate explicitly as a regression defence.
+        overlap = [
+            r
+            for r in internal_allowed
+            if _is_public_reachable(r.split(" ", 1)[1] if " " in r else r)
+        ]
+        if overlap:
+            failures.append(
+                "internal_allowed routes overlap public unauthenticated allowlists "
+                f"(hard fail): {overlap}"
+            )
+        if invalid_drift:
             failures.append(
                 "UNAUTHORIZED runtime_only drift outside ALLOWED_INTERNAL_PREFIXES "
-                f"(hard fail): {unauthorized}"
+                f"(hard fail): {invalid_drift}"
             )
 
     if summary.get("contract_only"):
