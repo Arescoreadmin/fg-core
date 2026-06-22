@@ -79,6 +79,12 @@ class NotificationTrigger(str, Enum):
     CONTROL_EVIDENCE_ADDED = "control_evidence_added"
     # PR 14.4 — Governance Portal
     PORTAL_ACK_CREATED = "portal_ack_created"
+    # PR 14.5 — Governance Reporting
+    REPORT_GENERATED = "report_generated"
+    REPORT_ATTESTED = "report_attested"
+    REPORT_VERIFIED = "report_verified"
+    REPORT_EXPORTED = "report_exported"
+    REPORT_SUPERSEDED = "report_superseded"
 
 
 class NotificationPreference(str, Enum):

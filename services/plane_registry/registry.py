@@ -59,6 +59,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/rag",
             "/metrics",
             "/signing",
+            "/governance-reports",
         ),
         allowed_dependency_categories=("auth", "tenant", "db", "rate", "breakglass"),
         required_make_targets=("control-plane-check", "plane-registry-spot"),
