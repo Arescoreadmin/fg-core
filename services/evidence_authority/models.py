@@ -59,82 +59,108 @@ class EvidenceLifecycleState(str, Enum):
 # Changing this is a breaking change — bump LIFECYCLE_SCHEMA_VERSION.
 LIFECYCLE_SCHEMA_VERSION = "1.0"
 
-VALID_LIFECYCLE_TRANSITIONS: dict[EvidenceLifecycleState, FrozenSet[EvidenceLifecycleState]] = {
-    EvidenceLifecycleState.DRAFT: frozenset({
-        EvidenceLifecycleState.COLLECTED,
-        EvidenceLifecycleState.SUBMITTED,
-        EvidenceLifecycleState.REVOKED,
-    }),
-    EvidenceLifecycleState.COLLECTED: frozenset({
-        EvidenceLifecycleState.SUBMITTED,
-        EvidenceLifecycleState.EXPIRED,
-        EvidenceLifecycleState.REVOKED,
-        EvidenceLifecycleState.ARCHIVED,
-    }),
-    EvidenceLifecycleState.SUBMITTED: frozenset({
-        EvidenceLifecycleState.UNDER_REVIEW,
-        EvidenceLifecycleState.COLLECTED,   # retract submission
-        EvidenceLifecycleState.EXPIRED,
-        EvidenceLifecycleState.REVOKED,
-    }),
-    EvidenceLifecycleState.UNDER_REVIEW: frozenset({
-        EvidenceLifecycleState.VERIFIED,
-        EvidenceLifecycleState.REJECTED,
-        EvidenceLifecycleState.REVOKED,
-    }),
-    EvidenceLifecycleState.VERIFIED: frozenset({
-        EvidenceLifecycleState.SUPERSEDED,
-        EvidenceLifecycleState.EXPIRED,
-        EvidenceLifecycleState.ARCHIVED,
-        EvidenceLifecycleState.REVOKED,
-    }),
-    EvidenceLifecycleState.REJECTED: frozenset({
-        EvidenceLifecycleState.SUBMITTED,   # resubmit after correction
-        EvidenceLifecycleState.ARCHIVED,
-        EvidenceLifecycleState.REVOKED,
-    }),
-    EvidenceLifecycleState.SUPERSEDED: frozenset({
-        EvidenceLifecycleState.ARCHIVED,
-    }),
-    EvidenceLifecycleState.EXPIRED: frozenset({
-        EvidenceLifecycleState.ARCHIVED,
-        EvidenceLifecycleState.REVOKED,
-    }),
-    EvidenceLifecycleState.REVOKED: frozenset(),        # terminal — no outbound
-    EvidenceLifecycleState.ARCHIVED: frozenset(),       # semi-terminal
+VALID_LIFECYCLE_TRANSITIONS: dict[
+    EvidenceLifecycleState, FrozenSet[EvidenceLifecycleState]
+] = {
+    EvidenceLifecycleState.DRAFT: frozenset(
+        {
+            EvidenceLifecycleState.COLLECTED,
+            EvidenceLifecycleState.SUBMITTED,
+            EvidenceLifecycleState.REVOKED,
+        }
+    ),
+    EvidenceLifecycleState.COLLECTED: frozenset(
+        {
+            EvidenceLifecycleState.SUBMITTED,
+            EvidenceLifecycleState.EXPIRED,
+            EvidenceLifecycleState.REVOKED,
+            EvidenceLifecycleState.ARCHIVED,
+        }
+    ),
+    EvidenceLifecycleState.SUBMITTED: frozenset(
+        {
+            EvidenceLifecycleState.UNDER_REVIEW,
+            EvidenceLifecycleState.COLLECTED,  # retract submission
+            EvidenceLifecycleState.EXPIRED,
+            EvidenceLifecycleState.REVOKED,
+        }
+    ),
+    EvidenceLifecycleState.UNDER_REVIEW: frozenset(
+        {
+            EvidenceLifecycleState.VERIFIED,
+            EvidenceLifecycleState.REJECTED,
+            EvidenceLifecycleState.REVOKED,
+        }
+    ),
+    EvidenceLifecycleState.VERIFIED: frozenset(
+        {
+            EvidenceLifecycleState.SUPERSEDED,
+            EvidenceLifecycleState.EXPIRED,
+            EvidenceLifecycleState.ARCHIVED,
+            EvidenceLifecycleState.REVOKED,
+        }
+    ),
+    EvidenceLifecycleState.REJECTED: frozenset(
+        {
+            EvidenceLifecycleState.SUBMITTED,  # resubmit after correction
+            EvidenceLifecycleState.ARCHIVED,
+            EvidenceLifecycleState.REVOKED,
+        }
+    ),
+    EvidenceLifecycleState.SUPERSEDED: frozenset(
+        {
+            EvidenceLifecycleState.ARCHIVED,
+        }
+    ),
+    EvidenceLifecycleState.EXPIRED: frozenset(
+        {
+            EvidenceLifecycleState.ARCHIVED,
+            EvidenceLifecycleState.REVOKED,
+        }
+    ),
+    EvidenceLifecycleState.REVOKED: frozenset(),  # terminal — no outbound
+    EvidenceLifecycleState.ARCHIVED: frozenset(),  # semi-terminal
 }
 
 # States where evidence is eligible for active use (scoring, reporting, governance)
-ACTIVE_ELIGIBLE_STATES: FrozenSet[EvidenceLifecycleState] = frozenset({
-    EvidenceLifecycleState.VERIFIED,
-})
+ACTIVE_ELIGIBLE_STATES: FrozenSet[EvidenceLifecycleState] = frozenset(
+    {
+        EvidenceLifecycleState.VERIFIED,
+    }
+)
 
 # States where evidence is eligible for read (viewing, audit trail)
-READ_ELIGIBLE_STATES: FrozenSet[EvidenceLifecycleState] = frozenset({
-    EvidenceLifecycleState.DRAFT,
-    EvidenceLifecycleState.COLLECTED,
-    EvidenceLifecycleState.SUBMITTED,
-    EvidenceLifecycleState.UNDER_REVIEW,
-    EvidenceLifecycleState.VERIFIED,
-    EvidenceLifecycleState.REJECTED,
-    EvidenceLifecycleState.SUPERSEDED,
-    EvidenceLifecycleState.EXPIRED,
-    EvidenceLifecycleState.ARCHIVED,
-    # REVOKED is readable for audit purposes
-    EvidenceLifecycleState.REVOKED,
-})
+READ_ELIGIBLE_STATES: FrozenSet[EvidenceLifecycleState] = frozenset(
+    {
+        EvidenceLifecycleState.DRAFT,
+        EvidenceLifecycleState.COLLECTED,
+        EvidenceLifecycleState.SUBMITTED,
+        EvidenceLifecycleState.UNDER_REVIEW,
+        EvidenceLifecycleState.VERIFIED,
+        EvidenceLifecycleState.REJECTED,
+        EvidenceLifecycleState.SUPERSEDED,
+        EvidenceLifecycleState.EXPIRED,
+        EvidenceLifecycleState.ARCHIVED,
+        # REVOKED is readable for audit purposes
+        EvidenceLifecycleState.REVOKED,
+    }
+)
 
 # Terminal states — no transitions out
-TERMINAL_LIFECYCLE_STATES: FrozenSet[EvidenceLifecycleState] = frozenset({
-    EvidenceLifecycleState.REVOKED,
-})
+TERMINAL_LIFECYCLE_STATES: FrozenSet[EvidenceLifecycleState] = frozenset(
+    {
+        EvidenceLifecycleState.REVOKED,
+    }
+)
 
 # States that block mutation of evidence metadata
-IMMUTABLE_LIFECYCLE_STATES: FrozenSet[EvidenceLifecycleState] = frozenset({
-    EvidenceLifecycleState.VERIFIED,
-    EvidenceLifecycleState.REVOKED,
-    EvidenceLifecycleState.ARCHIVED,
-})
+IMMUTABLE_LIFECYCLE_STATES: FrozenSet[EvidenceLifecycleState] = frozenset(
+    {
+        EvidenceLifecycleState.VERIFIED,
+        EvidenceLifecycleState.REVOKED,
+        EvidenceLifecycleState.ARCHIVED,
+    }
+)
 
 
 def validate_lifecycle_transition(
@@ -169,19 +195,21 @@ class EvidenceClassification(str, Enum):
 # Extended classification labels (additive, open set).
 # These are stored as JSON array on fa_evidence.classification_labels.
 # Adding new values here requires no schema migration.
-KNOWN_CLASSIFICATION_LABELS: frozenset[str] = frozenset({
-    "PII",
-    "PHI",
-    "PCI",
-    "CJIS",
-    "ITAR",
-    "EXPORT_CONTROLLED",
-    "LEGAL_HOLD",
-    "CUI",
-    "FEDRAMP",
-    "GLBA",
-    "SOX",
-})
+KNOWN_CLASSIFICATION_LABELS: frozenset[str] = frozenset(
+    {
+        "PII",
+        "PHI",
+        "PCI",
+        "CJIS",
+        "ITAR",
+        "EXPORT_CONTROLLED",
+        "LEGAL_HOLD",
+        "CUI",
+        "FEDRAMP",
+        "GLBA",
+        "SOX",
+    }
+)
 
 # Tier ordering for export gate logic: higher index = more restrictive
 CLASSIFICATION_TIER_ORDER = [
@@ -251,40 +279,52 @@ class EvidenceTrustState(str, Enum):
 
 
 VALID_TRUST_TRANSITIONS: dict[EvidenceTrustState, FrozenSet[EvidenceTrustState]] = {
-    EvidenceTrustState.UNVERIFIED: frozenset({
-        EvidenceTrustState.PARTIALLY_VERIFIED,
-        EvidenceTrustState.VERIFIED,
-        EvidenceTrustState.DISPUTED,
-        EvidenceTrustState.INVALIDATED,
-    }),
-    EvidenceTrustState.PARTIALLY_VERIFIED: frozenset({
-        EvidenceTrustState.VERIFIED,
-        EvidenceTrustState.HIGH_CONFIDENCE,
-        EvidenceTrustState.DISPUTED,
-        EvidenceTrustState.INVALIDATED,
-    }),
-    EvidenceTrustState.VERIFIED: frozenset({
-        EvidenceTrustState.HIGH_CONFIDENCE,
-        EvidenceTrustState.DISPUTED,
-        EvidenceTrustState.INVALIDATED,
-        EvidenceTrustState.PARTIALLY_VERIFIED,  # downgrade if new evidence contradicts
-    }),
-    EvidenceTrustState.HIGH_CONFIDENCE: frozenset({
-        EvidenceTrustState.DISPUTED,
-        EvidenceTrustState.INVALIDATED,
-        EvidenceTrustState.VERIFIED,            # downgrade if confidence evidence removed
-    }),
-    EvidenceTrustState.DISPUTED: frozenset({
-        EvidenceTrustState.PARTIALLY_VERIFIED,  # dispute resolved partially
-        EvidenceTrustState.VERIFIED,            # dispute resolved fully
-        EvidenceTrustState.INVALIDATED,         # dispute proves invalidity
-    }),
+    EvidenceTrustState.UNVERIFIED: frozenset(
+        {
+            EvidenceTrustState.PARTIALLY_VERIFIED,
+            EvidenceTrustState.VERIFIED,
+            EvidenceTrustState.DISPUTED,
+            EvidenceTrustState.INVALIDATED,
+        }
+    ),
+    EvidenceTrustState.PARTIALLY_VERIFIED: frozenset(
+        {
+            EvidenceTrustState.VERIFIED,
+            EvidenceTrustState.HIGH_CONFIDENCE,
+            EvidenceTrustState.DISPUTED,
+            EvidenceTrustState.INVALIDATED,
+        }
+    ),
+    EvidenceTrustState.VERIFIED: frozenset(
+        {
+            EvidenceTrustState.HIGH_CONFIDENCE,
+            EvidenceTrustState.DISPUTED,
+            EvidenceTrustState.INVALIDATED,
+            EvidenceTrustState.PARTIALLY_VERIFIED,  # downgrade if new evidence contradicts
+        }
+    ),
+    EvidenceTrustState.HIGH_CONFIDENCE: frozenset(
+        {
+            EvidenceTrustState.DISPUTED,
+            EvidenceTrustState.INVALIDATED,
+            EvidenceTrustState.VERIFIED,  # downgrade if confidence evidence removed
+        }
+    ),
+    EvidenceTrustState.DISPUTED: frozenset(
+        {
+            EvidenceTrustState.PARTIALLY_VERIFIED,  # dispute resolved partially
+            EvidenceTrustState.VERIFIED,  # dispute resolved fully
+            EvidenceTrustState.INVALIDATED,  # dispute proves invalidity
+        }
+    ),
     EvidenceTrustState.INVALIDATED: frozenset(),  # terminal
 }
 
-TERMINAL_TRUST_STATES: FrozenSet[EvidenceTrustState] = frozenset({
-    EvidenceTrustState.INVALIDATED,
-})
+TERMINAL_TRUST_STATES: FrozenSet[EvidenceTrustState] = frozenset(
+    {
+        EvidenceTrustState.INVALIDATED,
+    }
+)
 
 # Minimum trust score by state (for trust scoring engine)
 TRUST_STATE_SCORE_FLOOR: dict[EvidenceTrustState, int] = {

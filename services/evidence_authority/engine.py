@@ -32,10 +32,7 @@ from api.db_models_evidence_authority import (
     FaEvidenceTrustEvent,
 )
 from services.evidence_authority.models import (
-    ACTIVE_ELIGIBLE_STATES,
     IMMUTABLE_LIFECYCLE_STATES,
-    TERMINAL_LIFECYCLE_STATES,
-    TERMINAL_TRUST_STATES,
     TRUST_STATE_SCORE_FLOOR,
     ActorType,
     EvidenceAuditEventType,
@@ -64,7 +61,6 @@ from services.evidence_authority.schemas import (
     EvidenceRelationshipListResponse,
     EvidenceRelationshipResponse,
     EvidenceResponse,
-    EvidenceTenantViolation,
     EvidenceTrustEventResponse,
     EvidenceTrustHistoryResponse,
     LinkRelationshipRequest,
@@ -74,9 +70,19 @@ from services.evidence_authority.schemas import (
     VerifyEvidenceRequest,
 )
 
+from services.governance.timeline import TimelineStore
+from services.governance.timeline.identity import derive_event_id
+from services.governance.timeline.models import (
+    SourceType as TimelineSourceType,
+    TimelineEvent,
+)
+from services.canonical import utc_iso8601_z_now
+
 # Timeline event source type for this service
 _TIMELINE_SOURCE_TYPE = "EVIDENCE"
 _SCHEMA_VERSION = "1.0"
+
+_timeline_store = TimelineStore()
 
 
 def _now() -> str:
@@ -123,6 +129,7 @@ def _compute_integrity_hash(
 
 def _to_response(row: FaEvidence) -> EvidenceResponse:
     import json as _json
+
     labels_raw = getattr(row, "classification_labels", "[]") or "[]"
     try:
         labels = _json.loads(labels_raw) if isinstance(labels_raw, str) else labels_raw
@@ -185,8 +192,11 @@ def _to_ownership_response(row: FaEvidenceOwnership) -> EvidenceOwnershipRespons
     )
 
 
-def _to_relationship_response(row: FaEvidenceRelationship) -> EvidenceRelationshipResponse:
+def _to_relationship_response(
+    row: FaEvidenceRelationship,
+) -> EvidenceRelationshipResponse:
     import json as _json
+
     meta_raw = getattr(row, "link_metadata", "{}") or "{}"
     try:
         meta = _json.loads(meta_raw) if isinstance(meta_raw, str) else meta_raw
@@ -227,6 +237,7 @@ def _to_trust_event_response(row: FaEvidenceTrustEvent) -> EvidenceTrustEventRes
 
 def _to_audit_event_response(row: FaEvidenceAuditEvent) -> EvidenceAuditEventResponse:
     import json as _json
+
     meta_raw = getattr(row, "event_metadata", "{}") or "{}"
     try:
         meta = _json.loads(meta_raw) if isinstance(meta_raw, str) else meta_raw
@@ -246,44 +257,6 @@ def _to_audit_event_response(row: FaEvidenceAuditEvent) -> EvidenceAuditEventRes
         transaction_id=row.transaction_id,
         created_at=row.created_at,
     )
-
-
-def _emit_timeline_event(
-    tenant_id: str,
-    source_id: str,
-    event_type: str,
-    payload: dict,
-) -> None:
-    """Emit a governance timeline event for this evidence action.
-
-    Uses the existing governance timeline model. No-op if the import fails
-    (defense against circular imports during testing).
-    """
-    try:
-        from services.governance.timeline.models import SourceType, TimelineEvent
-        import hashlib as _hl
-
-        occurred_at = _now()
-        raw = f"{tenant_id}:{_TIMELINE_SOURCE_TYPE}:{source_id}:{event_type}:{occurred_at}"
-        event_id = _hl.sha256(raw.encode()).hexdigest()
-        _event = TimelineEvent(
-            event_id=event_id,
-            tenant_id=tenant_id,
-            source_type=SourceType.EVIDENCE,
-            source_id=source_id,
-            event_type=event_type,
-            occurred_at=occurred_at,
-            recorded_at=occurred_at,
-            payload=payload,
-            classification="internal",
-            replay_eligible=True,
-            schema_version=_SCHEMA_VERSION,
-            event_version="1.0",
-        )
-        # Future: persist TimelineEvent to fa_timeline_events table.
-        # For now: constructed in-memory for consumers that query the timeline.
-    except Exception:
-        pass  # timeline emission must never block evidence operations
 
 
 class EvidenceAuthorityEngine:
@@ -361,14 +334,19 @@ class EvidenceAuthorityEngine:
             actor_id=actor_id,
             actor_type=actor_type,
             reason="evidence created",
-            metadata={"source_type": req.source_type.value, "classification": req.classification.value},
+            metadata={
+                "source_type": req.source_type.value,
+                "classification": req.classification.value,
+            },
         )
 
-        _emit_timeline_event(
-            tenant_id=self._tenant_id,
+        self._emit_timeline_event(
             source_id=evidence_id,
             event_type="evidence_created",
-            payload={"source_type": req.source_type.value, "classification": req.classification.value},
+            payload={
+                "source_type": req.source_type.value,
+                "classification": req.classification.value,
+            },
         )
 
         self._db.commit()
@@ -530,8 +508,7 @@ class EvidenceAuthorityEngine:
             metadata={},
         )
 
-        _emit_timeline_event(
-            tenant_id=self._tenant_id,
+        self._emit_timeline_event(
             source_id=evidence_id,
             event_type=f"evidence_{to_state.value.lower()}",
             payload={
@@ -593,7 +570,11 @@ class EvidenceAuthorityEngine:
             actor_id=actor_id,
             actor_type=actor_type,
             reason=None,
-            metadata={"role": req.role.value, "assigned_to": req.actor_id, "assigned_to_type": req.actor_type.value},
+            metadata={
+                "role": req.role.value,
+                "assigned_to": req.actor_id,
+                "assigned_to_type": req.actor_type.value,
+            },
         )
 
         self._db.commit()
@@ -617,6 +598,25 @@ class EvidenceAuthorityEngine:
         own.revoked_by = actor_id
         own.is_active = 0
         self._repo.save_ownership(own)
+
+        # If revoking an OWNER, update fa_evidence.owner_id to next active OWNER or None
+        if own.role == EvidenceOwnershipRole.OWNER.value:
+            ev = self._repo.get_evidence(evidence_id)
+            if ev is not None and ev.owner_id == own.actor_id:
+                active_owners = [
+                    o
+                    for o in self._repo.list_ownership(evidence_id, active_only=True)
+                    if o.role == EvidenceOwnershipRole.OWNER.value
+                ]
+                if active_owners:
+                    next_owner = active_owners[0]
+                    ev.owner_id = next_owner.actor_id
+                    ev.owner_type = next_owner.actor_type
+                else:
+                    ev.owner_id = None
+                    ev.owner_type = None
+                ev.updated_at = now
+                self._repo.save_evidence(ev)
 
         self._write_audit(
             evidence_id=evidence_id,
@@ -658,7 +658,7 @@ class EvidenceAuthorityEngine:
         actor_id: str,
         actor_type: str = ActorType.HUMAN.value,
     ) -> EvidenceTrustHistoryResponse:
-        row = self._repo.get_evidence(evidence_id)
+        row = self._repo.lock_evidence_for_update(evidence_id)
         if not row:
             raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
 
@@ -720,7 +720,10 @@ class EvidenceAuthorityEngine:
             row.trust_score = max(state_floor, current_score)
 
         # If achieving VERIFIED trust while lifecycle allows, ensure verified_at is set
-        if to_state in (EvidenceTrustState.VERIFIED, EvidenceTrustState.HIGH_CONFIDENCE):
+        if to_state in (
+            EvidenceTrustState.VERIFIED,
+            EvidenceTrustState.HIGH_CONFIDENCE,
+        ):
             if not row.verified_at:
                 row.verified_at = now
 
@@ -742,8 +745,7 @@ class EvidenceAuthorityEngine:
             },
         )
 
-        _emit_timeline_event(
-            tenant_id=self._tenant_id,
+        self._emit_timeline_event(
             source_id=evidence_id,
             event_type="evidence_trust_changed",
             payload={
@@ -832,8 +834,7 @@ class EvidenceAuthorityEngine:
             },
         )
 
-        _emit_timeline_event(
-            tenant_id=self._tenant_id,
+        self._emit_timeline_event(
             source_id=evidence_id,
             event_type="evidence_relationship_linked",
             payload={
@@ -969,3 +970,42 @@ class EvidenceAuthorityEngine:
             created_at=_now(),
         )
         self._repo.create_audit_event(event)
+
+    def _emit_timeline_event(
+        self,
+        source_id: str,
+        event_type: str,
+        payload: dict,
+    ) -> None:
+        """Persist a governance timeline event for this evidence action.
+
+        Uses SourceType.EVIDENCE (existing registry entry). Idempotent:
+        duplicate event_id is a no-op via TimelineStore. Wrapped in
+        try/except so timeline persistence never blocks core operations.
+        """
+        try:
+            occurred_at = utc_iso8601_z_now()
+            event_id = derive_event_id(
+                tenant_id=self._tenant_id,
+                source_type=TimelineSourceType.EVIDENCE.value,
+                source_id=source_id,
+                event_type=event_type,
+                occurred_at=occurred_at,
+            )
+            event = TimelineEvent(
+                event_id=event_id,
+                tenant_id=self._tenant_id,
+                source_type=TimelineSourceType.EVIDENCE,
+                source_id=source_id,
+                event_type=event_type,
+                occurred_at=occurred_at,
+                recorded_at=utc_iso8601_z_now(),
+                payload=payload,
+                classification="internal",
+                replay_eligible=False,
+                schema_version=_SCHEMA_VERSION,
+                event_version="1.0",
+            )
+            _timeline_store.record(self._db, event)
+        except Exception:
+            pass  # timeline persistence must never block evidence operations

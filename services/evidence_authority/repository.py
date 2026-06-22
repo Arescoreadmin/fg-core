@@ -23,9 +23,7 @@ from api.db_models_evidence_authority import (
     FaEvidenceTrustEvent,
 )
 from services.evidence_authority.models import (
-    EvidenceAuditEventType,
     EvidenceLifecycleState,
-    EvidenceTrustState,
 )
 
 
@@ -63,6 +61,22 @@ class EvidenceRepository:
             .first()
         )
 
+    def lock_evidence_for_update(self, evidence_id: str) -> Optional[FaEvidence]:
+        """Lock evidence row to serialize concurrent trust transitions.
+
+        Uses SELECT ... FOR UPDATE. SQLite silently ignores the hint, making
+        this safe for tests without any conditional branching.
+        """
+        return (
+            self._db.query(FaEvidence)
+            .filter(
+                FaEvidence.id == evidence_id,
+                FaEvidence.tenant_id == self._tenant_id,
+            )
+            .with_for_update()
+            .first()
+        )
+
     def get_evidence_by_ref(self, evidence_ref: str) -> Optional[FaEvidence]:
         return (
             self._db.query(FaEvidence)
@@ -84,9 +98,7 @@ class EvidenceRepository:
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[FaEvidence], int]:
-        q = self._db.query(FaEvidence).filter(
-            FaEvidence.tenant_id == self._tenant_id
-        )
+        q = self._db.query(FaEvidence).filter(FaEvidence.tenant_id == self._tenant_id)
         if lifecycle_state:
             q = q.filter(FaEvidence.lifecycle_state == lifecycle_state)
         if trust_state:
@@ -100,10 +112,7 @@ class EvidenceRepository:
 
         total = q.count()
         items = (
-            q.order_by(FaEvidence.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+            q.order_by(FaEvidence.created_at.desc()).offset(offset).limit(limit).all()
         )
         return items, total
 
@@ -214,9 +223,7 @@ class EvidenceRepository:
     # fa_evidence_trust_events
     # ------------------------------------------------------------------
 
-    def create_trust_event(
-        self, record: FaEvidenceTrustEvent
-    ) -> FaEvidenceTrustEvent:
+    def create_trust_event(self, record: FaEvidenceTrustEvent) -> FaEvidenceTrustEvent:
         self._db.add(record)
         self._db.flush()
         return record
@@ -275,9 +282,7 @@ class EvidenceRepository:
     # fa_evidence_audit_events
     # ------------------------------------------------------------------
 
-    def create_audit_event(
-        self, record: FaEvidenceAuditEvent
-    ) -> FaEvidenceAuditEvent:
+    def create_audit_event(self, record: FaEvidenceAuditEvent) -> FaEvidenceAuditEvent:
         self._db.add(record)
         self._db.flush()
         return record
@@ -310,15 +315,8 @@ class EvidenceRepository:
     # ------------------------------------------------------------------
 
     def count_by_lifecycle_state(self) -> dict[str, int]:
-        rows = (
-            self._db.query(
-                FaEvidence.lifecycle_state,
-                # SQLAlchemy func.count
-            )
-            .filter(FaEvidence.tenant_id == self._tenant_id)
-            .all()
-        )
         from sqlalchemy import func as sa_func
+
         results = (
             self._db.query(
                 FaEvidence.lifecycle_state,
@@ -332,6 +330,7 @@ class EvidenceRepository:
 
     def count_by_trust_state(self) -> dict[str, int]:
         from sqlalchemy import func as sa_func
+
         results = (
             self._db.query(
                 FaEvidence.trust_state,
@@ -345,6 +344,7 @@ class EvidenceRepository:
 
     def count_by_classification(self) -> dict[str, int]:
         from sqlalchemy import func as sa_func
+
         results = (
             self._db.query(
                 FaEvidence.classification,
@@ -358,6 +358,7 @@ class EvidenceRepository:
 
     def count_by_source_type(self) -> dict[str, int]:
         from sqlalchemy import func as sa_func
+
         results = (
             self._db.query(
                 FaEvidence.source_type,
@@ -371,6 +372,7 @@ class EvidenceRepository:
 
     def count_expiring_soon(self, days: int = 30) -> int:
         from datetime import timedelta
+
         cutoff = (datetime.now(tz=timezone.utc) + timedelta(days=days)).isoformat()
         now = datetime.now(tz=timezone.utc).isoformat()
         return (
@@ -380,11 +382,13 @@ class EvidenceRepository:
                 FaEvidence.expires_at.isnot(None),
                 FaEvidence.expires_at > now,
                 FaEvidence.expires_at <= cutoff,
-                FaEvidence.lifecycle_state.notin_([
-                    EvidenceLifecycleState.EXPIRED.value,
-                    EvidenceLifecycleState.REVOKED.value,
-                    EvidenceLifecycleState.ARCHIVED.value,
-                ]),
+                FaEvidence.lifecycle_state.notin_(
+                    [
+                        EvidenceLifecycleState.EXPIRED.value,
+                        EvidenceLifecycleState.REVOKED.value,
+                        EvidenceLifecycleState.ARCHIVED.value,
+                    ]
+                ),
             )
             .count()
         )
@@ -400,7 +404,8 @@ class EvidenceRepository:
         )
 
     def count_without_relationships(self) -> int:
-        from sqlalchemy import func as sa_func, not_, exists
+        from sqlalchemy import exists
+
         return (
             self._db.query(FaEvidence)
             .filter(

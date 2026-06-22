@@ -6,6 +6,32 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-22 — PR 14.6.1 fix pass: Evidence Authority concurrency, ownership, and timeline
+
+**Issues (fix pass review):**
+
+1. **P1 — Trust event hash chain not serialized** — `verify_evidence()` fetched the evidence row with a plain `get_evidence()` before computing `prev_event_hash`, allowing concurrent requests to read the same `prev_hash` and produce a forked chain.
+   - Fix: Added `lock_evidence_for_update()` to `EvidenceRepository` using SQLAlchemy `.with_for_update()`. Changed `verify_evidence()` to call `lock_evidence_for_update()` instead of `get_evidence()`. SQLite silently ignores the hint; PostgreSQL serializes concurrent transitions. No conditional branching needed.
+
+2. **P2 — Stale `owner_id` after OWNER revocation** — `revoke_ownership()` set the ownership record to inactive but never updated `fa_evidence.owner_id`. Evidence continued to show a revoked actor as owner.
+   - Fix: After deactivating the record, if the revoked role is OWNER and the revoked actor matches `ev.owner_id`, query `list_ownership(evidence_id, active_only=True)` for remaining OWNER records. If any exist, promote the first as the new owner. If none, set `owner_id = None` and `owner_type = None`.
+
+3. **P2 — Timeline events emitted as in-memory projections only** — `_emit_timeline_event` was a module-level function that built `TimelineEvent` objects but never called `TimelineStore.record()`, so nothing reached `governance_timeline_events`.
+   - Fix: Converted to an instance method on `EvidenceAuthorityEngine`. Uses `TimelineStore.record(self._db, event)` with `SourceType.EVIDENCE` (already in `TIMELINE_ADAPTERS` registry) and `derive_event_id()` for idempotent event IDs. Exceptions are caught and suppressed so timeline failures never block evidence operations.
+
+**Tests added (EA-111 – EA-117):**
+- EA-111: Trust hash chain is linear across three sequential transitions (UNVERIFIED→PARTIALLY→VERIFIED→HIGH)
+- EA-112: No two trust events share the same `prev_event_hash` (fork detection)
+- EA-113: Revoking sole OWNER clears `evidence.owner_id` to None
+- EA-114: Revoking one OWNER promotes the remaining active OWNER to `evidence.owner_id`
+- EA-115: `without_owner_count` increases after last OWNER revoked
+- EA-116: `evidence_created` event persisted to `governance_timeline_events`
+- EA-117: `evidence_trust_changed` event persisted to `governance_timeline_events`
+
+**Files changed:** `services/evidence_authority/engine.py`, `services/evidence_authority/repository.py`, `tests/test_ea_canonical_14_6_1.py`
+
+---
+
 ### 2026-06-20 — PR 14.2 bot fixes: P2 review from governance engine
 
 **Issues (bot review):**

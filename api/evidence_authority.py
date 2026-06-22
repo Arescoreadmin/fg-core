@@ -66,16 +66,13 @@ _ACTOR_UNKNOWN = "unknown"
 
 def _actor(request: Request) -> str:
     return str(
-        getattr(getattr(request, "state", None), "key_prefix", None)
-        or _ACTOR_UNKNOWN
+        getattr(getattr(request, "state", None), "key_prefix", None) or _ACTOR_UNKNOWN
     )
 
 
 def _actor_type(request: Request) -> str:
     """Resolve actor type from request state. Defaults to 'human'."""
-    return str(
-        getattr(getattr(request, "state", None), "actor_type", None) or "human"
-    )
+    return str(getattr(getattr(request, "state", None), "actor_type", None) or "human")
 
 
 # ---------------------------------------------------------------------------
@@ -237,9 +234,7 @@ def update_evidence_metadata(
         except EvidenceNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except EvidenceImmutableState as exc:
-            raise HTTPException(
-                status_code=409, detail=str(exc)
-            )
+            raise HTTPException(status_code=409, detail=str(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -271,9 +266,7 @@ def transition_lifecycle(
         except EvidenceNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except EvidenceInvalidTransition as exc:
-            raise HTTPException(
-                status_code=422, detail=str(exc)
-            )
+            raise HTTPException(status_code=422, detail=str(exc))
         # Increment the appropriate metric
         to_state = req.to_state
         if to_state == EvidenceLifecycleState.VERIFIED:
@@ -400,9 +393,7 @@ def verify_evidence(
         except EvidenceNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except EvidenceInvalidTrustTransition as exc:
-            raise HTTPException(
-                status_code=422, detail=str(exc)
-            )
+            raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.get(
@@ -452,9 +443,7 @@ def link_relationship(
         except EvidenceNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except EvidenceRelationshipConflict as exc:
-            raise HTTPException(
-                status_code=409, detail=str(exc)
-            )
+            raise HTTPException(status_code=409, detail=str(exc))
 
 
 @router.get(

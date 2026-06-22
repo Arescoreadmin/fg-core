@@ -112,6 +112,13 @@ Coverage map:
   EA-108  Dashboard requires governance:read scope
   EA-109  By-entity endpoint returns relationships for given entity
   EA-110  Trust confidence_score stored on trust event
+  EA-111  Trust chain hash-link is linear across multiple transitions
+  EA-112  No two trust events share the same prev_event_hash (no fork)
+  EA-113  Revoking sole active OWNER clears evidence.owner_id to None
+  EA-114  Revoking active OWNER promotes another active OWNER to owner_id
+  EA-115  without_owner_count increments after last OWNER revoked
+  EA-116  Creating evidence persists a record to governance_timeline_events
+  EA-117  Trust transition persists evidence_trust_changed to timeline
 """
 
 from __future__ import annotations
@@ -1219,3 +1226,142 @@ def test_ea_110_trust_confidence_score_stored(client):
     result = _verify(client, ev["id"], "VERIFIED", confidence_score=88)
     event = result["events"][0]
     assert event["confidence_score"] == 88
+
+
+# ---------------------------------------------------------------------------
+# EA-111 – EA-117: Fix-pass regression tests (concurrency, ownership, timeline)
+# ---------------------------------------------------------------------------
+
+
+def test_ea_111_trust_chain_is_linear(client):
+    """Multiple sequential trust transitions produce a strictly linear hash chain."""
+    ev = _create_evidence(client)
+    _verify(client, ev["id"], "PARTIALLY_VERIFIED")
+    _verify(client, ev["id"], "VERIFIED")
+    r3 = _verify(client, ev["id"], "HIGH_CONFIDENCE")
+
+    events = r3["events"]
+    assert len(events) == 3
+    # Each event's prev_event_hash must equal the previous event's event_hash
+    assert events[0]["prev_event_hash"] is None
+    assert events[1]["prev_event_hash"] == events[0]["event_hash"]
+    assert events[2]["prev_event_hash"] == events[1]["event_hash"]
+
+
+def test_ea_112_no_forked_prev_event_hash(client):
+    """No two trust events share the same prev_event_hash (no forked chain)."""
+    ev = _create_evidence(client)
+    _verify(client, ev["id"], "PARTIALLY_VERIFIED")
+    _verify(client, ev["id"], "VERIFIED")
+    _verify(client, ev["id"], "HIGH_CONFIDENCE")
+
+    r = client.get(f"/evidence/{ev['id']}/trust")
+    events = _j(r.json())["events"]
+
+    prev_hashes = [
+        e["prev_event_hash"] for e in events if e["prev_event_hash"] is not None
+    ]
+    assert len(prev_hashes) == len(set(prev_hashes)), (
+        "Forked chain detected: duplicate prev_event_hash"
+    )
+
+
+def test_ea_113_revoke_owner_clears_owner_id_when_no_replacement(client):
+    """Revoking the sole active OWNER sets evidence.owner_id to None."""
+    ev = _create_evidence(client)
+    actor = f"user-{_uid()}"
+    own = _assign_ownership(client, ev["id"], role="OWNER", actor_id=actor)
+
+    ev_detail = _j(client.get(f"/evidence/{ev['id']}").json())
+    assert ev_detail["owner_id"] == actor
+
+    client.delete(f"/evidence/{ev['id']}/ownership/{own['id']}")
+
+    ev_after = _j(client.get(f"/evidence/{ev['id']}").json())
+    assert ev_after["owner_id"] is None
+
+
+def test_ea_114_revoke_owner_assigns_replacement_when_another_owner_exists(client):
+    """Revoking an active OWNER promotes another active OWNER to evidence.owner_id."""
+    ev = _create_evidence(client)
+    first_actor = f"user-{_uid()}"
+    second_actor = f"user-{_uid()}"
+
+    first_own = _assign_ownership(client, ev["id"], role="OWNER", actor_id=first_actor)
+    _assign_ownership(client, ev["id"], role="OWNER", actor_id=second_actor)
+
+    client.delete(f"/evidence/{ev['id']}/ownership/{first_own['id']}")
+
+    ev_after = _j(client.get(f"/evidence/{ev['id']}").json())
+    # owner_id must now be the second (still-active) owner
+    assert ev_after["owner_id"] == second_actor
+
+
+def test_ea_115_without_owner_count_updates_after_revocation(client):
+    """Dashboard without_owner_count increments after the last OWNER is revoked."""
+    ev = _create_evidence(client)
+
+    dash_before = _j(client.get("/evidence/dashboard").json())
+    count_before = dash_before["without_owner_count"]
+
+    actor = f"user-{_uid()}"
+    own = _assign_ownership(client, ev["id"], role="OWNER", actor_id=actor)
+
+    # Confirm owner assigned
+    dash_owned = _j(client.get("/evidence/dashboard").json())
+    assert dash_owned["without_owner_count"] <= count_before
+
+    # Revoke and re-check
+    client.delete(f"/evidence/{ev['id']}/ownership/{own['id']}")
+
+    dash_after = _j(client.get("/evidence/dashboard").json())
+    assert dash_after["without_owner_count"] > dash_owned["without_owner_count"]
+
+
+def test_ea_116_timeline_events_persisted_on_create(client):
+    """Creating evidence writes a record to governance_timeline_events."""
+    from api.db import get_engine
+    from sqlalchemy.orm import Session
+    import api.db_models_timeline  # noqa: F401 — ensure model registered
+
+    ev = _create_evidence(client)
+
+    from api.db_models_timeline import TimelineEventRecord
+
+    with Session(get_engine()) as db:
+        rows = (
+            db.query(TimelineEventRecord)
+            .filter(
+                TimelineEventRecord.source_id == ev["id"],
+                TimelineEventRecord.source_type == "EVIDENCE",
+                TimelineEventRecord.event_type == "evidence_created",
+            )
+            .all()
+        )
+    assert len(rows) >= 1, "No timeline event persisted for evidence_created"
+
+
+def test_ea_117_timeline_events_persisted_on_trust_transition(client):
+    """Verifying evidence writes a trust transition record to governance_timeline_events."""
+    from api.db import get_engine
+    from sqlalchemy.orm import Session
+    import api.db_models_timeline  # noqa: F401 — ensure model registered
+
+    ev = _create_evidence(client)
+    _verify(client, ev["id"], "VERIFIED")
+
+    from api.db_models_timeline import TimelineEventRecord
+
+    with Session(get_engine()) as db:
+        rows = (
+            db.query(TimelineEventRecord)
+            .filter(
+                TimelineEventRecord.source_id == ev["id"],
+                TimelineEventRecord.source_type == "EVIDENCE",
+                TimelineEventRecord.event_type == "evidence_trust_changed",
+            )
+            .all()
+        )
+    assert len(rows) >= 1, (
+        "No timeline event persisted for evidence_trust_state_changed"
+    )

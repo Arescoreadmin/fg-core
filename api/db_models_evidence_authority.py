@@ -35,11 +35,6 @@ from __future__ import annotations
 from sqlalchemy import Integer, String, Text, event as sa_event
 from sqlalchemy.orm import Mapped, mapped_column
 
-try:
-    from sqlalchemy import JSON
-except ImportError:  # pragma: no cover
-    from sqlalchemy import JSON  # type: ignore[assignment]
-
 from api.db_models import Base
 from sqlalchemy import Index, UniqueConstraint
 
@@ -101,17 +96,13 @@ class FaEvidence(Base):
     integrity_hash_algorithm: Mapped[str | None] = mapped_column(
         String(32), nullable=True, default="sha256"
     )
-    provenance_chain_head: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    provenance_chain_head: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Trust
     trust_state: Mapped[str] = mapped_column(
         String(32), nullable=False, default="UNVERIFIED"
     )
-    verification_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    verification_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     trust_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_verification_source: Mapped[str | None] = mapped_column(
         String(64), nullable=True
@@ -153,9 +144,7 @@ class FaEvidence(Base):
     updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "evidence_ref", name="uq_fa_evidence_tenant_ref"
-        ),
+        UniqueConstraint("tenant_id", "evidence_ref", name="uq_fa_evidence_tenant_ref"),
         Index("ix_fa_evidence_tenant_state", "tenant_id", "lifecycle_state"),
         Index("ix_fa_evidence_tenant_trust", "tenant_id", "trust_state"),
         Index("ix_fa_evidence_tenant_classification", "tenant_id", "classification"),
@@ -187,9 +176,7 @@ class FaEvidenceOwnership(Base):
 
     role: Mapped[str] = mapped_column(String(64), nullable=False)
     actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    actor_type: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="human"
-    )
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False, default="human")
 
     assigned_at: Mapped[str] = mapped_column(String(64), nullable=False)
     assigned_by: Mapped[str] = mapped_column(String(255), nullable=False)

@@ -316,15 +316,6 @@
         "title": "AcknowledgementResponse",
         "type": "object"
       },
-      "ActorType": {
-        "enum": [
-          "HUMAN",
-          "AGENT",
-          "SYSTEM"
-        ],
-        "title": "ActorType",
-        "type": "string"
-      },
       "AddCommentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3910,6 +3901,30 @@
         "title": "AssignEnvironmentRequest",
         "type": "object"
       },
+      "AssignOwnershipRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_type": {
+            "$ref": "#/components/schemas/services__evidence_authority__models__ActorType",
+            "default": "human"
+          },
+          "role": {
+            "$ref": "#/components/schemas/EvidenceOwnershipRole"
+          }
+        },
+        "required": [
+          "role",
+          "actor_id"
+        ],
+        "title": "AssignOwnershipRequest",
+        "type": "object"
+      },
       "AssignRoleRequest": {
         "properties": {
           "key_id": {
@@ -4624,7 +4639,7 @@
             "type": "string"
           },
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           },
@@ -6991,7 +7006,7 @@
       "CreateAttestationRequest": {
         "properties": {
           "actor_type": {
-            "$ref": "#/components/schemas/ActorType",
+            "$ref": "#/components/schemas/services__governance_reporting__schemas__ActorType",
             "default": "HUMAN"
           },
           "attestation_statement": {
@@ -7511,6 +7526,106 @@
           "evidence_entity_id"
         ],
         "title": "CreateEvidenceLinkRequest",
+        "type": "object"
+      },
+      "CreateEvidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/EvidenceClassification",
+            "default": "INTERNAL"
+          },
+          "classification_labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Classification Labels",
+            "type": "array"
+          },
+          "collected_at": {
+            "description": "ISO 8601 UTC timestamp of evidence collection at source",
+            "title": "Collected At",
+            "type": "string"
+          },
+          "collection_method": {
+            "$ref": "#/components/schemas/EvidenceCollectionMethod"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO 8601 UTC expiration timestamp",
+            "title": "Expires At"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "source_system": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source System"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/EvidenceSourceType"
+          },
+          "title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "source_type",
+          "collection_method",
+          "collected_at"
+        ],
+        "title": "CreateEvidenceRequest",
         "type": "object"
       },
       "CreateExportRequest": {
@@ -10963,6 +11078,125 @@
         "title": "EvidenceAnchorCreate",
         "type": "object"
       },
+      "EvidenceAuditEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_type": {
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_metadata": {
+            "title": "Event Metadata",
+            "type": "object"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "from_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From State"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "to_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To State"
+          },
+          "transaction_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transaction Id"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "evidence_id",
+          "event_type",
+          "from_state",
+          "to_state",
+          "actor_id",
+          "actor_type",
+          "reason",
+          "event_metadata",
+          "transaction_id",
+          "created_at"
+        ],
+        "title": "EvidenceAuditEventResponse",
+        "type": "object"
+      },
+      "EvidenceAuditListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceAuditEventResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "EvidenceAuditListResponse",
+        "type": "object"
+      },
       "EvidenceBundleCreateRequest": {
         "properties": {
           "artifacts": {
@@ -11036,6 +11270,127 @@
           "created_at"
         ],
         "title": "EvidenceBundleCreateResponse",
+        "type": "object"
+      },
+      "EvidenceClassification": {
+        "description": "Base classification tier \u2014 governs access, export, and display.",
+        "enum": [
+          "PUBLIC",
+          "INTERNAL",
+          "CONFIDENTIAL",
+          "RESTRICTED",
+          "REGULATED"
+        ],
+        "title": "EvidenceClassification",
+        "type": "string"
+      },
+      "EvidenceCollectionMethod": {
+        "description": "How the evidence was collected from the source.",
+        "enum": [
+          "MANUAL_UPLOAD",
+          "AUTOMATED_EXPORT",
+          "API_PULL",
+          "AGENT_COLLECT",
+          "ATTESTATION_SUBMISSION",
+          "EXTERNAL_CONNECTOR"
+        ],
+        "title": "EvidenceCollectionMethod",
+        "type": "string"
+      },
+      "EvidenceDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "by_classification": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Classification",
+            "type": "object"
+          },
+          "by_lifecycle_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Lifecycle State",
+            "type": "object"
+          },
+          "by_source_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Source Type",
+            "type": "object"
+          },
+          "by_trust_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Trust State",
+            "type": "object"
+          },
+          "disputed_count": {
+            "title": "Disputed Count",
+            "type": "integer"
+          },
+          "expired_count": {
+            "title": "Expired Count",
+            "type": "integer"
+          },
+          "expiring_soon_count": {
+            "title": "Expiring Soon Count",
+            "type": "integer"
+          },
+          "high_confidence_count": {
+            "title": "High Confidence Count",
+            "type": "integer"
+          },
+          "revoked_count": {
+            "title": "Revoked Count",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_evidence": {
+            "title": "Total Evidence",
+            "type": "integer"
+          },
+          "unverified_count": {
+            "title": "Unverified Count",
+            "type": "integer"
+          },
+          "verified_count": {
+            "title": "Verified Count",
+            "type": "integer"
+          },
+          "without_owner_count": {
+            "title": "Without Owner Count",
+            "type": "integer"
+          },
+          "without_relationships_count": {
+            "title": "Without Relationships Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_evidence",
+          "by_lifecycle_state",
+          "by_trust_state",
+          "by_classification",
+          "by_source_type",
+          "verified_count",
+          "unverified_count",
+          "expired_count",
+          "revoked_count",
+          "high_confidence_count",
+          "disputed_count",
+          "expiring_soon_count",
+          "without_owner_count",
+          "without_relationships_count"
+        ],
+        "title": "EvidenceDashboardResponse",
         "type": "object"
       },
       "EvidenceEntry": {
@@ -11160,6 +11515,23 @@
         "title": "EvidenceFreshnessState",
         "type": "string"
       },
+      "EvidenceLifecycleState": {
+        "description": "Ten-state enterprise evidence lifecycle.\n\nDRAFT:          Created but not yet submitted for review.\nCOLLECTED:      Raw evidence captured from source; not yet formally submitted.\nSUBMITTED:      Formally submitted for review; awaiting review assignment.\nUNDER_REVIEW:   Assigned to a reviewer; review in progress.\nVERIFIED:       Review completed positively; evidence is authoritative.\nREJECTED:       Review completed negatively; evidence is disqualified.\nSUPERSEDED:     Replaced by a newer evidence record; preserved for lineage.\nEXPIRED:        Past expires_at threshold; excluded from active use.\nREVOKED:        Administratively revoked (e.g., discovered tampered).\nARCHIVED:       Long-term preservation; excluded from active scoring.\n\nTerminal states: REVOKED (no forward transition allowed).\nSemi-terminal: ARCHIVED (break-glass reactivation not implemented here).",
+        "enum": [
+          "DRAFT",
+          "COLLECTED",
+          "SUBMITTED",
+          "UNDER_REVIEW",
+          "VERIFIED",
+          "REJECTED",
+          "SUPERSEDED",
+          "EXPIRED",
+          "REVOKED",
+          "ARCHIVED"
+        ],
+        "title": "EvidenceLifecycleState",
+        "type": "string"
+      },
       "EvidenceLinkResponse": {
         "properties": {
           "created_at": {
@@ -11226,6 +11598,155 @@
           "attestation"
         ],
         "title": "EvidenceLinkType",
+        "type": "string"
+      },
+      "EvidenceListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__evidence_authority__schemas__EvidenceResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "EvidenceListResponse",
+        "type": "object"
+      },
+      "EvidenceOwnershipListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceOwnershipResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "EvidenceOwnershipListResponse",
+        "type": "object"
+      },
+      "EvidenceOwnershipResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_type": {
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "assigned_at": {
+            "title": "Assigned At",
+            "type": "string"
+          },
+          "assigned_by": {
+            "title": "Assigned By",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "revoked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked By"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "evidence_id",
+          "role",
+          "actor_id",
+          "actor_type",
+          "assigned_at",
+          "assigned_by",
+          "revoked_at",
+          "revoked_by",
+          "is_active",
+          "created_at"
+        ],
+        "title": "EvidenceOwnershipResponse",
+        "type": "object"
+      },
+      "EvidenceOwnershipRole": {
+        "description": "Ownership roles for evidence \u2014 AGI-forward.",
+        "enum": [
+          "OWNER",
+          "REVIEWER",
+          "VERIFIER",
+          "APPROVER",
+          "CUSTODIAN"
+        ],
+        "title": "EvidenceOwnershipRole",
         "type": "string"
       },
       "EvidenceRefInput": {
@@ -11364,43 +11885,114 @@
         "title": "EvidenceReferenceResponse",
         "type": "object"
       },
-      "EvidenceResponse": {
+      "EvidenceRelatedEntityType": {
+        "description": "Entity types that evidence can relate to.",
+        "enum": [
+          "assessment",
+          "finding",
+          "control",
+          "risk_acceptance",
+          "review",
+          "governance_decision",
+          "remediation",
+          "report",
+          "timeline_event"
+        ],
+        "title": "EvidenceRelatedEntityType",
+        "type": "string"
+      },
+      "EvidenceRelationshipListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRelationshipResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "EvidenceRelationshipListResponse",
+        "type": "object"
+      },
+      "EvidenceRelationshipResponse": {
+        "additionalProperties": false,
         "properties": {
           "created_at": {
             "title": "Created At",
             "type": "string"
           },
-          "evidence_type": {
-            "title": "Evidence Type",
+          "evidence_id": {
+            "title": "Evidence Id",
             "type": "string"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
-          "reference": {
-            "title": "Reference",
+          "link_metadata": {
+            "title": "Link Metadata",
+            "type": "object"
+          },
+          "linked_at": {
+            "title": "Linked At",
             "type": "string"
           },
-          "submitted_by": {
-            "title": "Submitted By",
+          "linked_by": {
+            "title": "Linked By",
             "type": "string"
           },
-          "workflow_id": {
-            "title": "Workflow Id",
+          "related_entity_id": {
+            "title": "Related Entity Id",
+            "type": "string"
+          },
+          "related_entity_type": {
+            "title": "Related Entity Type",
+            "type": "string"
+          },
+          "relationship_type": {
+            "title": "Relationship Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
             "type": "string"
           }
         },
         "required": [
           "id",
-          "workflow_id",
-          "evidence_type",
-          "reference",
-          "submitted_by",
+          "tenant_id",
+          "evidence_id",
+          "related_entity_type",
+          "related_entity_id",
+          "relationship_type",
+          "link_metadata",
+          "linked_at",
+          "linked_by",
           "created_at"
         ],
-        "title": "EvidenceResponse",
+        "title": "EvidenceRelationshipResponse",
         "type": "object"
+      },
+      "EvidenceRelationshipType": {
+        "description": "Type of relationship between evidence and a governed resource.",
+        "enum": [
+          "SUPPORTS",
+          "PROVES",
+          "REFUTES",
+          "SUPERSEDES",
+          "LINKED_TO"
+        ],
+        "title": "EvidenceRelationshipType",
+        "type": "string"
       },
       "EvidenceRunRegisterRequest": {
         "additionalProperties": false,
@@ -11455,6 +12047,195 @@
         ],
         "title": "EvidenceRunRegisterRequest",
         "type": "object"
+      },
+      "EvidenceSourceType": {
+        "description": "How the evidence originated \u2014 unlimited extension without migration.",
+        "enum": [
+          "INTERVIEW",
+          "DOCUMENT",
+          "SCREENSHOT",
+          "SYSTEM_EXPORT",
+          "CONNECTOR",
+          "SCAN",
+          "POLICY",
+          "ATTESTATION",
+          "CONTROL_VERIFICATION",
+          "REMEDIATION_VERIFICATION",
+          "MANUAL_UPLOAD"
+        ],
+        "title": "EvidenceSourceType",
+        "type": "string"
+      },
+      "EvidenceTrustEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Hash"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "from_trust_state": {
+            "title": "From Trust State",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "prev_event_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Event Hash"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "to_trust_state": {
+            "title": "To Trust State",
+            "type": "string"
+          },
+          "verification_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Method"
+          },
+          "verification_source": {
+            "title": "Verification Source",
+            "type": "string"
+          },
+          "verifier_id": {
+            "title": "Verifier Id",
+            "type": "string"
+          },
+          "verifier_type": {
+            "title": "Verifier Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "evidence_id",
+          "from_trust_state",
+          "to_trust_state",
+          "verification_source",
+          "verifier_id",
+          "verifier_type",
+          "verification_method",
+          "confidence_score",
+          "notes",
+          "event_hash",
+          "prev_event_hash",
+          "created_at"
+        ],
+        "title": "EvidenceTrustEventResponse",
+        "type": "object"
+      },
+      "EvidenceTrustHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "current_trust_state": {
+            "title": "Current Trust State",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceTrustEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "trust_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Score"
+          },
+          "verification_count": {
+            "title": "Verification Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "current_trust_state",
+          "trust_score",
+          "verification_count",
+          "events"
+        ],
+        "title": "EvidenceTrustHistoryResponse",
+        "type": "object"
+      },
+      "EvidenceTrustState": {
+        "description": "Trust state independent of lifecycle state.\n\nA piece of evidence can be VERIFIED (lifecycle) but DISPUTED (trust) if\nsubsequent information calls its accuracy into question.",
+        "enum": [
+          "UNVERIFIED",
+          "PARTIALLY_VERIFIED",
+          "VERIFIED",
+          "HIGH_CONFIDENCE",
+          "DISPUTED",
+          "INVALIDATED"
+        ],
+        "title": "EvidenceTrustState",
+        "type": "string"
       },
       "EvidenceType": {
         "enum": [
@@ -14932,6 +15713,34 @@
           "evidence_type"
         ],
         "title": "LinkEvidenceRequest",
+        "type": "object"
+      },
+      "LinkRelationshipRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "link_metadata": {
+            "title": "Link Metadata",
+            "type": "object"
+          },
+          "related_entity_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Related Entity Id",
+            "type": "string"
+          },
+          "related_entity_type": {
+            "$ref": "#/components/schemas/EvidenceRelatedEntityType"
+          },
+          "relationship_type": {
+            "$ref": "#/components/schemas/EvidenceRelationshipType",
+            "default": "LINKED_TO"
+          }
+        },
+        "required": [
+          "related_entity_type",
+          "related_entity_id"
+        ],
+        "title": "LinkRelationshipRequest",
         "type": "object"
       },
       "LinkRiskRequest": {
@@ -24872,6 +25681,31 @@
         "title": "TransitionExportRequest",
         "type": "object"
       },
+      "TransitionLifecycleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/EvidenceLifecycleState"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "TransitionLifecycleRequest",
+        "type": "object"
+      },
       "TransitionRecoveryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -25399,6 +26233,72 @@
           }
         },
         "title": "UpdateControlRequest",
+        "type": "object"
+      },
+      "UpdateEvidenceMetadataRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "source_system": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source System"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdateEvidenceMetadataRequest",
         "type": "object"
       },
       "UpdateItemStatusRequest": {
@@ -26107,13 +27007,6 @@
       },
       "ValidationError": {
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -26415,6 +27308,19 @@
         "title": "VerificationResponse",
         "type": "object"
       },
+      "VerificationSource": {
+        "description": "Who or what performed the verification.",
+        "enum": [
+          "HUMAN",
+          "AI",
+          "CONNECTOR",
+          "THIRD_PARTY",
+          "AUTOMATED",
+          "SYSTEM"
+        ],
+        "title": "VerificationSource",
+        "type": "string"
+      },
       "VerifyControlRequest": {
         "additionalProperties": false,
         "properties": {
@@ -26431,6 +27337,60 @@
           }
         },
         "title": "VerifyControlRequest",
+        "type": "object"
+      },
+      "VerifyEvidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_score": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "to_trust_state": {
+            "$ref": "#/components/schemas/EvidenceTrustState"
+          },
+          "verification_method": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Method"
+          },
+          "verification_source": {
+            "$ref": "#/components/schemas/VerificationSource"
+          }
+        },
+        "required": [
+          "to_trust_state",
+          "verification_source"
+        ],
+        "title": "VerifyEvidenceRequest",
         "type": "object"
       },
       "VerifyReportResponse": {
@@ -27123,6 +28083,44 @@
         "title": "AuditEventResponse",
         "type": "object"
       },
+      "api__governance_workflows__EvidenceResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "submitted_by": {
+            "title": "Submitted By",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workflow_id",
+          "evidence_type",
+          "reference",
+          "submitted_by",
+          "created_at"
+        ],
+        "title": "EvidenceResponse",
+        "type": "object"
+      },
       "api__ops_governance_manager__CreateEnvironmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -27637,6 +28635,335 @@
         "title": "EnvironmentType",
         "type": "string"
       },
+      "services__evidence_authority__models__ActorType": {
+        "description": "Actor type classification \u2014 supports autonomous systems.",
+        "enum": [
+          "human",
+          "service",
+          "agent",
+          "autonomous_system"
+        ],
+        "title": "ActorType",
+        "type": "string"
+      },
+      "services__evidence_authority__schemas__EvidenceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "classification": {
+            "title": "Classification",
+            "type": "string"
+          },
+          "classification_labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Classification Labels",
+            "type": "array"
+          },
+          "collected_at": {
+            "title": "Collected At",
+            "type": "string"
+          },
+          "collection_method": {
+            "title": "Collection Method",
+            "type": "string"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "content_hash_algorithm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash Algorithm"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "creator_id": {
+            "title": "Creator Id",
+            "type": "string"
+          },
+          "creator_type": {
+            "title": "Creator Type",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "evidence_ref": {
+            "title": "Evidence Ref",
+            "type": "string"
+          },
+          "evidence_version": {
+            "title": "Evidence Version",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "integrity_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Integrity Hash"
+          },
+          "last_verification_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verification Source"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "owner_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Type"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "source_system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source System"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trust_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Score"
+          },
+          "trust_state": {
+            "title": "Trust State",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verification_count": {
+            "title": "Verification Count",
+            "type": "integer"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "evidence_ref",
+          "lifecycle_state",
+          "classification",
+          "classification_labels",
+          "source_type",
+          "source_system",
+          "source_ref",
+          "collection_method",
+          "title",
+          "description",
+          "content_hash",
+          "content_hash_algorithm",
+          "integrity_hash",
+          "trust_state",
+          "trust_score",
+          "verification_count",
+          "last_verification_source",
+          "owner_id",
+          "owner_type",
+          "creator_id",
+          "creator_type",
+          "engagement_id",
+          "collected_at",
+          "submitted_at",
+          "reviewed_at",
+          "verified_at",
+          "expires_at",
+          "revoked_at",
+          "archived_at",
+          "evidence_version",
+          "superseded_by",
+          "schema_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EvidenceResponse",
+        "type": "object"
+      },
       "services__governance_portal__schemas__PortalAuditListResponse": {
         "properties": {
           "items": {
@@ -27781,6 +29108,15 @@
         ],
         "title": "PortalEvidenceListResponse",
         "type": "object"
+      },
+      "services__governance_reporting__schemas__ActorType": {
+        "enum": [
+          "HUMAN",
+          "AGENT",
+          "SYSTEM"
+        ],
+        "title": "ActorType",
+        "type": "string"
       },
       "services__governance_reporting__schemas__AttestationResponse": {
         "properties": {
@@ -44752,6 +46088,217 @@
         ]
       }
     },
+    "/evidence": {
+      "get": {
+        "description": "List evidence records for the tenant with optional filters.",
+        "operationId": "list_evidence_evidence_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lifecycle_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trust_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trust State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "classification",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Classification"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "engagement_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Engagement Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evidence",
+        "tags": [
+          "evidence-authority"
+        ]
+      },
+      "post": {
+        "description": "Create a new canonical evidence record.",
+        "operationId": "create_evidence_evidence_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__evidence_authority__schemas__EvidenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Evidence",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
     "/evidence/anchors": {
       "get": {
         "operationId": "list_anchors_evidence_anchors_get",
@@ -45007,6 +46554,124 @@
         "summary": "Get Evidence Bundle",
         "tags": [
           "attestation"
+        ]
+      }
+    },
+    "/evidence/by-entity/{entity_type}/{entity_id}": {
+      "get": {
+        "description": "List all evidence relationships for a governed entity (finding, control, etc.).",
+        "operationId": "list_evidence_for_entity_evidence_by_entity__entity_type___entity_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_type",
+            "required": true,
+            "schema": {
+              "title": "Entity Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceRelationshipListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evidence For Entity",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
+    "/evidence/dashboard": {
+      "get": {
+        "description": "Evidence posture dashboard for the tenant.",
+        "operationId": "evidence_dashboard_evidence_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evidence Dashboard",
+        "tags": [
+          "evidence-authority"
         ]
       }
     },
@@ -45283,6 +46948,773 @@
         "summary": "Verify Evidence",
         "tags": [
           "attestation"
+        ]
+      }
+    },
+    "/evidence/{ev_id}": {
+      "get": {
+        "description": "Get a single evidence record by ID.",
+        "operationId": "get_evidence_evidence__ev_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__evidence_authority__schemas__EvidenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Evidence",
+        "tags": [
+          "evidence-authority"
+        ]
+      },
+      "patch": {
+        "description": "Update mutable metadata on a non-immutable evidence record.",
+        "operationId": "update_evidence_metadata_evidence__ev_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEvidenceMetadataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__evidence_authority__schemas__EvidenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Evidence Metadata",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
+    "/evidence/{ev_id}/audit": {
+      "get": {
+        "description": "List the full audit trail for an evidence record.",
+        "operationId": "list_audit_events_evidence__ev_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceAuditListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Audit Events",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
+    "/evidence/{ev_id}/lifecycle": {
+      "post": {
+        "description": "Transition evidence lifecycle state through the formal state machine.",
+        "operationId": "transition_lifecycle_evidence__ev_id__lifecycle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__evidence_authority__schemas__EvidenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Lifecycle",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
+    "/evidence/{ev_id}/ownership": {
+      "get": {
+        "description": "List ownership records for an evidence record.",
+        "operationId": "list_ownership_evidence__ev_id__ownership_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceOwnershipListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ownership",
+        "tags": [
+          "evidence-authority"
+        ]
+      },
+      "post": {
+        "description": "Assign an ownership role (OWNER/REVIEWER/VERIFIER/APPROVER/CUSTODIAN) to an actor.",
+        "operationId": "assign_ownership_evidence__ev_id__ownership_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignOwnershipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceOwnershipResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Ownership",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
+    "/evidence/{ev_id}/ownership/{ownership_id}": {
+      "delete": {
+        "description": "Revoke an ownership assignment (sets is_active=0; row is preserved).",
+        "operationId": "revoke_ownership_evidence__ev_id__ownership__ownership_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ownership_id",
+            "required": true,
+            "schema": {
+              "title": "Ownership Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceOwnershipResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Ownership",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
+    "/evidence/{ev_id}/relationships": {
+      "get": {
+        "description": "List all relationships from an evidence record to governed entities.",
+        "operationId": "list_relationships_evidence__ev_id__relationships_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Type"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceRelationshipListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Relationships",
+        "tags": [
+          "evidence-authority"
+        ]
+      },
+      "post": {
+        "description": "Link an evidence record to a governed entity (finding, control, risk, etc.).",
+        "operationId": "link_relationship_evidence__ev_id__relationships_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkRelationshipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceRelationshipResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Relationship",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
+    "/evidence/{ev_id}/trust": {
+      "get": {
+        "description": "Query the trust state and full trust event history for an evidence record.",
+        "operationId": "query_trust_state_evidence__ev_id__trust_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceTrustHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Query Trust State",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
+    "/evidence/{ev_id}/verify": {
+      "post": {
+        "description": "Transition evidence trust state and record a trust event (hash-chained).",
+        "operationId": "verify_evidence_evidence__ev_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceTrustHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Evidence",
+        "tags": [
+          "evidence-authority"
         ]
       }
     },
@@ -60882,7 +63314,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/EvidenceResponse"
+                    "$ref": "#/components/schemas/api__governance_workflows__EvidenceResponse"
                   },
                   "title": "Response Get Evidence Governance Workflows  Workflow Id  Evidence Get",
                   "type": "array"
@@ -60952,7 +63384,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EvidenceResponse"
+                  "$ref": "#/components/schemas/api__governance_workflows__EvidenceResponse"
                 }
               }
             },

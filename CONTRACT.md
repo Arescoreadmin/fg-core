@@ -5,7 +5,7 @@
 > in `contracts/core/openapi.json`.
 
 Contract Authority: contracts/core/openapi.json (prod)
-Contract-Authority-SHA256: eaf5e476a16dc29f031e45e1715fd003e16cc5d7a326fbc4b0b3ec84b0c03649
+Contract-Authority-SHA256: 17f247651e3d62311d751bc04f7b0eece57fbccc5c687d793f017d21ad4487d6
 <!-- CONTRACT_LINT_ANCHORS
 0) Principles
 1) Configuration and Environment Precedence

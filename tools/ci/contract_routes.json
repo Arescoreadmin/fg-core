@@ -1448,6 +1448,18 @@
     },
     {
       "method": "GET",
+      "path": "/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/evidence/anchors",
       "scopes": [],
       "source": "contract"
@@ -1472,6 +1484,18 @@
     },
     {
       "method": "GET",
+      "path": "/evidence/by-entity/{entity_type}/{entity_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/evidence/runs",
       "scopes": [],
       "source": "contract"
@@ -1491,6 +1515,72 @@
     {
       "method": "POST",
       "path": "/evidence/verify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/evidence/{ev_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence/{ev_id}/lifecycle",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}/ownership",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence/{ev_id}/ownership",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/evidence/{ev_id}/ownership/{ownership_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}/relationships",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence/{ev_id}/relationships",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/evidence/{ev_id}/trust",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence/{ev_id}/verify",
       "scopes": [],
       "source": "contract"
     },
@@ -3685,7 +3775,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-22T12:30:09.759166+00:00",
+  "generated_at": "2026-06-22T17:59:07.423253+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -82,8 +82,12 @@ class CreateEvidenceRequest(BaseModel):
     classification: EvidenceClassification = EvidenceClassification.INTERNAL
     classification_labels: list[str] = Field(default_factory=list)
     engagement_id: str | None = Field(default=None, max_length=64)
-    collected_at: str = Field(..., description="ISO 8601 UTC timestamp of evidence collection at source")
-    expires_at: str | None = Field(default=None, description="ISO 8601 UTC expiration timestamp")
+    collected_at: str = Field(
+        ..., description="ISO 8601 UTC timestamp of evidence collection at source"
+    )
+    expires_at: str | None = Field(
+        default=None, description="ISO 8601 UTC expiration timestamp"
+    )
 
     @field_validator("collected_at", "expires_at")
     @classmethod
@@ -91,6 +95,7 @@ class CreateEvidenceRequest(BaseModel):
         if v is None:
             return v
         from datetime import datetime
+
         try:
             datetime.fromisoformat(v.replace("Z", "+00:00"))
         except ValueError:
@@ -101,6 +106,7 @@ class CreateEvidenceRequest(BaseModel):
     @classmethod
     def _validate_labels(cls, v: list[str]) -> list[str]:
         from services.evidence_authority.models import KNOWN_CLASSIFICATION_LABELS
+
         unknown = [lbl for lbl in v if lbl not in KNOWN_CLASSIFICATION_LABELS]
         if unknown:
             # Warn but allow — labels set is open for extensibility
@@ -128,6 +134,7 @@ class UpdateEvidenceMetadataRequest(BaseModel):
         if v is None:
             return v
         from datetime import datetime
+
         try:
             datetime.fromisoformat(v.replace("Z", "+00:00"))
         except ValueError:
@@ -395,6 +402,6 @@ class EvidenceDashboardResponse(BaseModel):
     revoked_count: int
     high_confidence_count: int
     disputed_count: int
-    expiring_soon_count: int        # expires within 30 days
+    expiring_soon_count: int  # expires within 30 days
     without_owner_count: int
     without_relationships_count: int
