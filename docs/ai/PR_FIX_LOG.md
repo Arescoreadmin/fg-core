@@ -15878,3 +15878,9 @@ No fixes required — initial implementation.
 **Root cause:** `_EXPIRING_SOON_VERIFIED = "2026-03-25"` was 90 days ago at time of run, crossing into the `expired` bucket for a 90-day review cycle. `_AGING_VERIFIED` (52 days ago) and `_SOON_EXPIRY` (+7 days) were also within days of their own threshold crossings.
 
 **Fix:** Replaced all wall-clock-relative constants with `datetime.now(timezone.utc) + timedelta(...)` expressions so freshness-bucket assertions never drift with calendar time.
+
+**Fix 3: Performance test flake under full-suite load**
+
+**Root cause:** `test_10000_nodes_manifest_under_1000ms` used `time.monotonic()` (wall clock) with a 1000ms budget. Under full-suite load with 11k+ tests competing for CPU, the wall-clock time exceeded 1000ms even though the actual CPU work took <50ms.
+
+**Fix:** Switched to `time.process_time()` (CPU time) so the budget measures actual computation rather than scheduling latency. The 1000ms CPU budget remains unchanged and is still a meaningful regression guard.
