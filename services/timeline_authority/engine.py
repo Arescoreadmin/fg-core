@@ -314,6 +314,7 @@ class TimelineAuthorityEngine:
             rows = self._repo.list_events(
                 db,
                 tenant_id=tenant_id,
+                entity_type=entity_type,
                 limit=200,
                 offset=0,
             )

@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase
 
@@ -68,6 +69,18 @@ class FrameworkAuthorityFrameworkRecord(Base):
         ),
         Index("ix_fa_frameworks_tenant_status", "tenant_id", "status"),
         Index("ix_fa_frameworks_scope_key", "scope_type", "framework_key"),
+        # NULL-safe uniqueness for SYSTEM-scope rows (tenant_id IS NULL).
+        # Standard UniqueConstraint treats NULLs as distinct, so two SYSTEM rows
+        # with the same framework_key+version would both pass. A partial index
+        # on the WHERE clause enforces true uniqueness for the system namespace.
+        Index(
+            "uq_fa_frameworks_system_identity",
+            "framework_key",
+            "version",
+            unique=True,
+            postgresql_where=text("scope_type = 'SYSTEM'"),
+            sqlite_where=text("scope_type = 'SYSTEM'"),
+        ),
     )
 
     id = Column(String(36), primary_key=True, default=_new_uuid)
