@@ -15836,3 +15836,27 @@ Resolution order in `check_capability()` (fully backward-compatible):
 ## PR 14.6.2 — Timeline Authority (Canonical Governance Ledger)
 
 No fixes required — initial implementation.
+
+---
+
+## fix/timeline-authority-review-items — Post-merge review fixes (P1/P2)
+
+**Files changed:** `services/timeline_authority/repository.py`, `services/timeline_authority/engine.py`, `api/db_models_framework_authority.py`, `migrations/postgres/0127_framework_authority_system_unique.sql`, `tests/test_timeline_authority.py`
+
+**Fix 1 (P1): `get_latest_event_hash` tail ordering**
+
+**Root cause:** `get_latest_event_hash()` ordered by `occurred_at DESC, id ASC`. When two events share the same `occurred_at`, this picks the lowest `id` first — but the chain verification order is `occurred_at ASC, id ASC`, so the actual tail is the event with the highest `id` among ties. This causes `/integrity` to fail for valid same-timestamp sequences without any tampering.
+
+**Fix:** Changed to `occurred_at DESC, id DESC` so the query consistently returns the actual chain tail.
+
+**Fix 2 (P2): `export()` missing `entity_type` filter**
+
+**Root cause:** The `else` branch in `export()` called `list_events()` without `entity_type`, so `GET /export?entity_type=EVIDENCE` returned events of all entity types and computed cross-entity chain summaries over the wrong data.
+
+**Fix:** Forwarded `entity_type` to `list_events()` in the else-branch (matching what `replay()` already did).
+
+**Fix 3 (P2): NULL-safe uniqueness for SYSTEM-scope frameworks**
+
+**Root cause:** `UniqueConstraint("scope_type","tenant_id","framework_key","version")` does not prevent duplicate SYSTEM rows because SQL treats NULLs as distinct — two rows with `tenant_id=NULL` and the same `framework_key+version` both pass the constraint. Concurrent admin creates could insert duplicate canonical frameworks.
+
+**Fix:** Added partial unique index `uq_fa_frameworks_system_identity` on `(framework_key, version) WHERE scope_type='SYSTEM'` in the ORM model and migration `0127_framework_authority_system_unique.sql`.
