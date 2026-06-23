@@ -26264,6 +26264,349 @@
         "title": "TieD",
         "type": "object"
       },
+      "TimelineActorType": {
+        "enum": [
+          "HUMAN",
+          "SERVICE",
+          "AGENT",
+          "AUTONOMOUS_SYSTEM",
+          "SYSTEM"
+        ],
+        "title": "TimelineActorType",
+        "type": "string"
+      },
+      "TimelineAuthorityLevel": {
+        "enum": [
+          "SYSTEM",
+          "HUMAN",
+          "REVIEWER",
+          "COMMITTEE",
+          "AUTONOMOUS_AGENT",
+          "AUTONOMOUS_SYSTEM",
+          "AGI_SYSTEM"
+        ],
+        "title": "TimelineAuthorityLevel",
+        "type": "string"
+      },
+      "TimelineChainStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "broken_at_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Broken At Event Id"
+          },
+          "chain_valid": {
+            "title": "Chain Valid",
+            "type": "boolean"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id",
+          "event_count",
+          "chain_valid"
+        ],
+        "title": "TimelineChainStatus",
+        "type": "object"
+      },
+      "TimelineEntityType": {
+        "enum": [
+          "EVIDENCE",
+          "RISK",
+          "CONTROL",
+          "FRAMEWORK",
+          "FRAMEWORK_CONTROL",
+          "MAPPING",
+          "ENGAGEMENT",
+          "REPORT",
+          "DECISION",
+          "AGENT",
+          "TENANT",
+          "REMEDIATION"
+        ],
+        "title": "TimelineEntityType",
+        "type": "string"
+      },
+      "TimelineEventRecordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "default": "",
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_type": {
+            "$ref": "#/components/schemas/TimelineActorType",
+            "default": "SYSTEM"
+          },
+          "authority_level": {
+            "$ref": "#/components/schemas/TimelineAuthorityLevel",
+            "default": "SYSTEM"
+          },
+          "causation_id": {
+            "default": "",
+            "title": "Causation Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "default": "",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "$ref": "#/components/schemas/TimelineEntityType"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "external_reference": {
+            "default": "",
+            "title": "External Reference",
+            "type": "string"
+          },
+          "external_reference_type": {
+            "default": "",
+            "title": "External Reference Type",
+            "type": "string"
+          },
+          "metadata_json": {
+            "default": {},
+            "title": "Metadata Json",
+            "type": "object"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "origin_event_id": {
+            "default": "",
+            "title": "Origin Event Id",
+            "type": "string"
+          },
+          "origin_system": {
+            "default": "",
+            "title": "Origin System",
+            "type": "string"
+          },
+          "origin_tenant": {
+            "default": "",
+            "title": "Origin Tenant",
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/TimelineSeverity",
+            "default": "INFO"
+          },
+          "signature_algorithm": {
+            "default": "",
+            "title": "Signature Algorithm",
+            "type": "string"
+          },
+          "signature_value": {
+            "default": "",
+            "title": "Signature Value",
+            "type": "string"
+          },
+          "signed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed At"
+          },
+          "source_system": {
+            "$ref": "#/components/schemas/TimelineSourceSystem"
+          },
+          "source_type": {
+            "default": "",
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_system",
+          "entity_type",
+          "entity_id",
+          "event_type",
+          "occurred_at"
+        ],
+        "title": "TimelineEventRecordRequest",
+        "type": "object"
+      },
+      "TimelineExportChainSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "chain_valid": {
+            "title": "Chain Valid",
+            "type": "boolean"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "first_event_id": {
+            "title": "First Event Id",
+            "type": "string"
+          },
+          "last_event_hash": {
+            "title": "Last Event Hash",
+            "type": "string"
+          },
+          "last_event_id": {
+            "title": "Last Event Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id",
+          "event_count",
+          "chain_valid",
+          "first_event_id",
+          "last_event_id",
+          "last_event_hash"
+        ],
+        "title": "TimelineExportChainSummary",
+        "type": "object"
+      },
+      "TimelineExportResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "chain_verification_summary": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineExportChainSummary"
+            },
+            "title": "Chain Verification Summary",
+            "type": "array"
+          },
+          "deterministic_ordering": {
+            "default": true,
+            "title": "Deterministic Ordering",
+            "type": "boolean"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/services__timeline_authority__schemas__TimelineEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "integrity_status": {
+            "title": "Integrity Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "format",
+          "events",
+          "event_count",
+          "integrity_status",
+          "chain_verification_summary"
+        ],
+        "title": "TimelineExportResponse",
+        "type": "object"
+      },
+      "TimelineIntegrityResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "chain_details": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineChainStatus"
+            },
+            "title": "Chain Details",
+            "type": "array"
+          },
+          "chains_checked": {
+            "title": "Chains Checked",
+            "type": "integer"
+          },
+          "chains_invalid": {
+            "title": "Chains Invalid",
+            "type": "integer"
+          },
+          "chains_valid": {
+            "title": "Chains Valid",
+            "type": "integer"
+          },
+          "hash_chain_validations": {
+            "title": "Hash Chain Validations",
+            "type": "integer"
+          },
+          "integrity_valid": {
+            "title": "Integrity Valid",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_events": {
+            "title": "Total Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_events",
+          "chains_checked",
+          "chains_valid",
+          "chains_invalid",
+          "integrity_valid",
+          "chain_details",
+          "hash_chain_validations"
+        ],
+        "title": "TimelineIntegrityResponse",
+        "type": "object"
+      },
       "TimelineListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -26337,6 +26680,151 @@
           "cursor"
         ],
         "title": "TimelinePageResponse",
+        "type": "object"
+      },
+      "TimelineReplayResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/services__timeline_authority__schemas__TimelineEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "replay_deterministic": {
+            "default": true,
+            "title": "Replay Deterministic",
+            "type": "boolean"
+          },
+          "source_system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source System"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "events",
+          "event_count"
+        ],
+        "title": "TimelineReplayResponse",
+        "type": "object"
+      },
+      "TimelineSeverity": {
+        "enum": [
+          "DEBUG",
+          "INFO",
+          "WARNING",
+          "ERROR",
+          "CRITICAL"
+        ],
+        "title": "TimelineSeverity",
+        "type": "string"
+      },
+      "TimelineSourceSystem": {
+        "enum": [
+          "EVIDENCE_AUTHORITY",
+          "RISK_GOVERNANCE",
+          "CONTROL_REGISTRY",
+          "GOVERNANCE_PORTAL",
+          "GOVERNANCE_REPORTING",
+          "FIELD_ASSESSMENT",
+          "FRAMEWORK_AUTHORITY",
+          "REMEDIATION_VERIFICATION",
+          "AUTONOMOUS_GOVERNANCE",
+          "TIMELINE_AUTHORITY"
+        ],
+        "title": "TimelineSourceSystem",
+        "type": "string"
+      },
+      "TimelineStatisticsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "events_by_entity_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Events By Entity Type",
+            "type": "object"
+          },
+          "events_by_severity": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Events By Severity",
+            "type": "object"
+          },
+          "events_by_source_system": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Events By Source System",
+            "type": "object"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_events": {
+            "title": "Total Events",
+            "type": "integer"
+          },
+          "unique_entities": {
+            "title": "Unique Entities",
+            "type": "integer"
+          },
+          "unique_source_systems": {
+            "title": "Unique Source Systems",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_events",
+          "events_by_source_system",
+          "events_by_entity_type",
+          "events_by_severity",
+          "unique_entities",
+          "unique_source_systems"
+        ],
+        "title": "TimelineStatisticsResponse",
         "type": "object"
       },
       "TopItem": {
@@ -30681,6 +31169,167 @@
           "allowed"
         ],
         "title": "AllowedTransitionsResponse",
+        "type": "object"
+      },
+      "services__timeline_authority__schemas__TimelineEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_type": {
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "authority_level": {
+            "title": "Authority Level",
+            "type": "string"
+          },
+          "causation_id": {
+            "title": "Causation Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "event_hash": {
+            "title": "Event Hash",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "external_reference": {
+            "title": "External Reference",
+            "type": "string"
+          },
+          "external_reference_type": {
+            "title": "External Reference Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata_json": {
+            "title": "Metadata Json",
+            "type": "object"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "origin_event_id": {
+            "title": "Origin Event Id",
+            "type": "string"
+          },
+          "origin_system": {
+            "title": "Origin System",
+            "type": "string"
+          },
+          "origin_tenant": {
+            "title": "Origin Tenant",
+            "type": "string"
+          },
+          "prev_event_hash": {
+            "title": "Prev Event Hash",
+            "type": "string"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "replay_version": {
+            "title": "Replay Version",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "signature_algorithm": {
+            "title": "Signature Algorithm",
+            "type": "string"
+          },
+          "signature_value": {
+            "title": "Signature Value",
+            "type": "string"
+          },
+          "signed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed At"
+          },
+          "source_system": {
+            "title": "Source System",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "event_id",
+          "event_hash",
+          "prev_event_hash",
+          "source_system",
+          "source_type",
+          "entity_type",
+          "entity_id",
+          "event_type",
+          "actor_type",
+          "actor_id",
+          "occurred_at",
+          "recorded_at",
+          "severity",
+          "metadata_json",
+          "correlation_id",
+          "causation_id",
+          "replay_version",
+          "schema_version",
+          "authority_level",
+          "signature_algorithm",
+          "signature_value",
+          "signed_at",
+          "external_reference",
+          "external_reference_type",
+          "origin_system",
+          "origin_tenant",
+          "origin_event_id"
+        ],
+        "title": "TimelineEventResponse",
         "type": "object"
       }
     }
@@ -74971,6 +75620,704 @@
         "summary": "Explain Capability",
         "tags": [
           "subscriptions"
+        ]
+      }
+    },
+    "/timeline-authority/entities/{entity_type}/{entity_id}": {
+      "get": {
+        "operationId": "get_entity_timeline_timeline_authority_entities__entity_type___entity_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_type",
+            "required": true,
+            "schema": {
+              "title": "Entity Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/services__timeline_authority__schemas__TimelineEventResponse"
+                  },
+                  "title": "Response Get Entity Timeline Timeline Authority Entities  Entity Type   Entity Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Entity Timeline",
+        "tags": [
+          "timeline-authority"
+        ]
+      }
+    },
+    "/timeline-authority/events": {
+      "get": {
+        "operationId": "list_timeline_events_timeline_authority_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_system",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source System"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/services__timeline_authority__schemas__TimelineEventResponse"
+                  },
+                  "title": "Response List Timeline Events Timeline Authority Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Timeline Events",
+        "tags": [
+          "timeline-authority"
+        ]
+      },
+      "post": {
+        "operationId": "record_timeline_event_timeline_authority_events_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimelineEventRecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__timeline_authority__schemas__TimelineEventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Timeline Event",
+        "tags": [
+          "timeline-authority"
+        ]
+      }
+    },
+    "/timeline-authority/events/{event_id}": {
+      "get": {
+        "operationId": "get_timeline_event_timeline_authority_events__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__timeline_authority__schemas__TimelineEventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Timeline Event",
+        "tags": [
+          "timeline-authority"
+        ]
+      }
+    },
+    "/timeline-authority/export": {
+      "get": {
+        "operationId": "export_timeline_timeline_authority_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "entity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Timeline",
+        "tags": [
+          "timeline-authority"
+        ]
+      }
+    },
+    "/timeline-authority/integrity": {
+      "get": {
+        "operationId": "verify_integrity_timeline_authority_integrity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineIntegrityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Integrity",
+        "tags": [
+          "timeline-authority"
+        ]
+      }
+    },
+    "/timeline-authority/replay": {
+      "get": {
+        "operationId": "replay_timeline_timeline_authority_replay_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "entity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_system",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source System"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Timeline",
+        "tags": [
+          "timeline-authority"
+        ]
+      }
+    },
+    "/timeline-authority/statistics": {
+      "get": {
+        "operationId": "get_statistics_timeline_authority_statistics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineStatisticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Statistics",
+        "tags": [
+          "timeline-authority"
         ]
       }
     },

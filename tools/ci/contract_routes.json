@@ -3764,6 +3764,54 @@
     },
     {
       "method": "GET",
+      "path": "/timeline-authority/entities/{entity_type}/{entity_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/timeline-authority/events",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/timeline-authority/events",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/timeline-authority/events/{event_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/timeline-authority/export",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/timeline-authority/integrity",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/timeline-authority/replay",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/timeline-authority/statistics",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/ui/entitlements",
       "scopes": [],
       "source": "contract"
@@ -3883,7 +3931,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-22T20:58:07.971882+00:00",
+  "generated_at": "2026-06-23T12:33:11.545084+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

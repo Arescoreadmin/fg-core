@@ -2959,3 +2959,40 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `make route-inventory-audit`: OK
 - `make soc-review-sync`: OK (local)
 - `pytest tests/test_framework_authority.py`: 114/114 passed
+
+---
+
+## 2026-06-22 — PR 14.6.2 Timeline Authority (Canonical Governance Ledger)
+
+**Reviewer:** Codex | **Classification:** SOC-P2 (new GOVERNANCE plane routes; new FORCE RLS table; append-only enforcement at DB and ORM level; no auth mechanism change; existing tenant isolation model preserved)
+
+**Change:** Introduces `TimelineAuthority` — a new bounded context providing an append-only, hash-chained, deterministic governance ledger. Adds 8 new routes under `/timeline-authority` prefix. All routes are mounted in the `control` plane (`governance:read/write` scopes). Migration 0125 creates `fa_timeline_events` with FORCE RLS and append-only PostgreSQL triggers.
+
+**Security-relevant decisions:**
+
+1. **FORCE RLS:** `fa_timeline_events` has `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY`. The `fa_timeline_events_tenant_isolation` policy enforces `tenant_id = current_setting('app.tenant_id', true)` on both read (USING) and write (WITH CHECK).
+
+2. **Append-only enforcement — defense in depth:** Three independent layers prevent mutation: (a) PostgreSQL triggers `fa_timeline_events_append_only_update` and `fa_timeline_events_append_only_delete` call `fg_append_only_enforcer()` raising exceptions; (b) SQLite `RAISE(ABORT)` triggers added to `_auto_migrate_sqlite()` in `api/db.py`; (c) SQLAlchemy ORM `before_update` and `before_delete` event listeners on `TimelineAuthorityEventRecord` raise `ValueError`.
+
+3. **Hash chain integrity:** Every event stores a SHA-256 `event_hash` over canonical JSON (event_id, entity fields, occurred_at, source_system, prev_event_hash, metadata_json, tenant_id) and a `prev_event_hash` linking to the previous event in the chain. The genesis event uses `"0" * 64`. The `/integrity` endpoint walks all entity chains and verifies linkage.
+
+4. **Tenant cross-contamination prevention:** All repository methods filter by `tenant_id`. All routes call `require_bound_tenant()` before passing `tenant_id` to the engine. `derive_event_id` includes `tenant_id` in the canonical hash input, so the same logical event from different tenants produces different event IDs.
+
+5. **Scope requirements:** Write routes (`POST /timeline-authority/events`) require `governance:write`. All read routes require `governance:read`. Unauthenticated requests receive 401/403.
+
+**Files Changed (security-relevant):**
+
+- `api/timeline_authority.py` — 8 new routes; all gated on `require_scopes()`; all call `require_bound_tenant()`
+- `api/db_models_timeline_authority.py` — ORM append-only guards via `sa_event.listens_for`
+- `services/timeline_authority/repository.py` — deterministic `derive_event_id()` and `compute_event_hash()` (full 64-char SHA-256); all queries filtered by tenant_id
+- `services/timeline_authority/engine.py` — `_verify_chain()` validates hash linkage; 6 Prometheus counters
+- `migrations/postgres/0125_timeline_authority.sql` — FORCE RLS; tenant isolation policy; append-only triggers
+- `api/db.py` — SQLite `RAISE(ABORT)` triggers for `fa_timeline_events`; model registration
+- `services/plane_registry/registry.py` — added `/timeline-authority` to control plane route_prefixes
+
+**Validation:**
+
+- `make route-inventory-generate`: OK
+- `make contract-authority-refresh`: OK
+- `make route-inventory-audit`: OK
+- `pytest tests/test_timeline_authority.py`: 110+/110+ passed
