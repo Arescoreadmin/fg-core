@@ -52,6 +52,16 @@ class TimelineActorType(str, Enum):
     SYSTEM = "SYSTEM"
 
 
+class TimelineAuthorityLevel(str, Enum):
+    SYSTEM = "SYSTEM"
+    HUMAN = "HUMAN"
+    REVIEWER = "REVIEWER"
+    COMMITTEE = "COMMITTEE"
+    AUTONOMOUS_AGENT = "AUTONOMOUS_AGENT"
+    AUTONOMOUS_SYSTEM = "AUTONOMOUS_SYSTEM"
+    AGI_SYSTEM = "AGI_SYSTEM"
+
+
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
@@ -97,6 +107,19 @@ class TimelineEventRecordRequest(BaseModel):
     metadata_json: dict[str, Any] = {}
     correlation_id: str = ""
     causation_id: str = ""
+    # P1: authority level
+    authority_level: TimelineAuthorityLevel = TimelineAuthorityLevel.SYSTEM
+    # P1: signature reservation (unused until Notary / cryptographic chains)
+    signature_algorithm: str = ""
+    signature_value: str = ""
+    signed_at: str | None = None
+    # P1: external references (Jira, ServiceNow, Azure DevOps, legal hold)
+    external_reference: str = ""
+    external_reference_type: str = ""
+    # P1: federation hooks (CGIN / cross-tenant governance analytics)
+    origin_system: str = ""
+    origin_tenant: str = ""
+    origin_event_id: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +150,16 @@ class TimelineEventResponse(BaseModel):
     causation_id: str
     replay_version: int
     schema_version: int
+    # P1 fields
+    authority_level: str
+    signature_algorithm: str
+    signature_value: str
+    signed_at: str | None
+    external_reference: str
+    external_reference_type: str
+    origin_system: str
+    origin_tenant: str
+    origin_event_id: str
 
 
 class TimelineReplayResponse(BaseModel):

@@ -7,6 +7,7 @@ _SCHEMA_EXPORTS = {
     "TimelineEntityType",
     "TimelineSeverity",
     "TimelineActorType",
+    "TimelineAuthorityLevel",
     "TimelineAuthorityError",
     "TimelineEventNotFound",
     "TimelineConflict",

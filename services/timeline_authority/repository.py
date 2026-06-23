@@ -136,6 +136,15 @@ class TimelineAuthorityRepository:
         metadata_json: dict,
         correlation_id: str,
         causation_id: str,
+        authority_level: str = "SYSTEM",
+        signature_algorithm: str = "",
+        signature_value: str = "",
+        signed_at: datetime | None = None,
+        external_reference: str = "",
+        external_reference_type: str = "",
+        origin_system: str = "",
+        origin_tenant: str = "",
+        origin_event_id: str = "",
     ):
         from api.db_models_timeline_authority import TimelineAuthorityEventRecord
 
@@ -158,6 +167,15 @@ class TimelineAuthorityRepository:
             metadata_json=metadata_json,
             correlation_id=correlation_id,
             causation_id=causation_id,
+            authority_level=authority_level,
+            signature_algorithm=signature_algorithm,
+            signature_value=signature_value,
+            signed_at=signed_at,
+            external_reference=external_reference,
+            external_reference_type=external_reference_type,
+            origin_system=origin_system,
+            origin_tenant=origin_tenant,
+            origin_event_id=origin_event_id,
         )
         try:
             db.add(record)

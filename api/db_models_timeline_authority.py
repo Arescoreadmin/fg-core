@@ -60,6 +60,25 @@ class TimelineAuthorityEventRecord(Base):
     replay_version = Column(Integer, nullable=False, default=1)
     schema_version = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    # P1: authority level
+    authority_level = Column(
+        String(32), nullable=False, default="SYSTEM", server_default="SYSTEM"
+    )
+    # P1: signature reservation
+    signature_algorithm = Column(
+        String(64), nullable=False, default="", server_default=""
+    )
+    signature_value = Column(Text, nullable=False, default="", server_default="")
+    signed_at = Column(DateTime(timezone=True), nullable=True)
+    # P1: external references
+    external_reference = Column(Text, nullable=False, default="", server_default="")
+    external_reference_type = Column(
+        String(128), nullable=False, default="", server_default=""
+    )
+    # P1: federation hooks
+    origin_system = Column(String(255), nullable=False, default="", server_default="")
+    origin_tenant = Column(String(255), nullable=False, default="", server_default="")
+    origin_event_id = Column(String(255), nullable=False, default="", server_default="")
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "event_id", name="uq_fa_timeline_event_id"),

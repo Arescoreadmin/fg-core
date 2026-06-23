@@ -1593,6 +1593,22 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 """
             )
 
+        # PR 14.6.2 P1: Timeline Authority — add new columns if missing
+        for col, decl in (
+            ("authority_level", "TEXT NOT NULL DEFAULT 'SYSTEM'"),
+            ("signature_algorithm", "TEXT NOT NULL DEFAULT ''"),
+            ("signature_value", "TEXT NOT NULL DEFAULT ''"),
+            ("signed_at", "TEXT"),
+            ("external_reference", "TEXT NOT NULL DEFAULT ''"),
+            ("external_reference_type", "TEXT NOT NULL DEFAULT ''"),
+            ("origin_system", "TEXT NOT NULL DEFAULT ''"),
+            ("origin_tenant", "TEXT NOT NULL DEFAULT ''"),
+            ("origin_event_id", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            _sqlite_add_col_if_missing(
+                conn._dbapi_connection, "fa_timeline_events", col, decl
+            )
+
         # PR 14.6.2: Timeline Authority - fa_timeline_events append-only triggers
         for table in ("fa_timeline_events",):
             conn.exec_driver_sql(

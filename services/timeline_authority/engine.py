@@ -121,6 +121,15 @@ def _record_to_response(row) -> TimelineEventResponse:
         causation_id=row.causation_id or "",
         replay_version=row.replay_version,
         schema_version=row.schema_version,
+        authority_level=getattr(row, "authority_level", None) or "SYSTEM",
+        signature_algorithm=getattr(row, "signature_algorithm", None) or "",
+        signature_value=getattr(row, "signature_value", None) or "",
+        signed_at=_iso(row.signed_at) if getattr(row, "signed_at", None) else None,
+        external_reference=getattr(row, "external_reference", None) or "",
+        external_reference_type=getattr(row, "external_reference_type", None) or "",
+        origin_system=getattr(row, "origin_system", None) or "",
+        origin_tenant=getattr(row, "origin_tenant", None) or "",
+        origin_event_id=getattr(row, "origin_event_id", None) or "",
     )
 
 
@@ -169,6 +178,12 @@ class TimelineAuthorityEngine:
 
         actor_id = payload.actor_id or actor
 
+        signed_at_dt = None
+        if payload.signed_at:
+            signed_at_dt = datetime.fromisoformat(
+                payload.signed_at.replace("Z", "+00:00")
+            )
+
         row = self._repo.insert(
             db,
             tenant_id=tenant_id,
@@ -187,6 +202,15 @@ class TimelineAuthorityEngine:
             metadata_json=payload.metadata_json,
             correlation_id=payload.correlation_id,
             causation_id=payload.causation_id,
+            authority_level=payload.authority_level.value,
+            signature_algorithm=payload.signature_algorithm,
+            signature_value=payload.signature_value,
+            signed_at=signed_at_dt,
+            external_reference=payload.external_reference,
+            external_reference_type=payload.external_reference_type,
+            origin_system=payload.origin_system,
+            origin_tenant=payload.origin_tenant,
+            origin_event_id=payload.origin_event_id,
         )
         TIMELINE_EVENTS_RECORDED_TOTAL.inc()
         return _record_to_response(row)

@@ -26275,6 +26275,19 @@
         "title": "TimelineActorType",
         "type": "string"
       },
+      "TimelineAuthorityLevel": {
+        "enum": [
+          "SYSTEM",
+          "HUMAN",
+          "REVIEWER",
+          "COMMITTEE",
+          "AUTONOMOUS_AGENT",
+          "AUTONOMOUS_SYSTEM",
+          "AGI_SYSTEM"
+        ],
+        "title": "TimelineAuthorityLevel",
+        "type": "string"
+      },
       "TimelineChainStatus": {
         "additionalProperties": false,
         "properties": {
@@ -26345,6 +26358,10 @@
             "$ref": "#/components/schemas/TimelineActorType",
             "default": "SYSTEM"
           },
+          "authority_level": {
+            "$ref": "#/components/schemas/TimelineAuthorityLevel",
+            "default": "SYSTEM"
+          },
           "causation_id": {
             "default": "",
             "title": "Causation Id",
@@ -26366,6 +26383,16 @@
             "title": "Event Type",
             "type": "string"
           },
+          "external_reference": {
+            "default": "",
+            "title": "External Reference",
+            "type": "string"
+          },
+          "external_reference_type": {
+            "default": "",
+            "title": "External Reference Type",
+            "type": "string"
+          },
           "metadata_json": {
             "default": {},
             "title": "Metadata Json",
@@ -26375,9 +26402,45 @@
             "title": "Occurred At",
             "type": "string"
           },
+          "origin_event_id": {
+            "default": "",
+            "title": "Origin Event Id",
+            "type": "string"
+          },
+          "origin_system": {
+            "default": "",
+            "title": "Origin System",
+            "type": "string"
+          },
+          "origin_tenant": {
+            "default": "",
+            "title": "Origin Tenant",
+            "type": "string"
+          },
           "severity": {
             "$ref": "#/components/schemas/TimelineSeverity",
             "default": "INFO"
+          },
+          "signature_algorithm": {
+            "default": "",
+            "title": "Signature Algorithm",
+            "type": "string"
+          },
+          "signature_value": {
+            "default": "",
+            "title": "Signature Value",
+            "type": "string"
+          },
+          "signed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed At"
           },
           "source_system": {
             "$ref": "#/components/schemas/TimelineSourceSystem"
@@ -31119,6 +31182,10 @@
             "title": "Actor Type",
             "type": "string"
           },
+          "authority_level": {
+            "title": "Authority Level",
+            "type": "string"
+          },
           "causation_id": {
             "title": "Causation Id",
             "type": "string"
@@ -31147,6 +31214,14 @@
             "title": "Event Type",
             "type": "string"
           },
+          "external_reference": {
+            "title": "External Reference",
+            "type": "string"
+          },
+          "external_reference_type": {
+            "title": "External Reference Type",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -31157,6 +31232,18 @@
           },
           "occurred_at": {
             "title": "Occurred At",
+            "type": "string"
+          },
+          "origin_event_id": {
+            "title": "Origin Event Id",
+            "type": "string"
+          },
+          "origin_system": {
+            "title": "Origin System",
+            "type": "string"
+          },
+          "origin_tenant": {
+            "title": "Origin Tenant",
             "type": "string"
           },
           "prev_event_hash": {
@@ -31178,6 +31265,25 @@
           "severity": {
             "title": "Severity",
             "type": "string"
+          },
+          "signature_algorithm": {
+            "title": "Signature Algorithm",
+            "type": "string"
+          },
+          "signature_value": {
+            "title": "Signature Value",
+            "type": "string"
+          },
+          "signed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed At"
           },
           "source_system": {
             "title": "Source System",
@@ -31212,7 +31318,16 @@
           "correlation_id",
           "causation_id",
           "replay_version",
-          "schema_version"
+          "schema_version",
+          "authority_level",
+          "signature_algorithm",
+          "signature_value",
+          "signed_at",
+          "external_reference",
+          "external_reference_type",
+          "origin_system",
+          "origin_tenant",
+          "origin_event_id"
         ],
         "title": "TimelineEventResponse",
         "type": "object"

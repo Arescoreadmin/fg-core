@@ -1904,3 +1904,441 @@ def test_sqlite_append_only_delete_trigger(api_bundle):
     with pytest.raises(sqlite3.DatabaseError):
         con.execute("DELETE FROM fa_timeline_events WHERE id = 'test-trig-row'")
     con.close()
+
+
+# =============================================================================
+# P1: Authority Level
+# =============================================================================
+
+
+def test_p1_authority_level_defaults_to_system(api_bundle):
+    """TA-P1-01: authority_level defaults to SYSTEM when not specified."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "EVIDENCE_AUTHORITY",
+        "entity_type": "EVIDENCE",
+        "entity_id": "p1-ev-default-al",
+        "event_type": "P1_DEFAULT_AL",
+        "occurred_at": "2026-06-22T10:00:00Z",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["authority_level"] == "SYSTEM"
+
+
+def test_p1_authority_level_human(api_bundle):
+    """TA-P1-02: authority_level HUMAN is accepted and persisted."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "GOVERNANCE_PORTAL",
+        "entity_type": "DECISION",
+        "entity_id": "p1-dec-human",
+        "event_type": "HUMAN_APPROVED",
+        "occurred_at": "2026-06-22T10:01:00Z",
+        "authority_level": "HUMAN",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["authority_level"] == "HUMAN"
+
+
+def test_p1_authority_level_committee(api_bundle):
+    """TA-P1-03: authority_level COMMITTEE is accepted."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "GOVERNANCE_REPORTING",
+        "entity_type": "REPORT",
+        "entity_id": "p1-rep-committee",
+        "event_type": "COMMITTEE_REVIEW",
+        "occurred_at": "2026-06-22T10:02:00Z",
+        "authority_level": "COMMITTEE",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["authority_level"] == "COMMITTEE"
+
+
+def test_p1_authority_level_autonomous_agent(api_bundle):
+    """TA-P1-04: authority_level AUTONOMOUS_AGENT is accepted."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "AUTONOMOUS_GOVERNANCE",
+        "entity_type": "AGENT",
+        "entity_id": "p1-agent-aa",
+        "event_type": "AGENT_DECISION",
+        "occurred_at": "2026-06-22T10:03:00Z",
+        "authority_level": "AUTONOMOUS_AGENT",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["authority_level"] == "AUTONOMOUS_AGENT"
+
+
+def test_p1_authority_level_agi_system(api_bundle):
+    """TA-P1-05: authority_level AGI_SYSTEM is accepted — future-proofing."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "AUTONOMOUS_GOVERNANCE",
+        "entity_type": "DECISION",
+        "entity_id": "p1-dec-agi",
+        "event_type": "AGI_GOVERNANCE_DECISION",
+        "occurred_at": "2026-06-22T10:04:00Z",
+        "authority_level": "AGI_SYSTEM",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["authority_level"] == "AGI_SYSTEM"
+
+
+def test_p1_authority_level_all_values_accepted(api_bundle):
+    """TA-P1-06: all defined authority_level values are accepted by the API."""
+    from services.timeline_authority.schemas import TimelineAuthorityLevel
+
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    for i, level in enumerate(TimelineAuthorityLevel):
+        payload = {
+            "source_system": "CONTROL_REGISTRY",
+            "entity_type": "CONTROL",
+            "entity_id": f"p1-ctrl-al-{i}",
+            "event_type": f"AL_TEST_{level.value}",
+            "occurred_at": f"2026-06-22T10:10:{i:02d}Z",
+            "authority_level": level.value,
+        }
+        resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+        assert resp.status_code == 200, f"authority_level={level.value} rejected"
+        assert resp.json()["authority_level"] == level.value
+
+
+def test_p1_authority_level_invalid_rejected(api_bundle):
+    """TA-P1-07: invalid authority_level is rejected with 422."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "CONTROL_REGISTRY",
+        "entity_type": "CONTROL",
+        "entity_id": "p1-invalid-al",
+        "event_type": "TEST",
+        "occurred_at": "2026-06-22T10:20:00Z",
+        "authority_level": "NOT_A_REAL_LEVEL",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 422
+
+
+def test_p1_authority_level_in_response(api_bundle):
+    """TA-P1-08: authority_level appears in GET /events response."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    resp = client.get("/timeline-authority/events", headers=headers)
+    assert resp.status_code == 200
+    events = resp.json()
+    assert len(events) > 0
+    assert "authority_level" in events[0]
+
+
+# =============================================================================
+# P1: Signature Reservation
+# =============================================================================
+
+
+def test_p1_signature_fields_default_empty(api_bundle):
+    """TA-P1-09: signature fields default to empty strings, signed_at to None."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "EVIDENCE_AUTHORITY",
+        "entity_type": "EVIDENCE",
+        "entity_id": "p1-ev-sig-default",
+        "event_type": "SIG_DEFAULT",
+        "occurred_at": "2026-06-22T11:00:00Z",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["signature_algorithm"] == ""
+    assert body["signature_value"] == ""
+    assert body["signed_at"] is None
+
+
+def test_p1_signature_algorithm_stored(api_bundle):
+    """TA-P1-10: signature_algorithm is persisted and returned."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "EVIDENCE_AUTHORITY",
+        "entity_type": "EVIDENCE",
+        "entity_id": "p1-ev-sig-alg",
+        "event_type": "SIG_ALG_TEST",
+        "occurred_at": "2026-06-22T11:01:00Z",
+        "signature_algorithm": "Ed25519",
+        "signature_value": "base64encodedvalue==",
+        "signed_at": "2026-06-22T11:01:30Z",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["signature_algorithm"] == "Ed25519"
+    assert body["signature_value"] == "base64encodedvalue=="
+    assert body["signed_at"] is not None
+
+
+def test_p1_signature_reserved_without_value_accepted(api_bundle):
+    """TA-P1-11: partial signature fields (algorithm only) are accepted."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "RISK_GOVERNANCE",
+        "entity_type": "RISK",
+        "entity_id": "p1-risk-sig-partial",
+        "event_type": "SIG_PARTIAL",
+        "occurred_at": "2026-06-22T11:02:00Z",
+        "signature_algorithm": "SHA256withRSA",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["signature_algorithm"] == "SHA256withRSA"
+    assert resp.json()["signature_value"] == ""
+
+
+# =============================================================================
+# P1: External References
+# =============================================================================
+
+
+def test_p1_external_reference_defaults_empty(api_bundle):
+    """TA-P1-12: external_reference fields default to empty strings."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "FIELD_ASSESSMENT",
+        "entity_type": "ENGAGEMENT",
+        "entity_id": "p1-eng-extref-default",
+        "event_type": "EXTREF_DEFAULT",
+        "occurred_at": "2026-06-22T12:00:00Z",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["external_reference"] == ""
+    assert body["external_reference_type"] == ""
+
+
+def test_p1_external_reference_jira(api_bundle):
+    """TA-P1-13: Jira ticket reference is persisted and returned."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "CONTROL_REGISTRY",
+        "entity_type": "CONTROL",
+        "entity_id": "p1-ctrl-jira",
+        "event_type": "JIRA_LINKED",
+        "occurred_at": "2026-06-22T12:01:00Z",
+        "external_reference": "CTRL-1234",
+        "external_reference_type": "JIRA",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["external_reference"] == "CTRL-1234"
+    assert body["external_reference_type"] == "JIRA"
+
+
+def test_p1_external_reference_servicenow(api_bundle):
+    """TA-P1-14: ServiceNow ticket reference is accepted."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "RISK_GOVERNANCE",
+        "entity_type": "RISK",
+        "entity_id": "p1-risk-snow",
+        "event_type": "SNOW_LINKED",
+        "occurred_at": "2026-06-22T12:02:00Z",
+        "external_reference": "INC0012345",
+        "external_reference_type": "SERVICENOW",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["external_reference_type"] == "SERVICENOW"
+
+
+def test_p1_external_reference_legal_hold(api_bundle):
+    """TA-P1-15: Legal hold reference type is accepted — future regulatory use."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "EVIDENCE_AUTHORITY",
+        "entity_type": "EVIDENCE",
+        "entity_id": "p1-ev-legalhold",
+        "event_type": "LEGAL_HOLD_APPLIED",
+        "occurred_at": "2026-06-22T12:03:00Z",
+        "external_reference": "LH-2026-001",
+        "external_reference_type": "LEGAL_HOLD",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["external_reference"] == "LH-2026-001"
+
+
+def test_p1_external_reference_in_get_event(api_bundle):
+    """TA-P1-16: external_reference fields are present in GET /events/{event_id}."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    post_resp = client.post(
+        "/timeline-authority/events",
+        json={
+            "source_system": "CONTROL_REGISTRY",
+            "entity_type": "CONTROL",
+            "entity_id": "p1-ctrl-extref-get",
+            "event_type": "EXTREF_GET_TEST",
+            "occurred_at": "2026-06-22T12:04:00Z",
+            "external_reference": "ADO-9999",
+            "external_reference_type": "AZURE_DEVOPS",
+        },
+        headers=headers,
+    )
+    assert post_resp.status_code == 200
+    event_id = post_resp.json()["event_id"]
+    get_resp = client.get(f"/timeline-authority/events/{event_id}", headers=headers)
+    assert get_resp.status_code == 200
+    body = get_resp.json()
+    assert body["external_reference"] == "ADO-9999"
+    assert body["external_reference_type"] == "AZURE_DEVOPS"
+
+
+# =============================================================================
+# P1: Federation Hooks
+# =============================================================================
+
+
+def test_p1_federation_hooks_default_empty(api_bundle):
+    """TA-P1-17: federation hook fields default to empty strings."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "TIMELINE_AUTHORITY",
+        "entity_type": "TENANT",
+        "entity_id": "p1-tenant-fed-default",
+        "event_type": "FED_DEFAULT",
+        "occurred_at": "2026-06-22T13:00:00Z",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["origin_system"] == ""
+    assert body["origin_tenant"] == ""
+    assert body["origin_event_id"] == ""
+
+
+def test_p1_federation_hooks_stored(api_bundle):
+    """TA-P1-18: federation hook fields are persisted and returned."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "TIMELINE_AUTHORITY",
+        "entity_type": "DECISION",
+        "entity_id": "p1-dec-fed",
+        "event_type": "FEDERATED_EVENT",
+        "occurred_at": "2026-06-22T13:01:00Z",
+        "origin_system": "partner-frostgate-eu",
+        "origin_tenant": "partner-tenant-eu-001",
+        "origin_event_id": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["origin_system"] == "partner-frostgate-eu"
+    assert body["origin_tenant"] == "partner-tenant-eu-001"
+    assert (
+        body["origin_event_id"]
+        == "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    )
+
+
+def test_p1_federation_hooks_in_entity_timeline(api_bundle):
+    """TA-P1-19: federation hook fields present in entity timeline response."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "RISK_GOVERNANCE",
+        "entity_type": "RISK",
+        "entity_id": "p1-risk-fed-timeline",
+        "event_type": "FED_TIMELINE",
+        "occurred_at": "2026-06-22T13:02:00Z",
+        "origin_system": "cgin-node-1",
+    }
+    client.post("/timeline-authority/events", json=payload, headers=headers)
+    resp = client.get(
+        "/timeline-authority/entities/RISK/p1-risk-fed-timeline", headers=headers
+    )
+    assert resp.status_code == 200
+    events = resp.json()
+    assert len(events) >= 1
+    assert "origin_system" in events[0]
+    assert events[0]["origin_system"] == "cgin-node-1"
+
+
+def test_p1_federation_partial_hook_accepted(api_bundle):
+    """TA-P1-20: only origin_system set (partial federation) is valid."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    payload = {
+        "source_system": "AUTONOMOUS_GOVERNANCE",
+        "entity_type": "AGENT",
+        "entity_id": "p1-agent-fed-partial",
+        "event_type": "PARTIAL_FED",
+        "occurred_at": "2026-06-22T13:03:00Z",
+        "origin_system": "cgin-network-alpha",
+    }
+    resp = client.post("/timeline-authority/events", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["origin_system"] == "cgin-network-alpha"
+    assert resp.json()["origin_tenant"] == ""
+    assert resp.json()["origin_event_id"] == ""
+
+
+# =============================================================================
+# P1: Schema export
+# =============================================================================
+
+
+def test_p1_authority_level_enum_exported(api_bundle):
+    """TA-P1-21: TimelineAuthorityLevel is exported from the service __init__."""
+    from services.timeline_authority import TimelineAuthorityLevel
+
+    assert TimelineAuthorityLevel.AGI_SYSTEM.value == "AGI_SYSTEM"
+    assert TimelineAuthorityLevel.AUTONOMOUS_AGENT.value == "AUTONOMOUS_AGENT"
+    assert len(list(TimelineAuthorityLevel)) == 7
+
+
+def test_p1_all_p1_fields_in_response_schema(api_bundle):
+    """TA-P1-22: all P1 fields are present in TimelineEventResponse."""
+    from services.timeline_authority.schemas import TimelineEventResponse
+
+    fields = TimelineEventResponse.model_fields
+    for field in (
+        "authority_level",
+        "signature_algorithm",
+        "signature_value",
+        "signed_at",
+        "external_reference",
+        "external_reference_type",
+        "origin_system",
+        "origin_tenant",
+        "origin_event_id",
+    ):
+        assert field in fields, f"Missing P1 field in response schema: {field}"
+
+
+def test_p1_migration_file_exists(api_bundle):
+    """TA-P1-23: migration 0126 exists on disk."""
+    import os
+
+    assert os.path.exists("migrations/postgres/0126_timeline_authority_p1.sql"), (
+        "P1 migration file missing"
+    )
