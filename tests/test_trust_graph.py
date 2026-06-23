@@ -1431,11 +1431,11 @@ class TestPerformance:
             ev = _ev(g, f"ev-{i}")
             fi = _fi(g, f"fi-{i}")
             _edge(g, ev, fi, EdgeType.EVIDENCE_TO_FINDING)
-        t0 = time.monotonic()
+        t0 = time.process_time()
         generate_trust_graph_manifest(g)
-        elapsed_ms = (time.monotonic() - t0) * 1000
+        elapsed_ms = (time.process_time() - t0) * 1000
         assert elapsed_ms < 1000, (
-            f"10000-node manifest took {elapsed_ms:.1f}ms (target <1000ms)"
+            f"10000-node manifest took {elapsed_ms:.1f}ms CPU time (target <1000ms)"
         )
 
     def test_100_node_manifest_under_50ms(self) -> None:

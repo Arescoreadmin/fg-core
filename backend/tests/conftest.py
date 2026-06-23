@@ -24,11 +24,12 @@ def _restore_env():
     os.environ.update(before)
 
 
+_CI_TEST_KEY = "ci-test-key-00000000000000000000000000000000"
+
+
 def _require_api_key() -> str:
     api_key = os.environ.get("FG_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("FG_API_KEY must be set for test runs.")
-    return api_key
+    return api_key or _CI_TEST_KEY
 
 
 @pytest.fixture()

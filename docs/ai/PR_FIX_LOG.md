@@ -15860,3 +15860,27 @@ No fixes required — initial implementation.
 **Root cause:** `UniqueConstraint("scope_type","tenant_id","framework_key","version")` does not prevent duplicate SYSTEM rows because SQL treats NULLs as distinct — two rows with `tenant_id=NULL` and the same `framework_key+version` both pass the constraint. Concurrent admin creates could insert duplicate canonical frameworks.
 
 **Fix:** Added partial unique index `uq_fa_frameworks_system_identity` on `(framework_key, version) WHERE scope_type='SYSTEM'` in the ORM model and migration `0127_framework_authority_system_unique.sql`.
+
+---
+
+## fix/conftest-api-key-fallback — Test suite contamination fixes
+
+**Files changed:** `tests/conftest.py`, `backend/tests/conftest.py`, `tests/test_governance_portal.py`
+
+**Fix 1: Session-scoped FG_API_KEY contamination**
+
+**Root cause:** Session-scoped fixtures in `test_framework_authority`, `test_timeline_authority`, `test_evidence_index`, and `test_resilience_guard` set `os.environ["FG_API_KEY"] = ""` to force `mint_key()`-based auth. Because these fixtures are session-scoped, the mutation outlives the function-scoped `_restore_env` fixture, leaving `FG_API_KEY=""` for every subsequent test that calls `_require_api_key()`. This caused 91 FAILs and 624 ERRORs in the full suite.
+
+**Fix:** Changed `_require_api_key()` in both `tests/conftest.py` and `backend/tests/conftest.py` to return the CI test key fallback (`ci-test-key-00000000000000000000000000000000`) when `FG_API_KEY` is empty or absent, matching the intent already expressed by the module-level `os.environ.setdefault()`.
+
+**Fix 2: Hardcoded date constants in test_governance_portal**
+
+**Root cause:** `_EXPIRING_SOON_VERIFIED = "2026-03-25"` was 90 days ago at time of run, crossing into the `expired` bucket for a 90-day review cycle. `_AGING_VERIFIED` (52 days ago) and `_SOON_EXPIRY` (+7 days) were also within days of their own threshold crossings.
+
+**Fix:** Replaced all wall-clock-relative constants with `datetime.now(timezone.utc) + timedelta(...)` expressions so freshness-bucket assertions never drift with calendar time.
+
+**Fix 3: Performance test flake under full-suite load**
+
+**Root cause:** `test_10000_nodes_manifest_under_1000ms` used `time.monotonic()` (wall clock) with a 1000ms budget. Under full-suite load with 11k+ tests competing for CPU, the wall-clock time exceeded 1000ms even though the actual CPU work took <50ms.
+
+**Fix:** Switched to `time.process_time()` (CPU time) so the budget measures actual computation rather than scheduling latency. The 1000ms CPU budget remains unchanged and is still a meaningful regression guard.
