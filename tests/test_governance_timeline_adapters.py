@@ -1620,3 +1620,17 @@ class TestAdapterRegistryPR145:
     def test_all_source_types_registered_including_governance_reporting(self):
         for source_type in SourceType:
             assert source_type in TIMELINE_ADAPTERS, f"{source_type} not in registry"
+
+
+def test_framework_authority_audit_events_cover_mapping_lifecycle() -> None:
+    from services.framework_authority.schemas import MappingAuditEventType
+
+    values = {member.value for member in MappingAuditEventType}
+    assert values >= {
+        "CREATED",
+        "UPDATED",
+        "ACTIVATED",
+        "SUPERSEDED",
+        "REJECTED",
+        "RETIRED",
+    }

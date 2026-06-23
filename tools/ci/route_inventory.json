@@ -2940,6 +2940,74 @@
     {
       "dependency_categories": [
         "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/control-framework-mappings/{mapping_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "PATCH",
+      "path": "/control-framework-mappings/{mapping_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/control-framework-mappings/{mapping_id}/audit",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "POST",
+      "path": "/control-framework-mappings/{mapping_id}/transitions",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate",
         "tenant"
       ],
@@ -5780,6 +5848,57 @@
       "file": "api/control_registry.py",
       "method": "POST",
       "path": "/controls/maintenance/review-sweep",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/controls/{control_id}/framework-coverage",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/controls/{control_id}/framework-mappings",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "POST",
+      "path": "/controls/{control_id}/framework-mappings",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -9067,6 +9186,193 @@
       "scoped": true,
       "scopes": [
         "forensics:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/frameworks",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "POST",
+      "path": "/frameworks",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/frameworks/{framework_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "PATCH",
+      "path": "/frameworks/{framework_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/frameworks/{framework_id}/control-mappings",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/frameworks/{framework_id}/controls",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "POST",
+      "path": "/frameworks/{framework_id}/controls",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/frameworks/{framework_id}/controls/{framework_control_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "PATCH",
+      "path": "/frameworks/{framework_id}/controls/{framework_control_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "GET",
+      "path": "/frameworks/{framework_id}/coverage",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/framework_authority.py",
+      "method": "POST",
+      "path": "/frameworks/{framework_id}/transitions",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -13599,7 +13905,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-22T19:26:18.425756+00:00",
+  "generated_at": "2026-06-22T20:58:07.956698+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground: #E9EEF5;
+  --background: #05070A;
+  --primary: #FF5A1F;
+  --primary-hover: #CC4919;
+  --border: #0B3A4A;
+  --muted: #94A3B8;
+  --surface: #0D1117;
+  --surface-2: #161B22;
+  --surface-3: #1C2333;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  :focus-visible {
+    @apply outline-none ring-1 ring-primary;
+  }
+}
+
+@layer components {
+  .prose-dark h1,
+  .prose-dark h2,
+  .prose-dark h3 {
+    @apply text-foreground font-semibold;
+  }
+  .prose-dark p {
+    @apply text-muted leading-relaxed;
+  }
+  .prose-dark ul {
+    @apply list-disc list-inside text-muted;
+  }
+}

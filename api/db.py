@@ -251,6 +251,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_evidence_authority"
     )  # PR 14.6.1: Canonical Evidence Authority
+    importlib.import_module(
+        "api.db_models_framework_authority"
+    )  # PR 14.6.3/4: Framework Authority
 
 
 def _get_base():
@@ -1566,6 +1569,26 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             "CREATE INDEX IF NOT EXISTS ix_tiga_tenant_dim "
             "ON tenant_identity_governance_actions (tenant_id, dimension, created_at)"
         )
+
+        for table in ("control_framework_mapping_audits",):
+            conn.exec_driver_sql(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {table}_append_only_update
+                BEFORE UPDATE ON {table}
+                BEGIN
+                    SELECT RAISE(ABORT, '{table} is append-only');
+                END;
+                """
+            )
+            conn.exec_driver_sql(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {table}_append_only_delete
+                BEFORE DELETE ON {table}
+                BEGIN
+                    SELECT RAISE(ABORT, '{table} is append-only');
+                END;
+                """
+            )
 
 
 # ---------------------------------------------------------------------

@@ -6382,6 +6382,336 @@
         "title": "ControlEvidenceLinkResponse",
         "type": "object"
       },
+      "ControlFrameworkCoverageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "framework_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/FrameworkCoverageDetailResponse"
+            },
+            "title": "Framework Coverage",
+            "type": "array"
+          },
+          "mapped_frameworks": {
+            "title": "Mapped Frameworks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "control_id",
+          "mapped_frameworks",
+          "framework_coverage"
+        ],
+        "title": "ControlFrameworkCoverageResponse",
+        "type": "object"
+      },
+      "ControlFrameworkMappingAuditResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_at": {
+            "format": "date-time",
+            "title": "Event At",
+            "type": "string"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/MappingAuditEventType"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mapping_id": {
+            "title": "Mapping Id",
+            "type": "string"
+          },
+          "new_state": {
+            "title": "New State",
+            "type": "object"
+          },
+          "old_state": {
+            "title": "Old State",
+            "type": "object"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "mapping_id",
+          "event_type",
+          "actor",
+          "event_at",
+          "old_state",
+          "new_state",
+          "reason",
+          "schema_version",
+          "created_at"
+        ],
+        "title": "ControlFrameworkMappingAuditResponse",
+        "type": "object"
+      },
+      "ControlFrameworkMappingCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "integer"
+          },
+          "coverage_level": {
+            "$ref": "#/components/schemas/CoverageLevel"
+          },
+          "framework_control_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Framework Control Id",
+            "type": "string"
+          },
+          "framework_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "mapping_type": {
+            "$ref": "#/components/schemas/MappingType"
+          },
+          "rationale": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MappingStatus",
+            "default": "DRAFT"
+          }
+        },
+        "required": [
+          "framework_id",
+          "framework_control_id",
+          "mapping_type",
+          "coverage_level",
+          "confidence",
+          "rationale"
+        ],
+        "title": "ControlFrameworkMappingCreateRequest",
+        "type": "object"
+      },
+      "ControlFrameworkMappingResponse": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "integer"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "control_ref": {
+            "title": "Control Ref",
+            "type": "string"
+          },
+          "coverage_level": {
+            "$ref": "#/components/schemas/CoverageLevel"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "framework_control_id": {
+            "title": "Framework Control Id",
+            "type": "string"
+          },
+          "framework_control_title": {
+            "title": "Framework Control Title",
+            "type": "string"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_key": {
+            "title": "Framework Key",
+            "type": "string"
+          },
+          "framework_name": {
+            "title": "Framework Name",
+            "type": "string"
+          },
+          "framework_scope_type": {
+            "$ref": "#/components/schemas/ScopeType"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mapped_at": {
+            "format": "date-time",
+            "title": "Mapped At",
+            "type": "string"
+          },
+          "mapped_by": {
+            "title": "Mapped By",
+            "type": "string"
+          },
+          "mapping_type": {
+            "$ref": "#/components/schemas/MappingType"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MappingStatus"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "control_id",
+          "framework_id",
+          "framework_control_id",
+          "framework_key",
+          "framework_version",
+          "framework_name",
+          "framework_scope_type",
+          "control_ref",
+          "framework_control_title",
+          "mapping_type",
+          "coverage_level",
+          "confidence",
+          "rationale",
+          "mapped_by",
+          "mapped_at",
+          "status",
+          "schema_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ControlFrameworkMappingResponse",
+        "type": "object"
+      },
+      "ControlFrameworkMappingTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "to_status": {
+            "$ref": "#/components/schemas/MappingStatus"
+          }
+        },
+        "required": [
+          "to_status"
+        ],
+        "title": "ControlFrameworkMappingTransitionRequest",
+        "type": "object"
+      },
+      "ControlFrameworkMappingUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "coverage_level": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoverageLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mapping_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MappingType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          }
+        },
+        "title": "ControlFrameworkMappingUpdateRequest",
+        "type": "object"
+      },
       "ControlListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -6730,6 +7060,17 @@
         ],
         "title": "CoverageChangeRequest",
         "type": "object"
+      },
+      "CoverageLevel": {
+        "enum": [
+          "NONE",
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          "COMPLETE"
+        ],
+        "title": "CoverageLevel",
+        "type": "string"
       },
       "CreateAcknowledgementRequest": {
         "properties": {
@@ -13364,91 +13705,127 @@
         "title": "FindingStatusPatchResponse",
         "type": "object"
       },
-      "FrameworkResponse": {
+      "FrameworkControlCreateRequest": {
+        "additionalProperties": false,
         "properties": {
-          "activated_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Activated At"
+          "clause": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Clause",
+            "type": "string"
           },
-          "compatibility_metadata": {
-            "title": "Compatibility Metadata",
-            "type": "object"
+          "control_ref": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Control Ref",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Description",
+            "type": "string"
+          },
+          "domain": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Domain",
+            "type": "string"
+          },
+          "family": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Family",
+            "type": "string"
+          },
+          "implementation_guidance": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Implementation Guidance",
+            "type": "string"
+          },
+          "objective": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Objective",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FrameworkControlStatus",
+            "default": "DRAFT"
+          },
+          "title": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_ref",
+          "title"
+        ],
+        "title": "FrameworkControlCreateRequest",
+        "type": "object"
+      },
+      "FrameworkControlResponse": {
+        "properties": {
+          "clause": {
+            "title": "Clause",
+            "type": "string"
+          },
+          "control_ref": {
+            "title": "Control Ref",
+            "type": "string"
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
-          "created_by": {
-            "title": "Created By",
+          "description": {
+            "title": "Description",
             "type": "string"
           },
-          "deprecated_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Deprecated At"
+          "domain": {
+            "title": "Domain",
+            "type": "string"
           },
-          "framework_description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Framework Description"
+          "family": {
+            "title": "Family",
+            "type": "string"
           },
           "framework_id": {
             "title": "Framework Id",
             "type": "string"
           },
-          "framework_metadata": {
-            "title": "Framework Metadata",
-            "type": "object"
-          },
-          "framework_name": {
-            "title": "Framework Name",
+          "id": {
+            "title": "Id",
             "type": "string"
           },
-          "framework_slug": {
-            "title": "Framework Slug",
+          "implementation_guidance": {
+            "title": "Implementation Guidance",
             "type": "string"
           },
-          "framework_status": {
-            "title": "Framework Status",
+          "objective": {
+            "title": "Objective",
             "type": "string"
           },
-          "framework_version": {
-            "title": "Framework Version",
-            "type": "string"
-          },
-          "retired_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Retired At"
-          },
-          "state_version": {
-            "title": "State Version",
+          "schema_version": {
+            "title": "Schema Version",
             "type": "integer"
+          },
+          "scope_type": {
+            "$ref": "#/components/schemas/ScopeType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FrameworkControlStatus"
           },
           "tenant_id": {
             "anyOf": [
@@ -13461,53 +13838,447 @@
             ],
             "title": "Tenant Id"
           },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
           "updated_at": {
+            "format": "date-time",
             "title": "Updated At",
             "type": "string"
           }
         },
         "required": [
+          "id",
           "framework_id",
-          "framework_name",
-          "framework_slug",
-          "framework_version",
-          "framework_status",
-          "framework_description",
           "tenant_id",
-          "framework_metadata",
-          "compatibility_metadata",
-          "created_by",
+          "scope_type",
+          "control_ref",
+          "title",
+          "description",
+          "domain",
+          "family",
+          "clause",
+          "objective",
+          "implementation_guidance",
+          "status",
+          "schema_version",
           "created_at",
-          "updated_at",
-          "activated_at",
-          "deprecated_at",
-          "retired_at",
-          "state_version"
+          "updated_at"
         ],
-        "title": "FrameworkResponse",
+        "title": "FrameworkControlResponse",
         "type": "object"
       },
-      "FrameworkStatus": {
+      "FrameworkControlStatus": {
         "enum": [
-          "draft",
-          "active",
-          "deprecated",
-          "retired"
+          "DRAFT",
+          "ACTIVE",
+          "DEPRECATED",
+          "RETIRED"
+        ],
+        "title": "FrameworkControlStatus",
+        "type": "string"
+      },
+      "FrameworkControlUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "clause": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clause"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family"
+          },
+          "implementation_guidance": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Implementation Guidance"
+          },
+          "objective": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FrameworkControlStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "FrameworkControlUpdateRequest",
+        "type": "object"
+      },
+      "FrameworkCoverageDetailResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "average_confidence": {
+            "title": "Average Confidence",
+            "type": "number"
+          },
+          "coverage_percentage": {
+            "title": "Coverage Percentage",
+            "type": "number"
+          },
+          "framework_controls_covered": {
+            "title": "Framework Controls Covered",
+            "type": "integer"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_key": {
+            "title": "Framework Key",
+            "type": "string"
+          },
+          "framework_name": {
+            "title": "Framework Name",
+            "type": "string"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "mappings": {
+            "items": {
+              "$ref": "#/components/schemas/ControlFrameworkMappingResponse"
+            },
+            "title": "Mappings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "framework_id",
+          "framework_key",
+          "framework_version",
+          "framework_name",
+          "framework_controls_covered",
+          "coverage_percentage",
+          "average_confidence",
+          "mappings"
+        ],
+        "title": "FrameworkCoverageDetailResponse",
+        "type": "object"
+      },
+      "FrameworkCoverageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "average_confidence": {
+            "title": "Average Confidence",
+            "type": "number"
+          },
+          "coverage_percentage": {
+            "title": "Coverage Percentage",
+            "type": "number"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_key": {
+            "title": "Framework Key",
+            "type": "string"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "full_coverage_count": {
+            "title": "Full Coverage Count",
+            "type": "integer"
+          },
+          "mapped_framework_controls": {
+            "title": "Mapped Framework Controls",
+            "type": "integer"
+          },
+          "not_applicable_count": {
+            "title": "Not Applicable Count",
+            "type": "integer"
+          },
+          "partial_coverage_count": {
+            "title": "Partial Coverage Count",
+            "type": "integer"
+          },
+          "supporting_count": {
+            "title": "Supporting Count",
+            "type": "integer"
+          },
+          "total_framework_controls": {
+            "title": "Total Framework Controls",
+            "type": "integer"
+          },
+          "unmapped_framework_controls": {
+            "title": "Unmapped Framework Controls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "framework_id",
+          "framework_key",
+          "framework_version",
+          "total_framework_controls",
+          "mapped_framework_controls",
+          "unmapped_framework_controls",
+          "full_coverage_count",
+          "partial_coverage_count",
+          "supporting_count",
+          "not_applicable_count",
+          "coverage_percentage",
+          "average_confidence"
+        ],
+        "title": "FrameworkCoverageResponse",
+        "type": "object"
+      },
+      "FrameworkCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Description",
+            "type": "string"
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
+          "framework_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Framework Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "publisher": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Publisher",
+            "type": "string"
+          },
+          "retired_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired Date"
+          },
+          "schema_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "scope_type": {
+            "$ref": "#/components/schemas/ScopeType",
+            "default": "TENANT"
+          },
+          "status": {
+            "$ref": "#/components/schemas/services__framework_authority__schemas__FrameworkStatus",
+            "default": "DRAFT"
+          },
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "framework_key",
+          "name",
+          "version",
+          "category",
+          "publisher"
+        ],
+        "title": "FrameworkCreateRequest",
+        "type": "object"
+      },
+      "FrameworkStatus-Output": {
+        "enum": [
+          "DRAFT",
+          "ACTIVE",
+          "RETIRED"
         ],
         "title": "FrameworkStatus",
         "type": "string"
       },
-      "FrameworkTransitionRequest": {
+      "FrameworkUpdateRequest": {
         "additionalProperties": false,
         "properties": {
-          "to_status": {
-            "$ref": "#/components/schemas/FrameworkStatus"
+          "category": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "retired_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired Date"
           }
         },
-        "required": [
-          "to_status"
-        ],
-        "title": "FrameworkTransitionRequest",
+        "title": "FrameworkUpdateRequest",
         "type": "object"
       },
       "FrameworkVersionResponse": {
@@ -15898,6 +16669,41 @@
         ],
         "title": "ManifestResponse",
         "type": "object"
+      },
+      "MappingAuditEventType": {
+        "enum": [
+          "CREATED",
+          "UPDATED",
+          "ACTIVATED",
+          "SUPERSEDED",
+          "REJECTED",
+          "RETIRED"
+        ],
+        "title": "MappingAuditEventType",
+        "type": "string"
+      },
+      "MappingStatus": {
+        "enum": [
+          "DRAFT",
+          "ACTIVE",
+          "SUPERSEDED",
+          "REJECTED",
+          "RETIRED"
+        ],
+        "title": "MappingStatus",
+        "type": "string"
+      },
+      "MappingType": {
+        "enum": [
+          "FULL",
+          "PARTIAL",
+          "SUPPORTING",
+          "COMPENSATING",
+          "RELATED",
+          "NOT_APPLICABLE"
+        ],
+        "title": "MappingType",
+        "type": "string"
       },
       "MaturityBlockerResponse": {
         "properties": {
@@ -23715,6 +24521,14 @@
         "title": "ScheduleRotationRequest",
         "type": "object"
       },
+      "ScopeType": {
+        "enum": [
+          "SYSTEM",
+          "TENANT"
+        ],
+        "title": "ScopeType",
+        "type": "string"
+      },
       "ScoreOutputResponse": {
         "properties": {
           "assessment_id": {
@@ -28345,6 +29159,142 @@
         "title": "CreateControlRequest",
         "type": "object"
       },
+      "api__readiness_manager__FrameworkResponse": {
+        "properties": {
+          "activated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated At"
+          },
+          "compatibility_metadata": {
+            "title": "Compatibility Metadata",
+            "type": "object"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "deprecated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecated At"
+          },
+          "framework_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework Description"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_metadata": {
+            "title": "Framework Metadata",
+            "type": "object"
+          },
+          "framework_name": {
+            "title": "Framework Name",
+            "type": "string"
+          },
+          "framework_slug": {
+            "title": "Framework Slug",
+            "type": "string"
+          },
+          "framework_status": {
+            "title": "Framework Status",
+            "type": "string"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
+          },
+          "state_version": {
+            "title": "State Version",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "framework_id",
+          "framework_name",
+          "framework_slug",
+          "framework_version",
+          "framework_status",
+          "framework_description",
+          "tenant_id",
+          "framework_metadata",
+          "compatibility_metadata",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "activated_at",
+          "deprecated_at",
+          "retired_at",
+          "state_version"
+        ],
+        "title": "FrameworkResponse",
+        "type": "object"
+      },
+      "api__readiness_manager__FrameworkTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "to_status": {
+            "$ref": "#/components/schemas/services__readiness__models__FrameworkStatus"
+          }
+        },
+        "required": [
+          "to_status"
+        ],
+        "title": "FrameworkTransitionRequest",
+        "type": "object"
+      },
       "api__reports_engine__GenerateReportRequest": {
         "additionalProperties": false,
         "properties": {
@@ -28971,6 +29921,134 @@
         "title": "EvidenceResponse",
         "type": "object"
       },
+      "services__framework_authority__schemas__FrameworkResponse": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
+          "framework_key": {
+            "title": "Framework Key",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "publisher": {
+            "title": "Publisher",
+            "type": "string"
+          },
+          "retired_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired Date"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "scope_type": {
+            "$ref": "#/components/schemas/ScopeType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FrameworkStatus-Output"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "scope_type",
+          "framework_key",
+          "name",
+          "version",
+          "category",
+          "publisher",
+          "description",
+          "status",
+          "effective_date",
+          "retired_date",
+          "schema_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FrameworkResponse",
+        "type": "object"
+      },
+      "services__framework_authority__schemas__FrameworkStatus": {
+        "enum": [
+          "DRAFT",
+          "ACTIVE",
+          "RETIRED"
+        ],
+        "title": "FrameworkStatus",
+        "type": "string"
+      },
+      "services__framework_authority__schemas__FrameworkTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "to_status": {
+            "$ref": "#/components/schemas/services__framework_authority__schemas__FrameworkStatus"
+          }
+        },
+        "required": [
+          "to_status"
+        ],
+        "title": "FrameworkTransitionRequest",
+        "type": "object"
+      },
       "services__governance_portal__schemas__PortalAuditListResponse": {
         "properties": {
           "items": {
@@ -29249,6 +30327,16 @@
           "dr_standby"
         ],
         "title": "EnvironmentType",
+        "type": "string"
+      },
+      "services__readiness__models__FrameworkStatus": {
+        "enum": [
+          "draft",
+          "active",
+          "deprecated",
+          "retired"
+        ],
+        "title": "FrameworkStatus",
         "type": "string"
       },
       "services__remediation__schemas__AllowedTransitionsResponse": {
@@ -33693,6 +34781,324 @@
         "summary": "Write Config Version",
         "tags": [
           "config"
+        ]
+      }
+    },
+    "/control-framework-mappings/{mapping_id}": {
+      "get": {
+        "operationId": "get_control_framework_mapping_control_framework_mappings__mapping_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mapping_id",
+            "required": true,
+            "schema": {
+              "title": "Mapping Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlFrameworkMappingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Control Framework Mapping",
+        "tags": [
+          "framework-authority"
+        ]
+      },
+      "patch": {
+        "operationId": "update_control_framework_mapping_control_framework_mappings__mapping_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mapping_id",
+            "required": true,
+            "schema": {
+              "title": "Mapping Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlFrameworkMappingUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlFrameworkMappingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Control Framework Mapping",
+        "tags": [
+          "framework-authority"
+        ]
+      }
+    },
+    "/control-framework-mappings/{mapping_id}/audit": {
+      "get": {
+        "operationId": "get_control_framework_mapping_audit_control_framework_mappings__mapping_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mapping_id",
+            "required": true,
+            "schema": {
+              "title": "Mapping Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ControlFrameworkMappingAuditResponse"
+                  },
+                  "title": "Response Get Control Framework Mapping Audit Control Framework Mappings  Mapping Id  Audit Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Control Framework Mapping Audit",
+        "tags": [
+          "framework-authority"
+        ]
+      }
+    },
+    "/control-framework-mappings/{mapping_id}/transitions": {
+      "post": {
+        "operationId": "transition_control_framework_mapping_control_framework_mappings__mapping_id__transitions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mapping_id",
+            "required": true,
+            "schema": {
+              "title": "Mapping Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlFrameworkMappingTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlFrameworkMappingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Control Framework Mapping",
+        "tags": [
+          "framework-authority"
         ]
       }
     },
@@ -40122,7 +41528,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/FrameworkResponse"
+                    "$ref": "#/components/schemas/api__readiness_manager__FrameworkResponse"
                   },
                   "title": "Response List Frameworks Control Plane Readiness Frameworks Get",
                   "type": "array"
@@ -40183,7 +41589,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FrameworkResponse"
+                  "$ref": "#/components/schemas/api__readiness_manager__FrameworkResponse"
                 }
               }
             },
@@ -40242,7 +41648,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FrameworkResponse"
+                  "$ref": "#/components/schemas/api__readiness_manager__FrameworkResponse"
                 }
               }
             },
@@ -40660,7 +42066,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FrameworkTransitionRequest"
+                "$ref": "#/components/schemas/api__readiness_manager__FrameworkTransitionRequest"
               }
             }
           },
@@ -40671,7 +42077,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FrameworkResponse"
+                  "$ref": "#/components/schemas/api__readiness_manager__FrameworkResponse"
                 }
               }
             },
@@ -44627,6 +46033,240 @@
         "summary": "Mark Overdue Reviews",
         "tags": [
           "control-registry"
+        ]
+      }
+    },
+    "/controls/{control_id}/framework-coverage": {
+      "get": {
+        "operationId": "get_control_framework_coverage_controls__control_id__framework_coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "control_id",
+            "required": true,
+            "schema": {
+              "title": "Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlFrameworkCoverageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Control Framework Coverage",
+        "tags": [
+          "framework-authority"
+        ]
+      }
+    },
+    "/controls/{control_id}/framework-mappings": {
+      "get": {
+        "operationId": "list_control_framework_mappings_controls__control_id__framework_mappings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "control_id",
+            "required": true,
+            "schema": {
+              "title": "Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ControlFrameworkMappingResponse"
+                  },
+                  "title": "Response List Control Framework Mappings Controls  Control Id  Framework Mappings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Control Framework Mappings",
+        "tags": [
+          "framework-authority"
+        ]
+      },
+      "post": {
+        "operationId": "create_control_framework_mapping_controls__control_id__framework_mappings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "control_id",
+            "required": true,
+            "schema": {
+              "title": "Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlFrameworkMappingCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlFrameworkMappingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Control Framework Mapping",
+        "tags": [
+          "framework-authority"
         ]
       }
     },
@@ -58977,6 +60617,874 @@
         "summary": "Snapshot",
         "tags": [
           "forensics"
+        ]
+      }
+    },
+    "/frameworks": {
+      "get": {
+        "operationId": "list_frameworks_frameworks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/services__framework_authority__schemas__FrameworkResponse"
+                  },
+                  "title": "Response List Frameworks Frameworks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Frameworks",
+        "tags": [
+          "framework-authority"
+        ]
+      },
+      "post": {
+        "operationId": "create_framework_frameworks_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameworkCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__framework_authority__schemas__FrameworkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Framework",
+        "tags": [
+          "framework-authority"
+        ]
+      }
+    },
+    "/frameworks/{framework_id}": {
+      "get": {
+        "operationId": "get_framework_frameworks__framework_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__framework_authority__schemas__FrameworkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Framework",
+        "tags": [
+          "framework-authority"
+        ]
+      },
+      "patch": {
+        "operationId": "update_framework_frameworks__framework_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameworkUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__framework_authority__schemas__FrameworkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Framework",
+        "tags": [
+          "framework-authority"
+        ]
+      }
+    },
+    "/frameworks/{framework_id}/control-mappings": {
+      "get": {
+        "operationId": "list_framework_control_mappings_frameworks__framework_id__control_mappings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ControlFrameworkMappingResponse"
+                  },
+                  "title": "Response List Framework Control Mappings Frameworks  Framework Id  Control Mappings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Framework Control Mappings",
+        "tags": [
+          "framework-authority"
+        ]
+      }
+    },
+    "/frameworks/{framework_id}/controls": {
+      "get": {
+        "operationId": "list_framework_controls_frameworks__framework_id__controls_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FrameworkControlResponse"
+                  },
+                  "title": "Response List Framework Controls Frameworks  Framework Id  Controls Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Framework Controls",
+        "tags": [
+          "framework-authority"
+        ]
+      },
+      "post": {
+        "operationId": "create_framework_control_frameworks__framework_id__controls_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameworkControlCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameworkControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Framework Control",
+        "tags": [
+          "framework-authority"
+        ]
+      }
+    },
+    "/frameworks/{framework_id}/controls/{framework_control_id}": {
+      "get": {
+        "operationId": "get_framework_control_frameworks__framework_id__controls__framework_control_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "framework_control_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameworkControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Framework Control",
+        "tags": [
+          "framework-authority"
+        ]
+      },
+      "patch": {
+        "operationId": "update_framework_control_frameworks__framework_id__controls__framework_control_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "framework_control_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameworkControlUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameworkControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Framework Control",
+        "tags": [
+          "framework-authority"
+        ]
+      }
+    },
+    "/frameworks/{framework_id}/coverage": {
+      "get": {
+        "operationId": "get_framework_coverage_frameworks__framework_id__coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameworkCoverageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Framework Coverage",
+        "tags": [
+          "framework-authority"
+        ]
+      }
+    },
+    "/frameworks/{framework_id}/transitions": {
+      "post": {
+        "operationId": "transition_framework_frameworks__framework_id__transitions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__framework_authority__schemas__FrameworkTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__framework_authority__schemas__FrameworkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Framework",
+        "tags": [
+          "framework-authority"
         ]
       }
     },

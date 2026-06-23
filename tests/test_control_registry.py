@@ -1473,3 +1473,17 @@ def test_ccr_83_freshness_sweep_downgrades_highly_effective(client, db_session):
     updated = _json(client.get(f"/controls/{ctl_id}").json())
     assert updated["verification_status"] == "expired"
     assert updated["effectiveness_rating"] == "effective"
+
+
+def test_framework_authority_and_enterprise_controls_routes_coexist() -> None:
+    import warnings
+    from api.main import build_app
+    from pydantic.warnings import PydanticDeprecatedSince20
+
+    app = build_app(auth_enabled=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", PydanticDeprecatedSince20)
+        paths = app.openapi()["paths"]
+    assert "/enterprise-controls/frameworks" in paths
+    assert "/frameworks" in paths
+    assert "/controls/{control_id}/framework-mappings" in paths

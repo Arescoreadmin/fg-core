@@ -36,6 +36,8 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/compliance",
             "/compliance-cp",
             "/enterprise-controls",
+            "/frameworks",
+            "/control-framework-mappings",
             "/exceptions",
             "/breakglass",
             "/governance",
