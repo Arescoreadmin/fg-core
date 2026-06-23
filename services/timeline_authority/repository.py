@@ -114,7 +114,7 @@ class TimelineAuthorityRepository:
         )
         if row is None:
             return _GENESIS_HASH
-        return row.event_hash or _GENESIS_HASH
+        return str(row.event_hash) or _GENESIS_HASH
 
     def insert(
         self,
