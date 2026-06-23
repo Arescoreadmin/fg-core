@@ -254,6 +254,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_framework_authority"
     )  # PR 14.6.3/4: Framework Authority
+    importlib.import_module(
+        "api.db_models_timeline_authority"
+    )  # PR 14.6.2: Timeline Authority
 
 
 def _get_base():
@@ -1571,6 +1574,27 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
         )
 
         for table in ("control_framework_mapping_audits",):
+            conn.exec_driver_sql(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {table}_append_only_update
+                BEFORE UPDATE ON {table}
+                BEGIN
+                    SELECT RAISE(ABORT, '{table} is append-only');
+                END;
+                """
+            )
+            conn.exec_driver_sql(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {table}_append_only_delete
+                BEFORE DELETE ON {table}
+                BEGIN
+                    SELECT RAISE(ABORT, '{table} is append-only');
+                END;
+                """
+            )
+
+        # PR 14.6.2: Timeline Authority - fa_timeline_events append-only triggers
+        for table in ("fa_timeline_events",):
             conn.exec_driver_sql(
                 f"""
                 CREATE TRIGGER IF NOT EXISTS {table}_append_only_update

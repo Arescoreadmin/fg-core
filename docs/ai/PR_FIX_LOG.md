@@ -15830,3 +15830,9 @@ Resolution order in `check_capability()` (fully backward-compatible):
 **Root cause:** The git diff from origin/main to branch HEAD showed no net change to PR_FIX_LOG.md because the merge commit adopted main's version of the file. The enterprise policy requires a structured entry appended for any PR touching tracked source files.
 
 **Fix:** Added this PR 14.6.3/14.6.4 entry to docs/ai/PR_FIX_LOG.md.
+
+---
+
+## PR 14.6.2 — Timeline Authority (Canonical Governance Ledger)
+
+No fixes required — initial implementation.
