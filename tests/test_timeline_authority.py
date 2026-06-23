@@ -2342,3 +2342,95 @@ def test_p1_migration_file_exists(api_bundle):
     assert os.path.exists("migrations/postgres/0126_timeline_authority_p1.sql"), (
         "P1 migration file missing"
     )
+
+
+# =============================================================================
+# Bug fixes: ordering and export filter
+# =============================================================================
+
+
+def test_same_timestamp_tail_is_correct(api_bundle):
+    """BF-01: when two events share occurred_at, the lexically-last id is the tail.
+
+    get_latest_event_hash must use DESC,DESC ordering so the actual chain tail
+    (last in ASC,ASC) is selected as prev_event_hash for the next event.
+    """
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+    ts = "2026-06-23T09:00:00Z"
+    entity_id = "bf01-same-ts-entity"
+
+    r1 = client.post(
+        "/timeline-authority/events",
+        json={
+            "source_system": "EVIDENCE_AUTHORITY",
+            "entity_type": "EVIDENCE",
+            "entity_id": entity_id,
+            "event_type": "FIRST",
+            "occurred_at": ts,
+        },
+        headers=headers,
+    )
+    assert r1.status_code == 200
+
+    r2 = client.post(
+        "/timeline-authority/events",
+        json={
+            "source_system": "EVIDENCE_AUTHORITY",
+            "entity_type": "EVIDENCE",
+            "entity_id": entity_id,
+            "event_type": "SECOND",
+            "occurred_at": ts,
+        },
+        headers=headers,
+    )
+    assert r2.status_code == 200
+
+    # Chain must be intact — integrity must report valid
+    integrity = client.get("/timeline-authority/integrity", headers=headers)
+    assert integrity.status_code == 200
+    body = integrity.json()
+    entity_chains = [c for c in body["chain_details"] if c["entity_id"] == entity_id]
+    assert len(entity_chains) == 1
+    assert entity_chains[0]["chain_valid"] is True, (
+        "Same-timestamp events produced a broken chain — tail ordering bug"
+    )
+
+
+def test_export_entity_type_filter_honoured(api_bundle):
+    """BF-02: export?entity_type=X must not return events from other entity types."""
+    client = api_bundle["client"]
+    headers = api_bundle["headers_rw_a"]
+
+    # Record one RISK event
+    client.post(
+        "/timeline-authority/events",
+        json={
+            "source_system": "RISK_GOVERNANCE",
+            "entity_type": "RISK",
+            "entity_id": "bf02-risk",
+            "event_type": "BF_RISK",
+            "occurred_at": "2026-06-23T10:00:00Z",
+        },
+        headers=headers,
+    )
+    # Record one CONTROL event
+    client.post(
+        "/timeline-authority/events",
+        json={
+            "source_system": "CONTROL_REGISTRY",
+            "entity_type": "CONTROL",
+            "entity_id": "bf02-ctrl",
+            "event_type": "BF_CTRL",
+            "occurred_at": "2026-06-23T10:01:00Z",
+        },
+        headers=headers,
+    )
+
+    resp = client.get("/timeline-authority/export?entity_type=RISK", headers=headers)
+    assert resp.status_code == 200
+    events = resp.json()["events"]
+    entity_types = {e["entity_type"] for e in events}
+    assert "CONTROL" not in entity_types, (
+        "export?entity_type=RISK returned CONTROL events — entity_type filter bug"
+    )

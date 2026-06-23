@@ -108,7 +108,7 @@ class TimelineAuthorityRepository:
             )
             .order_by(
                 TimelineAuthorityEventRecord.occurred_at.desc(),
-                TimelineAuthorityEventRecord.id.asc(),
+                TimelineAuthorityEventRecord.id.desc(),
             )
             .first()
         )
