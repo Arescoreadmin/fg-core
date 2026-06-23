@@ -162,7 +162,7 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 647,
+  "contract_count": 655,
   "contract_only": [],
   "internal_allowed": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
@@ -403,13 +403,6 @@
     "GET /control/testing/runs/{run_id}",
     "GET /health",
     "GET /metrics",
-    "GET /timeline-authority/entities/{entity_type}/{entity_id}",
-    "GET /timeline-authority/events",
-    "GET /timeline-authority/events/{event_id}",
-    "GET /timeline-authority/export",
-    "GET /timeline-authority/integrity",
-    "GET /timeline-authority/replay",
-    "GET /timeline-authority/statistics",
     "GET /ui/ai",
     "GET /ui/ai/experience",
     "GET /ui/ai/usage",
@@ -500,7 +493,6 @@
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
-    "POST /timeline-authority/events",
     "POST /ui/ai/chat",
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
@@ -510,14 +502,5 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": [
-    "GET /timeline-authority/entities/{entity_type}/{entity_id}",
-    "GET /timeline-authority/events",
-    "GET /timeline-authority/events/{event_id}",
-    "GET /timeline-authority/export",
-    "GET /timeline-authority/integrity",
-    "GET /timeline-authority/replay",
-    "GET /timeline-authority/statistics",
-    "POST /timeline-authority/events"
-  ]
+  "unauthorized_runtime_only": []
 }
