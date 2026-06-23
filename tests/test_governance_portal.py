@@ -175,12 +175,22 @@ _TENANT_B = "tenant-gp-b"
 _FUTURE_EXPIRY = "2099-06-01T00:00:00+00:00"
 _PAST_EXPIRY = "2020-06-01T00:00:00+00:00"
 _NOW = datetime.now(timezone.utc)
-_SOON_EXPIRY = (_NOW + timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%S+00:00")  # ~10 days ahead — expiring soon
-_OLD_VERIFIED = (_NOW - timedelta(days=200)).strftime("%Y-%m-%dT%H:%M:%S+00:00")  # ~200 days ago — expired (>90)
-_RECENT_VERIFIED = (_NOW - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%S+00:00")  # ~10 days ago — fresh (<45)
+_SOON_EXPIRY = (_NOW + timedelta(days=10)).strftime(
+    "%Y-%m-%dT%H:%M:%S+00:00"
+)  # ~10 days ahead — expiring soon
+_OLD_VERIFIED = (_NOW - timedelta(days=200)).strftime(
+    "%Y-%m-%dT%H:%M:%S+00:00"
+)  # ~200 days ago — expired (>90)
+_RECENT_VERIFIED = (_NOW - timedelta(days=10)).strftime(
+    "%Y-%m-%dT%H:%M:%S+00:00"
+)  # ~10 days ago — fresh (<45)
 # AGING: 45 <= elapsed < 60 with 90-day cycle (aging_threshold=45, expiring_soon at 60)
-_AGING_VERIFIED = (_NOW - timedelta(days=52)).strftime("%Y-%m-%dT%H:%M:%S+00:00")  # ~52 days ago — aging
-_EXPIRING_SOON_VERIFIED = (_NOW - timedelta(days=75)).strftime("%Y-%m-%dT%H:%M:%S+00:00")  # ~75 days ago — expiring_soon
+_AGING_VERIFIED = (_NOW - timedelta(days=52)).strftime(
+    "%Y-%m-%dT%H:%M:%S+00:00"
+)  # ~52 days ago — aging
+_EXPIRING_SOON_VERIFIED = (_NOW - timedelta(days=75)).strftime(
+    "%Y-%m-%dT%H:%M:%S+00:00"
+)  # ~75 days ago — expiring_soon
 
 
 # ---------------------------------------------------------------------------
