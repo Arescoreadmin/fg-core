@@ -119,8 +119,8 @@ class EvidenceFreshnessEngine:
                 payload=payload,
                 replay_eligible=False,
             )
-            store = TimelineStore(self._db)
-            store.record(event)
+            store = TimelineStore()
+            store.record(self._db, event)
         except Exception:
             pass
 
@@ -611,7 +611,6 @@ class EvidenceFreshnessEngine:
 
         # Update status to REVOKED (ORM allows updates; only DELETE is blocked)
         row.status = FreshnessExceptionStatus.REVOKED.value
-        self._repo.create_exception.__func__  # noqa — use merge path
         self._db.merge(row)
         self._db.commit()
         self._db.refresh(row)
