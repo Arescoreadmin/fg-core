@@ -255,6 +255,9 @@ def _ensure_models_imported() -> None:
         "api.db_models_verification_authority"
     )  # PR 14.6.6: Verification Workflow Authority
     importlib.import_module(
+        "api.db_models_evidence_freshness_authority"
+    )  # PR 14.6.7: Evidence Freshness Authority
+    importlib.import_module(
         "api.db_models_framework_authority"
     )  # PR 14.6.3/4: Framework Authority
     importlib.import_module(

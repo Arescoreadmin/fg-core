@@ -9632,6 +9632,258 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "GET",
+      "path": "/freshness",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "POST",
+      "path": "/freshness",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "GET",
+      "path": "/freshness-policies",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "POST",
+      "path": "/freshness-policies",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "GET",
+      "path": "/freshness-policies/{policy_id}",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "PUT",
+      "path": "/freshness-policies/{policy_id}",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "GET",
+      "path": "/freshness/cgin/snapshot",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "GET",
+      "path": "/freshness/dashboard",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "GET",
+      "path": "/freshness/exceptions",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "POST",
+      "path": "/freshness/exceptions",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "POST",
+      "path": "/freshness/exceptions/{exception_id}/revoke",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "GET",
+      "path": "/freshness/{evidence_id}",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "PUT",
+      "path": "/freshness/{evidence_id}",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_freshness_authority.py",
+      "method": "POST",
+      "path": "/freshness/{evidence_id}/recompute",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/governance_reporting.py",
@@ -14527,7 +14779,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-24T15:12:32.397660+00:00",
+  "generated_at": "2026-06-24T18:21:25.000520+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

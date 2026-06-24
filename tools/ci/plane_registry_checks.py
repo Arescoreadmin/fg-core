@@ -66,6 +66,8 @@ def dependency_categories_for_record(rec) -> list[str]:
             "/approvals",
             "/audit",
             "/verification-requests",
+            "/freshness-policies",
+            "/freshness",
         )
     ):
         categories.append("rate")

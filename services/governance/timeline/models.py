@@ -29,6 +29,7 @@ class SourceType(str, Enum):
     GOVERNANCE_PORTAL = "GOVERNANCE_PORTAL"
     GOVERNANCE_REPORTING = "GOVERNANCE_REPORTING"
     VERIFICATION_WORKFLOW = "VERIFICATION_WORKFLOW"
+    EVIDENCE_FRESHNESS = "EVIDENCE_FRESHNESS"
 
 
 # ---------------------------------------------------------------------------

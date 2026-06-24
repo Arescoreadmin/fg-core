@@ -15994,3 +15994,31 @@ Updated verification workflow test helper return annotations to Response. Added 
 
 ### Risk Notes
 No runtime enforcement was weakened. No tenant authority is accepted from request bodies. Verification result and audit records remain append-only. Workflow state transitions remain validated by the authoritative state machine.
+
+### 2026-06-24 — PR 14.6.7: Evidence Freshness Authority
+
+**Summary:** Implemented PR 14.6.7 — Evidence Freshness Authority. New bounded context `services/evidence_freshness_authority/` with freshness policies, per-evidence freshness records, exceptions, deterministic scoring (0-100), freshness state engine (6 states: CURRENT/DUE_SOON/REVIEW_REQUIRED/VERIFICATION_REQUIRED/STALE/EXPIRED), timeline integration (10 event types), plane registration, 162 tests. All CI gates pass.
+
+**Fix applied:** Initial API implementation used `Depends(get_engine)` which returns an `Engine` object, not a `Session`. Fixed by rewriting all 14 routes to use the `with Session(get_engine()) as db:` context manager pattern used by `verification_authority.py` and other established API files.
+
+**Files changed:**
+- `services/evidence_freshness_authority/__init__.py` (new — empty)
+- `services/evidence_freshness_authority/models.py` (new — 4 enums + 2 pure functions)
+- `services/evidence_freshness_authority/schemas.py` (new — 5 exceptions + 14 schemas)
+- `services/evidence_freshness_authority/repository.py` (new — 16 methods)
+- `services/evidence_freshness_authority/engine.py` (new — 13 public methods + 7 helpers)
+- `api/db_models_evidence_freshness_authority.py` (new — 3 ORM models)
+- `api/evidence_freshness_authority.py` (new — 14 routes)
+- `migrations/postgres/0131_evidence_freshness_authority.sql` (new)
+- `tests/test_h14_6_7_evidence_freshness_authority.py` (new — 162 tests)
+- `services/governance/timeline/models.py` (modified — EVIDENCE_FRESHNESS SourceType)
+- `services/governance/timeline/adapters.py` (modified — evidence_freshness_to_timeline_event adapter)
+- `api/db.py` (modified — model import registration)
+- `api/main.py` (modified — router registered in both build_app locations)
+- `services/plane_registry/registry.py` (modified — /freshness-policies and /freshness prefixes)
+- `tools/ci/plane_registry_checks.py` (modified — rate-limiting prefix tuple)
+- `api/observability/metrics.py` (modified — 8 new Prometheus counters)
+- `ROADMAP.md` (modified — PR 14.6.7 row added)
+- `docs/ai/PR_FIX_LOG.md` (modified — this entry)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` (modified — PR 14.6.7 security review entry)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — PR 14.6.7 execution gate entry)

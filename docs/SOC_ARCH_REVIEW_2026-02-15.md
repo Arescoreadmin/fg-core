@@ -3108,3 +3108,44 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `services/verification_authority/schemas.py` — `RecordResultRequest.result` changed from `str` to `Literal["APPROVED", "REJECTED"]`, rejecting invalid values at deserialization with 422 (P2c review fix).
 
 **SOC review outcome:** approved. No auth, session, middleware, or OPA policy files changed. Plane registry registration is metadata-only — it enables CI governance checks to classify existing routes, does not change route behavior, scope enforcement, or tenant binding. Rate-limiting category addition aligns `/verification-requests` with the established rate policy already applied to `/evidence` and `/audit`. All code correctness fixes are internal to the verification_authority bounded context with no security surface expansion.
+
+## 2026-06-24 — PR 14.6.7: Evidence Freshness Authority
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new bounded context; additive; no new auth subsystem; no privilege escalation; no credential handling)
+
+**Security design overview:**
+
+1. **Tenant isolation:** All 14 new routes call `require_bound_tenant(request)` before any DB access. All ORM queries filter by `tenant_id`. Cross-tenant lookups return 404 with no tenant identity disclosed. All three new tables (`fa_freshness_policies`, `fa_evidence_freshness_records`, `fa_freshness_exceptions`) carry `tenant_id NOT NULL` with dedicated indexes.
+
+2. **Scope enforcement:** Read routes require `audit:read`; write routes require `audit:write`. All use `dependencies=[Depends(require_scopes(...))]` — same pattern as all other evidence/workflow routes. No scope relaxation.
+
+3. **Append-only model:** `fa_freshness_exceptions` is delete-protected at both the ORM layer (`before_delete` guard raising RuntimeError) and the PostgreSQL layer (delete trigger in migration 0131). Status updates (for revocation) are permitted at the ORM layer since revocation is a legitimate terminal state transition, not a deletion. No row in `fa_freshness_exceptions` is ever physically removed.
+
+4. **Actor resolution:** `actor_id` always resolved from `request.state.key_prefix` — never accepted from the request body. `actor_type` always resolved from `request.state.actor_type`.
+
+5. **Deterministic scoring:** `compute_freshness_state()` and `compute_freshness_score()` are pure functions in `services/evidence_freshness_authority/models.py`. No probabilistic values, no AI inference, no external network calls. All scores (0-100) and states (6 variants) are fully deterministic from stored fields.
+
+6. **UniqueConstraint:** `fa_evidence_freshness_records` enforces `UNIQUE(tenant_id, evidence_id)` — one freshness record per evidence per tenant. Duplicate creation returns 409 from the engine before any DB write.
+
+7. **Timeline events:** 10 new event types emitted via existing `TimelineStore.record()` — append-only, wrapped in try/except. No direct table mutations outside the freshness engine. Timeline failures never block core operations.
+
+8. **Verification authority integration:** `on_verification_approved()` and `on_verification_rejected()` are entirely wrapped in try/except — failures never block verification workflow operations. No credentials or secrets accessed.
+
+9. **Prometheus counters:** 8 new counters with no `tenant_id` labels (bounded cardinality). Metric increment failures are caught and silently ignored.
+
+**Critical-path files changed:**
+- `api/evidence_freshness_authority.py` — 14 new routes; all gated on `require_scopes()` + `require_bound_tenant()`
+- `api/db_models_evidence_freshness_authority.py` — 3 new ORM models: `FaFreshnessPolicy` (mutable), `FaEvidenceFreshnessRecord` (mutable with UniqueConstraint), `FaFreshnessException` (delete-blocked + ORM guard)
+- `migrations/postgres/0131_evidence_freshness_authority.sql` — 3 new tables + PG delete-only trigger on `fa_freshness_exceptions`
+- `services/governance/timeline/models.py` — `EVIDENCE_FRESHNESS` added to `SourceType` enum (additive)
+- `services/governance/timeline/adapters.py` — `evidence_freshness_to_timeline_event` adapter + `TIMELINE_ADAPTERS` entry (additive)
+- `api/observability/metrics.py` — 8 new counters (no `tenant_id` labels)
+- `services/plane_registry/registry.py` — `/freshness-policies` and `/freshness` prefixes added to `evidence` plane
+- `tools/ci/plane_registry_checks.py` — `/freshness-policies` and `/freshness` added to rate-limiting prefix tuple
+
+**Validation:**
+- `make route-inventory-generate`: OK
+- `python scripts/refresh_contract_authority.py`: OK
+- All CI gates pass
+
+**SOC review outcome:** approved. Route inventory update is purely additive: 14 new endpoints appended. No existing route entries removed or modified. No auth, session, middleware, OPA, or security files changed. All 14 routes require `audit:read` or `audit:write` scope via existing `require_scopes()` + `require_bound_tenant()`. All DB queries filter by `tenant_id`; cross-tenant access raises domain exceptions converted to 404 — no tenant identity disclosed in error body. `fa_freshness_exceptions` delete-only ORM guard ensures immutability of exception records while allowing legitimate status updates for revocation. Freshness scoring is deterministic pure-function computation — no probabilistic values, no external calls, no secrets accessed. Migration 0131 adds 3 tables + 1 delete-prevention trigger — backward compatible; safe to apply under live traffic.

@@ -871,3 +871,45 @@ VERIFICATION_WORKFLOW_EVIDENCE_UPDATES_TOTAL = Counter(
     "Total evidence trust state updates triggered by workflow",
     [],
 )
+
+# PR 14.6.7 — Evidence Freshness Authority metrics
+FRESHNESS_POLICIES_CREATED_TOTAL = Counter(
+    "frostgate_freshness_policies_created_total",
+    "Total freshness policies created",
+    [],
+)
+FRESHNESS_POLICIES_UPDATED_TOTAL = Counter(
+    "frostgate_freshness_policies_updated_total",
+    "Total freshness policy updates",
+    [],
+)
+FRESHNESS_RECORDS_CREATED_TOTAL = Counter(
+    "frostgate_freshness_records_created_total",
+    "Total evidence freshness records created",
+    [],
+)
+FRESHNESS_RECORDS_UPDATED_TOTAL = Counter(
+    "frostgate_freshness_records_updated_total",
+    "Total freshness record updates",
+    [],
+)
+FRESHNESS_STATE_TRANSITIONS_TOTAL = Counter(
+    "frostgate_freshness_state_transitions_total",
+    "Total freshness state changes",
+    ["to_state"],
+)
+FRESHNESS_EXCEPTIONS_CREATED_TOTAL = Counter(
+    "frostgate_freshness_exceptions_created_total",
+    "Total freshness exceptions created",
+    [],
+)
+FRESHNESS_EXCEPTIONS_REVOKED_TOTAL = Counter(
+    "frostgate_freshness_exceptions_revoked_total",
+    "Total freshness exceptions revoked",
+    [],
+)
+FRESHNESS_SCORE_RECOMPUTATIONS_TOTAL = Counter(
+    "frostgate_freshness_score_recomputations_total",
+    "Total freshness score recomputations",
+    [],
+)

@@ -8426,6 +8426,190 @@
         "title": "CreateFrameworkVersionRequest",
         "type": "object"
       },
+      "CreateFreshnessExceptionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Approved By",
+            "type": "string"
+          },
+          "evidence_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "ISO 8601 UTC expiration timestamp",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "reason",
+          "approved_by",
+          "expires_at"
+        ],
+        "title": "CreateFreshnessExceptionRequest",
+        "type": "object"
+      },
+      "CreateFreshnessPolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "criticality": {
+            "$ref": "#/components/schemas/FreshnessCriticality",
+            "default": "MEDIUM"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "expiration_interval_days": {
+            "default": 365,
+            "minimum": 1.0,
+            "title": "Expiration Interval Days",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "review_interval_days": {
+            "default": 90,
+            "minimum": 1.0,
+            "title": "Review Interval Days",
+            "type": "integer"
+          },
+          "verification_interval_days": {
+            "default": 180,
+            "minimum": 1.0,
+            "title": "Verification Interval Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateFreshnessPolicyRequest",
+        "type": "object"
+      },
+      "CreateFreshnessRecordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "expiration_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiration Due At"
+          },
+          "last_reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "review_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Due At"
+          },
+          "verification_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Due At"
+          }
+        },
+        "required": [
+          "evidence_id"
+        ],
+        "title": "CreateFreshnessRecordRequest",
+        "type": "object"
+      },
       "CreateGrantRequest": {
         "additionalProperties": false,
         "properties": {
@@ -15308,6 +15492,449 @@
         ],
         "title": "FrameworkVersionResponse",
         "type": "object"
+      },
+      "FreshnessCGINSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "avg_freshness_score": {
+            "title": "Avg Freshness Score",
+            "type": "number"
+          },
+          "coverage_at_risk": {
+            "title": "Coverage At Risk",
+            "type": "integer"
+          },
+          "expired_evidence": {
+            "title": "Expired Evidence",
+            "type": "integer"
+          },
+          "fresh_evidence": {
+            "title": "Fresh Evidence",
+            "type": "integer"
+          },
+          "freshness_exceptions_count": {
+            "title": "Freshness Exceptions Count",
+            "type": "integer"
+          },
+          "snapshot_at": {
+            "title": "Snapshot At",
+            "type": "string"
+          },
+          "stale_evidence": {
+            "title": "Stale Evidence",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_at",
+          "tenant_id",
+          "fresh_evidence",
+          "stale_evidence",
+          "expired_evidence",
+          "avg_freshness_score",
+          "coverage_at_risk",
+          "freshness_exceptions_count"
+        ],
+        "title": "FreshnessCGINSnapshot",
+        "type": "object"
+      },
+      "FreshnessCriticality": {
+        "enum": [
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          "CRITICAL"
+        ],
+        "title": "FreshnessCriticality",
+        "type": "string"
+      },
+      "FreshnessDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "avg_freshness_score": {
+            "title": "Avg Freshness Score",
+            "type": "number"
+          },
+          "coverage_at_risk_count": {
+            "title": "Coverage At Risk Count",
+            "type": "integer"
+          },
+          "due_soon_count": {
+            "title": "Due Soon Count",
+            "type": "integer"
+          },
+          "expired_count": {
+            "title": "Expired Count",
+            "type": "integer"
+          },
+          "fresh_count": {
+            "title": "Fresh Count",
+            "type": "integer"
+          },
+          "freshness_exceptions_count": {
+            "title": "Freshness Exceptions Count",
+            "type": "integer"
+          },
+          "review_required_count": {
+            "title": "Review Required Count",
+            "type": "integer"
+          },
+          "stale_count": {
+            "title": "Stale Count",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "verification_required_count": {
+            "title": "Verification Required Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fresh_count",
+          "due_soon_count",
+          "review_required_count",
+          "verification_required_count",
+          "stale_count",
+          "expired_count",
+          "total",
+          "avg_freshness_score",
+          "freshness_exceptions_count",
+          "coverage_at_risk_count"
+        ],
+        "title": "FreshnessDashboardResponse",
+        "type": "object"
+      },
+      "FreshnessExceptionListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FreshnessExceptionResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "FreshnessExceptionListResponse",
+        "type": "object"
+      },
+      "FreshnessExceptionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "title": "Approved By",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "evidence_id",
+          "reason",
+          "approved_by",
+          "expires_at",
+          "status",
+          "created_at"
+        ],
+        "title": "FreshnessExceptionResponse",
+        "type": "object"
+      },
+      "FreshnessPolicyListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FreshnessPolicyResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "FreshnessPolicyListResponse",
+        "type": "object"
+      },
+      "FreshnessPolicyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "criticality": {
+            "title": "Criticality",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "expiration_interval_days": {
+            "title": "Expiration Interval Days",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "review_interval_days": {
+            "title": "Review Interval Days",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verification_interval_days": {
+            "title": "Verification Interval Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "description",
+          "evidence_type",
+          "review_interval_days",
+          "verification_interval_days",
+          "expiration_interval_days",
+          "criticality",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FreshnessPolicyResponse",
+        "type": "object"
+      },
+      "FreshnessRecordListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FreshnessRecordResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "FreshnessRecordListResponse",
+        "type": "object"
+      },
+      "FreshnessRecordResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "expiration_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiration Due At"
+          },
+          "freshness_score": {
+            "title": "Freshness Score",
+            "type": "integer"
+          },
+          "freshness_state": {
+            "$ref": "#/components/schemas/FreshnessState"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "review_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Due At"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verification_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Due At"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "evidence_id",
+          "policy_id",
+          "review_due_at",
+          "verification_due_at",
+          "expiration_due_at",
+          "last_reviewed_at",
+          "last_verified_at",
+          "freshness_score",
+          "freshness_state",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FreshnessRecordResponse",
+        "type": "object"
+      },
+      "FreshnessState": {
+        "enum": [
+          "CURRENT",
+          "DUE_SOON",
+          "REVIEW_REQUIRED",
+          "VERIFICATION_REQUIRED",
+          "STALE",
+          "EXPIRED"
+        ],
+        "title": "FreshnessState",
+        "type": "string"
       },
       "FreshnessSweepResponse": {
         "additionalProperties": false,
@@ -24482,6 +25109,21 @@
         "title": "ReviewType",
         "type": "string"
       },
+      "RevokeFreshnessExceptionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RevokeFreshnessExceptionRequest",
+        "type": "object"
+      },
       "RevokeGrantResponse": {
         "properties": {
           "ok": {
@@ -29099,6 +29741,180 @@
           }
         },
         "title": "UpdateEvidenceMetadataRequest",
+        "type": "object"
+      },
+      "UpdateFreshnessPolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "criticality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FreshnessCriticality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "expiration_interval_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiration Interval Days"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "review_interval_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Interval Days"
+          },
+          "verification_interval_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Interval Days"
+          }
+        },
+        "title": "UpdateFreshnessPolicyRequest",
+        "type": "object"
+      },
+      "UpdateFreshnessRecordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expiration_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiration Due At"
+          },
+          "last_reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "review_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Due At"
+          },
+          "verification_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Due At"
+          }
+        },
+        "title": "UpdateFreshnessRecordRequest",
         "type": "object"
       },
       "UpdateItemStatusRequest": {
@@ -65648,6 +66464,958 @@
         "summary": "Transition Framework",
         "tags": [
           "framework-authority"
+        ]
+      }
+    },
+    "/freshness": {
+      "get": {
+        "operationId": "list_freshness_records_freshness_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "freshness_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Freshness State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "policy_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Policy Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessRecordListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Freshness Records",
+        "tags": [
+          "evidence-freshness"
+        ]
+      },
+      "post": {
+        "operationId": "create_freshness_record_freshness_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFreshnessRecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "409": {
+            "description": "Freshness record already exists for this evidence"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        },
+        "summary": "Create Freshness Record",
+        "tags": [
+          "evidence-freshness"
+        ]
+      }
+    },
+    "/freshness-policies": {
+      "get": {
+        "operationId": "list_policies_freshness_policies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "evidence_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "enabled_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Enabled Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessPolicyListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Policies",
+        "tags": [
+          "evidence-freshness"
+        ]
+      },
+      "post": {
+        "operationId": "create_policy_freshness_policies_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFreshnessPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessPolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        },
+        "summary": "Create Policy",
+        "tags": [
+          "evidence-freshness"
+        ]
+      }
+    },
+    "/freshness-policies/{policy_id}": {
+      "get": {
+        "operationId": "get_policy_freshness_policies__policy_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessPolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "evidence-freshness"
+        ]
+      },
+      "put": {
+        "operationId": "update_policy_freshness_policies__policy_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFreshnessPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessPolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Policy",
+        "tags": [
+          "evidence-freshness"
+        ]
+      }
+    },
+    "/freshness/cgin/snapshot": {
+      "get": {
+        "operationId": "get_cgin_snapshot_freshness_cgin_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessCGINSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Cgin Snapshot",
+        "tags": [
+          "evidence-freshness"
+        ]
+      }
+    },
+    "/freshness/dashboard": {
+      "get": {
+        "operationId": "get_dashboard_freshness_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "evidence-freshness"
+        ]
+      }
+    },
+    "/freshness/exceptions": {
+      "get": {
+        "operationId": "list_exceptions_freshness_exceptions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "evidence_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessExceptionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Exceptions",
+        "tags": [
+          "evidence-freshness"
+        ]
+      },
+      "post": {
+        "operationId": "create_exception_freshness_exceptions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFreshnessExceptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessExceptionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Evidence not found"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        },
+        "summary": "Create Exception",
+        "tags": [
+          "evidence-freshness"
+        ]
+      }
+    },
+    "/freshness/exceptions/{exception_id}/revoke": {
+      "post": {
+        "operationId": "revoke_exception_freshness_exceptions__exception_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "exception_id",
+            "required": true,
+            "schema": {
+              "title": "Exception Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeFreshnessExceptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessExceptionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Exception",
+        "tags": [
+          "evidence-freshness"
+        ]
+      }
+    },
+    "/freshness/{evidence_id}": {
+      "get": {
+        "operationId": "get_freshness_record_freshness__evidence_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Freshness Record",
+        "tags": [
+          "evidence-freshness"
+        ]
+      },
+      "put": {
+        "operationId": "update_freshness_record_freshness__evidence_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFreshnessRecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Freshness Record",
+        "tags": [
+          "evidence-freshness"
+        ]
+      }
+    },
+    "/freshness/{evidence_id}/recompute": {
+      "post": {
+        "operationId": "recompute_freshness_freshness__evidence_id__recompute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recompute Freshness",
+        "tags": [
+          "evidence-freshness"
         ]
       }
     },
