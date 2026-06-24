@@ -462,6 +462,7 @@ class EvidenceAuthorityEngine:
             changed["expires_at"] = req.expires_at
             row.expires_at = req.expires_at
 
+        _SCORE_INPUTS = {"description", "source_system", "source_ref", "expires_at"}
         if changed:
             row.updated_at = _now()
             self._repo.save_evidence(row)
@@ -475,6 +476,8 @@ class EvidenceAuthorityEngine:
                 reason=None,
                 metadata={"changed_fields": list(changed.keys())},
             )
+            if changed.keys() & _SCORE_INPUTS:
+                self._persist_quality_scores(row)
             self._db.commit()
 
         return _to_response(row)
@@ -601,8 +604,9 @@ class EvidenceAuthorityEngine:
         )
         self._repo.create_ownership(own)
 
-        # Update primary owner if role=OWNER
-        if req.role == EvidenceOwnershipRole.OWNER:
+        # Update primary owner if role=OWNER; owner_id affects completeness_score
+        owner_changed = req.role == EvidenceOwnershipRole.OWNER
+        if owner_changed:
             row.owner_id = req.actor_id
             row.owner_type = req.actor_type.value
             row.updated_at = now
@@ -623,6 +627,8 @@ class EvidenceAuthorityEngine:
             },
         )
 
+        if owner_changed:
+            self._persist_quality_scores(row)
         self._db.commit()
         return _to_ownership_response(own)
 
@@ -646,6 +652,7 @@ class EvidenceAuthorityEngine:
         self._repo.save_ownership(own)
 
         # If revoking an OWNER, update fa_evidence.owner_id to next active OWNER or None
+        owner_changed = False
         if own.role == EvidenceOwnershipRole.OWNER.value:
             ev = self._repo.get_evidence(evidence_id)
             if ev is not None and ev.owner_id == own.actor_id:
@@ -663,6 +670,7 @@ class EvidenceAuthorityEngine:
                     ev.owner_type = None
                 ev.updated_at = now
                 self._repo.save_evidence(ev)
+                owner_changed = True
 
         self._write_audit(
             evidence_id=evidence_id,
@@ -675,6 +683,8 @@ class EvidenceAuthorityEngine:
             metadata={"ownership_id": req.ownership_id, "role": own.role},
         )
 
+        if owner_changed:
+            self._persist_quality_scores(ev)
         self._db.commit()
         return _to_ownership_response(own)
 
@@ -999,7 +1009,10 @@ class EvidenceAuthorityEngine:
     # ------------------------------------------------------------------
 
     def recompute_quality_scores(
-        self, evidence_id: str
+        self,
+        evidence_id: str,
+        actor_id: str = "system",
+        actor_type: str = "service",
     ) -> EvidenceQualityScoreResponse:
         """Explicitly (re)compute and persist quality scores for an evidence record.
 
@@ -1017,8 +1030,8 @@ class EvidenceAuthorityEngine:
             event_type=EvidenceAuditEventType.QUALITY_SCORES_COMPUTED.value,
             from_state=None,
             to_state=None,
-            actor_id="system",
-            actor_type="service",
+            actor_id=actor_id,
+            actor_type=actor_type,
             reason=None,
             metadata={
                 "freshness_score": row.freshness_score,

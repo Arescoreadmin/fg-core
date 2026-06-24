@@ -24,7 +24,12 @@ def _parse_iso(s: Optional[str]) -> Optional[datetime]:
     if not s:
         return None
     try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        # Clients may omit a UTC offset; attach UTC so arithmetic with
+        # datetime.now(tz=timezone.utc) never raises TypeError.
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
     except (ValueError, AttributeError):
         return None
 

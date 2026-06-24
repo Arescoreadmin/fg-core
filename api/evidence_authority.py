@@ -655,7 +655,11 @@ def compute_quality_scores(
     with Session(engine) as db:
         svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
         try:
-            result = svc.recompute_quality_scores(ev_id)
+            result = svc.recompute_quality_scores(
+                ev_id,
+                actor_id=_actor(request),
+                actor_type=_actor_type(request),
+            )
         except EvidenceNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         EVIDENCE_QUALITY_SCORE_UPDATES_TOTAL.inc()
