@@ -175,13 +175,16 @@ class EvidenceFreshnessRepository:
         )
         return items, total
 
-    def count_active_exceptions_for_evidence(self, evidence_id: str) -> int:
+    def count_active_exceptions_for_evidence(
+        self, evidence_id: str, now_iso: str
+    ) -> int:
         return (
             self._db.query(FaFreshnessException)
             .filter(
                 FaFreshnessException.tenant_id == self._tenant_id,
                 FaFreshnessException.evidence_id == evidence_id,
                 FaFreshnessException.status == "ACTIVE",
+                FaFreshnessException.expires_at > now_iso,
             )
             .count()
         )
@@ -210,12 +213,13 @@ class EvidenceFreshnessRepository:
         )
         return float(result) if result is not None else 0.0
 
-    def count_active_exceptions(self) -> int:
+    def count_active_exceptions(self, now_iso: str) -> int:
         return (
             self._db.query(FaFreshnessException)
             .filter(
                 FaFreshnessException.tenant_id == self._tenant_id,
                 FaFreshnessException.status == "ACTIVE",
+                FaFreshnessException.expires_at > now_iso,
             )
             .count()
         )

@@ -121,6 +121,7 @@ class EvidenceFreshnessEngine:
             )
             store = TimelineStore()
             store.record(self._db, event)
+            self._db.commit()
         except Exception:
             pass
 
@@ -145,7 +146,7 @@ class EvidenceFreshnessEngine:
 
         # Count active exceptions
         has_active_exception = (
-            self._repo.count_active_exceptions_for_evidence(row.evidence_id) > 0
+            self._repo.count_active_exceptions_for_evidence(row.evidence_id, now_iso) > 0
         )
 
         # Age penalties
@@ -671,7 +672,7 @@ class EvidenceFreshnessEngine:
     def get_dashboard(self) -> FreshnessDashboardResponse:
         state_counts = self._repo.count_by_state()
         avg_score = self._repo.avg_freshness_score()
-        exceptions_count = self._repo.count_active_exceptions()
+        exceptions_count = self._repo.count_active_exceptions(self._now())
 
         fresh_count = state_counts.get(FreshnessState.CURRENT.value, 0)
         due_soon_count = state_counts.get(FreshnessState.DUE_SOON.value, 0)
@@ -705,7 +706,7 @@ class EvidenceFreshnessEngine:
     def get_cgin_snapshot(self) -> FreshnessCGINSnapshot:
         state_counts = self._repo.count_by_state()
         avg_score = self._repo.avg_freshness_score()
-        exceptions_count = self._repo.count_active_exceptions()
+        exceptions_count = self._repo.count_active_exceptions(self._now())
 
         fresh_evidence = state_counts.get(
             FreshnessState.CURRENT.value, 0
@@ -750,13 +751,21 @@ class EvidenceFreshnessEngine:
             if row is None:
                 # Create a minimal record for this evidence
                 now = self._now()
+                verification_due_at = None
+                try:
+                    vt = datetime.fromisoformat(verified_at.replace("Z", "+00:00"))
+                    if vt.tzinfo is None:
+                        vt = vt.replace(tzinfo=timezone.utc)
+                    verification_due_at = (vt + timedelta(days=180)).isoformat()
+                except Exception:
+                    pass
                 row = FaEvidenceFreshnessRecord(
                     id=self._new_id(),
                     tenant_id=self._tenant_id,
                     evidence_id=evidence_id,
                     policy_id=None,
                     review_due_at=None,
-                    verification_due_at=None,
+                    verification_due_at=verification_due_at,
                     expiration_due_at=None,
                     last_reviewed_at=None,
                     last_verified_at=verified_at,
@@ -765,6 +774,7 @@ class EvidenceFreshnessEngine:
                     created_at=now,
                     updated_at=now,
                 )
+                self._recompute_record(row)
                 self._repo.create_record(row)
             else:
                 row.last_verified_at = verified_at

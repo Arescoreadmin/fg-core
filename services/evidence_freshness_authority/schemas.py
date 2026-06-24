@@ -8,9 +8,10 @@ PR 14.6.7 — Evidence Freshness Authority
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from services.evidence_freshness_authority.models import (
     FreshnessCriticality,
@@ -79,6 +80,16 @@ class UpdateFreshnessPolicyRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _validate_iso_datetime(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return v
+    try:
+        datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        raise ValueError("must be a valid ISO 8601 datetime string")
+    return v
+
+
 class CreateFreshnessRecordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -90,6 +101,18 @@ class CreateFreshnessRecordRequest(BaseModel):
     last_reviewed_at: Optional[str] = Field(default=None)
     last_verified_at: Optional[str] = Field(default=None)
 
+    @field_validator(
+        "review_due_at",
+        "verification_due_at",
+        "expiration_due_at",
+        "last_reviewed_at",
+        "last_verified_at",
+        mode="before",
+    )
+    @classmethod
+    def _validate_timestamps(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_iso_datetime(v)
+
 
 class UpdateFreshnessRecordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -100,6 +123,18 @@ class UpdateFreshnessRecordRequest(BaseModel):
     expiration_due_at: Optional[str] = Field(default=None)
     last_reviewed_at: Optional[str] = Field(default=None)
     last_verified_at: Optional[str] = Field(default=None)
+
+    @field_validator(
+        "review_due_at",
+        "verification_due_at",
+        "expiration_due_at",
+        "last_reviewed_at",
+        "last_verified_at",
+        mode="before",
+    )
+    @classmethod
+    def _validate_timestamps(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_iso_datetime(v)
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +149,11 @@ class CreateFreshnessExceptionRequest(BaseModel):
     reason: str = Field(..., min_length=1)
     approved_by: str = Field(..., min_length=1, max_length=255)
     expires_at: str = Field(..., description="ISO 8601 UTC expiration timestamp")
+
+    @field_validator("expires_at", mode="before")
+    @classmethod
+    def _validate_expires_at(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_iso_datetime(v)
 
 
 class RevokeFreshnessExceptionRequest(BaseModel):
