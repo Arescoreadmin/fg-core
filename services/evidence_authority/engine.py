@@ -684,6 +684,8 @@ class EvidenceAuthorityEngine:
         )
 
         if owner_changed:
+            if ev is None:
+                raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
             self._persist_quality_scores(ev)
         self._db.commit()
         return _to_ownership_response(own)
