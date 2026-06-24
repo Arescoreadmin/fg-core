@@ -2672,6 +2672,90 @@
     },
     {
       "method": "GET",
+      "path": "/freshness",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/freshness",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness-policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/freshness-policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness-policies/{policy_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PUT",
+      "path": "/freshness-policies/{policy_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness/cgin/snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness/exceptions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/freshness/exceptions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/freshness/exceptions/{exception_id}/revoke",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness/{evidence_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PUT",
+      "path": "/freshness/{evidence_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/freshness/{evidence_id}/recompute",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/governance-reports",
       "scopes": [],
       "source": "contract"
@@ -4093,7 +4177,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-24T12:17:54.223372+00:00",
+  "generated_at": "2026-06-24T18:40:05.457904+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

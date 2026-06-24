@@ -10,7 +10,7 @@
   "governance": {
     "contract_count": 682,
     "contract_only": [],
-    "runtime_count": 848,
+    "runtime_count": 862,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -71,6 +71,13 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
+      "GET /freshness",
+      "GET /freshness-policies",
+      "GET /freshness-policies/{policy_id}",
+      "GET /freshness/cgin/snapshot",
+      "GET /freshness/dashboard",
+      "GET /freshness/exceptions",
+      "GET /freshness/{evidence_id}",
       "GET /health",
       "GET /metrics",
       "GET /ui/ai",
@@ -163,6 +170,11 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
+      "POST /freshness",
+      "POST /freshness-policies",
+      "POST /freshness/exceptions",
+      "POST /freshness/exceptions/{exception_id}/revoke",
+      "POST /freshness/{evidence_id}/recompute",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -170,7 +182,9 @@
       "PUT /admin/agent/version-floor",
       "PUT /admin/identity/tenants/{tenant_id}/config",
       "PUT /admin/tenants/{tenant_id}/quota",
-      "PUT /admin/tenants/{tenant_id}/tier"
+      "PUT /admin/tenants/{tenant_id}/tier",
+      "PUT /freshness-policies/{policy_id}",
+      "PUT /freshness/{evidence_id}"
     ],
     "schema_unknown_key_warnings": [],
     "schema_versions": {
@@ -179,7 +193,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "e256e798c723a48f78f36aadec404b8cfaae20fe099cda3d0b68fc7c879b2608",
+  "governance_fingerprint": "cdf3fd902780bdf31955a0e4700b8bbc169ad30d859d1f542c7709ed0de33098",
   "planes": [
     {
       "compat": {
@@ -298,6 +312,8 @@
         "/audit",
         "/evidence",
         "/forensics",
+        "/freshness",
+        "/freshness-policies",
         "/verification-requests"
       ]
     },
@@ -1102,6 +1118,13 @@
       "GET /forensics/audit_trail/{event_id}",
       "GET /forensics/chain/verify",
       "GET /forensics/snapshot/{event_id}",
+      "GET /freshness",
+      "GET /freshness-policies",
+      "GET /freshness-policies/{policy_id}",
+      "GET /freshness/cgin/snapshot",
+      "GET /freshness/dashboard",
+      "GET /freshness/exceptions",
+      "GET /freshness/{evidence_id}",
       "GET /verification-requests",
       "GET /verification-requests/cgin/snapshot",
       "GET /verification-requests/dashboard",
@@ -1129,12 +1152,19 @@
       "POST /evidence/{ev_id}/risk-links",
       "POST /evidence/{ev_id}/verifications",
       "POST /evidence/{ev_id}/verify",
+      "POST /freshness",
+      "POST /freshness-policies",
+      "POST /freshness/exceptions",
+      "POST /freshness/exceptions/{exception_id}/revoke",
+      "POST /freshness/{evidence_id}/recompute",
       "POST /verification-requests",
       "POST /verification-requests/{req_id}/assign",
       "POST /verification-requests/{req_id}/escalate",
       "POST /verification-requests/{req_id}/result",
       "POST /verification-requests/{req_id}/transition",
       "PUT /evidence/{ev_id}/sla",
+      "PUT /freshness-policies/{policy_id}",
+      "PUT /freshness/{evidence_id}",
       "PUT /verification-requests/{req_id}/sla"
     ],
     "rbac": [
