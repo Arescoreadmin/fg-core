@@ -151,23 +151,27 @@ class VerificationWorkflowRepository:
         return {state: count for state, count in rows}
 
     def count_overdue(self, now_iso: str) -> int:
-        """Count requests where any due field is past now and state is not terminal."""
-        q = self._db.query(FaVerificationRequest).filter(
-            FaVerificationRequest.tenant_id == self._tenant_id,
-            FaVerificationRequest.workflow_state.notin_(_TERMINAL_STATE_VALUES),
-        )
-        # Count those where review_due_at < now OR decision_due_at < now
+        """Count requests where any of the four due fields is past now and state is not terminal."""
         from sqlalchemy import or_
 
-        q = q.filter(
-            or_(
-                (FaVerificationRequest.review_due_at != None)  # noqa: E711
-                & (FaVerificationRequest.review_due_at < now_iso),
-                (FaVerificationRequest.decision_due_at != None)  # noqa: E711
-                & (FaVerificationRequest.decision_due_at < now_iso),
+        return (
+            self._db.query(FaVerificationRequest)
+            .filter(
+                FaVerificationRequest.tenant_id == self._tenant_id,
+                FaVerificationRequest.workflow_state.notin_(_TERMINAL_STATE_VALUES),
+                or_(
+                    (FaVerificationRequest.review_due_at != None)  # noqa: E711
+                    & (FaVerificationRequest.review_due_at < now_iso),
+                    (FaVerificationRequest.decision_due_at != None)  # noqa: E711
+                    & (FaVerificationRequest.decision_due_at < now_iso),
+                    (FaVerificationRequest.escalation_due_at != None)  # noqa: E711
+                    & (FaVerificationRequest.escalation_due_at < now_iso),
+                    (FaVerificationRequest.assigned_due_at != None)  # noqa: E711
+                    & (FaVerificationRequest.assigned_due_at < now_iso),
+                ),
             )
+            .count()
         )
-        return q.count()
 
     def count_unassigned(self) -> int:
         """Count requests in REQUESTED or QUEUED with no assignee."""

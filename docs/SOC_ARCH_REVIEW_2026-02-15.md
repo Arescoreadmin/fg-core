@@ -3091,3 +3091,20 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `make route-inventory-generate`: OK
 - `make fg-contract`: OK (contract authority refreshed)
 - All CI gates pass
+
+## 2026-06-24 — PR 14.6.6 fix pass: Verification Workflow Authority governance registration
+
+**Classification:** Fix-pass only. No new routes, no new tables, no new auth surfaces. Changes are governance registration metadata and code correctness fixes within the existing bounded context.
+
+**Critical-path files changed:**
+- `services/plane_registry/registry.py` — `/verification-requests` prefix added to `evidence` plane `route_prefixes`. This registers the 13 Verification Workflow Authority routes as owned by the evidence plane (same plane as `/evidence`, `/audit`, `/approvals`; same `audit:` scope prefix already required by all verification-request routes).
+- `tools/ci/plane_registry_checks.py` — `/verification-requests` added to the rate-limiting prefix tuple in `dependency_categories_for_record`. The evidence plane already enforces rate limiting on `/evidence` and `/audit`; `/verification-requests` is the same security posture.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `tools/ci/plane_registry_snapshot.json` — regenerated via `make route-inventory-generate` to reflect plane registration.
+- `contracts/core/openapi.json`, `CONTRACT.md`, `BLUEPRINT_STAGED.md` — contract authority refreshed.
+
+**Non-critical-path changes (code correctness):**
+- `services/verification_authority/engine.py` — `transition_workflow()` now increments `escalation_count`, sets `last_escalation_type = "MANUAL"`, `last_escalated_at`, `last_escalated_by` when transitioning to ESCALATED via the generic endpoint (P2a review fix). Ensures dashboard/CGIN escalation counts match reality.
+- `services/verification_authority/repository.py` — `count_overdue()` now checks all 4 SLA due fields (`review_due_at`, `decision_due_at`, `escalation_due_at`, `assigned_due_at`) instead of only 2 (P2b review fix). Overdue aggregates now match per-request SLA API.
+- `services/verification_authority/schemas.py` — `RecordResultRequest.result` changed from `str` to `Literal["APPROVED", "REJECTED"]`, rejecting invalid values at deserialization with 422 (P2c review fix).
+
+**SOC review outcome:** approved. No auth, session, middleware, or OPA policy files changed. Plane registry registration is metadata-only — it enables CI governance checks to classify existing routes, does not change route behavior, scope enforcement, or tenant binding. Rate-limiting category addition aligns `/verification-requests` with the established rate policy already applied to `/evidence` and `/audit`. All code correctness fixes are internal to the verification_authority bounded context with no security surface expansion.

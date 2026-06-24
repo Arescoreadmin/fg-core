@@ -24,6 +24,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from api.auth_scopes import mint_key
 from services.verification_authority.models import (
@@ -93,7 +94,7 @@ def _create_request(client: TestClient, **overrides: Any) -> dict:
 
 def _transition(
     client: TestClient, req_id: str, to_state: str, notes: str = ""
-) -> dict:
+) -> Response:
     body: dict = {"to_state": to_state}
     if notes:
         body["notes"] = notes
@@ -101,7 +102,7 @@ def _transition(
     return resp
 
 
-def _assign(client: TestClient, req_id: str, **overrides: Any) -> dict:
+def _assign(client: TestClient, req_id: str, **overrides: Any) -> Response:
     resp = client.post(
         f"/verification-requests/{req_id}/assign", json=_assign_payload(**overrides)
     )

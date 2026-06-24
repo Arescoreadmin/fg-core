@@ -881,7 +881,8 @@
         "/evidence",
         "/approvals",
         "/attestation",
-        "/forensics"
+        "/forensics",
+        "/verification-requests"
       ]
     },
     {
@@ -1161,7 +1162,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-24T12:17:54.217445+00:00",
+  "generated_at": "2026-06-24T15:12:32.407860+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

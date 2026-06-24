@@ -6,7 +6,7 @@ All response schemas use extra="forbid" for contract stability.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -80,7 +80,7 @@ class EscalateVerificationRequest(BaseModel):
 class RecordResultRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    result: str = Field(..., description="APPROVED or REJECTED")
+    result: Literal["APPROVED", "REJECTED"]
     decision_notes: Optional[str] = Field(default=None)
 
 

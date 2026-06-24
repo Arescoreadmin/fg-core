@@ -436,6 +436,13 @@ class VerificationAuthorityEngine:
         row.workflow_state = new_state
         row.updated_at = now
 
+        # Mirror escalation bookkeeping so dashboards/audits do not under-report
+        if new_state == VerificationWorkflowState.ESCALATED.value:
+            row.escalation_count = (row.escalation_count or 0) + 1
+            row.last_escalation_type = "MANUAL"
+            row.last_escalated_at = now
+            row.last_escalated_by = actor_id
+
         # Set terminal timestamps
         if new_state == VerificationWorkflowState.COMPLETED.value:
             row.completed_at = now

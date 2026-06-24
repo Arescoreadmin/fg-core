@@ -6,6 +6,26 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-24 — PR 14.6.6 fix pass: Verification Workflow Authority governance registration and code review
+
+**Issues (fix pass review):**
+
+1. **Governance registration — plane registry gap** — All 13 `/verification-requests` routes were unregistered in `services/plane_registry/registry.py`, causing `check_plane_registry.py` to report them as unexpected-route gaps and failing `test_plane_registry_checker_passes`.
+   - Fix: Added `/verification-requests` to the `evidence` plane's `route_prefixes`. This plane owns all audit-scoped, tenant-bound evidence verification surfaces. Also added `/verification-requests` to the rate-limiting prefix list in `tools/ci/plane_registry_checks.py::dependency_categories_for_record`. Regenerated all derived CI artifacts via `make route-inventory-generate` and `python scripts/generate_platform_inventory.py`.
+
+2. **P2a — Escalation bookkeeping skipped on generic transition to ESCALATED** — `transition_workflow()` allowed IN_REVIEW → ESCALATED via `TransitionWorkflowRequest` without updating `escalation_count`, `last_escalation_type`, `last_escalated_at`, or `last_escalated_by`. Dashboards and CGIN snapshots under-reported escalations for any request escalated through the generic endpoint.
+   - Fix: Added escalation bookkeeping block in `transition_workflow()` that fires when `new_state == ESCALATED`: increments `escalation_count`, sets `last_escalation_type = "MANUAL"`, `last_escalated_at = now`, `last_escalated_by = actor_id`.
+
+3. **P2b — `count_overdue()` only checked two of four SLA due fields** — `VerificationWorkflowRepository.count_overdue()` built an OR clause over only `review_due_at` and `decision_due_at`, silently ignoring `escalation_due_at` and `assigned_due_at`. Overdue counts reported by `/dashboard` and `/cgin/snapshot` were lower than the per-request SLA API, which correctly evaluates all four fields.
+   - Fix: Expanded the OR clause in `count_overdue()` to include all four due fields.
+
+4. **P2c — `RecordResultRequest.result` accepted arbitrary strings** — `result: str` allowed values like `"PASS"` or `"APPROVE"` to be persisted in `fa_verification_results`. Downstream timeline event logic treated anything other than exactly `"APPROVED"` as a rejection, corrupting the decision ledger for malformed input.
+   - Fix: Changed `result` to `Literal["APPROVED", "REJECTED"]`. Pydantic enforces this at deserialization and returns 422 for any other value.
+
+**Files changed:** `services/plane_registry/registry.py`, `tools/ci/plane_registry_checks.py`, `services/verification_authority/engine.py`, `services/verification_authority/repository.py`, `services/verification_authority/schemas.py`, `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `contracts/core/openapi.json`, `artifacts/PLATFORM_INVENTORY.md`, `artifacts/PLATFORM_GAPS.md`, `artifacts/platform_inventory.json`
+
+---
+
 ### 2026-06-22 — PR 14.6.1 fix pass: Evidence Authority concurrency, ownership, and timeline
 
 **Issues (fix pass review):**
@@ -15946,3 +15966,31 @@ Adding 13 new routes changes the OpenAPI spec. After `make route-inventory-gener
 Route inventory regeneration changed `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`, `plane_registry_snapshot.json`. SOC sync check requires updates to both SOC docs. Appended structured entries to `docs/SOC_ARCH_REVIEW_2026-02-15.md` and `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
 
 **Tests:** 116 tests in `test_h14_6_5a_evidence_hardening.py` covering verification creation/history/SLA, control/risk linkage, coverage analytics, health signals, timeline emission, tenant isolation, deterministic replay, CGIN snapshots.
+
+## PR 14.6.6 — Verification Workflow Authority
+
+Date: 2026-06-24
+
+### Summary
+Added Verification Workflow Authority as the tenant-scoped workflow subsystem for verification requests, assignments, state transitions, escalations, SLA tracking, queue views, dashboard metrics, timeline events, and Evidence Authority integration.
+
+### Root Cause / Gate Finding
+PR fix-log enforcement detected source changes without a corresponding structured entry. Strict mypy also detected two test helper annotations returning dict while the helpers returned HTTP Response objects.
+
+### Fix
+Updated verification workflow test helper return annotations to Response. Added this structured PR fix-log entry to satisfy enterprise gate policy.
+
+### Validation
+- Verification workflow targeted tests pass.
+- Evidence Authority regression tests pass.
+- Timeline Authority tests pass.
+- Governance timeline adapter tests pass.
+- Governance Reporting tests pass.
+- Tenant isolation tests pass.
+- fg-contract passed.
+- fg-security passed.
+- fg-fast passed before fix-log enforcement.
+- codex_gates mypy issue addressed.
+
+### Risk Notes
+No runtime enforcement was weakened. No tenant authority is accepted from request bodies. Verification result and audit records remain append-only. Workflow state transitions remain validated by the authoritative state machine.

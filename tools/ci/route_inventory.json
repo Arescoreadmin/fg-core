@@ -14011,13 +14011,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "GET",
       "path": "/verification-requests",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:read"
@@ -14028,13 +14029,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "POST",
       "path": "/verification-requests",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:write"
@@ -14045,13 +14047,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "GET",
       "path": "/verification-requests/cgin/snapshot",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:read"
@@ -14062,13 +14065,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "GET",
       "path": "/verification-requests/dashboard",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:read"
@@ -14079,13 +14083,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "GET",
       "path": "/verification-requests/queue/{state}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:read"
@@ -14096,13 +14101,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "GET",
       "path": "/verification-requests/{req_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:read"
@@ -14113,13 +14119,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "POST",
       "path": "/verification-requests/{req_id}/assign",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:write"
@@ -14130,13 +14137,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "GET",
       "path": "/verification-requests/{req_id}/audit",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:read"
@@ -14147,13 +14155,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "POST",
       "path": "/verification-requests/{req_id}/escalate",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:write"
@@ -14164,13 +14173,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "POST",
       "path": "/verification-requests/{req_id}/result",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:write"
@@ -14181,13 +14191,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "GET",
       "path": "/verification-requests/{req_id}/sla",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:read"
@@ -14198,13 +14209,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "PUT",
       "path": "/verification-requests/{req_id}/sla",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:write"
@@ -14215,13 +14227,14 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
         "tenant"
       ],
       "file": "api/verification_authority.py",
       "method": "POST",
       "path": "/verification-requests/{req_id}/transition",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "evidence",
+      "plane_id": "evidence",
       "scoped": true,
       "scopes": [
         "audit:write"
@@ -14514,7 +14527,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-24T12:17:54.206938+00:00",
+  "generated_at": "2026-06-24T15:12:32.397660+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

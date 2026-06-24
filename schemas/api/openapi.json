@@ -22833,7 +22833,10 @@
             "title": "Decision Notes"
           },
           "result": {
-            "description": "APPROVED or REJECTED",
+            "enum": [
+              "APPROVED",
+              "REJECTED"
+            ],
             "title": "Result",
             "type": "string"
           }
