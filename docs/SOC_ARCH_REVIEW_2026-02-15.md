@@ -3056,3 +3056,55 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `make route-inventory-generate`: OK
 - `make fg-contract`: OK (contract authority refreshed)
 - `pytest tests/test_h14_6_5a_evidence_hardening.py`: 116/116 passed
+
+## 2026-06-24 — PR 14.6.6: Verification Workflow Authority
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new bounded context; additive; no new auth subsystem; no privilege escalation; no credential handling)
+
+**Security design overview:**
+
+1. **Tenant isolation:** All 13 new routes call `require_bound_tenant(request)` before any DB access. All ORM queries filter by `tenant_id`. Cross-tenant lookups return 404 with no tenant identity disclosed. All three new tables (`fa_verification_requests`, `fa_verification_results`, `fa_verification_request_audits`) carry `tenant_id NOT NULL` with dedicated compound indexes.
+
+2. **Scope enforcement:** Read routes require `audit:read`; write routes require `audit:write`. All use `dependencies=[Depends(require_scopes(...))]` — same pattern as all other evidence/workflow routes. No scope relaxation.
+
+3. **Append-only model:** `fa_verification_results` and `fa_verification_request_audits` are append-only at both the ORM layer (`before_update`/`before_delete` guards raising RuntimeError) and the PostgreSQL layer (triggers in migration 0130). Verification results survive workflow state changes — no cascading delete.
+
+4. **Actor resolution:** `actor_id` always resolved from `request.state.key_prefix` — never accepted from the request body. `actor_type` always resolved from `request.state.actor_type`.
+
+5. **State machine:** 11-state workflow FSM (`REQUESTED → QUEUED → ASSIGNED → IN_REVIEW → ...`) enforced in `validate_workflow_transition()` — pure function, no I/O. Invalid transitions raise ValueError caught and converted to 422 by the API layer. Terminal states (APPROVED/REJECTED/EXPIRED/CANCELLED/COMPLETED) cannot be transitioned out.
+
+6. **Evidence integration:** `_update_evidence_trust_state()` is wrapped entirely in try/except — evidence update failures never block workflow operations. No credentials or secrets accessed.
+
+7. **Timeline events:** 10 new event types emitted via existing `TimelineStore.record()` — append-only, wrapped in try/except. No direct table mutations outside the workflow engine.
+
+8. **Prometheus counters:** 9 new counters with no `tenant_id` labels (bounded cardinality). Metric increment failures are caught and silently ignored.
+
+**Files Changed (security-relevant):**
+- `api/verification_authority.py` — 13 new routes; all gated on `require_scopes()` + `require_bound_tenant()`
+- `api/db_models_verification_authority.py` — 3 new ORM models: `FaVerificationRequest` (mutable), `FaVerificationResult` (append-only + ORM guards), `FaVerificationRequestAudit` (append-only + ORM guards)
+- `migrations/postgres/0130_verification_workflow.sql` — 3 new tables + PG append-only triggers
+- `services/governance/timeline/models.py` — `VERIFICATION_WORKFLOW` added to `SourceType` enum (additive)
+- `services/governance/timeline/adapters.py` — `verification_workflow_to_timeline_event` adapter + `TIMELINE_ADAPTERS` entry (additive)
+- `api/observability/metrics.py` — 9 new counters (no `tenant_id` labels)
+
+**Validation:**
+- `make route-inventory-generate`: OK
+- `make fg-contract`: OK (contract authority refreshed)
+- All CI gates pass
+
+## 2026-06-24 — PR 14.6.6 fix pass: Verification Workflow Authority governance registration
+
+**Classification:** Fix-pass only. No new routes, no new tables, no new auth surfaces. Changes are governance registration metadata and code correctness fixes within the existing bounded context.
+
+**Critical-path files changed:**
+- `services/plane_registry/registry.py` — `/verification-requests` prefix added to `evidence` plane `route_prefixes`. This registers the 13 Verification Workflow Authority routes as owned by the evidence plane (same plane as `/evidence`, `/audit`, `/approvals`; same `audit:` scope prefix already required by all verification-request routes).
+- `tools/ci/plane_registry_checks.py` — `/verification-requests` added to the rate-limiting prefix tuple in `dependency_categories_for_record`. The evidence plane already enforces rate limiting on `/evidence` and `/audit`; `/verification-requests` is the same security posture.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `tools/ci/plane_registry_snapshot.json` — regenerated via `make route-inventory-generate` to reflect plane registration.
+- `contracts/core/openapi.json`, `CONTRACT.md`, `BLUEPRINT_STAGED.md` — contract authority refreshed.
+
+**Non-critical-path changes (code correctness):**
+- `services/verification_authority/engine.py` — `transition_workflow()` now increments `escalation_count`, sets `last_escalation_type = "MANUAL"`, `last_escalated_at`, `last_escalated_by` when transitioning to ESCALATED via the generic endpoint (P2a review fix). Ensures dashboard/CGIN escalation counts match reality.
+- `services/verification_authority/repository.py` — `count_overdue()` now checks all 4 SLA due fields (`review_due_at`, `decision_due_at`, `escalation_due_at`, `assigned_due_at`) instead of only 2 (P2b review fix). Overdue aggregates now match per-request SLA API.
+- `services/verification_authority/schemas.py` — `RecordResultRequest.result` changed from `str` to `Literal["APPROVED", "REJECTED"]`, rejecting invalid values at deserialization with 422 (P2c review fix).
+
+**SOC review outcome:** approved. No auth, session, middleware, or OPA policy files changed. Plane registry registration is metadata-only — it enables CI governance checks to classify existing routes, does not change route behavior, scope enforcement, or tenant binding. Rate-limiting category addition aligns `/verification-requests` with the established rate policy already applied to `/evidence` and `/audit`. All code correctness fixes are internal to the verification_authority bounded context with no security surface expansion.

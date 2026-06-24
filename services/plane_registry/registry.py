@@ -582,6 +582,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/approvals",
             "/attestation",
             "/forensics",
+            "/verification-requests",
         ),
         allowed_dependency_categories=("auth", "tenant", "db", "rate"),
         required_make_targets=("audit-chain-verify",),

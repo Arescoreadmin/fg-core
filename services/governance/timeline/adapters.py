@@ -617,6 +617,36 @@ def governance_reporting_to_timeline_event(
     )
 
 
+def verification_workflow_to_timeline_event(
+    *,
+    tenant_id: str,
+    source_id: str,
+    event_type: str,
+    occurred_at: str,
+    payload: dict[str, object] | None = None,
+    replay_eligible: bool = False,
+) -> TimelineEvent:
+    """Convert verification workflow activity into TimelineEvent."""
+    occurred_at = _normalize_iso(occurred_at)
+    return TimelineEvent(
+        event_id=derive_event_id(
+            tenant_id=tenant_id,
+            source_type=SourceType.VERIFICATION_WORKFLOW.value,
+            source_id=source_id,
+            event_type=event_type,
+            occurred_at=occurred_at,
+        ),
+        tenant_id=tenant_id,
+        source_type=SourceType.VERIFICATION_WORKFLOW,
+        source_id=source_id,
+        event_type=event_type,
+        occurred_at=occurred_at,
+        recorded_at=utc_iso8601_z_now(),
+        payload=payload or {},
+        replay_eligible=replay_eligible,
+    )
+
+
 TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.SIMULATION: simulation_entry_to_timeline_event,
     SourceType.GOVERNANCE_REPORT: governance_report_to_timeline_event,
@@ -630,4 +660,5 @@ TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.CONTROL_REGISTRY: control_registry_to_timeline_event,
     SourceType.GOVERNANCE_PORTAL: governance_portal_to_timeline_event,
     SourceType.GOVERNANCE_REPORTING: governance_reporting_to_timeline_event,
+    SourceType.VERIFICATION_WORKFLOW: verification_workflow_to_timeline_event,
 }

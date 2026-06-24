@@ -100,6 +100,7 @@ from api.control_registry import router as control_registry_router
 from api.governance_portal import router as governance_portal_router
 from api.governance_reporting import router as governance_reporting_router
 from api.evidence_authority import router as evidence_authority_router
+from api.verification_authority import router as verification_workflow_router
 from api.framework_authority import router as framework_authority_router
 from api.timeline_authority import router as timeline_authority_router
 from api.risk_acceptance import router as risk_acceptance_router
@@ -719,6 +720,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(governance_portal_router)
     app.include_router(governance_reporting_router)
     app.include_router(evidence_authority_router)
+    app.include_router(verification_workflow_router)
     app.include_router(framework_authority_router)
     app.include_router(timeline_authority_router)
     app.include_router(rag_retrieval_policy_router)
@@ -1158,6 +1160,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(governance_portal_router)
     app.include_router(governance_reporting_router)
     app.include_router(evidence_authority_router)
+    app.include_router(verification_workflow_router)
     app.include_router(framework_authority_router)
     app.include_router(timeline_authority_router)
     app.include_router(connectors_msgraph_report_router)

@@ -3946,6 +3946,50 @@
         "title": "AssignRoleRequest",
         "type": "object"
       },
+      "AssignVerificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Due At"
+          },
+          "assignee_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Assignee Id",
+            "type": "string"
+          },
+          "assignee_type": {
+            "$ref": "#/components/schemas/AssigneeType"
+          }
+        },
+        "required": [
+          "assignee_id",
+          "assignee_type"
+        ],
+        "title": "AssignVerificationRequest",
+        "type": "object"
+      },
+      "AssigneeType": {
+        "enum": [
+          "ANALYST",
+          "MANAGER",
+          "DIRECTOR",
+          "VP",
+          "EXECUTIVE",
+          "SYSTEM",
+          "EXTERNAL_AUDITOR"
+        ],
+        "title": "AssigneeType",
+        "type": "string"
+      },
       "AttachEvidenceBody": {
         "additionalProperties": false,
         "properties": {
@@ -9425,6 +9469,62 @@
         "title": "CreateVerificationRequest",
         "type": "object"
       },
+      "CreateVerificationRequestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Due At"
+          },
+          "evidence_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "priority": {
+            "default": 50,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "review_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Due At"
+          }
+        },
+        "required": [
+          "evidence_id"
+        ],
+        "title": "CreateVerificationRequestRequest",
+        "type": "object"
+      },
       "CreateWorkflowBody": {
         "additionalProperties": false,
         "properties": {
@@ -11563,6 +11663,41 @@
         "title": "EnrollmentTokenCreateResponse",
         "type": "object"
       },
+      "EscalateVerificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "escalated_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalated To"
+          },
+          "escalation_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation Notes"
+          },
+          "escalation_type": {
+            "$ref": "#/components/schemas/EscalationType"
+          }
+        },
+        "required": [
+          "escalation_type"
+        ],
+        "title": "EscalateVerificationRequest",
+        "type": "object"
+      },
       "EscalationItemResponse": {
         "properties": {
           "ambiguity_type": {
@@ -11742,6 +11877,17 @@
           "approval_rejected"
         ],
         "title": "EscalationTrigger",
+        "type": "string"
+      },
+      "EscalationType": {
+        "enum": [
+          "MANUAL",
+          "AUTOMATIC",
+          "SLA",
+          "REVIEW",
+          "EXECUTIVE"
+        ],
+        "title": "EscalationType",
         "type": "string"
       },
       "EvidenceAnchorCreate": {
@@ -21901,6 +22047,110 @@
         "title": "QuestionnaireResponseItem",
         "type": "object"
       },
+      "QueueItemResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assignee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Id"
+          },
+          "assignee_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Type"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "review_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Due At"
+          },
+          "sla_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Status"
+          },
+          "workflow_state": {
+            "title": "Workflow State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "evidence_id",
+          "workflow_state",
+          "priority",
+          "assignee_id",
+          "assignee_type",
+          "review_due_at",
+          "sla_status"
+        ],
+        "title": "QueueItemResponse",
+        "type": "object"
+      },
+      "QueueResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueueItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "items",
+          "total"
+        ],
+        "title": "QueueResponse",
+        "type": "object"
+      },
       "ROEEvaluationRequest": {
         "properties": {
           "classification": {
@@ -22566,6 +22816,35 @@
           "liveness_result"
         ],
         "title": "RecordHealthRequest",
+        "type": "object"
+      },
+      "RecordResultRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Notes"
+          },
+          "result": {
+            "enum": [
+              "APPROVED",
+              "REJECTED"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "RecordResultRequest",
         "type": "object"
       },
       "RecordRotationOutcomeRequest": {
@@ -25927,6 +26206,57 @@
         "title": "SetSlaDeadlinesRequest",
         "type": "object"
       },
+      "SetWorkflowSlaRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Due At"
+          },
+          "decision_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Due At"
+          },
+          "escalation_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation Due At"
+          },
+          "review_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Due At"
+          }
+        },
+        "title": "SetWorkflowSlaRequest",
+        "type": "object"
+      },
       "SimulationClassification": {
         "description": "Audience classification for simulation run outputs.\n\nControls who may receive the simulation output and under what conditions.\nINTERNAL: Default \u2014 internal governance review only.\nREGULATOR: Suitable for regulatory submission or auditor disclosure.\nLEGAL: Legal-hold / e-discovery qualified output.\nCUSTOMER_SHAREABLE: Safe for customer-facing disclosure.\nSOVEREIGN_RESTRICTED: Sovereign / govcon boundary; restricted distribution.",
         "enum": [
@@ -28355,6 +28685,30 @@
         "title": "TransitionTaskRequest",
         "type": "object"
       },
+      "TransitionWorkflowRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/VerificationWorkflowState"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "TransitionWorkflowRequest",
+        "type": "object"
+      },
       "TraversalResponse": {
         "properties": {
           "edges": {
@@ -29503,6 +29857,123 @@
         "title": "VerificationActorType",
         "type": "string"
       },
+      "VerificationAuditListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationAuditResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "request_id"
+        ],
+        "title": "VerificationAuditListResponse",
+        "type": "object"
+      },
+      "VerificationAuditResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_type": {
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "new_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New State"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "old_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old State"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "request_id",
+          "evidence_id",
+          "event_type",
+          "actor_id",
+          "actor_type",
+          "old_state",
+          "new_state",
+          "details",
+          "occurred_at",
+          "created_at"
+        ],
+        "title": "VerificationAuditResponse",
+        "type": "object"
+      },
       "VerificationBundleComponentSummary": {
         "properties": {
           "count": {
@@ -29737,6 +30208,270 @@
         "title": "VerificationListResponse",
         "type": "object"
       },
+      "VerificationRequestListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationRequestResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "VerificationRequestListResponse",
+        "type": "object"
+      },
+      "VerificationRequestResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned At"
+          },
+          "assigned_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Due At"
+          },
+          "assignee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Id"
+          },
+          "assignee_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Type"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Due At"
+          },
+          "escalation_count": {
+            "title": "Escalation Count",
+            "type": "integer"
+          },
+          "escalation_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation Due At"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "expired_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expired At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_escalated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Escalated At"
+          },
+          "last_escalated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Escalated By"
+          },
+          "last_escalation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Escalation Type"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "requested_at": {
+            "title": "Requested At",
+            "type": "string"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "string"
+          },
+          "requester_actor_type": {
+            "title": "Requester Actor Type",
+            "type": "string"
+          },
+          "review_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Due At"
+          },
+          "sla_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowSlaStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow_state": {
+            "title": "Workflow State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "evidence_id",
+          "workflow_state",
+          "requested_by",
+          "requester_actor_type",
+          "requested_at",
+          "assignee_id",
+          "assignee_type",
+          "assigned_at",
+          "priority",
+          "notes",
+          "review_due_at",
+          "decision_due_at",
+          "escalation_due_at",
+          "assigned_due_at",
+          "completed_at",
+          "cancelled_at",
+          "expired_at",
+          "escalation_count",
+          "last_escalation_type",
+          "last_escalated_at",
+          "last_escalated_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "VerificationRequestResponse",
+        "type": "object"
+      },
       "VerificationResult": {
         "enum": [
           "PASS",
@@ -29745,6 +30480,72 @@
         ],
         "title": "VerificationResult",
         "type": "string"
+      },
+      "VerificationResultResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decided_by": {
+            "title": "Decided By",
+            "type": "string"
+          },
+          "decider_actor_type": {
+            "title": "Decider Actor Type",
+            "type": "string"
+          },
+          "decision_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Notes"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "result": {
+            "title": "Result",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "request_id",
+          "evidence_id",
+          "result",
+          "decided_by",
+          "decider_actor_type",
+          "decision_notes",
+          "decided_at",
+          "created_at"
+        ],
+        "title": "VerificationResultResponse",
+        "type": "object"
       },
       "VerificationSnapshot": {
         "additionalProperties": false,
@@ -29956,6 +30757,24 @@
           "AI_ASSISTED_REVIEW"
         ],
         "title": "VerificationType",
+        "type": "string"
+      },
+      "VerificationWorkflowState": {
+        "description": "11-state verification workflow state machine.",
+        "enum": [
+          "REQUESTED",
+          "QUEUED",
+          "ASSIGNED",
+          "IN_REVIEW",
+          "PENDING_INFORMATION",
+          "APPROVED",
+          "REJECTED",
+          "ESCALATED",
+          "EXPIRED",
+          "CANCELLED",
+          "COMPLETED"
+        ],
+        "title": "VerificationWorkflowState",
         "type": "string"
       },
       "VerifyControlRequest": {
@@ -30242,6 +31061,105 @@
         "title": "WebHeadersScanInitiateResponse",
         "type": "object"
       },
+      "WorkflowCginSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By State",
+            "type": "object"
+          },
+          "completed_last_30d": {
+            "title": "Completed Last 30D",
+            "type": "integer"
+          },
+          "escalated_count": {
+            "title": "Escalated Count",
+            "type": "integer"
+          },
+          "overdue_count": {
+            "title": "Overdue Count",
+            "type": "integer"
+          },
+          "snapshot_at": {
+            "title": "Snapshot At",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_requests": {
+            "title": "Total Requests",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "snapshot_at",
+          "tenant_id",
+          "total_requests",
+          "by_state",
+          "overdue_count",
+          "escalated_count",
+          "completed_last_30d"
+        ],
+        "title": "WorkflowCginSnapshot",
+        "type": "object"
+      },
+      "WorkflowDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "avg_priority": {
+            "title": "Avg Priority",
+            "type": "number"
+          },
+          "by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By State",
+            "type": "object"
+          },
+          "completed_count": {
+            "title": "Completed Count",
+            "type": "integer"
+          },
+          "due_soon_count": {
+            "title": "Due Soon Count",
+            "type": "integer"
+          },
+          "escalated_count": {
+            "title": "Escalated Count",
+            "type": "integer"
+          },
+          "overdue_count": {
+            "title": "Overdue Count",
+            "type": "integer"
+          },
+          "total_requests": {
+            "title": "Total Requests",
+            "type": "integer"
+          },
+          "unassigned_count": {
+            "title": "Unassigned Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_requests",
+          "by_state",
+          "overdue_count",
+          "due_soon_count",
+          "avg_priority",
+          "unassigned_count",
+          "escalated_count",
+          "completed_count"
+        ],
+        "title": "WorkflowDashboardResponse",
+        "type": "object"
+      },
       "WorkflowResponse": {
         "properties": {
           "archived_at": {
@@ -30352,6 +31270,85 @@
           "schema_version"
         ],
         "title": "WorkflowResponse",
+        "type": "object"
+      },
+      "WorkflowSlaStatus": {
+        "enum": [
+          "ON_TRACK",
+          "DUE_SOON",
+          "OVERDUE"
+        ],
+        "title": "WorkflowSlaStatus",
+        "type": "string"
+      },
+      "WorkflowSlaStatusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_sla_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Sla Status"
+          },
+          "decision_sla_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Sla Status"
+          },
+          "escalation_sla_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation Sla Status"
+          },
+          "overdue_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Overdue Fields",
+            "type": "array"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "review_sla_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Sla Status"
+          }
+        },
+        "required": [
+          "request_id",
+          "review_sla_status",
+          "decision_sla_status",
+          "escalation_sla_status",
+          "assigned_sla_status",
+          "overdue_fields"
+        ],
+        "title": "WorkflowSlaStatusResponse",
         "type": "object"
       },
       "_BacktestPayload": {
@@ -78934,6 +79931,955 @@
           }
         },
         "summary": "V1 Status"
+      }
+    },
+    "/verification-requests": {
+      "get": {
+        "description": "List verification workflow requests for the tenant.",
+        "operationId": "list_requests_verification_requests_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "evidence_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workflow_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assignee_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assignee Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Requests",
+        "tags": [
+          "verification-workflow"
+        ]
+      },
+      "post": {
+        "description": "Create a new verification workflow request.",
+        "operationId": "create_request_verification_requests_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVerificationRequestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        },
+        "summary": "Create Request",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/cgin/snapshot": {
+      "get": {
+        "description": "CGIN canonical snapshot for verification workflow.",
+        "operationId": "get_cgin_snapshot_verification_requests_cgin_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowCginSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Cgin Snapshot",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/dashboard": {
+      "get": {
+        "description": "Workflow authority dashboard metrics.",
+        "operationId": "get_dashboard_verification_requests_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/queue/{state}": {
+      "get": {
+        "description": "Get verification workflow queue for a specific state.",
+        "operationId": "get_queue_verification_requests_queue__state__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Queue",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/{req_id}": {
+      "get": {
+        "description": "Get a single verification workflow request.",
+        "operationId": "get_request_verification_requests__req_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "req_id",
+            "required": true,
+            "schema": {
+              "title": "Req Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Request",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/{req_id}/assign": {
+      "post": {
+        "description": "Assign a verifier to a verification request.",
+        "operationId": "assign_verification_verification_requests__req_id__assign_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "req_id",
+            "required": true,
+            "schema": {
+              "title": "Req Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Invalid transition"
+          }
+        },
+        "summary": "Assign Verification",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/{req_id}/audit": {
+      "get": {
+        "description": "List audit trail for a verification request.",
+        "operationId": "list_audit_trail_verification_requests__req_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "req_id",
+            "required": true,
+            "schema": {
+              "title": "Req Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationAuditListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Audit Trail",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/{req_id}/escalate": {
+      "post": {
+        "description": "Escalate a verification request.",
+        "operationId": "escalate_verification_verification_requests__req_id__escalate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "req_id",
+            "required": true,
+            "schema": {
+              "title": "Req Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EscalateVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Invalid state for escalation"
+          }
+        },
+        "summary": "Escalate Verification",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/{req_id}/result": {
+      "post": {
+        "description": "Record a verification decision result.",
+        "operationId": "record_result_verification_requests__req_id__result_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "req_id",
+            "required": true,
+            "schema": {
+              "title": "Req Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Invalid state for result"
+          }
+        },
+        "summary": "Record Result",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/{req_id}/sla": {
+      "get": {
+        "description": "Get SLA status for a verification request.",
+        "operationId": "get_sla_status_verification_requests__req_id__sla_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "req_id",
+            "required": true,
+            "schema": {
+              "title": "Req Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSlaStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Sla Status",
+        "tags": [
+          "verification-workflow"
+        ]
+      },
+      "put": {
+        "description": "Set SLA deadlines for a verification request.",
+        "operationId": "set_sla_deadlines_verification_requests__req_id__sla_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "req_id",
+            "required": true,
+            "schema": {
+              "title": "Req Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWorkflowSlaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSlaStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Sla Deadlines",
+        "tags": [
+          "verification-workflow"
+        ]
+      }
+    },
+    "/verification-requests/{req_id}/transition": {
+      "post": {
+        "description": "Transition a verification request to a new workflow state.",
+        "operationId": "transition_workflow_verification_requests__req_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "req_id",
+            "required": true,
+            "schema": {
+              "title": "Req Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Invalid transition"
+          }
+        },
+        "summary": "Transition Workflow",
+        "tags": [
+          "verification-workflow"
+        ]
       }
     },
     "/workforce/alert-rules": {
