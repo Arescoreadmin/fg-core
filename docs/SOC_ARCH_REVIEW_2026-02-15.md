@@ -2996,3 +2996,63 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `make contract-authority-refresh`: OK
 - `make route-inventory-audit`: OK
 - `pytest tests/test_timeline_authority.py`: 110+/110+ passed
+
+## 2026-06-23 — PR 14.6.5: Canonical Evidence Status Model
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (additive evidence governance; no new auth subsystem; no privilege escalation; no credential handling)
+
+**Security design overview:**
+
+1. **Tenant isolation:** Both new routes (`GET /evidence/status/report`, `POST /evidence/{ev_id}/quality/compute`) call `require_bound_tenant(request)` before any DB access. All ORM queries filter by `tenant_id`. Cross-tenant evidence lookup returns 404 (no tenant identity disclosed in error body).
+
+2. **Scope enforcement:** Status report requires `audit:read` scope. Quality recompute requires `audit:write` scope. Both routes use `dependencies=[Depends(require_scopes(...))]` — same pattern as existing evidence authority routes.
+
+3. **Quality scoring:** All four quality scores (freshness, verification, completeness, trust) are computed deterministically from stored evidence fields — no AI inference, no probabilistic values, no external I/O. Pure function in `services/evidence_authority/quality.py`.
+
+4. **Timeline events:** New `evidence_status_changed` timeline event emitted on every lifecycle and trust state transition. Write path: engine → TimelineStore.record() — same append-only path as all other timeline events. No direct table mutations.
+
+5. **New trust state ATTESTED:** Added as VARCHAR value between PARTIALLY_VERIFIED and VERIFIED. No DB enum migration required. Application-layer validation only. All existing trust transitions unaffected.
+
+6. **New ownership roles BUSINESS_OWNER / TECHNICAL_OWNER:** Added as VARCHAR values. Same ORM append-only ownership model. All existing role logic unaffected.
+
+**Files Changed (security-relevant):**
+- `api/evidence_authority.py` — 2 new routes added; both gated on `require_scopes()` and `require_bound_tenant()`
+- `services/evidence_authority/models.py` — ATTESTED trust state, BUSINESS_OWNER/TECHNICAL_OWNER roles added
+- `api/observability/metrics.py` — 3 new counters (no `tenant_id` labels)
+
+**Validation:**
+- `make route-inventory-generate`: OK
+- `make fg-contract`: OK (contract authority refreshed)
+- `pytest tests/test_h14_6_5_evidence_status_model.py`: 122/122 passed
+
+## 2026-06-23 — PR 14.6.5A: Evidence Status Model Hardening & Governance Completion
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (additive; extends existing evidence bounded context; no new auth subsystem; no privilege escalation; no credential handling)
+
+**Security design overview:**
+
+1. **Tenant isolation:** All 13 new routes call `require_bound_tenant(request)` before any DB access. All ORM queries and raw SQL calls filter by `tenant_id`. Cross-tenant lookups return 404 with no tenant identity disclosed. New tables (`fa_verifications`, `fa_evidence_control_links`, `fa_evidence_risk_links`) all carry `tenant_id NOT NULL` with dedicated indexes.
+
+2. **Scope enforcement:** Read routes require `audit:read`; write routes require `audit:write`. All use `dependencies=[Depends(require_scopes(...))]` — same pattern as existing evidence routes. No scope relaxation.
+
+3. **Append-only model:** `fa_verifications`, `fa_evidence_control_links`, `fa_evidence_risk_links` are append-only at both the ORM layer (`before_update`/`before_delete` guards) and the PostgreSQL layer (triggers in migration 0129). Verification records survive evidence lifecycle changes — no cascading delete.
+
+4. **SLA deadline fields:** `review_due_at`, `verification_due_at`, `freshness_due_at` are nullable TEXT columns on `fa_evidence` set only via authenticated `PUT /evidence/{ev_id}/sla` (audit:write). SLA status is computed deterministically at read time — no background worker, no cron, no side effects.
+
+5. **Coverage analytics:** Queries `control_registry` and `risk_acceptances` tables (same DB, same tenant) for cross-boundary counts. All queries filter by `tenant_id`. No cross-tenant data can be returned.
+
+6. **Benchmark placeholders:** 4 nullable INTEGER columns added to `fa_evidence` for future CGIN percentile benchmarking. No values written, no computation performed in this PR.
+
+7. **CGIN snapshot:** `GET /evidence/cgin/snapshot` returns a read-only deterministic bundle from authoritative evidence data. No external calls; no secrets accessed. Fully replayable.
+
+8. **Timeline events:** 9 new event types emitted via existing `TimelineStore.record()` — append-only, same path as all other timeline events. No direct table mutations.
+
+**Files Changed (security-relevant):**
+- `api/evidence_authority.py` — 13 new routes; all gated on `require_scopes()` + `require_bound_tenant()`
+- `api/db_models_evidence_authority.py` — 3 new append-only ORM models with ORM immutability guards; 7 new nullable columns on `FaEvidence`
+- `migrations/postgres/0129_evidence_hardening.sql` — 3 new tables + PG append-only triggers + 7 new nullable columns on `fa_evidence`
+
+**Validation:**
+- `make route-inventory-generate`: OK
+- `make fg-contract`: OK (contract authority refreshed)
+- `pytest tests/test_h14_6_5a_evidence_hardening.py`: 116/116 passed

@@ -109,6 +109,32 @@ class FaEvidence(Base):
     )
     last_verifier_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # PR 14.6.5 — Evidence Quality Metrics (deterministic, stored, no probabilistic values)
+    freshness_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    verification_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completeness_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quality_last_computed_at: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+
+    # PR 14.6.5A — SLA deadlines
+    review_due_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verification_due_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    freshness_due_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # PR 14.6.5A — Benchmark placeholder columns (CGIN-ready; populated when industry data available)
+    benchmark_freshness_percentile: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    benchmark_verification_percentile: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    benchmark_density_percentile: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    benchmark_coverage_percentile: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+
     # Ownership
     owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     owner_type: Mapped[str | None] = mapped_column(
@@ -385,3 +411,128 @@ def _block_audit_event_update(mapper, connection, target):
 @sa_event.listens_for(FaEvidenceAuditEvent, "before_delete")
 def _block_audit_event_delete(mapper, connection, target):
     raise ValueError("fa_evidence_audit_events rows are immutable")
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — fa_verifications (append-only)
+# ---------------------------------------------------------------------------
+
+
+class FaVerification(Base):
+    __tablename__ = "fa_verifications"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    verification_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    verification_method: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    verification_result: Mapped[str] = mapped_column(String(32), nullable=False)
+    verification_confidence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    verification_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verified_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    verified_actor_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    verified_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_verifications_tenant_evidence", "tenant_id", "evidence_id"),
+        Index("ix_fa_verifications_result", "tenant_id", "verification_result"),
+        Index("ix_fa_verifications_created", "tenant_id", "created_at"),
+    )
+
+
+@sa_event.listens_for(FaVerification, "before_update")
+def _block_verification_update(mapper, connection, target):
+    raise ValueError("fa_verifications rows are immutable")
+
+
+@sa_event.listens_for(FaVerification, "before_delete")
+def _block_verification_delete(mapper, connection, target):
+    raise ValueError("fa_verifications rows are immutable")
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — fa_evidence_control_links (append-only)
+# ---------------------------------------------------------------------------
+
+
+class FaEvidenceControlLink(Base):
+    __tablename__ = "fa_evidence_control_links"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    control_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    linked_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    linked_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "evidence_id", "control_id", name="uq_fa_evidence_control_link"
+        ),
+        Index("ix_fa_ecl_evidence", "tenant_id", "evidence_id"),
+        Index("ix_fa_ecl_control", "tenant_id", "control_id"),
+    )
+
+
+@sa_event.listens_for(FaEvidenceControlLink, "before_update")
+def _block_ecl_update(mapper, connection, target):
+    raise ValueError("fa_evidence_control_links rows are immutable")
+
+
+@sa_event.listens_for(FaEvidenceControlLink, "before_delete")
+def _block_ecl_delete(mapper, connection, target):
+    raise ValueError("fa_evidence_control_links rows are immutable")
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — fa_evidence_risk_links (append-only)
+# ---------------------------------------------------------------------------
+
+
+class FaEvidenceRiskLink(Base):
+    __tablename__ = "fa_evidence_risk_links"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    linked_resource_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    link_type: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # RISK|FINDING|EXCEPTION
+    linked_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    linked_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "evidence_id",
+            "linked_resource_id",
+            "link_type",
+            name="uq_fa_evidence_risk_link",
+        ),
+        Index("ix_fa_erl_evidence", "tenant_id", "evidence_id"),
+        Index("ix_fa_erl_resource", "tenant_id", "linked_resource_id"),
+        Index("ix_fa_erl_link_type", "tenant_id", "link_type"),
+    )
+
+
+@sa_event.listens_for(FaEvidenceRiskLink, "before_update")
+def _block_erl_update(mapper, connection, target):
+    raise ValueError("fa_evidence_risk_links rows are immutable")
+
+
+@sa_event.listens_for(FaEvidenceRiskLink, "before_delete")
+def _block_erl_delete(mapper, connection, target):
+    raise ValueError("fa_evidence_risk_links rows are immutable")

@@ -268,10 +268,15 @@ class EvidenceTrustState(str, Enum):
 
     A piece of evidence can be VERIFIED (lifecycle) but DISPUTED (trust) if
     subsequent information calls its accuracy into question.
+
+    ATTESTED: externally attested by a verifier (human, AI, or third-party)
+    but not yet fully verified internally. Sits between PARTIALLY_VERIFIED
+    and VERIFIED in the trust hierarchy.
     """
 
     UNVERIFIED = "UNVERIFIED"
     PARTIALLY_VERIFIED = "PARTIALLY_VERIFIED"
+    ATTESTED = "ATTESTED"
     VERIFIED = "VERIFIED"
     HIGH_CONFIDENCE = "HIGH_CONFIDENCE"
     DISPUTED = "DISPUTED"
@@ -282,6 +287,7 @@ VALID_TRUST_TRANSITIONS: dict[EvidenceTrustState, FrozenSet[EvidenceTrustState]]
     EvidenceTrustState.UNVERIFIED: frozenset(
         {
             EvidenceTrustState.PARTIALLY_VERIFIED,
+            EvidenceTrustState.ATTESTED,
             EvidenceTrustState.VERIFIED,
             EvidenceTrustState.DISPUTED,
             EvidenceTrustState.INVALIDATED,
@@ -289,10 +295,20 @@ VALID_TRUST_TRANSITIONS: dict[EvidenceTrustState, FrozenSet[EvidenceTrustState]]
     ),
     EvidenceTrustState.PARTIALLY_VERIFIED: frozenset(
         {
+            EvidenceTrustState.ATTESTED,
             EvidenceTrustState.VERIFIED,
             EvidenceTrustState.HIGH_CONFIDENCE,
             EvidenceTrustState.DISPUTED,
             EvidenceTrustState.INVALIDATED,
+        }
+    ),
+    EvidenceTrustState.ATTESTED: frozenset(
+        {
+            EvidenceTrustState.VERIFIED,
+            EvidenceTrustState.HIGH_CONFIDENCE,
+            EvidenceTrustState.DISPUTED,
+            EvidenceTrustState.INVALIDATED,
+            EvidenceTrustState.PARTIALLY_VERIFIED,  # downgrade if attestation withdrawn
         }
     ),
     EvidenceTrustState.VERIFIED: frozenset(
@@ -300,6 +316,7 @@ VALID_TRUST_TRANSITIONS: dict[EvidenceTrustState, FrozenSet[EvidenceTrustState]]
             EvidenceTrustState.HIGH_CONFIDENCE,
             EvidenceTrustState.DISPUTED,
             EvidenceTrustState.INVALIDATED,
+            EvidenceTrustState.ATTESTED,  # downgrade if internal review withdraws verification
             EvidenceTrustState.PARTIALLY_VERIFIED,  # downgrade if new evidence contradicts
         }
     ),
@@ -313,6 +330,7 @@ VALID_TRUST_TRANSITIONS: dict[EvidenceTrustState, FrozenSet[EvidenceTrustState]]
     EvidenceTrustState.DISPUTED: frozenset(
         {
             EvidenceTrustState.PARTIALLY_VERIFIED,  # dispute resolved partially
+            EvidenceTrustState.ATTESTED,  # dispute resolved via external attestation
             EvidenceTrustState.VERIFIED,  # dispute resolved fully
             EvidenceTrustState.INVALIDATED,  # dispute proves invalidity
         }
@@ -330,6 +348,7 @@ TERMINAL_TRUST_STATES: FrozenSet[EvidenceTrustState] = frozenset(
 TRUST_STATE_SCORE_FLOOR: dict[EvidenceTrustState, int] = {
     EvidenceTrustState.UNVERIFIED: 0,
     EvidenceTrustState.PARTIALLY_VERIFIED: 25,
+    EvidenceTrustState.ATTESTED: 45,
     EvidenceTrustState.VERIFIED: 60,
     EvidenceTrustState.HIGH_CONFIDENCE: 85,
     EvidenceTrustState.DISPUTED: 0,
@@ -357,9 +376,15 @@ def validate_trust_transition(
 
 
 class EvidenceOwnershipRole(str, Enum):
-    """Ownership roles for evidence — AGI-forward."""
+    """Ownership roles for evidence — AGI-forward.
+
+    BUSINESS_OWNER: accountable business stakeholder (risk/compliance owner).
+    TECHNICAL_OWNER: accountable technical actor (implements/maintains evidence).
+    """
 
     OWNER = "OWNER"
+    BUSINESS_OWNER = "BUSINESS_OWNER"
+    TECHNICAL_OWNER = "TECHNICAL_OWNER"
     REVIEWER = "REVIEWER"
     VERIFIER = "VERIFIER"
     APPROVER = "APPROVER"
@@ -440,3 +465,54 @@ class EvidenceAuditEventType(str, Enum):
     EVIDENCE_REVOKED = "evidence_revoked"
     EVIDENCE_ARCHIVED = "evidence_archived"
     EVIDENCE_SUPERSEDED = "evidence_superseded"
+    # PR 14.6.5 — canonical cross-cutting status event emitted on every state change
+    EVIDENCE_STATUS_CHANGED = "evidence_status_changed"
+    # PR 14.6.5A — verification & linkage audit events
+    VERIFICATION_CREATED = "verification_created"
+    VERIFICATION_FAILED = "verification_failed"
+    CONTROL_LINKED = "control_linked"
+    RISK_LINKED = "risk_linked"
+    SLA_DEADLINES_SET = "sla_deadlines_set"
+    QUALITY_SCORES_COMPUTED = "quality_scores_computed"
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Verification & Linkage Enums
+# ---------------------------------------------------------------------------
+
+
+class VerificationType(str, Enum):
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+    DOCUMENT_REVIEW = "DOCUMENT_REVIEW"
+    TECHNICAL_VALIDATION = "TECHNICAL_VALIDATION"
+    CONTROL_TEST = "CONTROL_TEST"
+    AUTOMATED_VALIDATION = "AUTOMATED_VALIDATION"
+    THIRD_PARTY_ATTESTATION = "THIRD_PARTY_ATTESTATION"
+    AI_ASSISTED_REVIEW = "AI_ASSISTED_REVIEW"
+
+
+class VerificationActorType(str, Enum):
+    HUMAN = "HUMAN"
+    REVIEWER = "REVIEWER"
+    APPROVER = "APPROVER"
+    AI_SYSTEM = "AI_SYSTEM"
+    AUTONOMOUS_AGENT = "AUTONOMOUS_AGENT"
+    AGI_SYSTEM = "AGI_SYSTEM"
+
+
+class VerificationResult(str, Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+    INCONCLUSIVE = "INCONCLUSIVE"
+
+
+class VerificationSlaStatus(str, Enum):
+    ON_TRACK = "ON_TRACK"
+    DUE_SOON = "DUE_SOON"
+    OVERDUE = "OVERDUE"
+
+
+class EvidenceLinkTargetType(str, Enum):
+    RISK = "RISK"
+    FINDING = "FINDING"
+    EXCEPTION = "EXCEPTION"

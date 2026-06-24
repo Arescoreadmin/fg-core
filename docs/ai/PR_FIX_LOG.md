@@ -15884,3 +15884,65 @@ No fixes required — initial implementation.
 **Root cause:** `test_10000_nodes_manifest_under_1000ms` used `time.monotonic()` (wall clock) with a 1000ms budget. Under full-suite load with 11k+ tests competing for CPU, the wall-clock time exceeded 1000ms even though the actual CPU work took <50ms.
 
 **Fix:** Switched to `time.process_time()` (CPU time) so the budget measures actual computation rather than scheduling latency. The 1000ms CPU budget remains unchanged and is still a meaningful regression guard.
+
+---
+
+## feat/evidence-status-model-14-6-5 — PR 14.6.5: Canonical Evidence Status Model
+
+**Files changed:** `services/evidence_authority/models.py`, `api/db_models_evidence_authority.py`, `services/evidence_authority/quality.py` (new), `services/evidence_authority/schemas.py`, `services/evidence_authority/repository.py`, `services/evidence_authority/engine.py`, `api/evidence_authority.py`, `api/observability/metrics.py`, `migrations/postgres/0128_evidence_status_model.sql` (new), `tests/test_h14_6_5_evidence_status_model.py` (new), `docs/SOC_ARCH_REVIEW_2026-02-15.md`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`, `ROADMAP.md`
+
+**Fix 1: New ATTESTED trust state**
+
+Added `ATTESTED = "ATTESTED"` to `EvidenceTrustState` enum with score floor 45 (between PARTIALLY_VERIFIED=25 and VERIFIED=60). Updated `VALID_TRUST_TRANSITIONS` to include all valid ATTESTED transitions. No DB migration required (VARCHAR storage).
+
+**Fix 2: New ownership roles BUSINESS_OWNER / TECHNICAL_OWNER**
+
+Added `BUSINESS_OWNER` and `TECHNICAL_OWNER` to `EvidenceOwnershipRole` enum. Total roles: 7. No DB migration required (VARCHAR storage).
+
+**Fix 3: Evidence Quality Metrics engine**
+
+Created `services/evidence_authority/quality.py` with four deterministic scoring functions:
+- `compute_freshness_score()` — linear decay from collected_at/expires_at; zero for REVOKED/EXPIRED/ARCHIVED
+- `compute_verification_score()` — trust state floor + verification count/source bonuses
+- `compute_completeness_score()` — points for optional metadata field presence (max 100)
+- `compute_quality_scores()` — returns immutable `QualityScores` dataclass
+
+Added `freshness_score`, `verification_score`, `completeness_score`, `quality_last_computed_at` columns to `fa_evidence` ORM model and migration `0128_evidence_status_model.sql`. Scores persisted automatically on every mutating operation.
+
+**Fix 4: EvidenceStatusChanged canonical timeline event**
+
+Added `_emit_status_changed_event()` helper in engine.py. Fires `evidence_status_changed` event on every lifecycle AND trust state transition with `change_type`, `from_state`, `to_state`, `actor_id`, `actor_type`, `reason` in payload. Governance consumers subscribe to a single event type.
+
+**Fix 5: Governance Status Report endpoint**
+
+New `GET /evidence/status/report` (before `/{ev_id}` to prevent FastAPI routing conflict). Returns `EvidenceStatusReportResponse` with per-item quality scores, aggregated counts by lifecycle/trust state, average quality scores, and governance health indicators. Requires `audit:read` scope.
+
+**Fix 6: Quality recompute endpoint**
+
+New `POST /evidence/{ev_id}/quality/compute`. Requires `audit:write` scope. Returns `EvidenceQualityScoreResponse`. Idempotent.
+
+**Fix 7: New Prometheus metrics**
+
+- `frostgate_evidence_status_transitions_total` (label: `to_status`)
+- `frostgate_evidence_trust_changes_total` (no labels)
+- `frostgate_evidence_quality_score_updates_total` (no labels)
+
+**Fix 8: AUDIT_EVENT_TYPES**
+
+Added `EVIDENCE_STATUS_CHANGED` and `QUALITY_SCORES_COMPUTED` to `EvidenceAuditEventType` enum.
+
+**Tests:** 122 tests in `test_h14_6_5_evidence_status_model.py` covering lifecycle/trust state machines, quality scoring (unit + HTTP), governance status report, tenant isolation, new ownership roles, and deterministic replay.
+
+---
+
+## feat/evidence-status-model-14-6-5a — PR 14.6.5A Evidence Status Model Hardening
+
+**Fix 1: Contract authority refresh after new routes**
+
+Adding 13 new routes changes the OpenAPI spec. After `make route-inventory-generate`, ran `python scripts/refresh_contract_authority.py` to update the SHA in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+
+**Fix 2: SOC review sync after CI artifact updates**
+
+Route inventory regeneration changed `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`, `plane_registry_snapshot.json`. SOC sync check requires updates to both SOC docs. Appended structured entries to `docs/SOC_ARCH_REVIEW_2026-02-15.md` and `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+
+**Tests:** 116 tests in `test_h14_6_5a_evidence_hardening.py` covering verification creation/history/SLA, control/risk linkage, coverage analytics, health signals, timeline emission, tenant isolation, deterministic replay, CGIN snapshots.

@@ -1555,6 +1555,12 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/evidence/status/report",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/evidence/verify",
       "scopes": [],
@@ -1599,6 +1605,12 @@
     {
       "method": "DELETE",
       "path": "/evidence/{ev_id}/ownership/{ownership_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/evidence/{ev_id}/quality/compute",
       "scopes": [],
       "source": "contract"
     },
@@ -3931,7 +3943,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-23T12:33:11.545084+00:00",
+  "generated_at": "2026-06-24T00:01:04.392774+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
