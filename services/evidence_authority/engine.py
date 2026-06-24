@@ -43,6 +43,7 @@ from services.evidence_authority.models import (
     validate_trust_transition,
 )
 from services.evidence_authority.repository import EvidenceRepository
+from services.evidence_authority.quality import compute_quality_scores
 from services.evidence_authority.schemas import (
     AssignOwnershipRequest,
     CreateEvidenceRequest,
@@ -57,10 +58,13 @@ from services.evidence_authority.schemas import (
     EvidenceOwnershipListResponse,
     EvidenceOwnershipNotFound,
     EvidenceOwnershipResponse,
+    EvidenceQualityScoreResponse,
     EvidenceRelationshipConflict,
     EvidenceRelationshipListResponse,
     EvidenceRelationshipResponse,
     EvidenceResponse,
+    EvidenceStatusItemResponse,
+    EvidenceStatusReportResponse,
     EvidenceTrustEventResponse,
     EvidenceTrustHistoryResponse,
     LinkRelationshipRequest,
@@ -172,6 +176,10 @@ def _to_response(row: FaEvidence) -> EvidenceResponse:
         schema_version=row.schema_version,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        freshness_score=getattr(row, "freshness_score", None),
+        verification_score=getattr(row, "verification_score", None),
+        completeness_score=getattr(row, "completeness_score", None),
+        quality_last_computed_at=getattr(row, "quality_last_computed_at", None),
     )
 
 
@@ -349,6 +357,7 @@ class EvidenceAuthorityEngine:
             },
         )
 
+        self._persist_quality_scores(row)
         self._db.commit()
         return _to_response(row)
 
@@ -518,6 +527,17 @@ class EvidenceAuthorityEngine:
             },
         )
 
+        self._emit_status_changed_event(
+            evidence_id=evidence_id,
+            change_type="lifecycle",
+            from_state=from_state.value,
+            to_state=to_state.value,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            reason=req.reason,
+        )
+
+        self._persist_quality_scores(row)
         self._db.commit()
         return _to_response(row)
 
@@ -756,6 +776,17 @@ class EvidenceAuthorityEngine:
             },
         )
 
+        self._emit_status_changed_event(
+            evidence_id=evidence_id,
+            change_type="trust",
+            from_state=from_state.value,
+            to_state=to_state.value,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            reason=req.notes,
+        )
+
+        self._persist_quality_scores(row)
         self._db.commit()
         return self.query_trust_history(evidence_id)
 
@@ -938,6 +969,111 @@ class EvidenceAuthorityEngine:
         )
 
     # ------------------------------------------------------------------
+    # PR 14.6.5 — Quality scoring
+    # ------------------------------------------------------------------
+
+    def recompute_quality_scores(self, evidence_id: str) -> EvidenceQualityScoreResponse:
+        """Explicitly (re)compute and persist quality scores for an evidence record.
+
+        Called automatically on all mutating operations. Also available as an
+        explicit HTTP trigger for bulk recomputes or on-demand freshness updates.
+        """
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+
+        self._persist_quality_scores(row)
+
+        self._write_audit(
+            evidence_id=evidence_id,
+            event_type=EvidenceAuditEventType.QUALITY_SCORES_COMPUTED.value,
+            from_state=None,
+            to_state=None,
+            actor_id="system",
+            actor_type="service",
+            reason=None,
+            metadata={
+                "freshness_score": row.freshness_score,
+                "verification_score": row.verification_score,
+                "completeness_score": row.completeness_score,
+            },
+        )
+        self._db.commit()
+
+        now = _now()
+        return EvidenceQualityScoreResponse(
+            evidence_id=evidence_id,
+            freshness_score=row.freshness_score or 0,
+            verification_score=row.verification_score or 0,
+            completeness_score=row.completeness_score or 0,
+            trust_score=row.trust_score,
+            quality_last_computed_at=row.quality_last_computed_at or now,
+        )
+
+    # ------------------------------------------------------------------
+    # PR 14.6.5 — Governance status report
+    # ------------------------------------------------------------------
+
+    def get_status_report(
+        self,
+        *,
+        offset: int = 0,
+        limit: int = 200,
+    ) -> EvidenceStatusReportResponse:
+        """Return governance-ready evidence status report for the tenant.
+
+        All status information originates here. Governance consumers must not
+        compute status from any other source.
+        """
+        items, total = self._repo.list_all_evidence_for_status_report(
+            offset=offset, limit=limit
+        )
+        by_lifecycle = self._repo.count_by_lifecycle_state()
+        by_trust = self._repo.count_by_trust_state()
+        avg_scores = self._repo.avg_quality_scores()
+
+        status_items = [
+            EvidenceStatusItemResponse(
+                id=row.id,
+                evidence_ref=row.evidence_ref,
+                title=row.title,
+                lifecycle_state=row.lifecycle_state,
+                trust_state=row.trust_state,
+                freshness_score=getattr(row, "freshness_score", None),
+                trust_score=row.trust_score,
+                verification_score=getattr(row, "verification_score", None),
+                completeness_score=getattr(row, "completeness_score", None),
+                quality_last_computed_at=getattr(row, "quality_last_computed_at", None),
+                owner_id=row.owner_id,
+                expires_at=row.expires_at,
+                verified_at=row.verified_at,
+                collected_at=row.collected_at,
+            )
+            for row in items
+        ]
+
+        from services.evidence_authority.models import EvidenceTrustState
+
+        return EvidenceStatusReportResponse(
+            tenant_id=self._tenant_id,
+            generated_at=_now(),
+            total=total,
+            items=status_items,
+            by_lifecycle_state=by_lifecycle,
+            by_trust_state=by_trust,
+            avg_freshness_score=avg_scores["avg_freshness"],
+            avg_verification_score=avg_scores["avg_verification"],
+            avg_completeness_score=avg_scores["avg_completeness"],
+            avg_trust_score=avg_scores["avg_trust"],
+            without_owner_count=self._repo.count_without_owner(),
+            expired_count=by_lifecycle.get(EvidenceLifecycleState.EXPIRED.value, 0),
+            expiring_soon_count=self._repo.count_expiring_soon(days=30),
+            disputed_count=by_trust.get(EvidenceTrustState.DISPUTED.value, 0),
+            invalidated_count=by_trust.get(EvidenceTrustState.INVALIDATED.value, 0),
+            attested_count=by_trust.get(EvidenceTrustState.ATTESTED.value, 0),
+        )
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
@@ -970,6 +1106,63 @@ class EvidenceAuthorityEngine:
             created_at=_now(),
         )
         self._repo.create_audit_event(event)
+
+    def _persist_quality_scores(self, row: "FaEvidence") -> None:
+        """Compute and persist all quality scores for an evidence row in place.
+
+        Mutates row directly so callers can read updated values without a
+        second DB fetch. The caller is responsible for flushing/committing.
+        """
+        now = _now()
+        scores = compute_quality_scores(
+            lifecycle_state=row.lifecycle_state,
+            trust_state=row.trust_state,
+            collected_at=row.collected_at,
+            expires_at=row.expires_at,
+            description=row.description,
+            owner_id=row.owner_id,
+            source_system=row.source_system,
+            source_ref=row.source_ref,
+            engagement_id=row.engagement_id,
+            verification_count=row.verification_count or 0,
+            last_verification_source=row.last_verification_source,
+            trust_score=row.trust_score,
+        )
+        row.freshness_score = scores.freshness_score
+        row.verification_score = scores.verification_score
+        row.completeness_score = scores.completeness_score
+        row.quality_last_computed_at = now
+        row.updated_at = now
+        self._repo.save_evidence(row)
+
+    def _emit_status_changed_event(
+        self,
+        *,
+        evidence_id: str,
+        change_type: str,
+        from_state: str,
+        to_state: str,
+        actor_id: str,
+        actor_type: str,
+        reason: Optional[str],
+    ) -> None:
+        """Emit canonical EvidenceStatusChanged timeline event.
+
+        Fired on every lifecycle AND trust state transition so governance
+        consumers receive a single, consistent event type.
+        """
+        self._emit_timeline_event(
+            source_id=evidence_id,
+            event_type="evidence_status_changed",
+            payload={
+                "change_type": change_type,
+                "from_state": from_state,
+                "to_state": to_state,
+                "actor_id": actor_id,
+                "actor_type": actor_type,
+                "reason": reason,
+            },
+        )
 
     def _emit_timeline_event(
         self,

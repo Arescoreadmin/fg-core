@@ -109,6 +109,14 @@ class FaEvidence(Base):
     )
     last_verifier_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # PR 14.6.5 — Evidence Quality Metrics (deterministic, stored, no probabilistic values)
+    freshness_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    verification_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completeness_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quality_last_computed_at: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+
     # Ownership
     owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     owner_type: Mapped[str | None] = mapped_column(

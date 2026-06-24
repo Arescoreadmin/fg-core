@@ -27,8 +27,11 @@ from api.observability.metrics import (
     EVIDENCE_ARCHIVED_TOTAL,
     EVIDENCE_CREATED_TOTAL,
     EVIDENCE_EXPIRED_TOTAL,
+    EVIDENCE_QUALITY_SCORE_UPDATES_TOTAL,
     EVIDENCE_REJECTED_TOTAL,
+    EVIDENCE_STATUS_TRANSITIONS_TOTAL,
     EVIDENCE_SUPERSEDED_TOTAL,
+    EVIDENCE_TRUST_CHANGES_TOTAL,
     EVIDENCE_VERIFIED_TOTAL,
 )
 from services.evidence_authority.engine import EvidenceAuthorityEngine
@@ -46,10 +49,12 @@ from services.evidence_authority.schemas import (
     EvidenceOwnershipListResponse,
     EvidenceOwnershipNotFound,
     EvidenceOwnershipResponse,
+    EvidenceQualityScoreResponse,
     EvidenceRelationshipConflict,
     EvidenceRelationshipListResponse,
     EvidenceRelationshipResponse,
     EvidenceResponse,
+    EvidenceStatusReportResponse,
     EvidenceTrustHistoryResponse,
     LinkRelationshipRequest,
     RevokeOwnershipRequest,
@@ -117,6 +122,36 @@ def list_evidence_for_entity(
     with Session(engine) as db:
         svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
         return svc.list_evidence_for_entity(entity_type, entity_id)
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5 — Governance Status Report (must be before /{ev_id})
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/evidence/status/report",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=EvidenceStatusReportResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def evidence_status_report(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> EvidenceStatusReportResponse:
+    """Governance-ready evidence status report for the tenant.
+
+    All status information originates from Canonical Evidence Authority.
+    Downstream consumers (Governance Reporting, Attestation Engine,
+    Executive Dashboard, CGIN) must consume this endpoint — never
+    recompute status independently.
+    """
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        return svc.get_status_report(offset=offset, limit=limit)
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +309,7 @@ def transition_lifecycle(
             raise HTTPException(status_code=404, detail=str(exc))
         except EvidenceInvalidTransition as exc:
             raise HTTPException(status_code=422, detail=str(exc))
-        # Increment the appropriate metric
+        # Increment per-state metrics
         to_state = req.to_state
         if to_state == EvidenceLifecycleState.VERIFIED:
             EVIDENCE_VERIFIED_TOTAL.inc()
@@ -286,6 +321,7 @@ def transition_lifecycle(
             EVIDENCE_EXPIRED_TOTAL.inc()
         elif to_state == EvidenceLifecycleState.ARCHIVED:
             EVIDENCE_ARCHIVED_TOTAL.inc()
+        EVIDENCE_STATUS_TRANSITIONS_TOTAL.labels(to_status=to_state.value).inc()
         return result
 
 
@@ -398,13 +434,15 @@ def verify_evidence(
     with Session(engine) as db:
         svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
         try:
-            return svc.verify_evidence(
+            result = svc.verify_evidence(
                 ev_id, req, actor_id=actor_id, actor_type=actor_type
             )
         except EvidenceNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except EvidenceInvalidTrustTransition as exc:
             raise HTTPException(status_code=422, detail=str(exc))
+        EVIDENCE_TRUST_CHANGES_TOTAL.inc()
+        return result
 
 
 @router.get(
@@ -510,3 +548,35 @@ def list_audit_events(
             )
         except EvidenceNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5 — Quality Scores (must be before /{ev_id} catch-all)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/evidence/{ev_id}/quality/compute",
+    dependencies=[Depends(require_scopes("audit:write"))],
+    response_model=EvidenceQualityScoreResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def compute_quality_scores(
+    ev_id: str,
+    request: Request,
+) -> EvidenceQualityScoreResponse:
+    """Recompute and persist deterministic quality scores for an evidence record.
+
+    Scores are also automatically recomputed on every mutating operation.
+    Use this endpoint for explicit recomputes (bulk refresh, freshness update).
+    """
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.recompute_quality_scores(ev_id)
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        EVIDENCE_QUALITY_SCORE_UPDATES_TOTAL.inc()
+        return result

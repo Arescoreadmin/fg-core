@@ -417,3 +417,90 @@ class EvidenceRepository:
             )
             .count()
         )
+
+    # ------------------------------------------------------------------
+    # PR 14.6.5 — Quality score persistence
+    # ------------------------------------------------------------------
+
+    def update_quality_scores(
+        self,
+        evidence_id: str,
+        freshness_score: int,
+        verification_score: int,
+        completeness_score: int,
+        computed_at: str,
+    ) -> None:
+        """Persist computed quality scores for an evidence record."""
+        self._db.query(FaEvidence).filter(
+            FaEvidence.id == evidence_id,
+            FaEvidence.tenant_id == self._tenant_id,
+        ).update(
+            {
+                "freshness_score": freshness_score,
+                "verification_score": verification_score,
+                "completeness_score": completeness_score,
+                "quality_last_computed_at": computed_at,
+                "updated_at": computed_at,
+            },
+            synchronize_session="fetch",
+        )
+
+    def list_all_evidence_for_status_report(
+        self,
+        *,
+        offset: int = 0,
+        limit: int = 200,
+    ) -> tuple[list[FaEvidence], int]:
+        """Fetch all evidence for the tenant for governance status reporting."""
+        q = (
+            self._db.query(FaEvidence)
+            .filter(FaEvidence.tenant_id == self._tenant_id)
+            .order_by(FaEvidence.created_at.desc())
+        )
+        total = q.count()
+        items = q.offset(offset).limit(limit).all()
+        return items, total
+
+    def count_by_trust_state_value(self, trust_state: str) -> int:
+        return (
+            self._db.query(FaEvidence)
+            .filter(
+                FaEvidence.tenant_id == self._tenant_id,
+                FaEvidence.trust_state == trust_state,
+            )
+            .count()
+        )
+
+    def avg_quality_scores(
+        self,
+    ) -> dict[str, Optional[float]]:
+        """Return avg freshness, verification, completeness, and trust scores."""
+        from sqlalchemy import func as sa_func
+
+        row = (
+            self._db.query(
+                sa_func.avg(FaEvidence.freshness_score).label("avg_freshness"),
+                sa_func.avg(FaEvidence.verification_score).label("avg_verification"),
+                sa_func.avg(FaEvidence.completeness_score).label("avg_completeness"),
+                sa_func.avg(FaEvidence.trust_score).label("avg_trust"),
+            )
+            .filter(FaEvidence.tenant_id == self._tenant_id)
+            .first()
+        )
+        if row is None:
+            return {
+                "avg_freshness": None,
+                "avg_verification": None,
+                "avg_completeness": None,
+                "avg_trust": None,
+            }
+
+        def _round(v: Optional[float]) -> Optional[float]:
+            return round(float(v), 2) if v is not None else None
+
+        return {
+            "avg_freshness": _round(row.avg_freshness),
+            "avg_verification": _round(row.avg_verification),
+            "avg_completeness": _round(row.avg_completeness),
+            "avg_trust": _round(row.avg_trust),
+        }

@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 655,
+    "contract_count": 657,
     "contract_only": [],
-    "runtime_count": 821,
+    "runtime_count": 823,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "de9168e9c5bc13d71aa6cbf542a508e6d2fd14a6c2870ad26ba851f784044826",
+  "governance_fingerprint": "947a4ecc364b7dbbc038af260fef57fe7f98c2152109ce28b48ce34c197cbd2a",
   "planes": [
     {
       "compat": {
@@ -1084,6 +1084,7 @@
       "GET /evidence/dashboard",
       "GET /evidence/runs",
       "GET /evidence/runs/{run_id}",
+      "GET /evidence/status/report",
       "GET /evidence/{ev_id}",
       "GET /evidence/{ev_id}/audit",
       "GET /evidence/{ev_id}/ownership",
@@ -1106,6 +1107,7 @@
       "POST /evidence/verify",
       "POST /evidence/{ev_id}/lifecycle",
       "POST /evidence/{ev_id}/ownership",
+      "POST /evidence/{ev_id}/quality/compute",
       "POST /evidence/{ev_id}/relationships",
       "POST /evidence/{ev_id}/verify"
     ],

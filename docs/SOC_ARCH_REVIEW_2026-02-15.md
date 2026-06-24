@@ -2996,3 +2996,31 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `make contract-authority-refresh`: OK
 - `make route-inventory-audit`: OK
 - `pytest tests/test_timeline_authority.py`: 110+/110+ passed
+
+## 2026-06-23 — PR 14.6.5: Canonical Evidence Status Model
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (additive evidence governance; no new auth subsystem; no privilege escalation; no credential handling)
+
+**Security design overview:**
+
+1. **Tenant isolation:** Both new routes (`GET /evidence/status/report`, `POST /evidence/{ev_id}/quality/compute`) call `require_bound_tenant(request)` before any DB access. All ORM queries filter by `tenant_id`. Cross-tenant evidence lookup returns 404 (no tenant identity disclosed in error body).
+
+2. **Scope enforcement:** Status report requires `audit:read` scope. Quality recompute requires `audit:write` scope. Both routes use `dependencies=[Depends(require_scopes(...))]` — same pattern as existing evidence authority routes.
+
+3. **Quality scoring:** All four quality scores (freshness, verification, completeness, trust) are computed deterministically from stored evidence fields — no AI inference, no probabilistic values, no external I/O. Pure function in `services/evidence_authority/quality.py`.
+
+4. **Timeline events:** New `evidence_status_changed` timeline event emitted on every lifecycle and trust state transition. Write path: engine → TimelineStore.record() — same append-only path as all other timeline events. No direct table mutations.
+
+5. **New trust state ATTESTED:** Added as VARCHAR value between PARTIALLY_VERIFIED and VERIFIED. No DB enum migration required. Application-layer validation only. All existing trust transitions unaffected.
+
+6. **New ownership roles BUSINESS_OWNER / TECHNICAL_OWNER:** Added as VARCHAR values. Same ORM append-only ownership model. All existing role logic unaffected.
+
+**Files Changed (security-relevant):**
+- `api/evidence_authority.py` — 2 new routes added; both gated on `require_scopes()` and `require_bound_tenant()`
+- `services/evidence_authority/models.py` — ATTESTED trust state, BUSINESS_OWNER/TECHNICAL_OWNER roles added
+- `api/observability/metrics.py` — 3 new counters (no `tenant_id` labels)
+
+**Validation:**
+- `make route-inventory-generate`: OK
+- `make fg-contract`: OK (contract authority refreshed)
+- `pytest tests/test_h14_6_5_evidence_status_model.py`: 122/122 passed

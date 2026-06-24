@@ -12079,9 +12079,11 @@
         "type": "object"
       },
       "EvidenceOwnershipRole": {
-        "description": "Ownership roles for evidence \u2014 AGI-forward.",
+        "description": "Ownership roles for evidence \u2014 AGI-forward.\n\nBUSINESS_OWNER: accountable business stakeholder (risk/compliance owner).\nTECHNICAL_OWNER: accountable technical actor (implements/maintains evidence).",
         "enum": [
           "OWNER",
+          "BUSINESS_OWNER",
+          "TECHNICAL_OWNER",
           "REVIEWER",
           "VERIFIER",
           "APPROVER",
@@ -12089,6 +12091,53 @@
         ],
         "title": "EvidenceOwnershipRole",
         "type": "string"
+      },
+      "EvidenceQualityScoreResponse": {
+        "additionalProperties": false,
+        "description": "Deterministic quality scores for a single evidence record.",
+        "properties": {
+          "completeness_score": {
+            "title": "Completeness Score",
+            "type": "integer"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "freshness_score": {
+            "title": "Freshness Score",
+            "type": "integer"
+          },
+          "quality_last_computed_at": {
+            "title": "Quality Last Computed At",
+            "type": "string"
+          },
+          "trust_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Score"
+          },
+          "verification_score": {
+            "title": "Verification Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "freshness_score",
+          "verification_score",
+          "completeness_score",
+          "trust_score",
+          "quality_last_computed_at"
+        ],
+        "title": "EvidenceQualityScoreResponse",
+        "type": "object"
       },
       "EvidenceRefInput": {
         "additionalProperties": false,
@@ -12407,6 +12456,269 @@
         "title": "EvidenceSourceType",
         "type": "string"
       },
+      "EvidenceStatusItemResponse": {
+        "additionalProperties": false,
+        "description": "Canonical evidence status for a single item \u2014 for governance consumers.",
+        "properties": {
+          "collected_at": {
+            "title": "Collected At",
+            "type": "string"
+          },
+          "completeness_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completeness Score"
+          },
+          "evidence_ref": {
+            "title": "Evidence Ref",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "freshness_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Score"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "quality_last_computed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Last Computed At"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trust_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Score"
+          },
+          "trust_state": {
+            "title": "Trust State",
+            "type": "string"
+          },
+          "verification_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Score"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "id",
+          "evidence_ref",
+          "title",
+          "lifecycle_state",
+          "trust_state",
+          "freshness_score",
+          "trust_score",
+          "verification_score",
+          "completeness_score",
+          "quality_last_computed_at",
+          "owner_id",
+          "expires_at",
+          "verified_at",
+          "collected_at"
+        ],
+        "title": "EvidenceStatusItemResponse",
+        "type": "object"
+      },
+      "EvidenceStatusReportResponse": {
+        "additionalProperties": false,
+        "description": "Governance-ready evidence status report.\n\nAll status information originates from Canonical Evidence Authority.\nConsumers must not compute status from any other source.",
+        "properties": {
+          "attested_count": {
+            "title": "Attested Count",
+            "type": "integer"
+          },
+          "avg_completeness_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Completeness Score"
+          },
+          "avg_freshness_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Freshness Score"
+          },
+          "avg_trust_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Trust Score"
+          },
+          "avg_verification_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Verification Score"
+          },
+          "by_lifecycle_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Lifecycle State",
+            "type": "object"
+          },
+          "by_trust_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Trust State",
+            "type": "object"
+          },
+          "disputed_count": {
+            "title": "Disputed Count",
+            "type": "integer"
+          },
+          "expired_count": {
+            "title": "Expired Count",
+            "type": "integer"
+          },
+          "expiring_soon_count": {
+            "title": "Expiring Soon Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "invalidated_count": {
+            "title": "Invalidated Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceStatusItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "without_owner_count": {
+            "title": "Without Owner Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "generated_at",
+          "total",
+          "items",
+          "by_lifecycle_state",
+          "by_trust_state",
+          "avg_freshness_score",
+          "avg_verification_score",
+          "avg_completeness_score",
+          "avg_trust_score",
+          "without_owner_count",
+          "expired_count",
+          "expiring_soon_count",
+          "disputed_count",
+          "invalidated_count",
+          "attested_count"
+        ],
+        "title": "EvidenceStatusReportResponse",
+        "type": "object"
+      },
       "EvidenceTrustEventResponse": {
         "additionalProperties": false,
         "properties": {
@@ -12566,10 +12878,11 @@
         "type": "object"
       },
       "EvidenceTrustState": {
-        "description": "Trust state independent of lifecycle state.\n\nA piece of evidence can be VERIFIED (lifecycle) but DISPUTED (trust) if\nsubsequent information calls its accuracy into question.",
+        "description": "Trust state independent of lifecycle state.\n\nA piece of evidence can be VERIFIED (lifecycle) but DISPUTED (trust) if\nsubsequent information calls its accuracy into question.\n\nATTESTED: externally attested by a verifier (human, AI, or third-party)\nbut not yet fully verified internally. Sits between PARTIALLY_VERIFIED\nand VERIFIED in the trust hierarchy.",
         "enum": [
           "UNVERIFIED",
           "PARTIALLY_VERIFIED",
+          "ATTESTED",
           "VERIFIED",
           "HIGH_CONFIDENCE",
           "DISPUTED",
@@ -30124,6 +30437,17 @@
             "title": "Collection Method",
             "type": "string"
           },
+          "completeness_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completeness Score"
+          },
           "content_hash": {
             "anyOf": [
               {
@@ -30199,6 +30523,17 @@
             ],
             "title": "Expires At"
           },
+          "freshness_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Score"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -30250,6 +30585,17 @@
               }
             ],
             "title": "Owner Type"
+          },
+          "quality_last_computed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Last Computed At"
           },
           "reviewed_at": {
             "anyOf": [
@@ -30355,6 +30701,17 @@
           "verification_count": {
             "title": "Verification Count",
             "type": "integer"
+          },
+          "verification_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Score"
           },
           "verified_at": {
             "anyOf": [
@@ -49212,6 +49569,85 @@
         ]
       }
     },
+    "/evidence/status/report": {
+      "get": {
+        "description": "Governance-ready evidence status report for the tenant.\n\nAll status information originates from Canonical Evidence Authority.\nDownstream consumers (Governance Reporting, Attestation Engine,\nExecutive Dashboard, CGIN) must consume this endpoint \u2014 never\nrecompute status independently.",
+        "operationId": "evidence_status_report_evidence_status_report_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceStatusReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evidence Status Report",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
     "/evidence/verify": {
       "post": {
         "operationId": "verify_evidence_evidence_verify_post",
@@ -49805,6 +50241,71 @@
           }
         },
         "summary": "Revoke Ownership",
+        "tags": [
+          "evidence-authority"
+        ]
+      }
+    },
+    "/evidence/{ev_id}/quality/compute": {
+      "post": {
+        "description": "Recompute and persist deterministic quality scores for an evidence record.\n\nScores are also automatically recomputed on every mutating operation.\nUse this endpoint for explicit recomputes (bulk refresh, freshness update).",
+        "operationId": "compute_quality_scores_evidence__ev_id__quality_compute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ev_id",
+            "required": true,
+            "schema": {
+              "title": "Ev Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceQualityScoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compute Quality Scores",
         "tags": [
           "evidence-authority"
         ]

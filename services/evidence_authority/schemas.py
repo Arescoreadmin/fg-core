@@ -252,6 +252,11 @@ class EvidenceResponse(BaseModel):
     schema_version: str
     created_at: str
     updated_at: str
+    # PR 14.6.5 — quality scores (None until first compute)
+    freshness_score: int | None = None
+    verification_score: int | None = None
+    completeness_score: int | None = None
+    quality_last_computed_at: str | None = None
 
 
 class EvidenceListResponse(BaseModel):
@@ -405,3 +410,72 @@ class EvidenceDashboardResponse(BaseModel):
     expiring_soon_count: int  # expires within 30 days
     without_owner_count: int
     without_relationships_count: int
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5 — Quality Scores + Governance Status Report
+# ---------------------------------------------------------------------------
+
+
+class EvidenceQualityScoreResponse(BaseModel):
+    """Deterministic quality scores for a single evidence record."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str
+    freshness_score: int
+    verification_score: int
+    completeness_score: int
+    trust_score: int | None
+    quality_last_computed_at: str
+
+
+class EvidenceStatusItemResponse(BaseModel):
+    """Canonical evidence status for a single item — for governance consumers."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    evidence_ref: str
+    title: str
+    lifecycle_state: str
+    trust_state: str
+    freshness_score: int | None
+    trust_score: int | None
+    verification_score: int | None
+    completeness_score: int | None
+    quality_last_computed_at: str | None
+    owner_id: str | None
+    expires_at: str | None
+    verified_at: str | None
+    collected_at: str
+
+
+class EvidenceStatusReportResponse(BaseModel):
+    """Governance-ready evidence status report.
+
+    All status information originates from Canonical Evidence Authority.
+    Consumers must not compute status from any other source.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str
+    generated_at: str
+    total: int
+    items: list[EvidenceStatusItemResponse]
+    # State aggregations
+    by_lifecycle_state: dict[str, int]
+    by_trust_state: dict[str, int]
+    # Quality aggregations (None if no evidence has been scored yet)
+    avg_freshness_score: float | None
+    avg_verification_score: float | None
+    avg_completeness_score: float | None
+    avg_trust_score: float | None
+    # Governance health indicators
+    without_owner_count: int
+    expired_count: int
+    expiring_soon_count: int
+    disputed_count: int
+    invalidated_count: int
+    attested_count: int

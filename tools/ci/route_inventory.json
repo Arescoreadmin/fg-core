@@ -6448,6 +6448,24 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_authority.py",
+      "method": "GET",
+      "path": "/evidence/status/report",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate"
       ],
       "file": "api/attestation.py",
@@ -6579,6 +6597,24 @@
       "file": "api/evidence_authority.py",
       "method": "DELETE",
       "path": "/evidence/{ev_id}/ownership/{ownership_id}",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/evidence_authority.py",
+      "method": "POST",
+      "path": "/evidence/{ev_id}/quality/compute",
       "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
@@ -14041,7 +14077,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-23T00:32:02.197508+00:00",
+  "generated_at": "2026-06-24T00:01:04.375111+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

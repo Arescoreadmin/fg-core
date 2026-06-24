@@ -754,3 +754,27 @@ EVIDENCE_ARCHIVED_TOTAL = Counter(
     "Total evidence records archived",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5 — Canonical Evidence Status Model metrics
+# Labels bounded: lifecycle states (10) × lifecycle states (10) = 100 max pairs.
+# No tenant_id labels — high cardinality.
+# ---------------------------------------------------------------------------
+
+EVIDENCE_STATUS_TRANSITIONS_TOTAL = Counter(
+    "frostgate_evidence_status_transitions_total",
+    "Total evidence lifecycle status transitions by target state",
+    ["to_status"],
+)
+
+EVIDENCE_TRUST_CHANGES_TOTAL = Counter(
+    "frostgate_evidence_trust_changes_total",
+    "Total evidence trust state transitions",
+    [],
+)
+
+EVIDENCE_QUALITY_SCORE_UPDATES_TOTAL = Counter(
+    "frostgate_evidence_quality_score_updates_total",
+    "Total evidence quality score recomputations stored",
+    [],
+)
