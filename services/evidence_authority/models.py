@@ -467,4 +467,52 @@ class EvidenceAuditEventType(str, Enum):
     EVIDENCE_SUPERSEDED = "evidence_superseded"
     # PR 14.6.5 — canonical cross-cutting status event emitted on every state change
     EVIDENCE_STATUS_CHANGED = "evidence_status_changed"
+    # PR 14.6.5A — verification & linkage audit events
+    VERIFICATION_CREATED = "verification_created"
+    VERIFICATION_FAILED = "verification_failed"
+    CONTROL_LINKED = "control_linked"
+    RISK_LINKED = "risk_linked"
+    SLA_DEADLINES_SET = "sla_deadlines_set"
     QUALITY_SCORES_COMPUTED = "quality_scores_computed"
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Verification & Linkage Enums
+# ---------------------------------------------------------------------------
+
+
+class VerificationType(str, Enum):
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+    DOCUMENT_REVIEW = "DOCUMENT_REVIEW"
+    TECHNICAL_VALIDATION = "TECHNICAL_VALIDATION"
+    CONTROL_TEST = "CONTROL_TEST"
+    AUTOMATED_VALIDATION = "AUTOMATED_VALIDATION"
+    THIRD_PARTY_ATTESTATION = "THIRD_PARTY_ATTESTATION"
+    AI_ASSISTED_REVIEW = "AI_ASSISTED_REVIEW"
+
+
+class VerificationActorType(str, Enum):
+    HUMAN = "HUMAN"
+    REVIEWER = "REVIEWER"
+    APPROVER = "APPROVER"
+    AI_SYSTEM = "AI_SYSTEM"
+    AUTONOMOUS_AGENT = "AUTONOMOUS_AGENT"
+    AGI_SYSTEM = "AGI_SYSTEM"
+
+
+class VerificationResult(str, Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+    INCONCLUSIVE = "INCONCLUSIVE"
+
+
+class VerificationSlaStatus(str, Enum):
+    ON_TRACK = "ON_TRACK"
+    DUE_SOON = "DUE_SOON"
+    OVERDUE = "OVERDUE"
+
+
+class EvidenceLinkTargetType(str, Enum):
+    RISK = "RISK"
+    FINDING = "FINDING"
+    EXCEPTION = "EXCEPTION"

@@ -25,19 +25,31 @@ from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
 from api.observability.metrics import (
     EVIDENCE_ARCHIVED_TOTAL,
+    EVIDENCE_CONTROL_LINKS_TOTAL,
+    EVIDENCE_COVERAGE_CALCULATIONS_TOTAL,
     EVIDENCE_CREATED_TOTAL,
     EVIDENCE_EXPIRED_TOTAL,
+    EVIDENCE_HEALTH_UPDATES_TOTAL,
     EVIDENCE_QUALITY_SCORE_UPDATES_TOTAL,
     EVIDENCE_REJECTED_TOTAL,
+    EVIDENCE_RISK_LINKS_TOTAL,
     EVIDENCE_STATUS_TRANSITIONS_TOTAL,
     EVIDENCE_SUPERSEDED_TOTAL,
     EVIDENCE_TRUST_CHANGES_TOTAL,
+    EVIDENCE_VERIFICATION_FAILURES_TOTAL,
+    EVIDENCE_VERIFICATIONS_TOTAL,
     EVIDENCE_VERIFIED_TOTAL,
 )
 from services.evidence_authority.engine import EvidenceAuthorityEngine
 from services.evidence_authority.schemas import (
     AssignOwnershipRequest,
+    CGINSnapshotBundle,
+    ControlLinkConflict,
+    ControlLinkListResponse,
+    ControlLinkResponse,
+    CoverageAnalyticsResponse,
     CreateEvidenceRequest,
+    CreateVerificationRequest,
     EvidenceAuditListResponse,
     EvidenceConflict,
     EvidenceDashboardResponse,
@@ -56,13 +68,27 @@ from services.evidence_authority.schemas import (
     EvidenceResponse,
     EvidenceStatusReportResponse,
     EvidenceTrustHistoryResponse,
+    HealthSignalsResponse,
+    LinkControlRequest,
     LinkRelationshipRequest,
+    LinkRiskRequest,
     RevokeOwnershipRequest,
+    RiskLinkConflict,
+    RiskLinkListResponse,
+    RiskLinkResponse,
+    SetSlaDeadlinesRequest,
+    SlaStatusResponse,
     TransitionLifecycleRequest,
     UpdateEvidenceMetadataRequest,
+    VerificationListResponse,
+    VerificationResponse,
+    VerificationSummaryResponse,
     VerifyEvidenceRequest,
 )
-from services.evidence_authority.models import EvidenceLifecycleState
+from services.evidence_authority.models import (
+    EvidenceLifecycleState,
+    VerificationResult,
+)
 
 router = APIRouter(tags=["evidence-authority"])
 
@@ -152,6 +178,60 @@ def evidence_status_report(
     with Session(engine) as db:
         svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
         return svc.get_status_report(offset=offset, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Coverage Analytics (must be before /{ev_id})
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/evidence/coverage",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=CoverageAnalyticsResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def evidence_coverage(request: Request) -> CoverageAnalyticsResponse:
+    """Coverage analytics — controls, risks, and evidence density for the tenant."""
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        result = svc.get_coverage_analytics()
+        EVIDENCE_COVERAGE_CALCULATIONS_TOTAL.inc()
+        return result
+
+
+@router.get(
+    "/evidence/health",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=HealthSignalsResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def evidence_health(request: Request) -> HealthSignalsResponse:
+    """Health signals — SLA overdue counts, orphaned evidence, trust posture."""
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        result = svc.get_health_signals()
+        EVIDENCE_HEALTH_UPDATES_TOTAL.inc()
+        return result
+
+
+@router.get(
+    "/evidence/cgin/snapshot",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=CGINSnapshotBundle,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def evidence_cgin_snapshot(request: Request) -> CGINSnapshotBundle:
+    """CGIN-ready canonical evidence snapshot bundle (deterministic, versioned)."""
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        return svc.get_cgin_snapshot()
 
 
 # ---------------------------------------------------------------------------
@@ -580,3 +660,238 @@ def compute_quality_scores(
             raise HTTPException(status_code=404, detail=str(exc))
         EVIDENCE_QUALITY_SCORE_UPDATES_TOTAL.inc()
         return result
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Verifications (per-evidence)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/evidence/{ev_id}/verifications",
+    dependencies=[Depends(require_scopes("audit:write"))],
+    response_model=VerificationResponse,
+    status_code=201,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def create_verification(
+    ev_id: str,
+    req: CreateVerificationRequest,
+    request: Request,
+) -> VerificationResponse:
+    """Record a verification attempt for an evidence record."""
+    tenant_id = require_bound_tenant(request)
+    actor_id = _actor(request)
+    actor_type = _actor_type(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.create_verification(
+                ev_id, req, actor_id=actor_id, actor_type=actor_type
+            )
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        EVIDENCE_VERIFICATIONS_TOTAL.inc()
+        if req.verification_result == VerificationResult.FAIL:
+            EVIDENCE_VERIFICATION_FAILURES_TOTAL.inc()
+        return result
+
+
+@router.get(
+    "/evidence/{ev_id}/verifications",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=VerificationListResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def list_verifications(ev_id: str, request: Request) -> VerificationListResponse:
+    """List all verifications for an evidence record."""
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_verifications(ev_id)
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get(
+    "/evidence/{ev_id}/verifications/summary",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=VerificationSummaryResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def get_verification_summary(
+    ev_id: str, request: Request
+) -> VerificationSummaryResponse:
+    """Get verification summary statistics for an evidence record."""
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.get_verification_summary(ev_id)
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — SLA Deadlines (per-evidence)
+# ---------------------------------------------------------------------------
+
+
+@router.put(
+    "/evidence/{ev_id}/sla",
+    dependencies=[Depends(require_scopes("audit:write"))],
+    response_model=SlaStatusResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def set_sla_deadlines(
+    ev_id: str,
+    req: SetSlaDeadlinesRequest,
+    request: Request,
+) -> SlaStatusResponse:
+    """Set SLA deadlines for an evidence record."""
+    tenant_id = require_bound_tenant(request)
+    actor_id = _actor(request)
+    actor_type = _actor_type(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.set_sla_deadlines(
+                ev_id, req, actor_id=actor_id, actor_type=actor_type
+            )
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get(
+    "/evidence/{ev_id}/sla",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=SlaStatusResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def get_sla_status(ev_id: str, request: Request) -> SlaStatusResponse:
+    """Get SLA status for an evidence record."""
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.get_sla_status(ev_id)
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Control Links (per-evidence)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/evidence/{ev_id}/control-links",
+    dependencies=[Depends(require_scopes("audit:write"))],
+    response_model=ControlLinkResponse,
+    status_code=201,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def link_to_control(
+    ev_id: str,
+    req: LinkControlRequest,
+    request: Request,
+) -> ControlLinkResponse:
+    """Link an evidence record to a control."""
+    tenant_id = require_bound_tenant(request)
+    actor_id = _actor(request)
+    actor_type = _actor_type(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.link_to_control(
+                ev_id, req, actor_id=actor_id, actor_type=actor_type
+            )
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except ControlLinkConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        EVIDENCE_CONTROL_LINKS_TOTAL.inc()
+        return result
+
+
+@router.get(
+    "/evidence/{ev_id}/control-links",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=ControlLinkListResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def list_control_links(ev_id: str, request: Request) -> ControlLinkListResponse:
+    """List all control links for an evidence record."""
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_control_links(ev_id)
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Risk Links (per-evidence)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/evidence/{ev_id}/risk-links",
+    dependencies=[Depends(require_scopes("audit:write"))],
+    response_model=RiskLinkResponse,
+    status_code=201,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def link_to_risk(
+    ev_id: str,
+    req: LinkRiskRequest,
+    request: Request,
+) -> RiskLinkResponse:
+    """Link an evidence record to a risk, finding, or exception."""
+    tenant_id = require_bound_tenant(request)
+    actor_id = _actor(request)
+    actor_type = _actor_type(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.link_to_risk(
+                ev_id, req, actor_id=actor_id, actor_type=actor_type
+            )
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except RiskLinkConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        EVIDENCE_RISK_LINKS_TOTAL.inc()
+        return result
+
+
+@router.get(
+    "/evidence/{ev_id}/risk-links",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=RiskLinkListResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
+def list_risk_links(
+    ev_id: str,
+    request: Request,
+    link_type: str | None = Query(default=None),
+) -> RiskLinkListResponse:
+    """List risk/finding/exception links for an evidence record."""
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = EvidenceAuthorityEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_risk_links(ev_id, link_type=link_type)
+        except EvidenceNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc))

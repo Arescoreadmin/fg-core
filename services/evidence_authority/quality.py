@@ -174,7 +174,9 @@ def compute_quality_scores(
     Pure function — no I/O. The caller is responsible for persisting results.
     """
     return QualityScores(
-        freshness_score=compute_freshness_score(lifecycle_state, collected_at, expires_at),
+        freshness_score=compute_freshness_score(
+            lifecycle_state, collected_at, expires_at
+        ),
         verification_score=compute_verification_score(
             trust_state, verification_count, last_verification_source
         ),

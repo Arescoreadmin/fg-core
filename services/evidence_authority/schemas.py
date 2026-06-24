@@ -6,6 +6,7 @@ All response schemas use extra="forbid" for contract stability.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -479,3 +480,310 @@ class EvidenceStatusReportResponse(BaseModel):
     disputed_count: int
     invalidated_count: int
     attested_count: int
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Exception classes
+# ---------------------------------------------------------------------------
+
+
+class VerificationConflict(EvidenceAuthorityError):
+    pass
+
+
+class ControlLinkConflict(EvidenceAuthorityError):
+    pass
+
+
+class RiskLinkConflict(EvidenceAuthorityError):
+    pass
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Request schemas
+# ---------------------------------------------------------------------------
+
+from services.evidence_authority.models import (  # noqa: E402
+    EvidenceLinkTargetType,
+    VerificationActorType,
+    VerificationResult,
+    VerificationType,
+)
+
+
+def _validate_iso8601(v: str) -> str:
+    try:
+        datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except (ValueError, AttributeError) as exc:
+        raise ValueError(f"Invalid ISO 8601 datetime: {v!r}") from exc
+    return v
+
+
+class CreateVerificationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verification_type: VerificationType
+    verification_method: str | None = Field(default=None, max_length=256)
+    verification_result: VerificationResult
+    verification_confidence: int | None = Field(default=None, ge=0, le=100)
+    verification_notes: str | None = Field(default=None, max_length=2048)
+    verified_by: str = Field(..., min_length=1, max_length=255)
+    verified_actor_type: VerificationActorType = VerificationActorType.HUMAN
+    verified_at: str = Field(..., description="ISO 8601 UTC")
+
+    @field_validator("verified_at")
+    @classmethod
+    def _check_verified_at(cls, v: str) -> str:
+        return _validate_iso8601(v)
+
+
+class SetSlaDeadlinesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    review_due_at: str | None = None
+    verification_due_at: str | None = None
+    freshness_due_at: str | None = None
+
+    @field_validator(
+        "review_due_at", "verification_due_at", "freshness_due_at", mode="before"
+    )
+    @classmethod
+    def _check_iso8601(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return _validate_iso8601(v)
+
+
+class LinkControlRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    control_id: str = Field(..., min_length=1, max_length=64)
+
+
+class LinkRiskRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    linked_resource_id: str = Field(..., min_length=1, max_length=64)
+    link_type: EvidenceLinkTargetType
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Response schemas
+# ---------------------------------------------------------------------------
+
+
+class VerificationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    evidence_id: str
+    verification_type: str
+    verification_method: str | None
+    verification_result: str
+    verification_confidence: int | None
+    verification_notes: str | None
+    verified_by: str
+    verified_actor_type: str
+    verified_at: str
+    schema_version: str
+    created_at: str
+
+
+class VerificationSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str
+    verification_count: int
+    passed_count: int
+    failed_count: int
+    inconclusive_count: int
+    verification_success_rate: float | None
+    verification_age_days: int | None
+    latest_verification_at: str | None
+    latest_verification_result: str | None
+    latest_verification_type: str | None
+
+
+class VerificationListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[VerificationResponse]
+    total: int
+
+
+class SlaStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str
+    review_due_at: str | None
+    verification_due_at: str | None
+    freshness_due_at: str | None
+    review_sla_status: str | None
+    verification_sla_status: str | None
+    freshness_sla_status: str | None
+    computed_at: str
+
+
+class ControlLinkResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    evidence_id: str
+    control_id: str
+    linked_by: str
+    linked_at: str
+    created_at: str
+
+
+class ControlLinkListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ControlLinkResponse]
+    total: int
+
+
+class RiskLinkResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    evidence_id: str
+    linked_resource_id: str
+    link_type: str
+    linked_by: str
+    linked_at: str
+    created_at: str
+
+
+class RiskLinkListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[RiskLinkResponse]
+    total: int
+
+
+class CoverageAnalyticsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str
+    generated_at: str
+    controls_with_evidence: int
+    controls_without_evidence: int
+    risks_with_evidence: int
+    risks_without_evidence: int
+    findings_with_evidence: int
+    exceptions_with_evidence: int
+    verified_controls: int
+    unverified_controls: int
+    total_control_links: int
+    total_risk_links: int
+    evidence_density: float
+    coverage_percentage: float
+    total_known_controls: int
+
+
+class HealthSignalsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str
+    generated_at: str
+    verification_overdue_count: int
+    review_overdue_count: int
+    freshness_overdue_count: int
+    orphaned_evidence_count: int
+    unlinked_evidence_count: int
+    disputed_evidence_count: int
+    invalidated_evidence_count: int
+    attested_evidence_count: int
+    verified_evidence_count: int
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — CGIN canonical snapshots (Sections 7 & 8)
+# ---------------------------------------------------------------------------
+
+
+class EvidenceStatusSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: str
+    snapshot_version: str
+    tenant_id: str
+    generated_at: str
+    evidence_id: str
+    lifecycle_state: str
+    trust_state: str
+    freshness_score: int | None
+    verification_score: int | None
+    completeness_score: int | None
+    trust_score: int | None
+    sla_review_status: str | None
+    sla_verification_status: str | None
+    benchmark_freshness_percentile: int | None = None
+    benchmark_verification_percentile: int | None = None
+
+
+class VerificationSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: str
+    snapshot_version: str
+    tenant_id: str
+    evidence_id: str
+    generated_at: str
+    verification_count: int
+    passed_count: int
+    verification_success_rate: float | None
+    latest_verification_at: str | None
+    latest_verification_type: str | None
+    verification_age_days: int | None
+
+
+class CoverageSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: str
+    snapshot_version: str
+    tenant_id: str
+    generated_at: str
+    controls_with_evidence: int
+    controls_without_evidence: int
+    risks_with_evidence: int
+    verified_controls: int
+    evidence_density: float
+    coverage_percentage: float
+    benchmark_density_percentile: int | None = None
+    benchmark_coverage_percentile: int | None = None
+
+
+class HealthSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: str
+    snapshot_version: str
+    tenant_id: str
+    generated_at: str
+    verification_overdue_count: int
+    review_overdue_count: int
+    freshness_overdue_count: int
+    orphaned_evidence_count: int
+    unlinked_evidence_count: int
+    disputed_evidence_count: int
+    invalidated_evidence_count: int
+    attested_evidence_count: int
+    verified_evidence_count: int
+
+
+class CGINSnapshotBundle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bundle_id: str
+    bundle_version: str
+    tenant_id: str
+    generated_at: str
+    evidence_snapshots: list[EvidenceStatusSnapshot]
+    verification_snapshots: list[VerificationSnapshot]
+    coverage: CoverageSnapshot
+    health: HealthSnapshot

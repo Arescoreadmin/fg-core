@@ -27,9 +27,12 @@ from sqlalchemy.orm import Session
 from api.db_models_evidence_authority import (
     FaEvidence,
     FaEvidenceAuditEvent,
+    FaEvidenceControlLink,
     FaEvidenceOwnership,
     FaEvidenceRelationship,
+    FaEvidenceRiskLink,
     FaEvidenceTrustEvent,
+    FaVerification,
 )
 from services.evidence_authority.models import (
     IMMUTABLE_LIFECYCLE_STATES,
@@ -39,6 +42,8 @@ from services.evidence_authority.models import (
     EvidenceLifecycleState,
     EvidenceOwnershipRole,
     EvidenceTrustState,
+    VerificationResult,
+    VerificationSlaStatus,
     validate_lifecycle_transition,
     validate_trust_transition,
 )
@@ -46,7 +51,14 @@ from services.evidence_authority.repository import EvidenceRepository
 from services.evidence_authority.quality import compute_quality_scores
 from services.evidence_authority.schemas import (
     AssignOwnershipRequest,
+    CGINSnapshotBundle,
+    ControlLinkConflict,
+    ControlLinkListResponse,
+    ControlLinkResponse,
+    CoverageAnalyticsResponse,
+    CoverageSnapshot,
     CreateEvidenceRequest,
+    CreateVerificationRequest,
     EvidenceAuditEventResponse,
     EvidenceAuditListResponse,
     EvidenceDashboardResponse,
@@ -65,12 +77,26 @@ from services.evidence_authority.schemas import (
     EvidenceResponse,
     EvidenceStatusItemResponse,
     EvidenceStatusReportResponse,
+    EvidenceStatusSnapshot,
     EvidenceTrustEventResponse,
     EvidenceTrustHistoryResponse,
+    HealthSignalsResponse,
+    HealthSnapshot,
+    LinkControlRequest,
     LinkRelationshipRequest,
+    LinkRiskRequest,
     RevokeOwnershipRequest,
+    RiskLinkConflict,
+    RiskLinkListResponse,
+    RiskLinkResponse,
+    SetSlaDeadlinesRequest,
+    SlaStatusResponse,
     TransitionLifecycleRequest,
     UpdateEvidenceMetadataRequest,
+    VerificationListResponse,
+    VerificationResponse,
+    VerificationSnapshot,
+    VerificationSummaryResponse,
     VerifyEvidenceRequest,
 )
 
@@ -972,7 +998,9 @@ class EvidenceAuthorityEngine:
     # PR 14.6.5 — Quality scoring
     # ------------------------------------------------------------------
 
-    def recompute_quality_scores(self, evidence_id: str) -> EvidenceQualityScoreResponse:
+    def recompute_quality_scores(
+        self, evidence_id: str
+    ) -> EvidenceQualityScoreResponse:
         """Explicitly (re)compute and persist quality scores for an evidence record.
 
         Called automatically on all mutating operations. Also available as an
@@ -1202,3 +1230,517 @@ class EvidenceAuthorityEngine:
             _timeline_store.record(self._db, event)
         except Exception:
             pass  # timeline persistence must never block evidence operations
+
+    # -----------------------------------------------------------------------
+    # PR 14.6.5A — Verifications
+    # -----------------------------------------------------------------------
+
+    def create_verification(
+        self,
+        evidence_id: str,
+        req: "CreateVerificationRequest",
+        actor_id: str,
+        actor_type: str = "human",
+    ) -> "VerificationResponse":
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+        now = _now()
+        ver_id = _new_id()
+        ver = FaVerification(
+            id=ver_id,
+            tenant_id=self._tenant_id,
+            evidence_id=evidence_id,
+            verification_type=req.verification_type.value,
+            verification_method=req.verification_method,
+            verification_result=req.verification_result.value,
+            verification_confidence=req.verification_confidence,
+            verification_notes=req.verification_notes,
+            verified_by=req.verified_by,
+            verified_actor_type=req.verified_actor_type.value,
+            verified_at=req.verified_at,
+            schema_version=_SCHEMA_VERSION,
+            created_at=now,
+        )
+        self._repo.create_verification(ver)
+        self._write_audit(
+            evidence_id=evidence_id,
+            event_type=EvidenceAuditEventType.VERIFICATION_CREATED.value,
+            from_state=None,
+            to_state=req.verification_result.value,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            reason=req.verification_notes,
+            metadata={
+                "verification_type": req.verification_type.value,
+                "verification_result": req.verification_result.value,
+            },
+        )
+        self._emit_timeline_event(
+            source_id=evidence_id,
+            event_type="verification_created",
+            payload={
+                "verification_type": req.verification_type.value,
+                "verification_result": req.verification_result.value,
+                "verified_by": req.verified_by,
+                "verified_actor_type": req.verified_actor_type.value,
+            },
+        )
+        if req.verification_result == VerificationResult.FAIL:
+            self._emit_timeline_event(
+                source_id=evidence_id,
+                event_type="verification_failed",
+                payload={
+                    "verification_type": req.verification_type.value,
+                    "verified_by": req.verified_by,
+                },
+            )
+        self._db.commit()
+        return _to_verification_response(ver)
+
+    def list_verifications(self, evidence_id: str) -> "VerificationListResponse":
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+        items = self._repo.list_verifications(evidence_id)
+        return VerificationListResponse(
+            items=[_to_verification_response(v) for v in items],
+            total=len(items),
+        )
+
+    def get_verification_summary(
+        self, evidence_id: str
+    ) -> "VerificationSummaryResponse":
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+        items = self._repo.list_verifications(evidence_id)
+        total = len(items)
+        passed = sum(1 for v in items if v.verification_result == "PASS")
+        failed = sum(1 for v in items if v.verification_result == "FAIL")
+        inconclusive = sum(1 for v in items if v.verification_result == "INCONCLUSIVE")
+        latest = items[0] if items else None
+        success_rate = round(passed / total, 4) if total > 0 else None
+        age_days = None
+        if latest:
+            try:
+                latest_dt = datetime.fromisoformat(
+                    latest.verified_at.replace("Z", "+00:00")
+                )
+                now_dt = datetime.now(tz=timezone.utc)
+                age_days = max(0, (now_dt - latest_dt).days)
+            except Exception:
+                pass
+        return VerificationSummaryResponse(
+            evidence_id=evidence_id,
+            verification_count=total,
+            passed_count=passed,
+            failed_count=failed,
+            inconclusive_count=inconclusive,
+            verification_success_rate=success_rate,
+            verification_age_days=age_days,
+            latest_verification_at=latest.verified_at if latest else None,
+            latest_verification_result=latest.verification_result if latest else None,
+            latest_verification_type=latest.verification_type if latest else None,
+        )
+
+    # -----------------------------------------------------------------------
+    # PR 14.6.5A — SLA Deadlines
+    # -----------------------------------------------------------------------
+
+    def set_sla_deadlines(
+        self,
+        evidence_id: str,
+        req: "SetSlaDeadlinesRequest",
+        actor_id: str,
+        actor_type: str = "human",
+    ) -> "SlaStatusResponse":
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+        now = _now()
+        if req.review_due_at is not None:
+            row.review_due_at = req.review_due_at
+        if req.verification_due_at is not None:
+            row.verification_due_at = req.verification_due_at
+        if req.freshness_due_at is not None:
+            row.freshness_due_at = req.freshness_due_at
+        row.updated_at = now
+        self._repo.save_evidence(row)
+        self._write_audit(
+            evidence_id=evidence_id,
+            event_type=EvidenceAuditEventType.SLA_DEADLINES_SET.value,
+            from_state=None,
+            to_state=None,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            reason=None,
+            metadata={
+                "review_due_at": req.review_due_at,
+                "verification_due_at": req.verification_due_at,
+                "freshness_due_at": req.freshness_due_at,
+            },
+        )
+        self._db.commit()
+        return self._compute_sla_status(row)
+
+    def get_sla_status(self, evidence_id: str) -> "SlaStatusResponse":
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+        return self._compute_sla_status(row)
+
+    def _compute_sla_status(self, row: "FaEvidence") -> "SlaStatusResponse":
+        now_dt = datetime.now(tz=timezone.utc)
+
+        def _sla_status(due_at: "str | None") -> "str | None":
+            if not due_at:
+                return None
+            try:
+                due_dt = datetime.fromisoformat(due_at.replace("Z", "+00:00"))
+                delta = (due_dt - now_dt).total_seconds()
+                if delta < 0:
+                    return VerificationSlaStatus.OVERDUE.value
+                elif delta < 7 * 86400:
+                    return VerificationSlaStatus.DUE_SOON.value
+                return VerificationSlaStatus.ON_TRACK.value
+            except Exception:
+                return None
+
+        return SlaStatusResponse(
+            evidence_id=row.id,
+            review_due_at=getattr(row, "review_due_at", None),
+            verification_due_at=getattr(row, "verification_due_at", None),
+            freshness_due_at=getattr(row, "freshness_due_at", None),
+            review_sla_status=_sla_status(getattr(row, "review_due_at", None)),
+            verification_sla_status=_sla_status(
+                getattr(row, "verification_due_at", None)
+            ),
+            freshness_sla_status=_sla_status(getattr(row, "freshness_due_at", None)),
+            computed_at=_now(),
+        )
+
+    # -----------------------------------------------------------------------
+    # PR 14.6.5A — Control Links
+    # -----------------------------------------------------------------------
+
+    def link_to_control(
+        self,
+        evidence_id: str,
+        req: "LinkControlRequest",
+        actor_id: str,
+        actor_type: str = "human",
+    ) -> "ControlLinkResponse":
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+        existing = self._repo.get_control_link(evidence_id, req.control_id)
+        if existing:
+            raise ControlLinkConflict(
+                f"Evidence {evidence_id!r} already linked to control {req.control_id!r}"
+            )
+        now = _now()
+        link = FaEvidenceControlLink(
+            id=_new_id(),
+            tenant_id=self._tenant_id,
+            evidence_id=evidence_id,
+            control_id=req.control_id,
+            linked_by=actor_id,
+            linked_at=now,
+            schema_version=_SCHEMA_VERSION,
+            created_at=now,
+        )
+        self._repo.create_control_link(link)
+        self._write_audit(
+            evidence_id=evidence_id,
+            event_type=EvidenceAuditEventType.CONTROL_LINKED.value,
+            from_state=None,
+            to_state=None,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            reason=None,
+            metadata={"control_id": req.control_id},
+        )
+        self._emit_timeline_event(
+            source_id=evidence_id,
+            event_type="evidence_linked_to_control",
+            payload={"control_id": req.control_id},
+        )
+        self._db.commit()
+        return _to_control_link_response(link)
+
+    def list_control_links(self, evidence_id: str) -> "ControlLinkListResponse":
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+        items = self._repo.list_control_links(evidence_id)
+        return ControlLinkListResponse(
+            items=[_to_control_link_response(lnk) for lnk in items],
+            total=len(items),
+        )
+
+    # -----------------------------------------------------------------------
+    # PR 14.6.5A — Risk/Finding/Exception Links
+    # -----------------------------------------------------------------------
+
+    def link_to_risk(
+        self,
+        evidence_id: str,
+        req: "LinkRiskRequest",
+        actor_id: str,
+        actor_type: str = "human",
+    ) -> "RiskLinkResponse":
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+        existing = self._repo.get_risk_link(
+            evidence_id, req.linked_resource_id, req.link_type.value
+        )
+        if existing:
+            raise RiskLinkConflict(
+                f"Evidence {evidence_id!r} already linked to "
+                f"{req.link_type.value} {req.linked_resource_id!r}"
+            )
+        now = _now()
+        link = FaEvidenceRiskLink(
+            id=_new_id(),
+            tenant_id=self._tenant_id,
+            evidence_id=evidence_id,
+            linked_resource_id=req.linked_resource_id,
+            link_type=req.link_type.value,
+            linked_by=actor_id,
+            linked_at=now,
+            schema_version=_SCHEMA_VERSION,
+            created_at=now,
+        )
+        self._repo.create_risk_link(link)
+        self._write_audit(
+            evidence_id=evidence_id,
+            event_type=EvidenceAuditEventType.RISK_LINKED.value,
+            from_state=None,
+            to_state=None,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            reason=None,
+            metadata={
+                "linked_resource_id": req.linked_resource_id,
+                "link_type": req.link_type.value,
+            },
+        )
+        tl_event = f"evidence_linked_to_{req.link_type.value.lower()}"
+        self._emit_timeline_event(
+            source_id=evidence_id,
+            event_type=tl_event,
+            payload={
+                "linked_resource_id": req.linked_resource_id,
+                "link_type": req.link_type.value,
+            },
+        )
+        self._db.commit()
+        return _to_risk_link_response(link)
+
+    def list_risk_links(
+        self,
+        evidence_id: str,
+        *,
+        link_type: "str | None" = None,
+    ) -> "RiskLinkListResponse":
+        row = self._repo.get_evidence(evidence_id)
+        if not row:
+            raise EvidenceNotFound(f"Evidence {evidence_id!r} not found")
+        items = self._repo.list_risk_links(evidence_id, link_type=link_type)
+        return RiskLinkListResponse(
+            items=[_to_risk_link_response(lnk) for lnk in items],
+            total=len(items),
+        )
+
+    # -----------------------------------------------------------------------
+    # PR 14.6.5A — Coverage Analytics
+    # -----------------------------------------------------------------------
+
+    def get_coverage_analytics(self) -> "CoverageAnalyticsResponse":
+        controls_with = self._repo.count_distinct_controls_with_evidence()
+        total_known_controls = self._repo.count_total_known_controls()
+        controls_without = max(0, total_known_controls - controls_with)
+        risks_with = self._repo.count_distinct_risks_with_evidence("RISK")
+        total_known_risks = self._repo.count_total_known_risks()
+        risks_without = max(0, total_known_risks - risks_with)
+        findings_with = self._repo.count_distinct_risks_with_evidence("FINDING")
+        exceptions_with = self._repo.count_distinct_risks_with_evidence("EXCEPTION")
+        verified_controls = self._repo.count_verified_controls()
+        unverified_controls = max(0, controls_with - verified_controls)
+        total_control_links = self._repo.count_total_control_links()
+        total_risk_links = self._repo.count_total_risk_links()
+        evidence_density = round(total_control_links / max(1, controls_with), 4)
+        coverage_pct = round((controls_with / max(1, total_known_controls)) * 100, 2)
+        return CoverageAnalyticsResponse(
+            tenant_id=self._tenant_id,
+            generated_at=_now(),
+            controls_with_evidence=controls_with,
+            controls_without_evidence=controls_without,
+            risks_with_evidence=risks_with,
+            risks_without_evidence=risks_without,
+            findings_with_evidence=findings_with,
+            exceptions_with_evidence=exceptions_with,
+            verified_controls=verified_controls,
+            unverified_controls=unverified_controls,
+            total_control_links=total_control_links,
+            total_risk_links=total_risk_links,
+            evidence_density=evidence_density,
+            coverage_percentage=coverage_pct,
+            total_known_controls=total_known_controls,
+        )
+
+    # -----------------------------------------------------------------------
+    # PR 14.6.5A — Health Signals
+    # -----------------------------------------------------------------------
+
+    def get_health_signals(self) -> "HealthSignalsResponse":
+        by_trust = self._repo.count_by_trust_state()
+        return HealthSignalsResponse(
+            tenant_id=self._tenant_id,
+            generated_at=_now(),
+            verification_overdue_count=self._repo.count_overdue_by_sla_field(
+                "verification_due_at"
+            ),
+            review_overdue_count=self._repo.count_overdue_by_sla_field("review_due_at"),
+            freshness_overdue_count=self._repo.count_overdue_by_sla_field(
+                "freshness_due_at"
+            ),
+            orphaned_evidence_count=self._repo.count_orphaned_evidence(),
+            unlinked_evidence_count=self._repo.count_unlinked_evidence(),
+            disputed_evidence_count=by_trust.get("DISPUTED", 0),
+            invalidated_evidence_count=by_trust.get("INVALIDATED", 0),
+            attested_evidence_count=by_trust.get("ATTESTED", 0),
+            verified_evidence_count=by_trust.get("VERIFIED", 0)
+            + by_trust.get("HIGH_CONFIDENCE", 0),
+        )
+
+    # -----------------------------------------------------------------------
+    # PR 14.6.5A — CGIN Snapshot Bundle
+    # -----------------------------------------------------------------------
+
+    def get_cgin_snapshot(self) -> "CGINSnapshotBundle":
+        bundle_id = _new_id()
+        generated_at = _now()
+        items, _ = self._repo.list_all_evidence_for_status_report(offset=0, limit=500)
+        ev_snapshots = []
+        ver_snapshots = []
+        for ev in items:
+            sla = self._compute_sla_status(ev)
+            ev_snapshots.append(
+                EvidenceStatusSnapshot(
+                    snapshot_id=_new_id(),
+                    snapshot_version="1.0",
+                    tenant_id=self._tenant_id,
+                    generated_at=generated_at,
+                    evidence_id=ev.id,
+                    lifecycle_state=ev.lifecycle_state,
+                    trust_state=ev.trust_state,
+                    freshness_score=getattr(ev, "freshness_score", None),
+                    verification_score=getattr(ev, "verification_score", None),
+                    completeness_score=getattr(ev, "completeness_score", None),
+                    trust_score=ev.trust_score,
+                    sla_review_status=sla.review_sla_status,
+                    sla_verification_status=sla.verification_sla_status,
+                    benchmark_freshness_percentile=getattr(
+                        ev, "benchmark_freshness_percentile", None
+                    ),
+                    benchmark_verification_percentile=getattr(
+                        ev, "benchmark_verification_percentile", None
+                    ),
+                )
+            )
+            summary = self.get_verification_summary(ev.id)
+            ver_snapshots.append(
+                VerificationSnapshot(
+                    snapshot_id=_new_id(),
+                    snapshot_version="1.0",
+                    tenant_id=self._tenant_id,
+                    evidence_id=ev.id,
+                    generated_at=generated_at,
+                    verification_count=summary.verification_count,
+                    passed_count=summary.passed_count,
+                    verification_success_rate=summary.verification_success_rate,
+                    latest_verification_at=summary.latest_verification_at,
+                    latest_verification_type=summary.latest_verification_type,
+                    verification_age_days=summary.verification_age_days,
+                )
+            )
+        cov = self.get_coverage_analytics()
+        health = self.get_health_signals()
+        return CGINSnapshotBundle(
+            bundle_id=bundle_id,
+            bundle_version="1.0",
+            tenant_id=self._tenant_id,
+            generated_at=generated_at,
+            evidence_snapshots=ev_snapshots,
+            verification_snapshots=ver_snapshots,
+            coverage=CoverageSnapshot(
+                snapshot_id=_new_id(),
+                snapshot_version="1.0",
+                tenant_id=self._tenant_id,
+                generated_at=generated_at,
+                controls_with_evidence=cov.controls_with_evidence,
+                controls_without_evidence=cov.controls_without_evidence,
+                risks_with_evidence=cov.risks_with_evidence,
+                verified_controls=cov.verified_controls,
+                evidence_density=cov.evidence_density,
+                coverage_percentage=cov.coverage_percentage,
+            ),
+            health=HealthSnapshot(
+                snapshot_id=_new_id(),
+                snapshot_version="1.0",
+                tenant_id=self._tenant_id,
+                generated_at=generated_at,
+                **health.model_dump(exclude={"tenant_id", "generated_at"}),
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — private row-to-response converters (module-level)
+# ---------------------------------------------------------------------------
+
+
+def _to_verification_response(row: "FaVerification") -> VerificationResponse:
+    return VerificationResponse(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        evidence_id=row.evidence_id,
+        verification_type=row.verification_type,
+        verification_method=row.verification_method,
+        verification_result=row.verification_result,
+        verification_confidence=row.verification_confidence,
+        verification_notes=row.verification_notes,
+        verified_by=row.verified_by,
+        verified_actor_type=row.verified_actor_type,
+        verified_at=row.verified_at,
+        schema_version=row.schema_version,
+        created_at=row.created_at,
+    )
+
+
+def _to_control_link_response(row: "FaEvidenceControlLink") -> ControlLinkResponse:
+    return ControlLinkResponse(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        evidence_id=row.evidence_id,
+        control_id=row.control_id,
+        linked_by=row.linked_by,
+        linked_at=row.linked_at,
+        created_at=row.created_at,
+    )
+
+
+def _to_risk_link_response(row: "FaEvidenceRiskLink") -> RiskLinkResponse:
+    return RiskLinkResponse(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        evidence_id=row.evidence_id,
+        linked_resource_id=row.linked_resource_id,
+        link_type=row.link_type,
+        linked_by=row.linked_by,
+        linked_at=row.linked_at,
+        created_at=row.created_at,
+    )

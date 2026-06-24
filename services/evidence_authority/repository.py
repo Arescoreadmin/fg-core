@@ -504,3 +504,287 @@ class EvidenceRepository:
             "avg_completeness": _round(row.avg_completeness),
             "avg_trust": _round(row.avg_trust),
         }
+
+    # ------------------------------------------------------------------
+    # PR 14.6.5A — fa_verifications
+    # ------------------------------------------------------------------
+
+    def create_verification(self, record) -> None:
+        from api.db_models_evidence_authority import FaVerification  # noqa: F401
+
+        self._db.add(record)
+        self._db.flush()
+
+    def list_verifications(self, evidence_id: str):
+        from api.db_models_evidence_authority import FaVerification
+
+        return (
+            self._db.query(FaVerification)
+            .filter(
+                FaVerification.tenant_id == self._tenant_id,
+                FaVerification.evidence_id == evidence_id,
+            )
+            .order_by(FaVerification.created_at.desc())
+            .all()
+        )
+
+    def count_verifications(self, evidence_id: str) -> int:
+        from api.db_models_evidence_authority import FaVerification
+
+        return (
+            self._db.query(FaVerification)
+            .filter(
+                FaVerification.tenant_id == self._tenant_id,
+                FaVerification.evidence_id == evidence_id,
+            )
+            .count()
+        )
+
+    def count_passed_verifications(self, evidence_id: str) -> int:
+        from api.db_models_evidence_authority import FaVerification
+
+        return (
+            self._db.query(FaVerification)
+            .filter(
+                FaVerification.tenant_id == self._tenant_id,
+                FaVerification.evidence_id == evidence_id,
+                FaVerification.verification_result == "PASS",
+            )
+            .count()
+        )
+
+    def get_latest_verification(self, evidence_id: str):
+        from api.db_models_evidence_authority import FaVerification
+
+        return (
+            self._db.query(FaVerification)
+            .filter(
+                FaVerification.tenant_id == self._tenant_id,
+                FaVerification.evidence_id == evidence_id,
+            )
+            .order_by(FaVerification.created_at.desc())
+            .first()
+        )
+
+    # ------------------------------------------------------------------
+    # PR 14.6.5A — fa_evidence_control_links
+    # ------------------------------------------------------------------
+
+    def create_control_link(self, record) -> None:
+        from api.db_models_evidence_authority import FaEvidenceControlLink  # noqa: F401
+
+        self._db.add(record)
+        self._db.flush()
+
+    def get_control_link(self, evidence_id: str, control_id: str):
+        from api.db_models_evidence_authority import FaEvidenceControlLink
+
+        return (
+            self._db.query(FaEvidenceControlLink)
+            .filter(
+                FaEvidenceControlLink.tenant_id == self._tenant_id,
+                FaEvidenceControlLink.evidence_id == evidence_id,
+                FaEvidenceControlLink.control_id == control_id,
+            )
+            .first()
+        )
+
+    def list_control_links(self, evidence_id: str):
+        from api.db_models_evidence_authority import FaEvidenceControlLink
+
+        return (
+            self._db.query(FaEvidenceControlLink)
+            .filter(
+                FaEvidenceControlLink.tenant_id == self._tenant_id,
+                FaEvidenceControlLink.evidence_id == evidence_id,
+            )
+            .order_by(FaEvidenceControlLink.created_at.asc())
+            .all()
+        )
+
+    def count_distinct_controls_with_evidence(self) -> int:
+        from api.db_models_evidence_authority import FaEvidenceControlLink
+        from sqlalchemy import func as sa_func
+
+        result = (
+            self._db.query(
+                sa_func.count(sa_func.distinct(FaEvidenceControlLink.control_id))
+            )
+            .filter(FaEvidenceControlLink.tenant_id == self._tenant_id)
+            .scalar()
+        )
+        return result or 0
+
+    def count_control_links_for_evidence(self, evidence_id: str) -> int:
+        from api.db_models_evidence_authority import FaEvidenceControlLink
+
+        return (
+            self._db.query(FaEvidenceControlLink)
+            .filter(
+                FaEvidenceControlLink.tenant_id == self._tenant_id,
+                FaEvidenceControlLink.evidence_id == evidence_id,
+            )
+            .count()
+        )
+
+    def count_total_known_controls(self) -> int:
+        from sqlalchemy import text
+
+        result = self._db.execute(
+            text("SELECT COUNT(*) FROM control_registry WHERE tenant_id = :tid"),
+            {"tid": self._tenant_id},
+        )
+        return result.scalar() or 0
+
+    def count_verified_controls(self) -> int:
+        from api.db_models_evidence_authority import FaEvidenceControlLink
+
+        result = (
+            self._db.query(FaEvidenceControlLink.control_id)
+            .join(
+                FaEvidence,
+                (FaEvidence.id == FaEvidenceControlLink.evidence_id)
+                & (FaEvidence.tenant_id == FaEvidenceControlLink.tenant_id),
+            )
+            .filter(
+                FaEvidenceControlLink.tenant_id == self._tenant_id,
+                FaEvidence.lifecycle_state == EvidenceLifecycleState.VERIFIED.value,
+            )
+            .distinct()
+            .count()
+        )
+        return result
+
+    def count_total_control_links(self) -> int:
+        from api.db_models_evidence_authority import FaEvidenceControlLink
+
+        return (
+            self._db.query(FaEvidenceControlLink)
+            .filter(FaEvidenceControlLink.tenant_id == self._tenant_id)
+            .count()
+        )
+
+    # ------------------------------------------------------------------
+    # PR 14.6.5A — fa_evidence_risk_links
+    # ------------------------------------------------------------------
+
+    def create_risk_link(self, record) -> None:
+        from api.db_models_evidence_authority import FaEvidenceRiskLink  # noqa: F401
+
+        self._db.add(record)
+        self._db.flush()
+
+    def get_risk_link(self, evidence_id: str, linked_resource_id: str, link_type: str):
+        from api.db_models_evidence_authority import FaEvidenceRiskLink
+
+        return (
+            self._db.query(FaEvidenceRiskLink)
+            .filter(
+                FaEvidenceRiskLink.tenant_id == self._tenant_id,
+                FaEvidenceRiskLink.evidence_id == evidence_id,
+                FaEvidenceRiskLink.linked_resource_id == linked_resource_id,
+                FaEvidenceRiskLink.link_type == link_type,
+            )
+            .first()
+        )
+
+    def list_risk_links(self, evidence_id: str, *, link_type: "str | None" = None):
+        from api.db_models_evidence_authority import FaEvidenceRiskLink
+
+        q = self._db.query(FaEvidenceRiskLink).filter(
+            FaEvidenceRiskLink.tenant_id == self._tenant_id,
+            FaEvidenceRiskLink.evidence_id == evidence_id,
+        )
+        if link_type is not None:
+            q = q.filter(FaEvidenceRiskLink.link_type == link_type)
+        return q.order_by(FaEvidenceRiskLink.created_at.asc()).all()
+
+    def count_distinct_risks_with_evidence(self, link_type: str = "RISK") -> int:
+        from api.db_models_evidence_authority import FaEvidenceRiskLink
+        from sqlalchemy import func as sa_func
+
+        result = (
+            self._db.query(
+                sa_func.count(sa_func.distinct(FaEvidenceRiskLink.linked_resource_id))
+            )
+            .filter(
+                FaEvidenceRiskLink.tenant_id == self._tenant_id,
+                FaEvidenceRiskLink.link_type == link_type,
+            )
+            .scalar()
+        )
+        return result or 0
+
+    def count_total_known_risks(self) -> int:
+        from sqlalchemy import text
+
+        result = self._db.execute(
+            text("SELECT COUNT(*) FROM risk_acceptances WHERE tenant_id = :tid"),
+            {"tid": self._tenant_id},
+        )
+        return result.scalar() or 0
+
+    def count_total_risk_links(self) -> int:
+        from api.db_models_evidence_authority import FaEvidenceRiskLink
+
+        return (
+            self._db.query(FaEvidenceRiskLink)
+            .filter(FaEvidenceRiskLink.tenant_id == self._tenant_id)
+            .count()
+        )
+
+    # ------------------------------------------------------------------
+    # PR 14.6.5A — SLA / health aggregations
+    # ------------------------------------------------------------------
+
+    def count_overdue_by_sla_field(self, field_name: str) -> int:
+        now = datetime.now(tz=timezone.utc).isoformat()
+        col = getattr(FaEvidence, field_name)
+        return (
+            self._db.query(FaEvidence)
+            .filter(
+                FaEvidence.tenant_id == self._tenant_id,
+                col.isnot(None),
+                col < now,
+            )
+            .count()
+        )
+
+    def count_orphaned_evidence(self) -> int:
+        from sqlalchemy import exists
+
+        return (
+            self._db.query(FaEvidence)
+            .filter(
+                FaEvidence.tenant_id == self._tenant_id,
+                ~exists().where(
+                    FaEvidenceOwnership.evidence_id == FaEvidence.id,
+                    FaEvidenceOwnership.tenant_id == self._tenant_id,
+                    FaEvidenceOwnership.is_active == 1,
+                ),
+            )
+            .count()
+        )
+
+    def count_unlinked_evidence(self) -> int:
+        from sqlalchemy import exists
+        from api.db_models_evidence_authority import (
+            FaEvidenceControlLink,
+            FaEvidenceRiskLink,
+        )
+
+        return (
+            self._db.query(FaEvidence)
+            .filter(
+                FaEvidence.tenant_id == self._tenant_id,
+                ~exists().where(
+                    FaEvidenceControlLink.evidence_id == FaEvidence.id,
+                    FaEvidenceControlLink.tenant_id == self._tenant_id,
+                ),
+                ~exists().where(
+                    FaEvidenceRiskLink.evidence_id == FaEvidence.id,
+                    FaEvidenceRiskLink.tenant_id == self._tenant_id,
+                ),
+            )
+            .count()
+        )

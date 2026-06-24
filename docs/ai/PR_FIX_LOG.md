@@ -15932,3 +15932,17 @@ New `POST /evidence/{ev_id}/quality/compute`. Requires `audit:write` scope. Retu
 Added `EVIDENCE_STATUS_CHANGED` and `QUALITY_SCORES_COMPUTED` to `EvidenceAuditEventType` enum.
 
 **Tests:** 122 tests in `test_h14_6_5_evidence_status_model.py` covering lifecycle/trust state machines, quality scoring (unit + HTTP), governance status report, tenant isolation, new ownership roles, and deterministic replay.
+
+---
+
+## feat/evidence-status-model-14-6-5a — PR 14.6.5A Evidence Status Model Hardening
+
+**Fix 1: Contract authority refresh after new routes**
+
+Adding 13 new routes changes the OpenAPI spec. After `make route-inventory-generate`, ran `python scripts/refresh_contract_authority.py` to update the SHA in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+
+**Fix 2: SOC review sync after CI artifact updates**
+
+Route inventory regeneration changed `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `topology.sha256`, `plane_registry_snapshot.json`. SOC sync check requires updates to both SOC docs. Appended structured entries to `docs/SOC_ARCH_REVIEW_2026-02-15.md` and `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+
+**Tests:** 116 tests in `test_h14_6_5a_evidence_hardening.py` covering verification creation/history/SLA, control/risk linkage, coverage analytics, health signals, timeline emission, tenant isolation, deterministic replay, CGIN snapshots.

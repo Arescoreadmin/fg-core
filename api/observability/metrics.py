@@ -778,3 +778,49 @@ EVIDENCE_QUALITY_SCORE_UPDATES_TOTAL = Counter(
     "Total evidence quality score recomputations stored",
     [],
 )
+
+# ---------------------------------------------------------------------------
+# PR 14.6.5A — Evidence hardening & governance completion metrics
+# ---------------------------------------------------------------------------
+
+EVIDENCE_VERIFICATIONS_TOTAL = Counter(
+    "frostgate_evidence_verifications_total",
+    "Total evidence verifications created",
+    [],
+)
+
+EVIDENCE_VERIFICATION_FAILURES_TOTAL = Counter(
+    "frostgate_evidence_verification_failures_total",
+    "Total FAIL verifications",
+    [],
+)
+
+EVIDENCE_VERIFICATION_OVERDUE_TOTAL = Counter(
+    "frostgate_evidence_verification_overdue_total",
+    "Total overdue verification SLA checks observed",
+    [],
+)
+
+EVIDENCE_CONTROL_LINKS_TOTAL = Counter(
+    "frostgate_evidence_control_links_total",
+    "Total evidence-to-control links created",
+    [],
+)
+
+EVIDENCE_RISK_LINKS_TOTAL = Counter(
+    "frostgate_evidence_risk_links_total",
+    "Total evidence-to-risk/finding/exception links created",
+    [],
+)
+
+EVIDENCE_COVERAGE_CALCULATIONS_TOTAL = Counter(
+    "frostgate_evidence_coverage_calculations_total",
+    "Total coverage analytics computations",
+    [],
+)
+
+EVIDENCE_HEALTH_UPDATES_TOTAL = Counter(
+    "frostgate_evidence_health_updates_total",
+    "Total health signal computations",
+    [],
+)
