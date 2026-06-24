@@ -146,7 +146,8 @@ class EvidenceFreshnessEngine:
 
         # Count active exceptions
         has_active_exception = (
-            self._repo.count_active_exceptions_for_evidence(row.evidence_id, now_iso) > 0
+            self._repo.count_active_exceptions_for_evidence(row.evidence_id, now_iso)
+            > 0
         )
 
         # Age penalties
