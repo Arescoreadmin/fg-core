@@ -162,7 +162,7 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 657,
+  "contract_count": 682,
   "contract_only": [],
   "internal_allowed": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
@@ -286,6 +286,7 @@
     "rbac": 5,
     "security": 6,
     "ui": 49,
+    "unmapped": 13,
     "workforce": 17
   },
   "public_exempt": [
@@ -340,7 +341,7 @@
     "POST /ui/devices/{device_id}/enable"
   ],
   "removed": [],
-  "runtime_count": 835,
+  "runtime_count": 848,
   "runtime_only": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
     "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -401,14 +402,6 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
-    "GET /evidence/cgin/snapshot",
-    "GET /evidence/coverage",
-    "GET /evidence/health",
-    "GET /evidence/{ev_id}/control-links",
-    "GET /evidence/{ev_id}/risk-links",
-    "GET /evidence/{ev_id}/sla",
-    "GET /evidence/{ev_id}/verifications",
-    "GET /evidence/{ev_id}/verifications/summary",
     "GET /health",
     "GET /metrics",
     "GET /ui/ai",
@@ -501,9 +494,6 @@
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
-    "POST /evidence/{ev_id}/control-links",
-    "POST /evidence/{ev_id}/risk-links",
-    "POST /evidence/{ev_id}/verifications",
     "POST /ui/ai/chat",
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
@@ -511,21 +501,7 @@
     "PUT /admin/agent/version-floor",
     "PUT /admin/identity/tenants/{tenant_id}/config",
     "PUT /admin/tenants/{tenant_id}/quota",
-    "PUT /admin/tenants/{tenant_id}/tier",
-    "PUT /evidence/{ev_id}/sla"
+    "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": [
-    "GET /evidence/cgin/snapshot",
-    "GET /evidence/coverage",
-    "GET /evidence/health",
-    "GET /evidence/{ev_id}/control-links",
-    "GET /evidence/{ev_id}/risk-links",
-    "GET /evidence/{ev_id}/sla",
-    "GET /evidence/{ev_id}/verifications",
-    "GET /evidence/{ev_id}/verifications/summary",
-    "POST /evidence/{ev_id}/control-links",
-    "POST /evidence/{ev_id}/risk-links",
-    "POST /evidence/{ev_id}/verifications",
-    "PUT /evidence/{ev_id}/sla"
-  ]
+  "unauthorized_runtime_only": []
 }

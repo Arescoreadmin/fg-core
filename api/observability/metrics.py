@@ -824,3 +824,50 @@ EVIDENCE_HEALTH_UPDATES_TOTAL = Counter(
     "Total health signal computations",
     [],
 )
+
+# PR 14.6.6 — Verification Workflow Authority metrics
+VERIFICATION_WORKFLOW_REQUESTS_TOTAL = Counter(
+    "frostgate_verification_workflow_requests_total",
+    "Total verification workflow requests created",
+    [],
+)
+VERIFICATION_WORKFLOW_TRANSITIONS_TOTAL = Counter(
+    "frostgate_verification_workflow_transitions_total",
+    "Total workflow state transitions",
+    ["to_state"],
+)
+VERIFICATION_WORKFLOW_ESCALATIONS_TOTAL = Counter(
+    "frostgate_verification_workflow_escalations_total",
+    "Total verification escalations",
+    ["escalation_type"],
+)
+VERIFICATION_WORKFLOW_RESULTS_TOTAL = Counter(
+    "frostgate_verification_workflow_results_total",
+    "Total verification results recorded",
+    ["result"],
+)
+VERIFICATION_WORKFLOW_APPROVALS_TOTAL = Counter(
+    "frostgate_verification_workflow_approvals_total",
+    "Total workflow approvals",
+    [],
+)
+VERIFICATION_WORKFLOW_REJECTIONS_TOTAL = Counter(
+    "frostgate_verification_workflow_rejections_total",
+    "Total workflow rejections",
+    [],
+)
+VERIFICATION_WORKFLOW_ASSIGNMENTS_TOTAL = Counter(
+    "frostgate_verification_workflow_assignments_total",
+    "Total verification assignments",
+    ["assignee_type"],
+)
+VERIFICATION_WORKFLOW_SLA_UPDATES_TOTAL = Counter(
+    "frostgate_verification_workflow_sla_updates_total",
+    "Total SLA deadline sets",
+    [],
+)
+VERIFICATION_WORKFLOW_EVIDENCE_UPDATES_TOTAL = Counter(
+    "frostgate_verification_workflow_evidence_updates_total",
+    "Total evidence trust state updates triggered by workflow",
+    [],
+)
