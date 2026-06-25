@@ -6,6 +6,33 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-25 — PR 16.5.1: Control Effectiveness Explainability & Governance Action Engine
+
+**New implementation.** No prior defects to fix. Initial ship.
+
+**Components delivered:**
+- `services/control_effectiveness_explainability/` — 5 files: `__init__.py`, `models.py`, `schemas.py`, `repository.py`, `engine.py`
+- `api/db_models_control_effectiveness_explainability.py` — `FaControlRanking` ORM model
+- `migrations/postgres/0134_control_effectiveness_explainability.sql` — `fa_control_ranking` table + 3 indexes
+- `api/control_effectiveness_explainability.py` — 6 read-only routes
+- 3 Prometheus counters in `api/observability/metrics.py`
+- `db.py` + `main.py` wiring (explainability router before CE router)
+- `services/control_effectiveness/engine.py` — `recalculate_all()` extended with rankings refresh
+
+**Design rationale:**
+
+**On-the-fly vs stored:** contributions, root causes, actions, narrative, and priority are computed on-the-fly from `FaControlEffectiveness` rows — they derive deterministically from stored scores so no separate table is needed. Rankings are stored in `fa_control_ranking` because they require cross-control comparison and "do not calculate on every request."
+
+**No AI, no LLMs:** all outputs are pure rule-based deterministic derivations. Narrative is template-driven with fill-in phrases. Root causes are `if score < threshold: emit signal` rules. Actions are `if condition: emit action` rules. Same inputs always produce same outputs.
+
+**CGIN foundation:** 4 Pydantic snapshot schema types (ControlContributionSnapshot, ControlRiskSnapshot, ControlActionSnapshot, ControlPrioritySnapshot) built but no CGIN benchmarking endpoints added yet — structures ready for PR 17.x.
+
+**Route ordering invariant:** `control_effectiveness_explainability_router` registered BEFORE `control_effectiveness_router` in both `build_app()` and `build_contract_app()` to prevent `/priorities`, `/rankings`, `/executive-dashboard` (2-segment routes) from being captured by `/{control_id}` (also 2-segment catch-all).
+
+**246 tests** in `tests/test_h16_5_1_control_effectiveness_explainability.py` (CEX-1 through CEX-246): pure function tests, priority classification, change detection, narrative generation, engine methods, rankings, priorities, executive dashboard, API auth/scope, route ordering, tenant isolation, response shape validation, integration, edge cases.
+
+---
+
 ### 2026-06-25 — PR 16.5: Control Effectiveness Engine
 
 **New implementation.** No prior defects to fix. Initial ship.

@@ -967,3 +967,20 @@ CONTROL_EFFECTIVENESS_RECALCULATIONS_TOTAL = Counter(
     "Total recalculate_all runs completed",
     [],
 )
+
+# PR 16.5.1 — Explainability & Governance Action Engine metrics
+CONTROL_EXPLAINABILITY_EXPLAIN_TOTAL = Counter(
+    "frostgate_control_explainability_explain_total",
+    "Total explain requests served",
+    [],
+)
+CONTROL_EXPLAINABILITY_RANKINGS_REFRESHED_TOTAL = Counter(
+    "frostgate_control_explainability_rankings_refreshed_total",
+    "Total ranking refresh runs completed",
+    [],
+)
+CONTROL_EXPLAINABILITY_ACTIONS_GENERATED_TOTAL = Counter(
+    "frostgate_control_explainability_actions_generated_total",
+    "Total governance actions generated across all requests",
+    [],
+)

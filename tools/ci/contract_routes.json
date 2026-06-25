@@ -404,6 +404,42 @@
     },
     {
       "method": "GET",
+      "path": "/control-effectiveness",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-effectiveness/cgin/snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-effectiveness/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-effectiveness/history/{control_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-effectiveness/recalculate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-effectiveness/{control_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-framework-mappings/{mapping_id}",
       "scopes": [],
       "source": "contract"
@@ -4219,7 +4255,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-25T16:01:51.005452+00:00",
+  "generated_at": "2026-06-25T22:11:38.161803+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

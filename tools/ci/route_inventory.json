@@ -2961,9 +2961,45 @@
         "rate",
         "tenant"
       ],
+      "file": "api/control_effectiveness_explainability.py",
+      "method": "GET",
+      "path": "/control-effectiveness/actions/{control_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/control_effectiveness.py",
       "method": "GET",
       "path": "/control-effectiveness/cgin/snapshot",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/control_effectiveness_explainability.py",
+      "method": "GET",
+      "path": "/control-effectiveness/contributors/{control_id}",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -2997,9 +3033,81 @@
         "rate",
         "tenant"
       ],
+      "file": "api/control_effectiveness_explainability.py",
+      "method": "GET",
+      "path": "/control-effectiveness/executive-dashboard",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/control_effectiveness_explainability.py",
+      "method": "GET",
+      "path": "/control-effectiveness/explain/{control_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/control_effectiveness.py",
       "method": "GET",
       "path": "/control-effectiveness/history/{control_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/control_effectiveness_explainability.py",
+      "method": "GET",
+      "path": "/control-effectiveness/priorities",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/control_effectiveness_explainability.py",
+      "method": "GET",
+      "path": "/control-effectiveness/rankings",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -15013,7 +15121,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-25T16:01:50.988687+00:00",
+  "generated_at": "2026-06-25T22:11:38.142917+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

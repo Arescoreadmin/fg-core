@@ -1,3 +1,22 @@
+## 2026-06-25 — PR 16.5.1: Control Effectiveness Explainability & Governance Action Engine
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new governance-scoped read-only explainability endpoints under existing `/control-effectiveness` prefix; 1 new DB table; no new auth subsystem; all outputs are deterministic derivations from existing effectiveness data)
+
+**Changes:**
+- `migrations/postgres/0134_control_effectiveness_explainability.sql` — creates `fa_control_ranking` (1 table, 3 indexes; mutable, no append-only guard since rankings are replaced wholesale on refresh).
+- `api/db_models_control_effectiveness_explainability.py` — `FaControlRanking` ORM model.
+- `services/control_effectiveness_explainability/` — new bounded context: `models.py` (pure-Python classifiers + computation functions, 7 enum types), `schemas.py` (13 Pydantic schemas including 4 CGIN benchmark-ready snapshot types), `repository.py` (tenant-scoped ranking access), `engine.py` (`ExplainabilityEngine` with 10 methods: on-the-fly contributions, root causes, actions, narrative, priorities + stored rankings + executive dashboard + CGIN snapshots).
+- `api/control_effectiveness_explainability.py` — 6 read-only routes: `/executive-dashboard`, `/priorities`, `/rankings`, `/explain/{control_id}`, `/contributors/{control_id}`, `/actions/{control_id}`. All require `governance:read`.
+- `api/observability/metrics.py` — 3 new Prometheus counters (no `tenant_id` labels).
+- `api/db.py` — `db_models_control_effectiveness_explainability` added to `_ensure_models_imported()`.
+- `api/main.py` — `control_effectiveness_explainability_router` imported and registered BEFORE `control_effectiveness_router` in both app builders.
+- `services/control_effectiveness/engine.py` — `recalculate_all()` calls `ExplainabilityEngine.recalculate_rankings()` via try/except-protected lazy import.
+- Governance registration files regenerated.
+
+**Security posture:** all routes under existing `/control-effectiveness` prefix, `control`-plane-scoped. All require `governance:read`. Explainability outputs are deterministic rule-based derivations (no ML, no AI). Rankings are stored per-tenant. No cross-tenant query paths. No credential storage, no PII, no PHI.
+
+---
+
 ## 2026-06-25 — PR 16.5: Control Effectiveness Engine
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (new governance-scoped read/write endpoints under new `control-effectiveness` prefix registered in `control` plane; new DB tables, migration, and ORM models; no new auth subsystem, no privilege escalation, no credential handling added)
