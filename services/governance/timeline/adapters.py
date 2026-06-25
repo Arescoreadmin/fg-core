@@ -707,6 +707,36 @@ def freshness_score_history_to_timeline_event(
     )
 
 
+def control_effectiveness_to_timeline_event(
+    *,
+    tenant_id: str,
+    source_id: str,
+    event_type: str,
+    occurred_at: str,
+    payload: dict[str, object] | None = None,
+    replay_eligible: bool = False,
+) -> TimelineEvent:
+    """Convert control effectiveness calculation into TimelineEvent."""
+    occurred_at = _normalize_iso(occurred_at)
+    return TimelineEvent(
+        event_id=derive_event_id(
+            tenant_id=tenant_id,
+            source_type=SourceType.CONTROL_EFFECTIVENESS.value,
+            source_id=source_id,
+            event_type=event_type,
+            occurred_at=occurred_at,
+        ),
+        tenant_id=tenant_id,
+        source_type=SourceType.CONTROL_EFFECTIVENESS,
+        source_id=source_id,
+        event_type=event_type,
+        occurred_at=occurred_at,
+        recorded_at=utc_iso8601_z_now(),
+        payload=payload or {},
+        replay_eligible=replay_eligible,
+    )
+
+
 TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.SIMULATION: simulation_entry_to_timeline_event,
     SourceType.GOVERNANCE_REPORT: governance_report_to_timeline_event,
@@ -723,4 +753,5 @@ TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.VERIFICATION_WORKFLOW: verification_workflow_to_timeline_event,
     SourceType.EVIDENCE_FRESHNESS: evidence_freshness_to_timeline_event,
     SourceType.FRESHNESS_SCORE_HISTORY: freshness_score_history_to_timeline_event,
+    SourceType.CONTROL_EFFECTIVENESS: control_effectiveness_to_timeline_event,
 }

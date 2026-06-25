@@ -631,7 +631,8 @@
         "/metrics",
         "/signing",
         "/governance-reports",
-        "/timeline-authority"
+        "/timeline-authority",
+        "/control-effectiveness"
       ]
     },
     {
@@ -1167,7 +1168,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-25T10:30:37.735493+00:00",
+  "generated_at": "2026-06-25T16:01:50.999191+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

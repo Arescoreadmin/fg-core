@@ -31,6 +31,7 @@ class SourceType(str, Enum):
     VERIFICATION_WORKFLOW = "VERIFICATION_WORKFLOW"
     EVIDENCE_FRESHNESS = "EVIDENCE_FRESHNESS"
     FRESHNESS_SCORE_HISTORY = "FRESHNESS_SCORE_HISTORY"
+    CONTROL_EFFECTIVENESS = "CONTROL_EFFECTIVENESS"
 
 
 # ---------------------------------------------------------------------------
