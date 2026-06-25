@@ -913,3 +913,30 @@ FRESHNESS_SCORE_RECOMPUTATIONS_TOTAL = Counter(
     "Total freshness score recomputations",
     [],
 )
+
+# PR 14.6.8 — Freshness Score History & Governance Trend Intelligence
+FRESHNESS_SNAPSHOTS_CREATED_TOTAL = Counter(
+    "freshness_snapshots_created_total",
+    "Total daily freshness snapshot runs completed",
+    [],
+)
+FRESHNESS_TRENDS_GENERATED_TOTAL = Counter(
+    "freshness_trends_generated_total",
+    "Total freshness trend calculations performed",
+    [],
+)
+FRESHNESS_DECAY_DETECTED_TOTAL = Counter(
+    "freshness_decay_detected_total",
+    "Total freshness decay events detected (DEGRADING or CRITICAL trend)",
+    [],
+)
+FRESHNESS_IMPROVEMENT_DETECTED_TOTAL = Counter(
+    "freshness_improvement_detected_total",
+    "Total freshness improvement events detected (IMPROVING trend)",
+    [],
+)
+FRESHNESS_HISTORY_RECORDS_TOTAL = Counter(
+    "freshness_history_records_total",
+    "Total evidence freshness history retrievals",
+    [],
+)
