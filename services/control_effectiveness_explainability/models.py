@@ -141,6 +141,8 @@ def classify_priority(
         return GovernancePriority.HIGH
     if effectiveness_score < 75:
         return GovernancePriority.MEDIUM
+    if trend_direction == "CRITICAL":
+        return GovernancePriority.HIGH
     if trend_direction == "DEGRADING":
         return GovernancePriority.MEDIUM
     if forecast_score is not None and forecast_score < 50:

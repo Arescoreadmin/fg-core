@@ -2142,3 +2142,21 @@ class TestEdgeCasesAndSchema:
         for rt in RankType:
             rows = _exp_engine(db)._repo.get_rankings(rt.value)
             assert isinstance(rows, list)
+
+    def test_CEX_247_effective_control_critical_trend_is_high_not_low(self):
+        # P2 fix: score>=75 + CRITICAL trend must not fall through to LOW
+        p = classify_priority(85, "EFFECTIVE", "CRITICAL", 65, 100)
+        assert p == GovernancePriority.HIGH
+
+    def test_CEX_248_highly_effective_critical_trend_is_high(self):
+        p = classify_priority(92, "HIGHLY_EFFECTIVE", "CRITICAL", 65, 100)
+        assert p == GovernancePriority.HIGH
+
+    def test_CEX_249_effective_degrading_remains_medium(self):
+        # DEGRADING on effective control stays MEDIUM (not escalated)
+        p = classify_priority(80, "EFFECTIVE", "DEGRADING", 65, 100)
+        assert p == GovernancePriority.MEDIUM
+
+    def test_CEX_250_effective_improving_is_low(self):
+        p = classify_priority(85, "EFFECTIVE", "IMPROVING", 65, 100)
+        assert p == GovernancePriority.LOW
