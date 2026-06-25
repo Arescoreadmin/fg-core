@@ -39,7 +39,6 @@ from api.db_models_evidence_freshness_authority import (
 from api.db_models_freshness_score_history import FaFreshnessScoreSnapshot
 from services.control_effectiveness.models import (
     SCORING_MODEL_VERSION,
-    EffectivenessLevel,
     classify_effectiveness,
     classify_risk,
     classify_trend,
@@ -160,8 +159,7 @@ class ControlEffectivenessEngine:
             return 0.0
         total = len(verifications)
         passing = sum(
-            1 for v in verifications
-            if v.verification_result in _PASSING_RESULTS
+            1 for v in verifications if v.verification_result in _PASSING_RESULTS
         )
         success_rate = passing / total * 100.0
 
@@ -179,7 +177,9 @@ class ControlEffectivenessEngine:
 
         failure_count = total - passing
         failure_penalty = min(30.0, failure_count * 5.0)
-        return round(max(0.0, min(100.0, success_rate - age_penalty - failure_penalty)), 2)
+        return round(
+            max(0.0, min(100.0, success_rate - age_penalty - failure_penalty)), 2
+        )
 
     # ------------------------------------------------------------------
     # Component: Freshness (15%)
@@ -378,12 +378,15 @@ class ControlEffectivenessEngine:
         quality_values = []
         for e in evidence:
             scores = [
-                s for s in [e.freshness_score, e.verification_score, e.completeness_score]
+                s
+                for s in [e.freshness_score, e.verification_score, e.completeness_score]
                 if s is not None
             ]
             if scores:
                 quality_values.append(sum(scores) / len(scores))
-        quality_score = sum(quality_values) / len(quality_values) if quality_values else 0.0
+        quality_score = (
+            sum(quality_values) / len(quality_values) if quality_values else 0.0
+        )
 
         # Diversity: distinct source systems / 3 × 100, capped at 100
         distinct_sources = len({e.source_system for e in evidence if e.source_system})
@@ -415,13 +418,9 @@ class ControlEffectivenessEngine:
             return 100.0
 
         open_count = sum(
-            1 for ex in exceptions
-            if ex.status == "ACTIVE" and ex.expires_at > now_iso
+            1 for ex in exceptions if ex.status == "ACTIVE" and ex.expires_at > now_iso
         )
-        expired_count = sum(
-            1 for ex in exceptions
-            if ex.expires_at <= now_iso
-        )
+        expired_count = sum(1 for ex in exceptions if ex.expires_at <= now_iso)
         penalty = open_count * 8.0 + expired_count * 3.0
         return round(max(0.0, min(100.0, 100.0 - penalty)), 2)
 
@@ -588,6 +587,7 @@ class ControlEffectivenessEngine:
                 CONTROL_EFFECTIVENESS_CALCULATIONS_TOTAL,
                 CONTROL_EFFECTIVENESS_HISTORY_RECORDS_TOTAL,
             )
+
             CONTROL_EFFECTIVENESS_CALCULATIONS_TOTAL.inc()
             CONTROL_EFFECTIVENESS_HISTORY_RECORDS_TOTAL.inc()
         except Exception:
@@ -599,6 +599,7 @@ class ControlEffectivenessEngine:
                     from api.observability.metrics import (
                         CONTROL_EFFECTIVENESS_IMPROVEMENT_TOTAL,
                     )
+
                     CONTROL_EFFECTIVENESS_IMPROVEMENT_TOTAL.inc()
                 except Exception:
                     pass
@@ -607,6 +608,7 @@ class ControlEffectivenessEngine:
                     from api.observability.metrics import (
                         CONTROL_EFFECTIVENESS_DEGRADATION_TOTAL,
                     )
+
                     CONTROL_EFFECTIVENESS_DEGRADATION_TOTAL.inc()
                 except Exception:
                     pass
@@ -666,6 +668,7 @@ class ControlEffectivenessEngine:
             from api.observability.metrics import (
                 CONTROL_EFFECTIVENESS_RECALCULATIONS_TOTAL,
             )
+
             CONTROL_EFFECTIVENESS_RECALCULATIONS_TOTAL.inc()
         except Exception:
             pass
@@ -732,13 +735,14 @@ class ControlEffectivenessEngine:
                 generated_at=now,
             )
 
-        avg_score = round(
-            sum(r.effectiveness_score for r in all_items) / total, 2
-        )
+        avg_score = round(sum(r.effectiveness_score for r in all_items) / total, 2)
 
         level_counts: dict[str, int] = {
-            "HIGHLY_EFFECTIVE": 0, "EFFECTIVE": 0,
-            "ADEQUATE": 0, "WEAK": 0, "INEFFECTIVE": 0,
+            "HIGHLY_EFFECTIVE": 0,
+            "EFFECTIVE": 0,
+            "ADEQUATE": 0,
+            "WEAK": 0,
+            "INEFFECTIVE": 0,
         }
         for r in all_items:
             level_counts[r.effectiveness_level] = (
@@ -756,12 +760,12 @@ class ControlEffectivenessEngine:
         ][:5]
         fastest_improving = sorted(
             [r for r in responses if r.score_delta_30d is not None],
-            key=lambda x: x.score_delta_30d,  # type: ignore[arg-type]
+            key=lambda x: float(x.score_delta_30d or 0.0),
             reverse=True,
         )[:5]
         fastest_decaying = sorted(
             [r for r in responses if r.score_delta_30d is not None],
-            key=lambda x: x.score_delta_30d,  # type: ignore[arg-type]
+            key=lambda x: float(x.score_delta_30d or 0.0),
         )[:5]
 
         return ControlEffectivenessDashboardResponse(
@@ -793,8 +797,11 @@ class ControlEffectivenessEngine:
                 tenant_id=self._tenant_id,
                 average_effectiveness=0.0,
                 effectiveness_distribution={
-                    "HIGHLY_EFFECTIVE": 0, "EFFECTIVE": 0,
-                    "ADEQUATE": 0, "WEAK": 0, "INEFFECTIVE": 0,
+                    "HIGHLY_EFFECTIVE": 0,
+                    "EFFECTIVE": 0,
+                    "ADEQUATE": 0,
+                    "WEAK": 0,
+                    "INEFFECTIVE": 0,
                 },
                 total_controls=0,
                 high_risk_controls=0,
@@ -806,8 +813,11 @@ class ControlEffectivenessEngine:
 
         avg = round(sum(r.effectiveness_score for r in all_items) / total, 2)
         distribution: dict[str, int] = {
-            "HIGHLY_EFFECTIVE": 0, "EFFECTIVE": 0,
-            "ADEQUATE": 0, "WEAK": 0, "INEFFECTIVE": 0,
+            "HIGHLY_EFFECTIVE": 0,
+            "EFFECTIVE": 0,
+            "ADEQUATE": 0,
+            "WEAK": 0,
+            "INEFFECTIVE": 0,
         }
         for r in all_items:
             distribution[r.effectiveness_level] = (
@@ -816,9 +826,7 @@ class ControlEffectivenessEngine:
         high_risk = sum(
             1 for r in all_items if r.effectiveness_risk in ("HIGH", "CRITICAL")
         )
-        critical_risk = sum(
-            1 for r in all_items if r.effectiveness_risk == "CRITICAL"
-        )
+        critical_risk = sum(1 for r in all_items if r.effectiveness_risk == "CRITICAL")
         top = [r.control_id for r in all_items if r.effectiveness_score >= 75]
         weak = [r.control_id for r in all_items if r.effectiveness_score < 60]
 

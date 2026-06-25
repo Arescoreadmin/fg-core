@@ -215,6 +215,8 @@ def _make_snapshot(
         tenant_id=tenant_id,
         evidence_id=evidence_id,
         freshness_score=freshness_score,
+        freshness_state="CURRENT",
+        captured_at=f"{capture_date}T00:00:00+00:00",
         capture_date=capture_date,
     )
     db.add(snap)
@@ -864,9 +866,9 @@ class TestForecastAndOtherComponents:
 
     def test_CE_110_health_score_bounded_0_to_100(self, db):
         cid = f"ctl-{_uid()}"
-        ev = _make_evidence(db)
-        _link_evidence(db, ev.id, cid)
         for _ in range(20):
+            ev = _make_evidence(db)
+            _link_evidence(db, ev.id, cid)
             _make_freshness_record(db, ev.id, freshness_state="EXPIRED")
             _make_exception(db, ev.id, status="ACTIVE", expires_at=_FUTURE)
         eng = _engine(db)

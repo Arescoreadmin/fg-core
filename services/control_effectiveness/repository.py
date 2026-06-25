@@ -54,9 +54,7 @@ class ControlEffectivenessRepository:
             self._db.add(row)
             self._db.flush()
 
-    def get_effectiveness(
-        self, control_id: str
-    ) -> Optional[FaControlEffectiveness]:
+    def get_effectiveness(self, control_id: str) -> Optional[FaControlEffectiveness]:
         return (
             self._db.query(FaControlEffectiveness)
             .filter(
