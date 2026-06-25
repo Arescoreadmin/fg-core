@@ -15995,6 +15995,32 @@ Updated verification workflow test helper return annotations to Response. Added 
 ### Risk Notes
 No runtime enforcement was weakened. No tenant authority is accepted from request bodies. Verification result and audit records remain append-only. Workflow state transitions remain validated by the authoritative state machine.
 
+### 2026-06-24 — PR 14.6.8: Freshness Score History & Governance Trend Intelligence
+
+**Summary:** Implemented PR 14.6.8 — Freshness Score History & Governance Trend Intelligence. New bounded context `services/freshness_score_history/` providing append-only historical snapshots of every evidence freshness score (daily, per-evidence), tenant-wide daily aggregation snapshots, deterministic trend calculations (7d/30d/90d/180d/365d windows), governance decay detection (IMPROVING/STABLE/DEGRADING/CRITICAL), and CGIN trend foundation. 5 routes: `POST /freshness/snapshots/run` (idempotent daily snapshot trigger), `GET /freshness/history/{evidence_id}` (per-evidence score timeline), `GET /freshness/trends` (tenant trend summary), `GET /freshness/trends/dashboard` (7d/30d/90d deltas + velocity), `GET /freshness/cgin/trends` (CGIN intelligence snapshot). 3 append-only ORM tables. 5 Prometheus counters. Timeline integration (4 event types). 89 tests across 19 classes. All CI gates pass.
+
+**Files changed:**
+- `services/freshness_score_history/__init__.py` (new — empty)
+- `services/freshness_score_history/models.py` (new — 2 enums + 2 pure functions)
+- `services/freshness_score_history/schemas.py` (new — 2 exceptions + 8 schemas)
+- `services/freshness_score_history/repository.py` (new — tenant-scoped data access)
+- `services/freshness_score_history/engine.py` (new — 5 public methods, idempotent snapshot collection, trend arithmetic)
+- `api/db_models_freshness_score_history.py` (new — 3 append-only ORM models)
+- `api/freshness_score_history.py` (new — 5 routes, registered before evidence_freshness_router)
+- `migrations/postgres/0132_freshness_score_history.sql` (new — 3 tables, indexes, PG append-only triggers)
+- `tests/test_h14_6_8_freshness_score_history.py` (new — 89 tests, 19 classes)
+- `services/governance/timeline/models.py` (modified — FRESHNESS_SCORE_HISTORY SourceType)
+- `services/governance/timeline/adapters.py` (modified — freshness_score_history_to_timeline_event adapter)
+- `api/db.py` (modified — model import registration)
+- `api/main.py` (modified — freshness_score_history_router registered before evidence_freshness_router)
+- `services/plane_registry/registry.py` (modified — /freshness/snapshots, /freshness/history, /freshness/trends prefixes)
+- `tools/ci/plane_registry_checks.py` (modified — rate-limiting prefix tuple)
+- `api/observability/metrics.py` (modified — 5 new Prometheus counters)
+- `ROADMAP.md` (modified — PR 14.6.8 row added)
+- `docs/ai/PR_FIX_LOG.md` (modified — this entry)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` (modified — PR 14.6.8 security review entry)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — PR 14.6.8 execution gate entry)
+
 ### 2026-06-24 — PR 14.6.7: Evidence Freshness Authority
 
 **Summary:** Implemented PR 14.6.7 — Evidence Freshness Authority. New bounded context `services/evidence_freshness_authority/` with freshness policies, per-evidence freshness records, exceptions, deterministic scoring (0-100), freshness state engine (6 states: CURRENT/DUE_SOON/REVIEW_REQUIRED/VERIFICATION_REQUIRED/STALE/EXPIRED), timeline integration (10 event types), plane registration, 162 tests. All CI gates pass.

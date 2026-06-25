@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 682,
+    "contract_count": 696,
     "contract_only": [],
-    "runtime_count": 862,
+    "runtime_count": 867,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -71,13 +71,10 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
-      "GET /freshness",
-      "GET /freshness-policies",
-      "GET /freshness-policies/{policy_id}",
-      "GET /freshness/cgin/snapshot",
-      "GET /freshness/dashboard",
-      "GET /freshness/exceptions",
-      "GET /freshness/{evidence_id}",
+      "GET /freshness/cgin/trends",
+      "GET /freshness/history/{evidence_id}",
+      "GET /freshness/trends",
+      "GET /freshness/trends/dashboard",
       "GET /health",
       "GET /metrics",
       "GET /ui/ai",
@@ -170,11 +167,7 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
-      "POST /freshness",
-      "POST /freshness-policies",
-      "POST /freshness/exceptions",
-      "POST /freshness/exceptions/{exception_id}/revoke",
-      "POST /freshness/{evidence_id}/recompute",
+      "POST /freshness/snapshots/run",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -182,9 +175,7 @@
       "PUT /admin/agent/version-floor",
       "PUT /admin/identity/tenants/{tenant_id}/config",
       "PUT /admin/tenants/{tenant_id}/quota",
-      "PUT /admin/tenants/{tenant_id}/tier",
-      "PUT /freshness-policies/{policy_id}",
-      "PUT /freshness/{evidence_id}"
+      "PUT /admin/tenants/{tenant_id}/tier"
     ],
     "schema_unknown_key_warnings": [],
     "schema_versions": {
@@ -193,7 +184,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "cdf3fd902780bdf31955a0e4700b8bbc169ad30d859d1f542c7709ed0de33098",
+  "governance_fingerprint": "b33e7090046a9beed2d7884fff27633549fc65dce375e75b8fe176b3cb7bde26",
   "planes": [
     {
       "compat": {
@@ -314,6 +305,9 @@
         "/forensics",
         "/freshness",
         "/freshness-policies",
+        "/freshness/history",
+        "/freshness/snapshots",
+        "/freshness/trends",
         "/verification-requests"
       ]
     },
@@ -1122,8 +1116,12 @@
       "GET /freshness-policies",
       "GET /freshness-policies/{policy_id}",
       "GET /freshness/cgin/snapshot",
+      "GET /freshness/cgin/trends",
       "GET /freshness/dashboard",
       "GET /freshness/exceptions",
+      "GET /freshness/history/{evidence_id}",
+      "GET /freshness/trends",
+      "GET /freshness/trends/dashboard",
       "GET /freshness/{evidence_id}",
       "GET /verification-requests",
       "GET /verification-requests/cgin/snapshot",
@@ -1156,6 +1154,7 @@
       "POST /freshness-policies",
       "POST /freshness/exceptions",
       "POST /freshness/exceptions/{exception_id}/revoke",
+      "POST /freshness/snapshots/run",
       "POST /freshness/{evidence_id}/recompute",
       "POST /verification-requests",
       "POST /verification-requests/{req_id}/assign",

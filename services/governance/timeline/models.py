@@ -30,6 +30,7 @@ class SourceType(str, Enum):
     GOVERNANCE_REPORTING = "GOVERNANCE_REPORTING"
     VERIFICATION_WORKFLOW = "VERIFICATION_WORKFLOW"
     EVIDENCE_FRESHNESS = "EVIDENCE_FRESHNESS"
+    FRESHNESS_SCORE_HISTORY = "FRESHNESS_SCORE_HISTORY"
 
 
 # ---------------------------------------------------------------------------

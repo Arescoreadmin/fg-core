@@ -1,3 +1,29 @@
+## 2026-06-24 — PR 14.6.8: Freshness Score History & Governance Trend Intelligence
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new audit-scoped read/write endpoints; no new auth subsystem, no privilege escalation, no credential handling added)
+
+**Changes:**
+- `tools/ci/plane_registry_checks.py` — added `/freshness/snapshots`, `/freshness/history`, `/freshness/trends` to the rate-limiting prefix tuple. Additive-only; no existing entries modified.
+- `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — regenerated via `make route-inventory-generate`. Reflects 5 new routes added to the `evidence` plane.
+- `services/plane_registry/registry.py` — added `/freshness/snapshots`, `/freshness/history`, `/freshness/trends` to the `evidence` plane `route_prefixes`. Additive only; no existing prefixes removed.
+- `services/governance/timeline/models.py` — added `FRESHNESS_SCORE_HISTORY = "FRESHNESS_SCORE_HISTORY"` to `SourceType` enum. Forward-compatible addition.
+- `services/governance/timeline/adapters.py` — added `freshness_score_history_to_timeline_event` adapter and registered it in `TIMELINE_ADAPTERS`. No existing adapters modified.
+- `api/observability/metrics.py` — added 5 new Prometheus counters for snapshot/trend/decay/improvement/history. No `tenant_id` labels; bounded cardinality.
+- `api/db_models_freshness_score_history.py` — 3 ORM models (`FaFreshnessScoreSnapshot`, `FaFreshnessDailySnapshot`, `FaFreshnessTrendSnapshot`); all append-only with both `before_update` and `before_delete` guards.
+- `api/db.py` — `db_models_freshness_score_history` import registered in `_ensure_models_imported()`.
+- `api/main.py` — `freshness_score_history_router` imported and registered BEFORE `evidence_freshness_router` in both `build_app` and `build_contract_app` to prevent route capture ambiguity.
+- `migrations/postgres/0132_freshness_score_history.sql` — 3 new tables + PG-level update + delete prevention triggers; backward compatible.
+
+**Security posture:** strictly additive. All 5 new routes require `audit:read` or `audit:write` scope via `require_scopes()` + `require_bound_tenant()`. All DB queries filter by `tenant_id`. Cross-tenant access returns 404 — no tenant identity disclosed. All three tables are append-only at ORM and PG layers. Trend calculations are pure arithmetic; no ML, no external calls, no secrets accessed. `improvement_velocity` = `max(0, delta/30)` — no probabilistic values.
+
+### Validation
+
+- `make fg-lint`: OK
+- `make fg-contract`: OK
+- `make fg-fast`: All gates passed
+
+---
+
 ## 2026-06-17 — P1.3D: Enterprise Capability Enforcement
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (additive capability gate; no new auth subsystem, no privilege escalation, no credential handling added)
