@@ -219,15 +219,9 @@ class FreshnessScoreHistoryEngine:
                     t_delta = compute_score_delta(
                         avg_score, baseline.average_freshness_score
                     )
-                    t_fresh = (
-                        fresh_count - baseline.fresh_evidence_count
-                    )
-                    t_expired = (
-                        expired_count - baseline.expired_count
-                    )
-                    t_cov = (
-                        coverage_at_risk_count - baseline.coverage_at_risk_count
-                    )
+                    t_fresh = fresh_count - baseline.fresh_evidence_count
+                    t_expired = expired_count - baseline.expired_count
+                    t_cov = coverage_at_risk_count - baseline.coverage_at_risk_count
                 trend_row = FaFreshnessTrendSnapshot(
                     id=_new_id(),
                     tenant_id=self._tenant_id,
@@ -491,8 +485,7 @@ class FreshnessScoreHistoryEngine:
             cutoff = _date_n_days_ago(days)
             lower_bound = _date_n_days_ago(days * 2)
             candidates = [
-                s for s in snapshots
-                if lower_bound <= s.capture_date <= cutoff
+                s for s in snapshots if lower_bound <= s.capture_date <= cutoff
             ]
             if not candidates:
                 return None
@@ -570,8 +563,7 @@ class FreshnessScoreHistoryEngine:
             cutoff = _date_n_days_ago(days)
             lower_bound = _date_n_days_ago(days * 2)
             candidates = [
-                s for s in snapshots
-                if lower_bound <= s.capture_date <= cutoff
+                s for s in snapshots if lower_bound <= s.capture_date <= cutoff
             ]
             if not candidates:
                 return None
@@ -587,8 +579,7 @@ class FreshnessScoreHistoryEngine:
         cutoff_30d = _date_n_days_ago(30)
         lower_bound_30d = _date_n_days_ago(60)
         candidates_30d = [
-            s for s in snapshots
-            if lower_bound_30d <= s.capture_date <= cutoff_30d
+            s for s in snapshots if lower_bound_30d <= s.capture_date <= cutoff_30d
         ]
         if candidates_30d:
             baseline_30d = candidates_30d[-1]
@@ -700,7 +691,9 @@ class FreshnessScoreHistoryEngine:
         def _project(horizon: int) -> Optional[float]:
             if velocity_per_day is None:
                 return None
-            return round(max(0.0, min(100.0, current_avg + velocity_per_day * horizon)), 2)
+            return round(
+                max(0.0, min(100.0, current_avg + velocity_per_day * horizon)), 2
+            )
 
         forecast_30d = _project(30)
         forecast_60d = _project(60)
