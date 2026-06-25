@@ -2744,6 +2744,12 @@
     },
     {
       "method": "GET",
+      "path": "/freshness/forecast",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/freshness/history/{evidence_id}",
       "scopes": [],
       "source": "contract"
@@ -2763,6 +2769,12 @@
     {
       "method": "GET",
       "path": "/freshness/trends/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness/trends/history",
       "scopes": [],
       "source": "contract"
     },
@@ -4207,7 +4219,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-25T10:30:37.741957+00:00",
+  "generated_at": "2026-06-25T16:01:51.005452+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

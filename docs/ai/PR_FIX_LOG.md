@@ -6,6 +6,41 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-25 — PR 16.5: Control Effectiveness Engine
+
+**New implementation.** No prior defects to fix. Initial ship.
+
+**Components delivered:**
+- `services/control_effectiveness/` — 5 files: `__init__.py`, `models.py`, `schemas.py`, `repository.py`, `engine.py`
+- `api/db_models_control_effectiveness.py` — 2 ORM models with SQLAlchemy event guards
+- `migrations/postgres/0133_control_effectiveness.sql` — 2 tables + 4 indexes + 1 unique index + 2 PG trigger functions (delete prevention on current; append-only on history)
+- `api/control_effectiveness.py` — 6 routes under `/control-effectiveness`
+- 5 Prometheus counters in `api/observability/metrics.py`
+- `CONTROL_EFFECTIVENESS` source type + adapter in `services/governance/timeline/`
+- Plane registry + rate-limit + db.py + main.py wiring
+- `migrations/postgres/0133_control_effectiveness.sql`
+
+**Design rationale:**
+
+**Scoring model v1 (7 components):**
+- Coverage 20% — evidence existence + verified-evidence ratio
+- Verification 20% — pass rate, age penalty, failure penalty
+- Freshness 15% — avg freshness_score from FaEvidenceFreshnessRecord
+- Trend 15% — freshness trajectory (IMPROVING→80, STABLE→60, DEGRADING→35, CRITICAL→10)
+- Forecast 10% — 30d velocity from FaFreshnessScoreSnapshot
+- Evidence Density 10% — count + quality + source diversity
+- Exception 10% — penalty per open/expired exception
+
+**Trend data uses 2× window constraint (from PR 14.6.9 P2 fixes):** `lower_bound = _date_n_days_ago(days * 2)` prevents a snapshot from outside the labeled period being used as baseline. Same pattern in both `_compute_trend_data()` and `_compute_forecast_score()`.
+
+**FaControlEffectiveness is mutable (recalculation updates in-place):** The spec requires the current state table to reflect the latest calculation. Only deletion is blocked (ORM + PG layer). `FaControlEffectivenessHistory` is fully append-only at both ORM and PG layers.
+
+**Route ordering:** `/dashboard`, `/cgin/snapshot`, and POST `/recalculate` registered before `/{control_id}` to prevent FastAPI catch-all capture.
+
+**Control plane (not evidence plane):** `/control-effectiveness` uses `governance:` scope prefix, which only the control plane has in `auth_class.required_scope_prefixes`.
+
+---
+
 ### 2026-06-24 — PR 14.6.6 fix pass: Verification Workflow Authority governance registration and code review
 
 **Issues (fix pass review):**

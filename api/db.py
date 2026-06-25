@@ -266,6 +266,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_timeline_authority"
     )  # PR 14.6.2: Timeline Authority
+    importlib.import_module(
+        "api.db_models_control_effectiveness"
+    )  # PR 16.5: Control Effectiveness Engine
 
 
 def _get_base():

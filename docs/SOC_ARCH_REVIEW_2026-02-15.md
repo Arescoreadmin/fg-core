@@ -1,3 +1,30 @@
+## 2026-06-25 — PR 16.5: Control Effectiveness Engine
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new governance-scoped read/write endpoints under new `control-effectiveness` prefix registered in `control` plane; new DB tables, migration, and ORM models; no new auth subsystem, no privilege escalation, no credential handling added)
+
+**Changes:**
+- `migrations/postgres/0133_control_effectiveness.sql` — creates `fa_control_effectiveness` (mutable, delete-protected) and `fa_control_effectiveness_history` (fully append-only). Both tables tenant-scoped with PG triggers blocking disallowed mutations.
+- `api/db_models_control_effectiveness.py` — ORM models with matching SQLAlchemy event guards (`before_delete` on current table; `before_update` + `before_delete` on history).
+- `services/control_effectiveness/` — new bounded context: `models.py` (scoring constants + enums + pure functions), `schemas.py` (8 Pydantic schemas), `repository.py` (all tenant-scoped queries), `engine.py` (deterministic 7-component scoring engine).
+- `api/control_effectiveness.py` — 6 routes (3 GET, 1 POST recalculate, 1 GET list, 1 GET history). `/dashboard`, `/cgin/snapshot`, and POST `/recalculate` registered before `/{control_id}` to prevent catch-all capture.
+- `services/governance/timeline/models.py` — `CONTROL_EFFECTIVENESS` added to `SourceType` enum.
+- `services/governance/timeline/adapters.py` — `control_effectiveness_to_timeline_event` adapter registered in `TIMELINE_ADAPTERS`.
+- `api/observability/metrics.py` — 5 new Prometheus counters, no `tenant_id` labels.
+- `tools/ci/plane_registry_checks.py` — `/control-effectiveness` added to rate-limiting prefix tuple.
+- `services/plane_registry/registry.py` — `/control-effectiveness` added to `control` plane `route_prefixes`.
+- `api/db.py` — `db_models_control_effectiveness` added to `_ensure_models_imported()`.
+- `api/main.py` — `control_effectiveness_router` imported and registered in both `build_app` and `build_contract_app`.
+- Governance registration files regenerated via `make route-inventory-generate` + `python scripts/refresh_contract_authority.py`.
+
+**Security posture:** new planes and prefix are `control`-plane-scoped. All routes require `governance:read` or `governance:write` enforced by `require_scopes()` + `require_bound_tenant()`. Scoring is deterministic arithmetic — no ML, no AI inference, no external calls, no probabilistic values. History table is append-only at both ORM and PG layers. No credential storage, no PII, no PHI.
+
+### Validation
+- `make route-inventory-generate` completed with no errors.
+- `python scripts/refresh_contract_authority.py` — SHA updated.
+- `python scripts/generate_platform_inventory.py` — completed with no errors.
+
+---
+
 ## 2026-06-25 — PR 14.6.9: Trend Persistence & Governance Forecasting
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (2 new audit-scoped read endpoints; no schema changes, no new auth subsystem, no privilege escalation, no credential handling added)

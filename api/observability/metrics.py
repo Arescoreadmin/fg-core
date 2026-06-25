@@ -940,3 +940,30 @@ FRESHNESS_HISTORY_RECORDS_TOTAL = Counter(
     "Total evidence freshness history retrievals",
     [],
 )
+
+# PR 16.5 — Control Effectiveness Engine metrics
+CONTROL_EFFECTIVENESS_CALCULATIONS_TOTAL = Counter(
+    "frostgate_control_effectiveness_calculations_total",
+    "Total control effectiveness score calculations",
+    [],
+)
+CONTROL_EFFECTIVENESS_HISTORY_RECORDS_TOTAL = Counter(
+    "frostgate_control_effectiveness_history_records_total",
+    "Total control effectiveness history records appended",
+    [],
+)
+CONTROL_EFFECTIVENESS_IMPROVEMENT_TOTAL = Counter(
+    "frostgate_control_effectiveness_improvement_total",
+    "Total control effectiveness scores that improved (30d delta > 5)",
+    [],
+)
+CONTROL_EFFECTIVENESS_DEGRADATION_TOTAL = Counter(
+    "frostgate_control_effectiveness_degradation_total",
+    "Total control effectiveness scores that degraded (30d delta < -5)",
+    [],
+)
+CONTROL_EFFECTIVENESS_RECALCULATIONS_TOTAL = Counter(
+    "frostgate_control_effectiveness_recalculations_total",
+    "Total recalculate_all runs completed",
+    [],
+)
