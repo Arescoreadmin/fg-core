@@ -269,6 +269,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_control_effectiveness"
     )  # PR 16.5: Control Effectiveness Engine
+    importlib.import_module(
+        "api.db_models_control_effectiveness_explainability"
+    )  # PR 16.5.1: Explainability & Governance Action Engine
 
 
 def _get_base():

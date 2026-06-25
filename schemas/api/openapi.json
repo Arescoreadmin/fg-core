@@ -5190,6 +5190,61 @@
         "title": "CertEnrollResponse",
         "type": "object"
       },
+      "ChangeDetectionSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "delta_30d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta 30D"
+          },
+          "delta_7d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta 7D"
+          },
+          "delta_90d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta 90D"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "explanation",
+          "delta_7d",
+          "delta_30d",
+          "delta_90d"
+        ],
+        "title": "ChangeDetectionSummary",
+        "type": "object"
+      },
       "ClassificationRing": {
         "enum": [
           "UNCLASS",
@@ -6990,6 +7045,91 @@
         "title": "ControlEvidenceLinkResponse",
         "type": "object"
       },
+      "ControlExplainResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/GovernanceActionItem"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "change_detection": {
+            "$ref": "#/components/schemas/ChangeDetectionSummary"
+          },
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreContributionItem"
+            },
+            "title": "Contributions",
+            "type": "array"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "effectiveness_level": {
+            "title": "Effectiveness Level",
+            "type": "string"
+          },
+          "effectiveness_risk": {
+            "title": "Effectiveness Risk",
+            "type": "string"
+          },
+          "effectiveness_score": {
+            "title": "Effectiveness Score",
+            "type": "number"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "governance_priority": {
+            "title": "Governance Priority",
+            "type": "string"
+          },
+          "narrative": {
+            "title": "Narrative",
+            "type": "string"
+          },
+          "negative_signals": {
+            "items": {
+              "$ref": "#/components/schemas/RootCauseItem"
+            },
+            "title": "Negative Signals",
+            "type": "array"
+          },
+          "positive_signals": {
+            "items": {
+              "$ref": "#/components/schemas/RootCauseItem"
+            },
+            "title": "Positive Signals",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "control_id",
+          "effectiveness_score",
+          "effectiveness_level",
+          "effectiveness_risk",
+          "governance_priority",
+          "narrative",
+          "contributions",
+          "positive_signals",
+          "negative_signals",
+          "actions",
+          "change_detection",
+          "generated_at"
+        ],
+        "title": "ControlExplainResponse",
+        "type": "object"
+      },
       "ControlFrameworkCoverageResponse": {
         "additionalProperties": false,
         "properties": {
@@ -7406,6 +7546,57 @@
           "total"
         ],
         "title": "ControlListResponse",
+        "type": "object"
+      },
+      "ControlPriorityItem": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "effectiveness_level": {
+            "title": "Effectiveness Level",
+            "type": "string"
+          },
+          "effectiveness_risk": {
+            "title": "Effectiveness Risk",
+            "type": "string"
+          },
+          "effectiveness_score": {
+            "title": "Effectiveness Score",
+            "type": "number"
+          },
+          "governance_priority": {
+            "title": "Governance Priority",
+            "type": "string"
+          },
+          "priority_rationale": {
+            "title": "Priority Rationale",
+            "type": "string"
+          },
+          "trend_direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trend Direction"
+          }
+        },
+        "required": [
+          "control_id",
+          "effectiveness_score",
+          "effectiveness_level",
+          "effectiveness_risk",
+          "governance_priority",
+          "trend_direction",
+          "priority_rationale"
+        ],
+        "title": "ControlPriorityItem",
         "type": "object"
       },
       "ControlReviewListResponse": {
@@ -14527,6 +14718,154 @@
         "title": "ExecutionStateResponse",
         "type": "object"
       },
+      "ExecutiveDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "adequate_count": {
+            "title": "Adequate Count",
+            "type": "integer"
+          },
+          "average_effectiveness_score": {
+            "title": "Average Effectiveness Score",
+            "type": "number"
+          },
+          "critical_priority_count": {
+            "title": "Critical Priority Count",
+            "type": "integer"
+          },
+          "critical_risk_count": {
+            "title": "Critical Risk Count",
+            "type": "integer"
+          },
+          "effective_count": {
+            "title": "Effective Count",
+            "type": "integer"
+          },
+          "fastest_declining": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Fastest Declining",
+            "type": "array"
+          },
+          "fastest_improving": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Fastest Improving",
+            "type": "array"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "high_priority_count": {
+            "title": "High Priority Count",
+            "type": "integer"
+          },
+          "high_risk_count": {
+            "title": "High Risk Count",
+            "type": "integer"
+          },
+          "highest_risk_controls": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Highest Risk Controls",
+            "type": "array"
+          },
+          "highly_effective_count": {
+            "title": "Highly Effective Count",
+            "type": "integer"
+          },
+          "ineffective_count": {
+            "title": "Ineffective Count",
+            "type": "integer"
+          },
+          "low_priority_count": {
+            "title": "Low Priority Count",
+            "type": "integer"
+          },
+          "medium_priority_count": {
+            "title": "Medium Priority Count",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "top_controls": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Top Controls",
+            "type": "array"
+          },
+          "top_negative_signals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Negative Signals",
+            "type": "array"
+          },
+          "top_positive_signals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Positive Signals",
+            "type": "array"
+          },
+          "top_recommended_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Recommended Actions",
+            "type": "array"
+          },
+          "total_controls": {
+            "title": "Total Controls",
+            "type": "integer"
+          },
+          "weak_count": {
+            "title": "Weak Count",
+            "type": "integer"
+          },
+          "weakest_controls": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Weakest Controls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_controls",
+          "average_effectiveness_score",
+          "highly_effective_count",
+          "effective_count",
+          "adequate_count",
+          "weak_count",
+          "ineffective_count",
+          "critical_risk_count",
+          "high_risk_count",
+          "critical_priority_count",
+          "high_priority_count",
+          "medium_priority_count",
+          "low_priority_count",
+          "top_positive_signals",
+          "top_negative_signals",
+          "top_recommended_actions",
+          "top_controls",
+          "weakest_controls",
+          "highest_risk_controls",
+          "fastest_improving",
+          "fastest_declining",
+          "generated_at"
+        ],
+        "title": "ExecutiveDashboardResponse",
+        "type": "object"
+      },
       "ExplainCapabilityResponse": {
         "properties": {
           "capability": {
@@ -17495,6 +17834,72 @@
           "action_state"
         ],
         "title": "GovernanceActionBody",
+        "type": "object"
+      },
+      "GovernanceActionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "action_type": {
+            "title": "Action Type",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_type",
+          "priority",
+          "description",
+          "rationale"
+        ],
+        "title": "GovernanceActionItem",
+        "type": "object"
+      },
+      "GovernanceActionsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/GovernanceActionItem"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "governance_priority": {
+            "title": "Governance Priority",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "control_id",
+          "governance_priority",
+          "actions",
+          "generated_at"
+        ],
+        "title": "GovernanceActionsResponse",
         "type": "object"
       },
       "GovernanceDashboardResponse": {
@@ -23430,6 +23835,58 @@
         "title": "PortalTaskView",
         "type": "object"
       },
+      "PrioritiesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "critical_count": {
+            "title": "Critical Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "high_count": {
+            "title": "High Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ControlPriorityItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "low_count": {
+            "title": "Low Count",
+            "type": "integer"
+          },
+          "medium_count": {
+            "title": "Medium Count",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "items",
+          "total",
+          "critical_count",
+          "high_count",
+          "medium_count",
+          "low_count",
+          "generated_at"
+        ],
+        "title": "PrioritiesResponse",
+        "type": "object"
+      },
       "PromoteConnectorAssetsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -24012,6 +24469,120 @@
           }
         },
         "title": "ROEPolicy",
+        "type": "object"
+      },
+      "RankingItem": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "effectiveness_level": {
+            "title": "Effectiveness Level",
+            "type": "string"
+          },
+          "effectiveness_risk": {
+            "title": "Effectiveness Risk",
+            "type": "string"
+          },
+          "effectiveness_score": {
+            "title": "Effectiveness Score",
+            "type": "number"
+          },
+          "rank_position": {
+            "title": "Rank Position",
+            "type": "integer"
+          },
+          "rank_type": {
+            "title": "Rank Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_id",
+          "rank_position",
+          "effectiveness_score",
+          "effectiveness_level",
+          "effectiveness_risk",
+          "rank_type"
+        ],
+        "title": "RankingItem",
+        "type": "object"
+      },
+      "RankingsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "fastest_declining": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Fastest Declining",
+            "type": "array"
+          },
+          "fastest_improving": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Fastest Improving",
+            "type": "array"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "highest_risk": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Highest Risk",
+            "type": "array"
+          },
+          "most_fragile": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Most Fragile",
+            "type": "array"
+          },
+          "most_valuable": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Most Valuable",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "top_controls": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Top Controls",
+            "type": "array"
+          },
+          "weakest_controls": {
+            "items": {
+              "$ref": "#/components/schemas/RankingItem"
+            },
+            "title": "Weakest Controls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "top_controls",
+          "weakest_controls",
+          "fastest_improving",
+          "fastest_declining",
+          "highest_risk",
+          "most_fragile",
+          "most_valuable",
+          "generated_at"
+        ],
+        "title": "RankingsResponse",
         "type": "object"
       },
       "ReadinessBlockerResponse": {
@@ -27311,6 +27882,40 @@
         "title": "RootCauseCandidateOut",
         "type": "object"
       },
+      "RootCauseItem": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "impact": {
+            "title": "Impact",
+            "type": "string"
+          },
+          "impact_score": {
+            "title": "Impact Score",
+            "type": "number"
+          },
+          "root_cause_type": {
+            "title": "Root Cause Type",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root_cause_type",
+          "impact",
+          "severity",
+          "impact_score",
+          "description"
+        ],
+        "title": "RootCauseItem",
+        "type": "object"
+      },
       "RotateKeyRequest": {
         "description": "Request to rotate an API key.",
         "properties": {
@@ -27724,6 +28329,87 @@
         ],
         "title": "ScopeType",
         "type": "string"
+      },
+      "ScoreContributionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "component_name": {
+            "title": "Component Name",
+            "type": "string"
+          },
+          "contribution_percentage": {
+            "title": "Contribution Percentage",
+            "type": "number"
+          },
+          "impact": {
+            "title": "Impact",
+            "type": "string"
+          },
+          "raw_score": {
+            "title": "Raw Score",
+            "type": "number"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          },
+          "weighted_score": {
+            "title": "Weighted Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "component_name",
+          "raw_score",
+          "weight",
+          "weighted_score",
+          "contribution_percentage",
+          "impact"
+        ],
+        "title": "ScoreContributionItem",
+        "type": "object"
+      },
+      "ScoreContributorsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreContributionItem"
+            },
+            "title": "Contributions",
+            "type": "array"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "effectiveness_level": {
+            "title": "Effectiveness Level",
+            "type": "string"
+          },
+          "effectiveness_score": {
+            "title": "Effectiveness Score",
+            "type": "number"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "control_id",
+          "effectiveness_score",
+          "effectiveness_level",
+          "contributions",
+          "generated_at"
+        ],
+        "title": "ScoreContributorsResponse",
+        "type": "object"
       },
       "ScoreOutputResponse": {
         "properties": {
@@ -40158,6 +40844,73 @@
         ]
       }
     },
+    "/control-effectiveness/actions/{control_id}": {
+      "get": {
+        "operationId": "get_actions_control_effectiveness_actions__control_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "control_id",
+            "required": true,
+            "schema": {
+              "title": "Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceActionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Control not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Actions",
+        "tags": [
+          "control-effectiveness-explainability"
+        ]
+      }
+    },
     "/control-effectiveness/cgin/snapshot": {
       "get": {
         "operationId": "get_cgin_snapshot_control_effectiveness_cgin_snapshot_get",
@@ -40213,6 +40966,73 @@
         ]
       }
     },
+    "/control-effectiveness/contributors/{control_id}": {
+      "get": {
+        "operationId": "get_contributors_control_effectiveness_contributors__control_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "control_id",
+            "required": true,
+            "schema": {
+              "title": "Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreContributorsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Control not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Contributors",
+        "tags": [
+          "control-effectiveness-explainability"
+        ]
+      }
+    },
     "/control-effectiveness/dashboard": {
       "get": {
         "operationId": "get_dashboard_control_effectiveness_dashboard_get",
@@ -40265,6 +41085,128 @@
         "summary": "Get Dashboard",
         "tags": [
           "control-effectiveness"
+        ]
+      }
+    },
+    "/control-effectiveness/executive-dashboard": {
+      "get": {
+        "operationId": "get_executive_dashboard_control_effectiveness_executive_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutiveDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Executive Dashboard",
+        "tags": [
+          "control-effectiveness-explainability"
+        ]
+      }
+    },
+    "/control-effectiveness/explain/{control_id}": {
+      "get": {
+        "operationId": "explain_control_control_effectiveness_explain__control_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "control_id",
+            "required": true,
+            "schema": {
+              "title": "Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlExplainResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Control not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explain Control",
+        "tags": [
+          "control-effectiveness-explainability"
         ]
       }
     },
@@ -40355,6 +41297,139 @@
         "summary": "Get History",
         "tags": [
           "control-effectiveness"
+        ]
+      }
+    },
+    "/control-effectiveness/priorities": {
+      "get": {
+        "operationId": "get_priorities_control_effectiveness_priorities_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrioritiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Priorities",
+        "tags": [
+          "control-effectiveness-explainability"
+        ]
+      }
+    },
+    "/control-effectiveness/rankings": {
+      "get": {
+        "operationId": "get_rankings_control_effectiveness_rankings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Rankings",
+        "tags": [
+          "control-effectiveness-explainability"
         ]
       }
     },

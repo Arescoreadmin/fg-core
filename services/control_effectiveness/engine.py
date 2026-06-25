@@ -672,6 +672,14 @@ class ControlEffectivenessEngine:
             CONTROL_EFFECTIVENESS_RECALCULATIONS_TOTAL.inc()
         except Exception:
             pass
+        try:
+            from services.control_effectiveness_explainability.engine import (
+                ExplainabilityEngine,
+            )
+
+            ExplainabilityEngine(self._db, self._tenant_id).recalculate_rankings()
+        except Exception:
+            pass
         return RecalculateResponse(
             tenant_id=self._tenant_id,
             controls_recalculated=count,
