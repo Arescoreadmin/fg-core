@@ -66,6 +66,15 @@ class ControlEffectivenessRepository:
             .first()
         )
 
+    def list_all_effectiveness(self) -> list[FaControlEffectiveness]:
+        """Return every row for this tenant — used by dashboard/CGIN aggregation."""
+        return (
+            self._db.query(FaControlEffectiveness)
+            .filter(FaControlEffectiveness.tenant_id == self._tenant_id)
+            .order_by(FaControlEffectiveness.effectiveness_score.desc())
+            .all()
+        )
+
     def list_effectiveness(
         self, limit: int, offset: int
     ) -> tuple[list[FaControlEffectiveness], int]:

@@ -508,6 +508,9 @@ class ControlEffectivenessEngine:
     # ------------------------------------------------------------------
 
     def recalculate(self, control_id: str) -> ControlEffectivenessResponse:
+        if not self._get_linked_evidence_ids(control_id):
+            raise ControlNotFound(control_id)
+
         now = _now_iso()
 
         coverage_score = self._compute_coverage_score(control_id)
@@ -706,7 +709,8 @@ class ControlEffectivenessEngine:
 
     def get_dashboard(self) -> ControlEffectivenessDashboardResponse:
         now = _now_iso()
-        all_items, total = self._repo.list_effectiveness(limit=10000, offset=0)
+        all_items = self._repo.list_all_effectiveness()
+        total = len(all_items)
 
         if total == 0:
             return ControlEffectivenessDashboardResponse(
@@ -781,7 +785,8 @@ class ControlEffectivenessEngine:
 
     def get_cgin_snapshot(self) -> CGINEffectivenessSnapshot:
         now = _now_iso()
-        all_items, total = self._repo.list_effectiveness(limit=10000, offset=0)
+        all_items = self._repo.list_all_effectiveness()
+        total = len(all_items)
 
         if total == 0:
             return CGINEffectivenessSnapshot(

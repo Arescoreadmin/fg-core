@@ -78,7 +78,7 @@ def recalculate(
     tenant_id = require_bound_tenant(request)
     with Session(get_engine()) as db:
         engine = ControlEffectivenessEngine(db, tenant_id)
-        if req.control_id:
+        if req.control_id is not None:
             try:
                 result = engine.recalculate(req.control_id)
             except ControlNotFound:
