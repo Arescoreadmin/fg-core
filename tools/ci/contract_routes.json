@@ -2714,6 +2714,12 @@
     },
     {
       "method": "GET",
+      "path": "/freshness/cgin/trends",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/freshness/dashboard",
       "scopes": [],
       "source": "contract"
@@ -2733,6 +2739,30 @@
     {
       "method": "POST",
       "path": "/freshness/exceptions/{exception_id}/revoke",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness/history/{evidence_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/freshness/snapshots/run",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness/trends",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/freshness/trends/dashboard",
       "scopes": [],
       "source": "contract"
     },
@@ -4177,7 +4207,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-24T18:40:05.457904+00:00",
+  "generated_at": "2026-06-25T10:30:37.741957+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

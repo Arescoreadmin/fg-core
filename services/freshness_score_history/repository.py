@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from api.db_models_freshness_score_history import (
     FaFreshnessDailySnapshot,
     FaFreshnessScoreSnapshot,
+    FaFreshnessTrendSnapshot,
 )
 
 
@@ -46,12 +47,18 @@ class FreshnessScoreHistoryRepository:
         )
 
     def list_score_snapshots_for_evidence(
-        self, evidence_id: str, limit: int, offset: int
+        self,
+        evidence_id: str,
+        limit: int,
+        offset: int,
+        since_date: Optional[str] = None,
     ) -> tuple[list[FaFreshnessScoreSnapshot], int]:
         q = self._db.query(FaFreshnessScoreSnapshot).filter(
             FaFreshnessScoreSnapshot.tenant_id == self._tenant_id,
             FaFreshnessScoreSnapshot.evidence_id == evidence_id,
         )
+        if since_date is not None:
+            q = q.filter(FaFreshnessScoreSnapshot.capture_date >= since_date)
         total = q.count()
         items = (
             q.order_by(FaFreshnessScoreSnapshot.capture_date.desc())
@@ -116,3 +123,27 @@ class FreshnessScoreHistoryRepository:
             .order_by(FaFreshnessDailySnapshot.capture_date.desc())
             .first()
         )
+
+    # ------------------------------------------------------------------
+    # FaFreshnessTrendSnapshot
+    # ------------------------------------------------------------------
+
+    def create_trend_snapshot(self, row: FaFreshnessTrendSnapshot) -> None:
+        self._db.add(row)
+        self._db.flush()
+
+    def list_trend_snapshots(
+        self, period: str, limit: int, offset: int
+    ) -> tuple[list[FaFreshnessTrendSnapshot], int]:
+        q = self._db.query(FaFreshnessTrendSnapshot).filter(
+            FaFreshnessTrendSnapshot.tenant_id == self._tenant_id,
+            FaFreshnessTrendSnapshot.period == period,
+        )
+        total = q.count()
+        items = (
+            q.order_by(FaFreshnessTrendSnapshot.generated_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total

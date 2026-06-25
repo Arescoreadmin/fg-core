@@ -15754,6 +15754,110 @@
         "title": "FreshnessExceptionResponse",
         "type": "object"
       },
+      "FreshnessGovernanceForecast": {
+        "additionalProperties": false,
+        "properties": {
+          "current_avg_score": {
+            "title": "Current Avg Score",
+            "type": "number"
+          },
+          "days_until_threshold": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Until Threshold"
+          },
+          "early_warning": {
+            "title": "Early Warning",
+            "type": "boolean"
+          },
+          "early_warning_horizon_days": {
+            "title": "Early Warning Horizon Days",
+            "type": "integer"
+          },
+          "early_warning_threshold": {
+            "title": "Early Warning Threshold",
+            "type": "integer"
+          },
+          "forecast_30d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast 30D"
+          },
+          "forecast_60d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast 60D"
+          },
+          "forecast_90d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast 90D"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "trend_direction": {
+            "title": "Trend Direction",
+            "type": "string"
+          },
+          "velocity_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Velocity Per Day"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "current_avg_score",
+          "velocity_per_day",
+          "forecast_30d",
+          "forecast_60d",
+          "forecast_90d",
+          "early_warning",
+          "early_warning_threshold",
+          "early_warning_horizon_days",
+          "days_until_threshold",
+          "trend_direction",
+          "generated_at"
+        ],
+        "title": "FreshnessGovernanceForecast",
+        "type": "object"
+      },
       "FreshnessHistoryResponse": {
         "additionalProperties": false,
         "properties": {
@@ -16283,6 +16387,38 @@
         "title": "FreshnessTrendDashboardResponse",
         "type": "object"
       },
+      "FreshnessTrendHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FreshnessTrendSnapshotResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "period",
+          "items",
+          "total"
+        ],
+        "title": "FreshnessTrendHistoryResponse",
+        "type": "object"
+      },
       "FreshnessTrendResponse": {
         "additionalProperties": false,
         "properties": {
@@ -16375,6 +16511,88 @@
           "generated_at"
         ],
         "title": "FreshnessTrendResponse",
+        "type": "object"
+      },
+      "FreshnessTrendSnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "average_score": {
+            "title": "Average Score",
+            "type": "number"
+          },
+          "coverage_risk_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Risk Delta"
+          },
+          "expired_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expired Delta"
+          },
+          "fresh_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fresh Delta"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "score_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Delta"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "period",
+          "average_score",
+          "score_delta",
+          "fresh_delta",
+          "expired_delta",
+          "coverage_risk_delta",
+          "generated_at"
+        ],
+        "title": "FreshnessTrendSnapshotResponse",
         "type": "object"
       },
       "GapAnalysisResultResponse": {
@@ -67765,6 +67983,79 @@
         ]
       }
     },
+    "/freshness/forecast": {
+      "get": {
+        "operationId": "get_forecast_freshness_forecast_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "early_warning_threshold",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Early Warning Threshold",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "early_warning_horizon_days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "maximum": 365,
+              "minimum": 7,
+              "title": "Early Warning Horizon Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessGovernanceForecast"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Forecast",
+        "tags": [
+          "freshness-score-history"
+        ]
+      }
+    },
     "/freshness/history/{evidence_id}": {
       "get": {
         "operationId": "get_evidence_history_freshness_history__evidence_id__get",
@@ -68030,6 +68321,89 @@
           }
         },
         "summary": "Get Trends Dashboard",
+        "tags": [
+          "freshness-score-history"
+        ]
+      }
+    },
+    "/freshness/trends/history": {
+      "get": {
+        "operationId": "get_trend_history_freshness_trends_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "default": "30d",
+              "pattern": "^(7d|30d|90d|180d|365d)$",
+              "title": "Period",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreshnessTrendHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Trend History",
         "tags": [
           "freshness-score-history"
         ]
