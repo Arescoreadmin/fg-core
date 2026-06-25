@@ -34,4 +34,4 @@ def compute_trend_direction(score_delta: float) -> TrendDirection:
 
 
 def compute_score_delta(current: float, baseline: float) -> float:
-    return round(current - baseline, 2)
+    return float(round(current - baseline, 2))

@@ -9853,6 +9853,24 @@
       ],
       "file": "api/freshness_score_history.py",
       "method": "GET",
+      "path": "/freshness/forecast",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/freshness_score_history.py",
+      "method": "GET",
       "path": "/freshness/history/{evidence_id}",
       "plane": "evidence",
       "plane_id": "evidence",
@@ -9908,6 +9926,24 @@
       "file": "api/freshness_score_history.py",
       "method": "GET",
       "path": "/freshness/trends/dashboard",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/freshness_score_history.py",
+      "method": "GET",
+      "path": "/freshness/trends/history",
       "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
@@ -14869,7 +14905,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-24T23:52:07.174064+00:00",
+  "generated_at": "2026-06-25T10:30:37.724866+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

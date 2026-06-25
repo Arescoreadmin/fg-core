@@ -1,3 +1,23 @@
+## 2026-06-25 — PR 14.6.9: Trend Persistence & Governance Forecasting
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (2 new audit-scoped read endpoints; no schema changes, no new auth subsystem, no privilege escalation, no credential handling added)
+
+**Changes:**
+- `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — regenerated via `make route-inventory-generate` + `python scripts/refresh_contract_authority.py`. Reflects 2 new routes added to existing `evidence` plane.
+- `services/freshness_score_history/schemas.py` — added `FreshnessTrendSnapshotResponse`, `FreshnessTrendHistoryResponse`, `FreshnessGovernanceForecast` response schemas. Additive only; no existing schemas modified.
+- `services/freshness_score_history/repository.py` — added `create_trend_snapshot()` and `list_trend_snapshots()` to `FreshnessScoreHistoryRepository`. All queries tenant-scoped.
+- `services/freshness_score_history/engine.py` — extended `run_snapshot()` to persist 3 trend rows (7d/30d/90d) per run; added `get_trend_history()` and `get_forecast()` methods. No auth logic touched.
+- `api/freshness_score_history.py` — added `GET /freshness/trends/history` and `GET /freshness/forecast` routes. Both require `audit:read` scope via existing `require_scopes()` + `require_bound_tenant()`.
+
+**Security posture:** strictly additive. No new planes, no new DB tables, no migrations, no auth changes. Both new routes are read-only and require `audit:read` scope. Tenant isolation enforced at repository layer. `get_forecast()` is pure arithmetic (linear extrapolation from stored daily snapshots); no ML, no external calls, no secrets. `get_trend_history()` returns paginated stored rows — no computed values. Trend writes in `run_snapshot()` are wrapped in `try/except` so a failed write never blocks the daily snapshot commit.
+
+### Validation
+- `make route-inventory-generate` completed with no errors.
+- `python scripts/refresh_contract_authority.py` — SHA updated.
+- `python scripts/generate_platform_inventory.py` — completed with no errors.
+
+---
+
 ## 2026-06-24 — PR 14.6.8: Freshness Score History & Governance Trend Intelligence
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (new audit-scoped read/write endpoints; no new auth subsystem, no privilege escalation, no credential handling added)

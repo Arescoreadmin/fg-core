@@ -136,3 +136,43 @@ class RunSnapshotResponse(BaseModel):
     daily_snapshot_created: bool
     already_exists: bool
     captured_at: str
+
+
+class FreshnessTrendSnapshotResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    period: str
+    average_score: float
+    score_delta: Optional[float]
+    fresh_delta: Optional[int]
+    expired_delta: Optional[int]
+    coverage_risk_delta: Optional[int]
+    generated_at: str
+
+
+class FreshnessTrendHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str
+    period: str
+    items: list[FreshnessTrendSnapshotResponse]
+    total: int
+
+
+class FreshnessGovernanceForecast(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str
+    current_avg_score: float
+    velocity_per_day: Optional[float]
+    forecast_30d: Optional[float]
+    forecast_60d: Optional[float]
+    forecast_90d: Optional[float]
+    early_warning: bool
+    early_warning_threshold: int
+    early_warning_horizon_days: int
+    days_until_threshold: Optional[int]
+    trend_direction: str
+    generated_at: str

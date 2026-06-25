@@ -18,6 +18,7 @@ from api.db_models_evidence_freshness_authority import FaEvidenceFreshnessRecord
 from api.db_models_freshness_score_history import (
     FaFreshnessDailySnapshot,
     FaFreshnessScoreSnapshot,
+    FaFreshnessTrendSnapshot,
 )
 from services.freshness_score_history.models import (
     TrendDirection,
@@ -27,10 +28,13 @@ from services.freshness_score_history.models import (
 from services.freshness_score_history.repository import FreshnessScoreHistoryRepository
 from services.freshness_score_history.schemas import (
     FreshnessCGINTrendSnapshot,
+    FreshnessGovernanceForecast,
     FreshnessHistoryResponse,
     FreshnessScoreSnapshotResponse,
     FreshnessTrendDashboardResponse,
+    FreshnessTrendHistoryResponse,
     FreshnessTrendResponse,
+    FreshnessTrendSnapshotResponse,
     RunSnapshotRequest,
     RunSnapshotResponse,
 )
@@ -195,6 +199,48 @@ class FreshnessScoreHistoryEngine:
         self._repo.create_daily_snapshot(daily_snap)
         self._db.commit()
 
+        # Persist trend snapshots for 7d / 30d / 90d windows
+        for period_days, period_label in ((7, "7d"), (30, "30d"), (90, "90d")):
+            try:
+                since = _date_n_days_ago(period_days)
+                hist = self._repo.list_daily_snapshots_since(
+                    since, limit=period_days + 1
+                )
+                baseline = hist[0] if hist else None
+                t_delta: Optional[float] = None
+                t_fresh: Optional[int] = None
+                t_expired: Optional[int] = None
+                t_cov: Optional[int] = None
+                if baseline is not None and baseline.capture_date != capture_date:
+                    t_delta = compute_score_delta(
+                        avg_score, baseline.average_freshness_score
+                    )
+                    t_fresh = (
+                        fresh_count - baseline.fresh_evidence_count
+                    )
+                    t_expired = (
+                        expired_count - baseline.expired_count
+                    )
+                    t_cov = (
+                        coverage_at_risk_count - baseline.coverage_at_risk_count
+                    )
+                trend_row = FaFreshnessTrendSnapshot(
+                    id=_new_id(),
+                    tenant_id=self._tenant_id,
+                    period=period_label,
+                    average_score=avg_score,
+                    score_delta=t_delta,
+                    fresh_delta=t_fresh,
+                    expired_delta=t_expired,
+                    coverage_risk_delta=t_cov,
+                    generated_at=now,
+                )
+                self._repo.create_trend_snapshot(trend_row)
+            except Exception:
+                pass
+
+        self._db.commit()
+
         try:
             from api.observability.metrics import FRESHNESS_SNAPSHOTS_CREATED_TOTAL
 
@@ -276,27 +322,29 @@ class FreshnessScoreHistoryEngine:
         snapshots_since = self._repo.get_score_snapshots_since(evidence_id, since_date)
 
         if not snapshots_since:
-            items, total = self._repo.list_score_snapshots_for_evidence(
-                evidence_id, limit, offset
+            # No data within the requested window — check if evidence has any history
+            check_items, _ = self._repo.list_score_snapshots_for_evidence(
+                evidence_id, limit=1, offset=0
             )
-            if not items:
+            if not check_items:
                 from services.freshness_score_history.schemas import (
                     FreshnessSnapshotNotFound,
                 )
 
                 raise FreshnessSnapshotNotFound(evidence_id)
+            # Evidence has history but none within the days window
             return FreshnessHistoryResponse(
                 evidence_id=evidence_id,
                 tenant_id=self._tenant_id,
-                snapshots=[self._to_snapshot_response(r) for r in items],
-                total=total,
+                snapshots=[],
+                total=0,
                 trend_direction=TrendDirection.STABLE.value,
                 score_delta_7d=None,
                 score_delta_30d=None,
             )
 
         items, total = self._repo.list_score_snapshots_for_evidence(
-            evidence_id, limit, offset
+            evidence_id, limit, offset, since_date=since_date
         )
 
         score_delta_7d: Optional[float] = None
@@ -437,7 +485,11 @@ class FreshnessScoreHistoryEngine:
 
         def _delta_for_period(days: int) -> Optional[float]:
             cutoff = _date_n_days_ago(days)
-            candidates = [s for s in snapshots if s.capture_date <= cutoff]
+            lower_bound = _date_n_days_ago(days * 2)
+            candidates = [
+                s for s in snapshots
+                if lower_bound <= s.capture_date <= cutoff
+            ]
             if not candidates:
                 return None
             baseline = candidates[-1]
@@ -512,7 +564,11 @@ class FreshnessScoreHistoryEngine:
 
         def _delta_for_period(days: int) -> Optional[float]:
             cutoff = _date_n_days_ago(days)
-            candidates = [s for s in snapshots if s.capture_date <= cutoff]
+            lower_bound = _date_n_days_ago(days * 2)
+            candidates = [
+                s for s in snapshots
+                if lower_bound <= s.capture_date <= cutoff
+            ]
             if not candidates:
                 return None
             baseline = candidates[-1]
@@ -525,7 +581,11 @@ class FreshnessScoreHistoryEngine:
 
         coverage_risk_delta: Optional[int] = None
         cutoff_30d = _date_n_days_ago(30)
-        candidates_30d = [s for s in snapshots if s.capture_date <= cutoff_30d]
+        lower_bound_30d = _date_n_days_ago(60)
+        candidates_30d = [
+            s for s in snapshots
+            if lower_bound_30d <= s.capture_date <= cutoff_30d
+        ]
         if candidates_30d:
             baseline_30d = candidates_30d[-1]
             if baseline_30d.capture_date != current.capture_date:
@@ -544,5 +604,119 @@ class FreshnessScoreHistoryEngine:
             score_delta_90d=score_delta_90d,
             coverage_risk_delta=coverage_risk_delta,
             improvement_velocity=improvement_velocity,
+            generated_at=now,
+        )
+
+    def get_trend_history(
+        self,
+        period: str,
+        limit: int,
+        offset: int,
+    ) -> FreshnessTrendHistoryResponse:
+        items, total = self._repo.list_trend_snapshots(
+            period=period, limit=limit, offset=offset
+        )
+        return FreshnessTrendHistoryResponse(
+            tenant_id=self._tenant_id,
+            period=period,
+            items=[
+                FreshnessTrendSnapshotResponse(
+                    id=r.id,
+                    tenant_id=r.tenant_id,
+                    period=r.period,
+                    average_score=r.average_score,
+                    score_delta=r.score_delta,
+                    fresh_delta=r.fresh_delta,
+                    expired_delta=r.expired_delta,
+                    coverage_risk_delta=r.coverage_risk_delta,
+                    generated_at=r.generated_at,
+                )
+                for r in items
+            ],
+            total=total,
+        )
+
+    def get_forecast(
+        self,
+        early_warning_threshold: int = 50,
+        early_warning_horizon_days: int = 90,
+    ) -> FreshnessGovernanceForecast:
+        now = _now_iso()
+        current = self._repo.get_latest_daily_snapshot()
+
+        if current is None:
+            return FreshnessGovernanceForecast(
+                tenant_id=self._tenant_id,
+                current_avg_score=0.0,
+                velocity_per_day=None,
+                forecast_30d=None,
+                forecast_60d=None,
+                forecast_90d=None,
+                early_warning=False,
+                early_warning_threshold=early_warning_threshold,
+                early_warning_horizon_days=early_warning_horizon_days,
+                days_until_threshold=None,
+                trend_direction=TrendDirection.STABLE.value,
+                generated_at=now,
+            )
+
+        current_avg = current.average_freshness_score
+
+        # Derive velocity from 30d delta (preferred) or 7d
+        velocity_per_day: Optional[float] = None
+        trend_direction = TrendDirection.STABLE.value
+        since_30d = _date_n_days_ago(30)
+        snapshots_30d = self._repo.list_daily_snapshots_since(since_30d, limit=31)
+        if len(snapshots_30d) >= 2:
+            baseline_30d = snapshots_30d[0]
+            if baseline_30d.capture_date != current.capture_date:
+                delta_30d = compute_score_delta(
+                    current_avg, baseline_30d.average_freshness_score
+                )
+                velocity_per_day = round(delta_30d / 30.0, 4)
+                trend_direction = compute_trend_direction(delta_30d).value
+        if velocity_per_day is None:
+            since_7d = _date_n_days_ago(7)
+            snapshots_7d = self._repo.list_daily_snapshots_since(since_7d, limit=8)
+            if len(snapshots_7d) >= 2:
+                baseline_7d = snapshots_7d[0]
+                if baseline_7d.capture_date != current.capture_date:
+                    delta_7d = compute_score_delta(
+                        current_avg, baseline_7d.average_freshness_score
+                    )
+                    velocity_per_day = round(delta_7d / 7.0, 4)
+                    trend_direction = compute_trend_direction(delta_7d).value
+
+        def _project(horizon: int) -> Optional[float]:
+            if velocity_per_day is None:
+                return None
+            return round(max(0.0, min(100.0, current_avg + velocity_per_day * horizon)), 2)
+
+        forecast_30d = _project(30)
+        forecast_60d = _project(60)
+        forecast_90d = _project(90)
+
+        # Early warning: will score breach threshold within horizon?
+        early_warning = False
+        days_until_threshold: Optional[int] = None
+        if velocity_per_day is not None and velocity_per_day < 0:
+            # days until score hits threshold: (current - threshold) / abs(velocity)
+            days_raw = (current_avg - early_warning_threshold) / abs(velocity_per_day)
+            if 0 < days_raw <= early_warning_horizon_days:
+                early_warning = True
+                days_until_threshold = max(0, int(days_raw))
+
+        return FreshnessGovernanceForecast(
+            tenant_id=self._tenant_id,
+            current_avg_score=current_avg,
+            velocity_per_day=velocity_per_day,
+            forecast_30d=forecast_30d,
+            forecast_60d=forecast_60d,
+            forecast_90d=forecast_90d,
+            early_warning=early_warning,
+            early_warning_threshold=early_warning_threshold,
+            early_warning_horizon_days=early_warning_horizon_days,
+            days_until_threshold=days_until_threshold,
+            trend_direction=trend_direction,
             generated_at=now,
         )

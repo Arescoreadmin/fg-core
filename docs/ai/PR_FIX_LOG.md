@@ -15995,6 +15995,27 @@ Updated verification workflow test helper return annotations to Response. Added 
 ### Risk Notes
 No runtime enforcement was weakened. No tenant authority is accepted from request bodies. Verification result and audit records remain append-only. Workflow state transitions remain validated by the authoritative state machine.
 
+### 2026-06-25 — PR 14.6.9: Trend Persistence & Governance Forecasting
+
+**Summary:** Extended PR 14.6.8 freshness history substrate with trend persistence and governance forecasting. `run_snapshot()` now persists 3 `FaFreshnessTrendSnapshot` rows (7d/30d/90d) on every snapshot run, each capturing `average_score`, `score_delta`, `fresh_delta`, `expired_delta`, and `coverage_risk_delta` relative to the period baseline. Added `get_trend_history()` (paginated trend snapshot retrieval) and `get_forecast()` (linear velocity projection to 30/60/90-day horizons with early warning flag). 2 new routes: `GET /freshness/trends/history` and `GET /freshness/forecast`. No new DB tables or migrations — `fa_freshness_trend_snapshots` already existed from migration 0132. All CI gates pass.
+
+**Files changed:**
+- `services/freshness_score_history/schemas.py` (modified — +`FreshnessTrendSnapshotResponse`, `FreshnessTrendHistoryResponse`, `FreshnessGovernanceForecast`)
+- `services/freshness_score_history/repository.py` (modified — +`create_trend_snapshot()`, `list_trend_snapshots()`)
+- `services/freshness_score_history/engine.py` (modified — trend persistence loop in `run_snapshot()`, +`get_trend_history()`, +`get_forecast()`)
+- `api/freshness_score_history.py` (modified — +`GET /freshness/trends/history`, `GET /freshness/forecast`)
+- `tools/ci/contract_routes.json` (regenerated)
+- `tools/ci/plane_registry_snapshot.json` (regenerated)
+- `tools/ci/route_inventory.json` (regenerated)
+- `tools/ci/route_inventory_summary.json` (regenerated)
+- `tools/ci/topology.sha256` (regenerated)
+- `artifacts/platform_inventory.json` (regenerated)
+- `artifacts/platform_inventory.det.json` (regenerated)
+- `ROADMAP.md` (modified — PR 14.6.9 row added)
+- `docs/ai/PR_FIX_LOG.md` (modified — this entry)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` (modified — PR 14.6.9 security review entry)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — PR 14.6.9 execution gate entry)
+
 ### 2026-06-24 — PR 14.6.8: Freshness Score History & Governance Trend Intelligence
 
 **Summary:** Implemented PR 14.6.8 — Freshness Score History & Governance Trend Intelligence. New bounded context `services/freshness_score_history/` providing append-only historical snapshots of every evidence freshness score (daily, per-evidence), tenant-wide daily aggregation snapshots, deterministic trend calculations (7d/30d/90d/180d/365d windows), governance decay detection (IMPROVING/STABLE/DEGRADING/CRITICAL), and CGIN trend foundation. 5 routes: `POST /freshness/snapshots/run` (idempotent daily snapshot trigger), `GET /freshness/history/{evidence_id}` (per-evidence score timeline), `GET /freshness/trends` (tenant trend summary), `GET /freshness/trends/dashboard` (7d/30d/90d deltas + velocity), `GET /freshness/cgin/trends` (CGIN intelligence snapshot). 3 append-only ORM tables. 5 Prometheus counters. Timeline integration (4 event types). 89 tests across 19 classes. All CI gates pass.

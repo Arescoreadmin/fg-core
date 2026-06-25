@@ -25,10 +25,12 @@ from api.db import get_engine
 from services.freshness_score_history.engine import FreshnessScoreHistoryEngine
 from services.freshness_score_history.schemas import (
     FreshnessCGINTrendSnapshot,
+    FreshnessGovernanceForecast,
     FreshnessHistoryResponse,
-    FreshnessTrendDashboardResponse,
-    FreshnessTrendResponse,
     FreshnessSnapshotNotFound,
+    FreshnessTrendDashboardResponse,
+    FreshnessTrendHistoryResponse,
+    FreshnessTrendResponse,
     RunSnapshotRequest,
     RunSnapshotResponse,
 )
@@ -147,3 +149,41 @@ def get_cgin_trends(
     with Session(engine) as db:
         svc = FreshnessScoreHistoryEngine(db, tenant_id=tenant_id)
         return svc.get_cgin_trends()
+
+
+@router.get(
+    "/freshness/trends/history",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=FreshnessTrendHistoryResponse,
+)
+def get_trend_history(
+    request: Request,
+    period: str = Query(default="30d", pattern="^(7d|30d|90d|180d|365d)$"),
+    limit: int = Query(default=90, ge=1, le=365),
+    offset: int = Query(default=0, ge=0),
+) -> FreshnessTrendHistoryResponse:
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = FreshnessScoreHistoryEngine(db, tenant_id=tenant_id)
+        return svc.get_trend_history(period=period, limit=limit, offset=offset)
+
+
+@router.get(
+    "/freshness/forecast",
+    dependencies=[Depends(require_scopes("audit:read"))],
+    response_model=FreshnessGovernanceForecast,
+)
+def get_forecast(
+    request: Request,
+    early_warning_threshold: int = Query(default=50, ge=0, le=100),
+    early_warning_horizon_days: int = Query(default=90, ge=7, le=365),
+) -> FreshnessGovernanceForecast:
+    tenant_id = require_bound_tenant(request)
+    engine = get_engine()
+    with Session(engine) as db:
+        svc = FreshnessScoreHistoryEngine(db, tenant_id=tenant_id)
+        return svc.get_forecast(
+            early_warning_threshold=early_warning_threshold,
+            early_warning_horizon_days=early_warning_horizon_days,
+        )

@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 696,
+    "contract_count": 701,
     "contract_only": [],
-    "runtime_count": 867,
+    "runtime_count": 869,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -71,10 +71,8 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
-      "GET /freshness/cgin/trends",
-      "GET /freshness/history/{evidence_id}",
-      "GET /freshness/trends",
-      "GET /freshness/trends/dashboard",
+      "GET /freshness/forecast",
+      "GET /freshness/trends/history",
       "GET /health",
       "GET /metrics",
       "GET /ui/ai",
@@ -167,7 +165,6 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
-      "POST /freshness/snapshots/run",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -184,7 +181,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "b33e7090046a9beed2d7884fff27633549fc65dce375e75b8fe176b3cb7bde26",
+  "governance_fingerprint": "c3cadf034a06ebac9d2d28b6609558fefcf11b8e82546112fe7cdd8fcda5b7ef",
   "planes": [
     {
       "compat": {
@@ -1119,9 +1116,11 @@
       "GET /freshness/cgin/trends",
       "GET /freshness/dashboard",
       "GET /freshness/exceptions",
+      "GET /freshness/forecast",
       "GET /freshness/history/{evidence_id}",
       "GET /freshness/trends",
       "GET /freshness/trends/dashboard",
+      "GET /freshness/trends/history",
       "GET /freshness/{evidence_id}",
       "GET /verification-requests",
       "GET /verification-requests/cgin/snapshot",
