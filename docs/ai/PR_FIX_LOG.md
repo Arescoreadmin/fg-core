@@ -15997,6 +15997,14 @@ No runtime enforcement was weakened. No tenant authority is accepted from reques
 
 ### 2026-06-25 — PR 14.6.9: Trend Persistence & Governance Forecasting
 
+**Design rationale (gaps identified after PR 14.6.8):**
+
+**Gap #1 — Trend Persistence** was the lowest-hanging fruit and the most important gap. PR 14.6.8 computed trends (7d/30d/90d score deltas) on every GET from raw daily snapshots. Persisting the trend row daily inside `run_snapshot()` costs almost nothing — `fa_freshness_trend_snapshots` already existed in migration 0132 but was never written. Once rows are stored, trend history becomes queryable: "show me how our 30d delta changed over the last 90 days." Without persistence, velocity-of-velocity is impossible. Addressed in 14.6.9.
+
+**Gap #2 — Forecast Objects** is one algebraic step beyond Gap #1. Once `velocity = score_delta_30d / 30.0` is available, the projection is `projected_score = clamp(0, 100, current_score + velocity * horizon_days)`. The governance early warning threshold is a config value (alert when projected score drops below `early_warning_threshold` within `early_warning_horizon_days`). No ML needed. Contract note: `FreshnessGovernanceForecast` is a linear extrapolation, not a probability — the schema makes this unambiguous by exposing `velocity_per_day` alongside the projections. Addressed in 14.6.9.
+
+**Gap #3 — Control Trend Rollups** is architecturally more significant because it requires joining across bounded contexts: `fa_evidence_control_links` (14.6.5A) → `fa_freshness_score_snapshots` (14.6.8) → aggregate by `control_id`. The Freshness Authority should not own control-level intelligence — that belongs in the Control Effectiveness Engine (16.5). What 14.6.8 already does correctly is make the join easy: `evidence_id` on snapshots matches `fa_evidence.id`. The rollup query is a 4-line GROUP BY that 16.5 can call when ready. Not addressed in 14.6.9 — deferred to 16.5.
+
 **Summary:** Extended PR 14.6.8 freshness history substrate with trend persistence and governance forecasting. `run_snapshot()` now persists 3 `FaFreshnessTrendSnapshot` rows (7d/30d/90d) on every snapshot run, each capturing `average_score`, `score_delta`, `fresh_delta`, `expired_delta`, and `coverage_risk_delta` relative to the period baseline. Added `get_trend_history()` (paginated trend snapshot retrieval) and `get_forecast()` (linear velocity projection to 30/60/90-day horizons with early warning flag). 2 new routes: `GET /freshness/trends/history` and `GET /freshness/forecast`. No new DB tables or migrations — `fa_freshness_trend_snapshots` already existed from migration 0132. All CI gates pass.
 
 **Files changed:**
