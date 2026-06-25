@@ -9,7 +9,7 @@ PR 14.6.8 — Freshness Score History & Governance Trend Intelligence
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -202,11 +202,15 @@ class FreshnessScoreHistoryEngine:
         # Persist trend snapshots for 7d / 30d / 90d windows
         for period_days, period_label in ((7, "7d"), (30, "30d"), (90, "90d")):
             try:
-                since = _date_n_days_ago(period_days)
+                cutoff = _date_n_days_ago(period_days)
+                lower_bound = _date_n_days_ago(period_days * 2)
                 hist = self._repo.list_daily_snapshots_since(
-                    since, limit=period_days + 1
+                    lower_bound, limit=period_days * 2 + 1
                 )
-                baseline = hist[0] if hist else None
+                # Baseline must be at or before the period cutoff (not a recent row)
+                baseline = next(
+                    (s for s in reversed(hist) if s.capture_date <= cutoff), None
+                )
                 t_delta: Optional[float] = None
                 t_fresh: Optional[int] = None
                 t_expired: Optional[int] = None
@@ -662,30 +666,36 @@ class FreshnessScoreHistoryEngine:
 
         current_avg = current.average_freshness_score
 
-        # Derive velocity from 30d delta (preferred) or 7d
+        # Derive velocity from 30d baseline (preferred) or 7d fallback.
+        # Baseline must be near the period cutoff; divide by actual days elapsed.
         velocity_per_day: Optional[float] = None
         trend_direction = TrendDirection.STABLE.value
-        since_30d = _date_n_days_ago(30)
-        snapshots_30d = self._repo.list_daily_snapshots_since(since_30d, limit=31)
-        if len(snapshots_30d) >= 2:
-            baseline_30d = snapshots_30d[0]
-            if baseline_30d.capture_date != current.capture_date:
-                delta_30d = compute_score_delta(
-                    current_avg, baseline_30d.average_freshness_score
-                )
-                velocity_per_day = round(delta_30d / 30.0, 4)
-                trend_direction = compute_trend_direction(delta_30d).value
+
+        def _velocity_from_period(period_days: int) -> Optional[float]:
+            nonlocal trend_direction
+            cutoff = _date_n_days_ago(period_days)
+            lower_bound = _date_n_days_ago(period_days * 2)
+            candidates = self._repo.list_daily_snapshots_since(
+                lower_bound, limit=period_days * 2 + 1
+            )
+            baseline = next(
+                (s for s in reversed(candidates) if s.capture_date <= cutoff), None
+            )
+            if baseline is None or baseline.capture_date == current.capture_date:
+                return None
+            actual_days = (
+                date.fromisoformat(current.capture_date)
+                - date.fromisoformat(baseline.capture_date)
+            ).days
+            if actual_days <= 0:
+                return None
+            delta = compute_score_delta(current_avg, baseline.average_freshness_score)
+            trend_direction = compute_trend_direction(delta).value
+            return round(delta / actual_days, 4)
+
+        velocity_per_day = _velocity_from_period(30)
         if velocity_per_day is None:
-            since_7d = _date_n_days_ago(7)
-            snapshots_7d = self._repo.list_daily_snapshots_since(since_7d, limit=8)
-            if len(snapshots_7d) >= 2:
-                baseline_7d = snapshots_7d[0]
-                if baseline_7d.capture_date != current.capture_date:
-                    delta_7d = compute_score_delta(
-                        current_avg, baseline_7d.average_freshness_score
-                    )
-                    velocity_per_day = round(delta_7d / 7.0, 4)
-                    trend_direction = compute_trend_direction(delta_7d).value
+            velocity_per_day = _velocity_from_period(7)
 
         def _project(horizon: int) -> Optional[float]:
             if velocity_per_day is None:
@@ -696,15 +706,17 @@ class FreshnessScoreHistoryEngine:
         forecast_60d = _project(60)
         forecast_90d = _project(90)
 
-        # Early warning: will score breach threshold within horizon?
+        # Early warning: threshold already breached OR will breach within horizon
         early_warning = False
         days_until_threshold: Optional[int] = None
-        if velocity_per_day is not None and velocity_per_day < 0:
-            # days until score hits threshold: (current - threshold) / abs(velocity)
+        if current_avg <= early_warning_threshold:
+            early_warning = True
+            days_until_threshold = 0
+        elif velocity_per_day is not None and velocity_per_day < 0:
             days_raw = (current_avg - early_warning_threshold) / abs(velocity_per_day)
             if 0 < days_raw <= early_warning_horizon_days:
                 early_warning = True
-                days_until_threshold = max(0, int(days_raw))
+                days_until_threshold = int(days_raw)
 
         return FreshnessGovernanceForecast(
             tenant_id=self._tenant_id,
