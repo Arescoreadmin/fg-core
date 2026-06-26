@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 709,
+    "contract_count": 725,
     "contract_only": [],
-    "runtime_count": 881,
+    "runtime_count": 891,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -68,12 +68,6 @@
       "GET /admin/tenants/{tenant_id}/subscriptions/items",
       "GET /admin/tenants/{tenant_id}/usage",
       "GET /admin/usage/all",
-      "GET /control-effectiveness/actions/{control_id}",
-      "GET /control-effectiveness/contributors/{control_id}",
-      "GET /control-effectiveness/executive-dashboard",
-      "GET /control-effectiveness/explain/{control_id}",
-      "GET /control-effectiveness/priorities",
-      "GET /control-effectiveness/rankings",
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
@@ -185,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "729aa5a2d439f6d6331d7a790acb28a600dc2583d31c67f9e2c2c8267e8043d6",
+  "governance_fingerprint": "09124c0b2224b7d72d56132998416d217d3b117662ecbcde273e9f3d5657d7d6",
   "planes": [
     {
       "compat": {
@@ -266,6 +260,7 @@
         "/portal/governance",
         "/rag",
         "/remediation",
+        "/remediation-effectiveness",
         "/risk-acceptances",
         "/risk-governance",
         "/signing",
@@ -756,6 +751,13 @@
       "GET /rag/documents/{document_id}/ingestion",
       "GET /rag/retrieval-policy",
       "GET /rag/uploads",
+      "GET /remediation-effectiveness",
+      "GET /remediation-effectiveness/cgin/snapshot",
+      "GET /remediation-effectiveness/dashboard",
+      "GET /remediation-effectiveness/failures",
+      "GET /remediation-effectiveness/patterns",
+      "GET /remediation-effectiveness/top-successes",
+      "GET /remediation-effectiveness/{remediation_id}",
       "GET /remediation/tasks",
       "GET /remediation/tasks/overdue",
       "GET /remediation/tasks/unassigned",
@@ -806,6 +808,7 @@
       "PATCH /governance/assets/{asset_id}",
       "PATCH /governance/workflows/{workflow_id}/transition",
       "PATCH /portal/remediation/tasks/{task_id}/comments/{comment_id}",
+      "PATCH /remediation-effectiveness/{remediation_id}",
       "PATCH /remediation/tasks/{task_id}",
       "PATCH /risk-acceptances/{ra_id}",
       "POST /admin/agent/commands/issue",
@@ -1015,6 +1018,8 @@
       "POST /portal/remediation/tasks/{task_id}/evidence",
       "POST /rag/documents/{document_id}/retry-ingestion",
       "POST /rag/upload",
+      "POST /remediation-effectiveness",
+      "POST /remediation-effectiveness/recalculate",
       "POST /remediation/tasks",
       "POST /remediation/tasks/{task_id}/assign",
       "POST /remediation/tasks/{task_id}/close",
