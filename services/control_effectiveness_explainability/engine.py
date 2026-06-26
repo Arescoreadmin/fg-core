@@ -145,7 +145,9 @@ class ExplainabilityEngine:
         )
         return [RootCauseItem(**d) for d in items]
 
-    def _actions_from_row(self, row: FaControlEffectiveness) -> list[GovernanceActionItem]:
+    def _actions_from_row(
+        self, row: FaControlEffectiveness
+    ) -> list[GovernanceActionItem]:
         items = compute_governance_actions(
             verification_score=row.verification_score,
             freshness_score=row.freshness_score,
@@ -265,9 +267,7 @@ class ExplainabilityEngine:
     # Public: GET /control-effectiveness/priorities
     # ------------------------------------------------------------------
 
-    def get_priorities(
-        self, limit: int, offset: int
-    ) -> PrioritiesResponse:
+    def get_priorities(self, limit: int, offset: int) -> PrioritiesResponse:
         now = _now_iso()
         all_rows = self._ce_repo.list_all_effectiveness()
 
@@ -396,7 +396,9 @@ class ExplainabilityEngine:
 
         # MOST_FRAGILE: lowest governance_health_score (non-null)
         with_health = [r for r in all_rows if r.governance_health_score is not None]
-        most_fragile = sorted(with_health, key=lambda r: r.governance_health_score or 100.0)
+        most_fragile = sorted(
+            with_health, key=lambda r: r.governance_health_score or 100.0
+        )
         self._repo.replace_rankings(
             RankType.MOST_FRAGILE.value,
             _rows_to_ranking(most_fragile, "MOST_FRAGILE"),
@@ -511,8 +513,6 @@ class ExplainabilityEngine:
         high_risk = sum(1 for r in all_rows if r.effectiveness_risk == "HIGH")
 
         # Priority distribution
-        from services.control_effectiveness_explainability.models import PRIORITY_ORDER
-
         prio_counts: dict[str, int] = {
             "CRITICAL": 0,
             "HIGH": 0,
@@ -560,11 +560,19 @@ class ExplainabilityEngine:
                 )
 
         top_positive = sorted(
-            [k.split(":", 1)[1] for k, _ in sorted(signal_freq.items(), key=lambda x: -x[1]) if k.startswith("POSITIVE:")],
+            [
+                k.split(":", 1)[1]
+                for k, _ in sorted(signal_freq.items(), key=lambda x: -x[1])
+                if k.startswith("POSITIVE:")
+            ],
             key=lambda t: -signal_freq.get(f"POSITIVE:{t}", 0),
         )[:5]
         top_negative = sorted(
-            [k.split(":", 1)[1] for k, _ in sorted(signal_freq.items(), key=lambda x: -x[1]) if k.startswith("NEGATIVE:")],
+            [
+                k.split(":", 1)[1]
+                for k, _ in sorted(signal_freq.items(), key=lambda x: -x[1])
+                if k.startswith("NEGATIVE:")
+            ],
             key=lambda t: -signal_freq.get(f"NEGATIVE:{t}", 0),
         )[:5]
         top_actions = sorted(action_freq, key=lambda t: -action_freq[t])[:5]
@@ -608,7 +616,10 @@ class ExplainabilityEngine:
         def _derive_highest_risk() -> list[RankingItem]:
             rows = sorted(
                 all_rows,
-                key=lambda r: (RISK_SEVERITY.get(r.effectiveness_risk, 3), r.effectiveness_score),
+                key=lambda r: (
+                    RISK_SEVERITY.get(r.effectiveness_risk, 3),
+                    r.effectiveness_score,
+                ),
             )
             return [
                 self._ranking_item_from_row(r, "HIGHEST_RISK", i + 1)
@@ -617,7 +628,9 @@ class ExplainabilityEngine:
 
         def _derive_improving() -> list[RankingItem]:
             with_delta = [r for r in all_rows if r.score_delta_30d is not None]
-            rows = sorted(with_delta, key=lambda r: r.score_delta_30d or 0.0, reverse=True)
+            rows = sorted(
+                with_delta, key=lambda r: r.score_delta_30d or 0.0, reverse=True
+            )
             return [
                 self._ranking_item_from_row(r, "FASTEST_IMPROVING", i + 1)
                 for i, r in enumerate(rows[:5])
@@ -641,7 +654,9 @@ class ExplainabilityEngine:
             else _derive_highest_risk()
         )
         improving_items = (
-            _stored_to_items(stored_improving) if stored_improving else _derive_improving()
+            _stored_to_items(stored_improving)
+            if stored_improving
+            else _derive_improving()
         )
         declining_items = (
             _stored_to_items(stored_declining)

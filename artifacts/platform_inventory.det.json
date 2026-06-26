@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 703,
+    "contract_count": 709,
     "contract_only": [],
-    "runtime_count": 875,
+    "runtime_count": 881,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -68,11 +68,12 @@
       "GET /admin/tenants/{tenant_id}/subscriptions/items",
       "GET /admin/tenants/{tenant_id}/usage",
       "GET /admin/usage/all",
-      "GET /control-effectiveness",
-      "GET /control-effectiveness/cgin/snapshot",
-      "GET /control-effectiveness/dashboard",
-      "GET /control-effectiveness/history/{control_id}",
-      "GET /control-effectiveness/{control_id}",
+      "GET /control-effectiveness/actions/{control_id}",
+      "GET /control-effectiveness/contributors/{control_id}",
+      "GET /control-effectiveness/executive-dashboard",
+      "GET /control-effectiveness/explain/{control_id}",
+      "GET /control-effectiveness/priorities",
+      "GET /control-effectiveness/rankings",
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
@@ -165,7 +166,6 @@
       "POST /admin/tenants/{tenant_id}/entitlements",
       "POST /admin/tenants/{tenant_id}/subscriptions",
       "POST /admin/tenants/{tenant_id}/suspend",
-      "POST /control-effectiveness/recalculate",
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
@@ -185,7 +185,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "66c65841d232bc6d722ecc6fff73c14b8787be2a254dcfc1ca68de200ca1bdd0",
+  "governance_fingerprint": "729aa5a2d439f6d6331d7a790acb28a600dc2583d31c67f9e2c2c8267e8043d6",
   "planes": [
     {
       "compat": {
@@ -481,9 +481,15 @@
       "GET /compliance/requirements/diff",
       "GET /compliance/requirements/updates",
       "GET /control-effectiveness",
+      "GET /control-effectiveness/actions/{control_id}",
       "GET /control-effectiveness/cgin/snapshot",
+      "GET /control-effectiveness/contributors/{control_id}",
       "GET /control-effectiveness/dashboard",
+      "GET /control-effectiveness/executive-dashboard",
+      "GET /control-effectiveness/explain/{control_id}",
       "GET /control-effectiveness/history/{control_id}",
+      "GET /control-effectiveness/priorities",
+      "GET /control-effectiveness/rankings",
       "GET /control-effectiveness/{control_id}",
       "GET /control-framework-mappings/{mapping_id}",
       "GET /control-framework-mappings/{mapping_id}/audit",

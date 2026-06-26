@@ -506,15 +506,15 @@ def detect_change(
 
     if primary > 10:
         status = "IMPROVED"
-        explanation = f"Score improved by {primary:+.1f} points over the measurement period."
+        explanation = (
+            f"Score improved by {primary:+.1f} points over the measurement period."
+        )
     elif primary > 3:
         status = "IMPROVING"
         explanation = f"Score has shown moderate improvement of {primary:+.1f} points."
     elif primary < -10:
         status = "CRITICAL"
-        explanation = (
-            f"Score declined by {abs(primary):.1f} points — immediate attention required."
-        )
+        explanation = f"Score declined by {abs(primary):.1f} points — immediate attention required."
     elif primary < -3:
         status = "DECLINING"
         explanation = f"Score has declined by {abs(primary):.1f} points over the measurement period."
