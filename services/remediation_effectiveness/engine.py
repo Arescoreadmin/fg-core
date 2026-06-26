@@ -37,7 +37,6 @@ from services.remediation_effectiveness.models import (
     classify_category_from_string,
     classify_effectiveness_level,
     classify_outcome,
-    classify_persistence,
     classify_roi,
     compute_remediation_effectiveness_score,
     compute_roi_score,
@@ -57,7 +56,6 @@ from services.remediation_effectiveness.schemas import (
     RemediationDashboardResponse,
     RemediationOutcomeResponse,
     TopSuccessesResponse,
-    UpdateOutcomeRequest,
 )
 
 
@@ -426,9 +424,7 @@ class RemediationEffectivenessEngine:
     # Public: GET /remediation-effectiveness/{remediation_id}
     # ------------------------------------------------------------------
 
-    def get_outcome(
-        self, remediation_id: str
-    ) -> Optional[RemediationOutcomeResponse]:
+    def get_outcome(self, remediation_id: str) -> Optional[RemediationOutcomeResponse]:
         """Retrieve a single outcome by ID."""
         row = self._repo.get_outcome(remediation_id)
         if row is None:
@@ -452,9 +448,7 @@ class RemediationEffectivenessEngine:
             offset=offset,
             outcome_classification=outcome_classification,
         )
-        total = self._repo.count_outcomes(
-            outcome_classification=outcome_classification
-        )
+        total = self._repo.count_outcomes(outcome_classification=outcome_classification)
         success_count = self._repo.count_outcomes(
             outcome_classification=OutcomeClassification.SUCCESS.value
         )
@@ -530,8 +524,8 @@ class RemediationEffectivenessEngine:
         top_cat: Optional[str] = None
         worst_cat: Optional[str] = None
         if all_learning:
-            best = max(all_learning, key=lambda l: l.success_rate)
-            worst = min(all_learning, key=lambda l: l.success_rate)
+            best = max(all_learning, key=lambda learning: learning.success_rate)
+            worst = min(all_learning, key=lambda learning: learning.success_rate)
             top_cat = best.remediation_category
             worst_cat = worst.remediation_category
 
@@ -543,19 +537,19 @@ class RemediationEffectivenessEngine:
 
         learning_items = [
             LearningItem(
-                remediation_category=l.remediation_category,
-                total_remediations=l.total_remediations,
-                success_count=l.success_count,
-                partial_success_count=l.partial_success_count,
-                no_change_count=l.no_change_count,
-                regression_count=l.regression_count,
-                failure_count=l.failure_count,
-                success_rate=l.success_rate,
-                average_score_delta=l.average_score_delta,
-                average_roi_score=l.average_roi_score,
-                last_updated_at=l.last_updated_at,
+                remediation_category=learning.remediation_category,
+                total_remediations=learning.total_remediations,
+                success_count=learning.success_count,
+                partial_success_count=learning.partial_success_count,
+                no_change_count=learning.no_change_count,
+                regression_count=learning.regression_count,
+                failure_count=learning.failure_count,
+                success_rate=learning.success_rate,
+                average_score_delta=learning.average_score_delta,
+                average_roi_score=learning.average_roi_score,
+                last_updated_at=learning.last_updated_at,
             )
-            for l in all_learning
+            for learning in all_learning
         ]
 
         return RemediationDashboardResponse(
@@ -689,9 +683,7 @@ class RemediationEffectivenessEngine:
     # Public: POST /remediation-effectiveness/recalculate
     # ------------------------------------------------------------------
 
-    def recalculate(
-        self, control_id: Optional[str] = None
-    ) -> RecalculateResponse:
+    def recalculate(self, control_id: Optional[str] = None) -> RecalculateResponse:
         """Recalculate patterns and learning aggregates.
 
         If control_id is provided, only re-detect patterns for that control.
