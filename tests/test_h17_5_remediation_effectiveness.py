@@ -39,7 +39,6 @@ from services.remediation_effectiveness.models import (
     OUTCOME_SUCCESS_THRESHOLD,
     REMEDIATION_EFFECTIVENESS_VERSION,
     OutcomeClassification,
-    PatternSeverity,
     PatternType,
     PersistenceClassification,
     ROIClassification,
@@ -306,7 +305,8 @@ class TestClassifyEffectivenessLevel:
 
     def test_REM_28_60_is_effective(self):
         assert (
-            classify_effectiveness_level(60.0) == RemediationEffectivenessLevel.EFFECTIVE
+            classify_effectiveness_level(60.0)
+            == RemediationEffectivenessLevel.EFFECTIVE
         )
 
     def test_REM_29_45_is_adequate(self):
@@ -562,8 +562,6 @@ class TestOrmInstantiation:
         assert row.roi_score > 50.0
 
     def test_REM_61_learning_unique_constraint_enforced(self, db):
-        import sqlalchemy.exc
-
         row1 = FaRemediationLearning(
             id=_uid(),
             tenant_id=_TENANT,
@@ -604,8 +602,6 @@ class TestOrmInstantiation:
     def test_REM_62_persistence_unique_constraint_on_tenant_remediation_window(
         self, db
     ):
-        import sqlalchemy.exc
-
         outcome = _make_outcome_row()
         db.add(outcome)
         db.flush()
@@ -639,8 +635,6 @@ class TestOrmInstantiation:
         db.rollback()
 
     def test_REM_63_pattern_unique_constraint_on_tenant_control_type(self, db):
-        import sqlalchemy.exc
-
         cid = _uid()
         p1 = FaRemediationPattern(
             id=_uid(),
@@ -791,14 +785,11 @@ class TestAppendOnlyGuards:
     def test_REM_74_outcome_has_correct_indexes(self):
         # Verify __table_args__ contains expected index definitions
         arg_names = [
-            getattr(arg, "name", None)
-            for arg in FaRemediationOutcome.__table_args__
+            getattr(arg, "name", None) for arg in FaRemediationOutcome.__table_args__
         ]
         assert any("tenant" in (n or "") for n in arg_names)
 
-    def test_REM_75_persistence_different_windows_on_same_remediation_allowed(
-        self, db
-    ):
+    def test_REM_75_persistence_different_windows_on_same_remediation_allowed(self, db):
         outcome = _make_outcome_row()
         db.add(outcome)
         db.flush()
@@ -1394,8 +1385,12 @@ class TestPostOutcome:
         assert "generated_at" in resp.json()
 
     def test_REM_176_post_multiple_outcomes_different_ids(self, client):
-        r1 = client.post("/remediation-effectiveness", json=self._valid_payload()).json()
-        r2 = client.post("/remediation-effectiveness", json=self._valid_payload()).json()
+        r1 = client.post(
+            "/remediation-effectiveness", json=self._valid_payload()
+        ).json()
+        r2 = client.post(
+            "/remediation-effectiveness", json=self._valid_payload()
+        ).json()
         assert r1["id"] != r2["id"]
 
     def test_REM_177_post_coverage_category(self, client):
@@ -1451,12 +1446,24 @@ class TestPostOutcome:
         resp = client.post("/remediation-effectiveness", json=self._valid_payload())
         data = resp.json()
         required = [
-            "id", "tenant_id", "remediation_task_id", "control_id",
-            "before_score", "after_score", "score_delta",
-            "before_effectiveness_level", "after_effectiveness_level",
-            "outcome_classification", "remediation_effectiveness_score",
-            "effectiveness_level", "roi_score", "roi_classification",
-            "remediation_category", "status", "measured_at", "generated_at",
+            "id",
+            "tenant_id",
+            "remediation_task_id",
+            "control_id",
+            "before_score",
+            "after_score",
+            "score_delta",
+            "before_effectiveness_level",
+            "after_effectiveness_level",
+            "outcome_classification",
+            "remediation_effectiveness_score",
+            "effectiveness_level",
+            "roi_score",
+            "roi_classification",
+            "remediation_category",
+            "status",
+            "measured_at",
+            "generated_at",
         ]
         for field in required:
             assert field in data, f"Missing field: {field}"
@@ -1541,10 +1548,18 @@ class TestGetRoutes:
         resp = client.get("/remediation-effectiveness/dashboard")
         data = resp.json()
         required = [
-            "tenant_id", "total_remediations", "success_count", "failure_count",
-            "success_rate", "average_score_delta", "average_roi_score",
-            "average_effectiveness_score", "active_patterns", "critical_patterns",
-            "learning", "generated_at",
+            "tenant_id",
+            "total_remediations",
+            "success_count",
+            "failure_count",
+            "success_rate",
+            "average_score_delta",
+            "average_roi_score",
+            "average_effectiveness_score",
+            "active_patterns",
+            "critical_patterns",
+            "learning",
+            "generated_at",
         ]
         for field in required:
             assert field in data, f"Missing field: {field}"
@@ -1571,7 +1586,9 @@ class TestGetRoutes:
     def test_REM_213_get_top_successes_limit_param(self, client):
         for _ in range(5):
             self._post_outcome(client, before=60.0, after=75.0)
-        resp = client.get("/remediation-effectiveness/top-successes", params={"limit": 3})
+        resp = client.get(
+            "/remediation-effectiveness/top-successes", params={"limit": 3}
+        )
         data = resp.json()
         assert len(data["items"]) == 3
 
@@ -1601,9 +1618,13 @@ class TestGetRoutes:
         resp = client.get("/remediation-effectiveness/cgin/snapshot")
         data = resp.json()
         required = [
-            "tenant_id", "total_remediations", "success_rate",
-            "average_score_delta", "average_roi_score",
-            "patterns_detected", "snapshot_at",
+            "tenant_id",
+            "total_remediations",
+            "success_rate",
+            "average_score_delta",
+            "average_roi_score",
+            "patterns_detected",
+            "snapshot_at",
         ]
         for field in required:
             assert field in data, f"Missing field: {field}"
@@ -1739,21 +1760,15 @@ class TestEdgeCases:
         assert resp.status_code == 404
 
     def test_REM_233_list_limit_max_200(self, client):
-        resp = client.get(
-            "/remediation-effectiveness", params={"limit": 201}
-        )
+        resp = client.get("/remediation-effectiveness", params={"limit": 201})
         assert resp.status_code == 422
 
     def test_REM_234_list_limit_min_1(self, client):
-        resp = client.get(
-            "/remediation-effectiveness", params={"limit": 0}
-        )
+        resp = client.get("/remediation-effectiveness", params={"limit": 0})
         assert resp.status_code == 422
 
     def test_REM_235_list_offset_cannot_be_negative(self, client):
-        resp = client.get(
-            "/remediation-effectiveness", params={"offset": -1}
-        )
+        resp = client.get("/remediation-effectiveness", params={"offset": -1})
         assert resp.status_code == 422
 
     def test_REM_236_top_successes_limit_min_1(self, client):
@@ -1813,8 +1828,13 @@ class TestEdgeCases:
     def test_REM_244_pattern_detection_consistent_improvement(self, db):
         cid = _uid()
         for _ in range(3):
-            _record_outcome(db, tenant_id=_TENANT, control_id=cid,
-                            before_score=60.0, after_score=75.0)
+            _record_outcome(
+                db,
+                tenant_id=_TENANT,
+                control_id=cid,
+                before_score=60.0,
+                after_score=75.0,
+            )
         db.commit()
         result = _engine(db).recalculate()
         assert result.patterns_detected >= 1
@@ -1822,10 +1842,12 @@ class TestEdgeCases:
     def test_REM_245_pattern_detection_rollback(self, db):
         cid = _uid()
         # SUCCESS then FAILURE
-        _record_outcome(db, tenant_id=_TENANT, control_id=cid,
-                        before_score=60.0, after_score=75.0)
-        _record_outcome(db, tenant_id=_TENANT, control_id=cid,
-                        before_score=70.0, after_score=55.0)
+        _record_outcome(
+            db, tenant_id=_TENANT, control_id=cid, before_score=60.0, after_score=75.0
+        )
+        _record_outcome(
+            db, tenant_id=_TENANT, control_id=cid, before_score=70.0, after_score=55.0
+        )
         db.commit()
         result = _engine(db).recalculate()
         assert result.patterns_detected >= 1
@@ -1876,8 +1898,13 @@ class TestEdgeCases:
     def test_REM_255_pattern_detection_no_improvement(self, db):
         cid = _uid()
         for _ in range(3):
-            _record_outcome(db, tenant_id=_TENANT, control_id=cid,
-                            before_score=60.0, after_score=60.0)
+            _record_outcome(
+                db,
+                tenant_id=_TENANT,
+                control_id=cid,
+                before_score=60.0,
+                after_score=60.0,
+            )
         db.commit()
         result = _engine(db).recalculate()
         assert result.patterns_detected >= 1
@@ -1885,14 +1912,18 @@ class TestEdgeCases:
     def test_REM_256_pattern_repeated_failure_critical_severity(self, db):
         cid = _uid()
         for _ in range(3):
-            _record_outcome(db, tenant_id=_TENANT, control_id=cid,
-                            before_score=70.0, after_score=55.0)
+            _record_outcome(
+                db,
+                tenant_id=_TENANT,
+                control_id=cid,
+                before_score=70.0,
+                after_score=55.0,
+            )
         db.commit()
         _engine(db).recalculate()
         patterns_resp = _engine(db).get_patterns()
         critical = [
-            p for p in patterns_resp.patterns
-            if p.pattern_type == "REPEATED_FAILURE"
+            p for p in patterns_resp.patterns if p.pattern_type == "REPEATED_FAILURE"
         ]
         assert len(critical) >= 1
         assert critical[0].severity == "CRITICAL"
@@ -2196,20 +2227,28 @@ class TestComponentScoreFields:
     def test_REM_273_outcome_response_schema_has_component_fields(self):
         fields = RemediationOutcomeResponse.model_fields
         for field in (
-            "verification_before", "verification_after",
-            "freshness_before", "freshness_after",
-            "forecast_before", "forecast_after",
-            "governance_health_before", "governance_health_after",
+            "verification_before",
+            "verification_after",
+            "freshness_before",
+            "freshness_after",
+            "forecast_before",
+            "forecast_after",
+            "governance_health_before",
+            "governance_health_after",
         ):
             assert field in fields, f"Missing field: {field}"
 
     def test_REM_274_record_request_schema_has_component_fields(self):
         fields = RecordOutcomeRequest.model_fields
         for field in (
-            "verification_before", "verification_after",
-            "freshness_before", "freshness_after",
-            "forecast_before", "forecast_after",
-            "governance_health_before", "governance_health_after",
+            "verification_before",
+            "verification_after",
+            "freshness_before",
+            "freshness_after",
+            "forecast_before",
+            "forecast_after",
+            "governance_health_before",
+            "governance_health_after",
         ):
             assert field in fields, f"Missing field: {field}"
 
@@ -2465,7 +2504,9 @@ class TestDuplicatePrevention:
     """REM-293 through REM-297: duplicate outcome prevention."""
 
     def test_REM_293_duplicate_task_control_raises_engine_error(self, db):
-        from services.remediation_effectiveness.engine import DuplicateRemediationOutcome
+        from services.remediation_effectiveness.engine import (
+            DuplicateRemediationOutcome,
+        )
 
         task_id = _uid()
         ctrl_id = _uid()
@@ -2597,13 +2638,17 @@ class TestFailureCounts:
         ctrl_id = _uid()
         for _ in range(30):
             row = _make_outcome_row(
-                control_id=ctrl_id, before_score=70.0, after_score=55.0,
+                control_id=ctrl_id,
+                before_score=70.0,
+                after_score=55.0,
                 outcome_classification="FAILURE",
             )
             db.add(row)
         for _ in range(25):
             row = _make_outcome_row(
-                control_id=ctrl_id, before_score=70.0, after_score=62.0,
+                control_id=ctrl_id,
+                before_score=70.0,
+                after_score=62.0,
                 outcome_classification="REGRESSION",
             )
             db.add(row)
