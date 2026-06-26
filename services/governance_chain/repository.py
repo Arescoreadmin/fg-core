@@ -149,8 +149,14 @@ class GovernanceChainRepository:
         )
         return {r[0]: r[1] for r in rows}
 
-    def count_executions_success_failure(self) -> tuple[int, int, int]:
-        """Returns (total, successful, failed)."""
+    def count_executions_success_failure(self) -> tuple[int, int, int, int]:
+        """Returns (total, successful, failed, skipped).
+
+        Skipped = SKIPPED_UNAVAILABLE only (success=0, required data absent).
+        NOOP_SAFE has success=1 and counts in successful, not skipped.
+        Failed  = success=0 AND execution_result != SKIPPED_UNAVAILABLE.
+        """
+        _SKIPPED_RESULTS = ("SKIPPED_UNAVAILABLE",)
         total = (
             self._db.query(FaGovernanceChainExecution)
             .filter(FaGovernanceChainExecution.tenant_id == self._tenant_id)
@@ -164,15 +170,24 @@ class GovernanceChainRepository:
             )
             .count()
         )
+        skipped_count = (
+            self._db.query(FaGovernanceChainExecution)
+            .filter(
+                FaGovernanceChainExecution.tenant_id == self._tenant_id,
+                FaGovernanceChainExecution.execution_result.in_(_SKIPPED_RESULTS),
+            )
+            .count()
+        )
         failed_count = (
             self._db.query(FaGovernanceChainExecution)
             .filter(
                 FaGovernanceChainExecution.tenant_id == self._tenant_id,
                 FaGovernanceChainExecution.success == 0,
+                ~FaGovernanceChainExecution.execution_result.in_(_SKIPPED_RESULTS),
             )
             .count()
         )
-        return total, success_count, failed_count
+        return total, success_count, failed_count, skipped_count
 
     def average_duration_by_bridge(self) -> dict[str, Optional[float]]:
         rows = (

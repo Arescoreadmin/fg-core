@@ -1042,10 +1042,9 @@ class GovernanceChainEngine:
         total_events = sum(event_dist.values())
 
         bridge_dist = self._repo.count_executions_by_bridge()
-        total_exec, success_count, failed_count = (
+        total_exec, success_count, failed_count, skipped_count = (
             self._repo.count_executions_success_failure()
         )
-        skipped_count = max(0, total_exec - success_count - failed_count)
 
         success_rate = round(success_count / total_exec, 4) if total_exec > 0 else 1.0
 
@@ -1122,9 +1121,14 @@ class GovernanceChainEngine:
 
     def get_cgin_snapshot(self) -> CGINChainSnapshotBundle:
         fingerprint = _tenant_fingerprint(self._tenant_id)
-        avg_by_bridge = self._repo.average_duration_by_bridge()
+        _SKIPPED = (
+            ChainExecutionResult.SKIPPED_UNAVAILABLE.value,
+            ChainExecutionResult.NOOP_SAFE.value,
+        )
 
-        # Build per-authority aggregates from execution records
+        # Build per-authority aggregates from execution records.
+        # Duration is accumulated here (keyed by target_authority) rather than
+        # using average_duration_by_bridge() which is keyed by bridge_type.
         authority_map: dict[str, dict] = {}
         rows, _ = self._repo.list_executions(limit=10000)
         for row in rows:
@@ -1135,14 +1139,16 @@ class GovernanceChainEngine:
                     "success_count": 0,
                     "failure_count": 0,
                     "skipped_count": 0,
+                    "total_duration_ms": 0.0,
+                    "duration_count": 0,
                 }
             authority_map[auth]["execution_count"] += 1
+            if row.duration_ms is not None:
+                authority_map[auth]["total_duration_ms"] += row.duration_ms
+                authority_map[auth]["duration_count"] += 1
             if row.success:
                 authority_map[auth]["success_count"] += 1
-            elif row.execution_result in (
-                ChainExecutionResult.SKIPPED_UNAVAILABLE.value,
-                ChainExecutionResult.NOOP_SAFE.value,
-            ):
+            elif row.execution_result in _SKIPPED:
                 authority_map[auth]["skipped_count"] += 1
             else:
                 authority_map[auth]["failure_count"] += 1
@@ -1152,6 +1158,10 @@ class GovernanceChainEngine:
             exec_count = counts["execution_count"]
             success = counts["success_count"]
             success_rate = round(success / exec_count, 4) if exec_count > 0 else 0.0
+            dc = counts["duration_count"]
+            avg_ms = (
+                round(counts["total_duration_ms"] / dc, 2) if dc > 0 else None
+            )
             snapshots.append(
                 CGINChainAuthoritySnapshot(
                     authority=auth,
@@ -1160,7 +1170,7 @@ class GovernanceChainEngine:
                     failure_count=counts["failure_count"],
                     skipped_count=counts["skipped_count"],
                     success_rate=success_rate,
-                    average_duration_ms=avg_by_bridge.get(auth),
+                    average_duration_ms=avg_ms,
                 )
             )
 

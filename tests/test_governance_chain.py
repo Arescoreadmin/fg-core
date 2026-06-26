@@ -2192,3 +2192,57 @@ class TestEdgeCases:
 
     def test_GC_210_health_weight_effectiveness_correct(self):
         assert HEALTH_WEIGHT_EFFECTIVENESS == 0.25
+
+    def test_GC_211_skipped_bridges_not_counted_as_failures(self, build_app):
+        # Regression: SKIPPED_UNAVAILABLE had success=0, causing count_executions_success_failure
+        # to lump skipped rows into failed_count and return skipped_executions=0 from diagnostics.
+        build_app(auth_enabled=False)
+        tid = f"t-skip-{_uid()[:8]}"
+        with Session(get_engine()) as db:
+            engine = GovernanceChainEngine(db, tid)
+            # FRESHNESS_TO_EFFECTIVENESS skips when no control_id is provided
+            for _ in range(3):
+                req = ExecuteBridgeRequest(
+                    bridge=BridgeType.FRESHNESS_TO_EFFECTIVENESS.value,
+                    trigger_object_id=_uid(),
+                    trigger_object_type="freshness_record",
+                    trigger_reason="no control_id",
+                )
+                engine.execute_bridge(req, "a", "service")
+            db.commit()
+            diag = engine.get_diagnostics()
+
+        assert diag.total_bridge_executions == 3
+        assert diag.skipped_executions == 3, (
+            f"Expected 3 skipped, got {diag.skipped_executions} "
+            f"(failed={diag.failed_executions})"
+        )
+        assert diag.failed_executions == 0
+        assert diag.successful_executions == 0
+
+    def test_GC_212_cgin_average_duration_ms_not_null_after_executions(self, build_app):
+        # Regression: avg_by_bridge was keyed by bridge_type (e.g. 'EVIDENCE_TO_VERIFICATION')
+        # but the CGIN lookup used target_authority (e.g. 'verification_authority'), so
+        # average_duration_ms was always null even when executions had been recorded.
+        build_app(auth_enabled=False)
+        tid = f"t-avgdur-{_uid()[:8]}"
+        with Session(get_engine()) as db:
+            engine = GovernanceChainEngine(db, tid)
+            # ASSESSMENT_TO_EVIDENCE is NOOP_SAFE — always records an execution with a duration
+            for _ in range(2):
+                req = ExecuteBridgeRequest(
+                    bridge=BridgeType.ASSESSMENT_TO_EVIDENCE.value,
+                    trigger_object_id=_uid(),
+                    trigger_object_type="assessment",
+                    trigger_reason="duration test",
+                )
+                engine.execute_bridge(req, "a", "service")
+            db.commit()
+            bundle = engine.get_cgin_snapshot()
+
+        # At least one authority snapshot must have a non-null average_duration_ms
+        durations = [s.average_duration_ms for s in bundle.authority_snapshots]
+        assert any(d is not None for d in durations), (
+            "All authority_snapshots have average_duration_ms=None — "
+            "key mismatch between bridge_type and target_authority likely regressed"
+        )
