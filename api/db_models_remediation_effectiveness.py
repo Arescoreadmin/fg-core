@@ -63,6 +63,19 @@ class FaRemediationOutcome(Base):
     roi_classification: Mapped[str] = mapped_column(String(32), nullable=False)
     remediation_category: Mapped[str] = mapped_column(String(32), nullable=False)
 
+    verification_before: Mapped[float | None] = mapped_column(Float, nullable=True)
+    verification_after: Mapped[float | None] = mapped_column(Float, nullable=True)
+    verification_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    freshness_before: Mapped[float | None] = mapped_column(Float, nullable=True)
+    freshness_after: Mapped[float | None] = mapped_column(Float, nullable=True)
+    freshness_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forecast_before: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forecast_after: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forecast_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    governance_health_before: Mapped[float | None] = mapped_column(Float, nullable=True)
+    governance_health_after: Mapped[float | None] = mapped_column(Float, nullable=True)
+    governance_health_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="COMPLETE")
     measured_at: Mapped[str] = mapped_column(String(64), nullable=False)
     calculation_version: Mapped[str] = mapped_column(

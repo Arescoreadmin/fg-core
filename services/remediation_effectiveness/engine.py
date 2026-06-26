@@ -69,6 +69,12 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
+def _component_delta(before: float | None, after: float | None) -> float | None:
+    if before is None or after is None:
+        return None
+    return round(after - before, 4)
+
+
 class RemediationEffectivenessEngine:
     """Derives remediation effectiveness analytics from stored outcome data."""
 
@@ -100,6 +106,18 @@ class RemediationEffectivenessEngine:
             roi_score=row.roi_score,
             roi_classification=row.roi_classification,
             remediation_category=row.remediation_category,
+            verification_before=row.verification_before,
+            verification_after=row.verification_after,
+            verification_delta=row.verification_delta,
+            freshness_before=row.freshness_before,
+            freshness_after=row.freshness_after,
+            freshness_delta=row.freshness_delta,
+            forecast_before=row.forecast_before,
+            forecast_after=row.forecast_after,
+            forecast_delta=row.forecast_delta,
+            governance_health_before=row.governance_health_before,
+            governance_health_after=row.governance_health_after,
+            governance_health_delta=row.governance_health_delta,
             status=row.status,
             measured_at=row.measured_at,
             generated_at=_now_iso(),
@@ -364,6 +382,26 @@ class RemediationEffectivenessEngine:
             roi_score=round(roi, 4),
             roi_classification=roi_cls.value,
             remediation_category=category.value,
+            verification_before=request.verification_before,
+            verification_after=request.verification_after,
+            verification_delta=_component_delta(
+                request.verification_before, request.verification_after
+            ),
+            freshness_before=request.freshness_before,
+            freshness_after=request.freshness_after,
+            freshness_delta=_component_delta(
+                request.freshness_before, request.freshness_after
+            ),
+            forecast_before=request.forecast_before,
+            forecast_after=request.forecast_after,
+            forecast_delta=_component_delta(
+                request.forecast_before, request.forecast_after
+            ),
+            governance_health_before=request.governance_health_before,
+            governance_health_after=request.governance_health_after,
+            governance_health_delta=_component_delta(
+                request.governance_health_before, request.governance_health_after
+            ),
             status="COMPLETE",
             measured_at=now,
             calculation_version=REMEDIATION_EFFECTIVENESS_VERSION,

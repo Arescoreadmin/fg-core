@@ -1948,3 +1948,413 @@ class TestEdgeCases:
                 last_seen_at=_now_str(),
                 bad_field="value",
             )
+
+
+# ===========================================================================
+# REM-261 to REM-274: Component score fields
+# ===========================================================================
+
+
+class TestComponentScoreFields:
+    """REM-261 through REM-274: verification/freshness/forecast/governance_health fields."""
+
+    def test_REM_261_record_outcome_request_accepts_component_scores(self):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            verification_before=55.0,
+            verification_after=70.0,
+            freshness_before=60.0,
+            freshness_after=78.0,
+            forecast_before=50.0,
+            forecast_after=65.0,
+            governance_health_before=45.0,
+            governance_health_after=62.0,
+        )
+        assert req.verification_before == 55.0
+        assert req.verification_after == 70.0
+        assert req.freshness_before == 60.0
+        assert req.freshness_after == 78.0
+        assert req.forecast_before == 50.0
+        assert req.forecast_after == 65.0
+        assert req.governance_health_before == 45.0
+        assert req.governance_health_after == 62.0
+
+    def test_REM_262_component_scores_default_to_none(self):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+        )
+        assert req.verification_before is None
+        assert req.verification_after is None
+        assert req.freshness_before is None
+        assert req.freshness_after is None
+        assert req.forecast_before is None
+        assert req.forecast_after is None
+        assert req.governance_health_before is None
+        assert req.governance_health_after is None
+
+    def test_REM_263_engine_stores_and_returns_component_scores(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=78.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            verification_before=55.0,
+            verification_after=72.0,
+            freshness_before=60.0,
+            freshness_after=80.0,
+            forecast_before=48.0,
+            forecast_after=64.0,
+            governance_health_before=42.0,
+            governance_health_after=60.0,
+        )
+        result = _engine(db).record_outcome(req)
+        assert result.verification_before == 55.0
+        assert result.verification_after == 72.0
+        assert result.freshness_before == 60.0
+        assert result.freshness_after == 80.0
+        assert result.forecast_before == 48.0
+        assert result.forecast_after == 64.0
+        assert result.governance_health_before == 42.0
+        assert result.governance_health_after == 60.0
+
+    def test_REM_264_component_scores_null_when_not_provided(self, db):
+        result = _record_outcome(db)
+        assert result.verification_before is None
+        assert result.verification_after is None
+        assert result.freshness_before is None
+        assert result.freshness_after is None
+        assert result.forecast_before is None
+        assert result.forecast_after is None
+        assert result.governance_health_before is None
+        assert result.governance_health_after is None
+
+    def test_REM_265_component_scores_persisted_and_retrieved(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=55.0,
+            after_score=70.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            verification_before=50.0,
+            verification_after=68.0,
+        )
+        created = _engine(db).record_outcome(req)
+        fetched = _engine(db).get_outcome(created.id)
+        assert fetched is not None
+        assert fetched.verification_before == 50.0
+        assert fetched.verification_after == 68.0
+        assert fetched.freshness_before is None
+
+    def test_REM_266_orm_outcome_has_component_score_columns(self, db):
+        row = _make_outcome_row()
+        row.verification_before = 55.0
+        row.verification_after = 70.0
+        row.freshness_before = 60.0
+        row.freshness_after = 75.0
+        row.forecast_before = 48.0
+        row.forecast_after = 62.0
+        row.governance_health_before = 40.0
+        row.governance_health_after = 58.0
+        db.add(row)
+        db.flush()
+        assert row.verification_before == 55.0
+        assert row.governance_health_after == 58.0
+
+    def test_REM_267_verification_delta_visible_via_before_after(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            verification_before=40.0,
+            verification_after=80.0,
+        )
+        result = _engine(db).record_outcome(req)
+        delta = result.verification_after - result.verification_before
+        assert delta == 40.0
+
+    def test_REM_268_partial_component_scores_allowed(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            verification_before=55.0,
+            verification_after=70.0,
+        )
+        result = _engine(db).record_outcome(req)
+        assert result.verification_before == 55.0
+        assert result.verification_after == 70.0
+        assert result.freshness_before is None
+        assert result.freshness_after is None
+
+    def test_REM_269_http_post_accepts_component_scores(self, client):
+        payload = {
+            "remediation_task_id": _uid(),
+            "control_id": _uid(),
+            "before_score": 60.0,
+            "after_score": 78.0,
+            "before_effectiveness_level": "ADEQUATE",
+            "after_effectiveness_level": "EFFECTIVE",
+            "verification_before": 55.0,
+            "verification_after": 72.0,
+            "freshness_before": 60.0,
+            "freshness_after": 80.0,
+            "forecast_before": 48.0,
+            "forecast_after": 64.0,
+            "governance_health_before": 42.0,
+            "governance_health_after": 60.0,
+        }
+        r = client.post("/remediation-effectiveness", json=payload)
+        assert r.status_code == 201
+        body = r.json()
+        assert body["verification_before"] == 55.0
+        assert body["verification_after"] == 72.0
+        assert body["freshness_before"] == 60.0
+        assert body["freshness_after"] == 80.0
+        assert body["forecast_before"] == 48.0
+        assert body["forecast_after"] == 64.0
+        assert body["governance_health_before"] == 42.0
+        assert body["governance_health_after"] == 60.0
+
+    def test_REM_270_http_post_without_component_scores_returns_nulls(self, client):
+        payload = {
+            "remediation_task_id": _uid(),
+            "control_id": _uid(),
+            "before_score": 60.0,
+            "after_score": 75.0,
+            "before_effectiveness_level": "ADEQUATE",
+            "after_effectiveness_level": "EFFECTIVE",
+        }
+        r = client.post("/remediation-effectiveness", json=payload)
+        assert r.status_code == 201
+        body = r.json()
+        assert body["verification_before"] is None
+        assert body["verification_after"] is None
+        assert body["freshness_before"] is None
+        assert body["freshness_after"] is None
+        assert body["forecast_before"] is None
+        assert body["forecast_after"] is None
+        assert body["governance_health_before"] is None
+        assert body["governance_health_after"] is None
+
+    def test_REM_271_http_get_single_returns_component_scores(self, client):
+        payload = {
+            "remediation_task_id": _uid(),
+            "control_id": _uid(),
+            "before_score": 55.0,
+            "after_score": 72.0,
+            "before_effectiveness_level": "ADEQUATE",
+            "after_effectiveness_level": "EFFECTIVE",
+            "governance_health_before": 40.0,
+            "governance_health_after": 58.0,
+        }
+        r = client.post("/remediation-effectiveness", json=payload)
+        assert r.status_code == 201
+        rid = r.json()["id"]
+        r2 = client.get(f"/remediation-effectiveness/{rid}")
+        assert r2.status_code == 200
+        assert r2.json()["governance_health_before"] == 40.0
+        assert r2.json()["governance_health_after"] == 58.0
+
+    def test_REM_272_http_list_returns_component_scores(self, client):
+        payload = {
+            "remediation_task_id": _uid(),
+            "control_id": _uid(),
+            "before_score": 55.0,
+            "after_score": 72.0,
+            "before_effectiveness_level": "ADEQUATE",
+            "after_effectiveness_level": "EFFECTIVE",
+            "forecast_before": 48.0,
+            "forecast_after": 63.0,
+        }
+        client.post("/remediation-effectiveness", json=payload)
+        r = client.get("/remediation-effectiveness?limit=1")
+        assert r.status_code == 200
+        items = r.json()["items"]
+        assert len(items) >= 1
+        matching = [i for i in items if i.get("forecast_before") == 48.0]
+        assert len(matching) >= 1
+
+    def test_REM_273_outcome_response_schema_has_component_fields(self):
+        fields = RemediationOutcomeResponse.model_fields
+        for field in (
+            "verification_before", "verification_after",
+            "freshness_before", "freshness_after",
+            "forecast_before", "forecast_after",
+            "governance_health_before", "governance_health_after",
+        ):
+            assert field in fields, f"Missing field: {field}"
+
+    def test_REM_274_record_request_schema_has_component_fields(self):
+        fields = RecordOutcomeRequest.model_fields
+        for field in (
+            "verification_before", "verification_after",
+            "freshness_before", "freshness_after",
+            "forecast_before", "forecast_after",
+            "governance_health_before", "governance_health_after",
+        ):
+            assert field in fields, f"Missing field: {field}"
+
+    def test_REM_275_engine_computes_verification_delta(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            verification_before=40.0,
+            verification_after=65.0,
+        )
+        result = _engine(db).record_outcome(req)
+        assert result.verification_delta == 25.0
+
+    def test_REM_276_engine_computes_freshness_delta(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            freshness_before=50.0,
+            freshness_after=80.0,
+        )
+        result = _engine(db).record_outcome(req)
+        assert result.freshness_delta == 30.0
+
+    def test_REM_277_engine_computes_forecast_delta(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            forecast_before=55.0,
+            forecast_after=70.0,
+        )
+        result = _engine(db).record_outcome(req)
+        assert result.forecast_delta == 15.0
+
+    def test_REM_278_engine_computes_governance_health_delta(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            governance_health_before=45.0,
+            governance_health_after=62.0,
+        )
+        result = _engine(db).record_outcome(req)
+        assert result.governance_health_delta == 17.0
+
+    def test_REM_279_delta_is_none_when_before_or_after_missing(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            verification_before=50.0,
+        )
+        result = _engine(db).record_outcome(req)
+        assert result.verification_delta is None
+
+    def test_REM_280_negative_delta_stored_correctly(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=75.0,
+            after_score=60.0,
+            before_effectiveness_level="EFFECTIVE",
+            after_effectiveness_level="ADEQUATE",
+            freshness_before=70.0,
+            freshness_after=55.0,
+        )
+        result = _engine(db).record_outcome(req)
+        assert result.freshness_delta == -15.0
+
+    def test_REM_281_all_deltas_null_when_no_components_provided(self, db):
+        result = _record_outcome(db)
+        assert result.verification_delta is None
+        assert result.freshness_delta is None
+        assert result.forecast_delta is None
+        assert result.governance_health_delta is None
+
+    def test_REM_282_http_post_returns_all_deltas(self, client):
+        payload = {
+            "remediation_task_id": _uid(),
+            "control_id": _uid(),
+            "before_score": 60.0,
+            "after_score": 78.0,
+            "before_effectiveness_level": "ADEQUATE",
+            "after_effectiveness_level": "EFFECTIVE",
+            "verification_before": 50.0,
+            "verification_after": 70.0,
+            "freshness_before": 60.0,
+            "freshness_after": 85.0,
+            "forecast_before": 45.0,
+            "forecast_after": 60.0,
+            "governance_health_before": 40.0,
+            "governance_health_after": 55.0,
+        }
+        r = client.post("/remediation-effectiveness", json=payload)
+        assert r.status_code == 201
+        body = r.json()
+        assert body["verification_delta"] == 20.0
+        assert body["freshness_delta"] == 25.0
+        assert body["forecast_delta"] == 15.0
+        assert body["governance_health_delta"] == 15.0
+
+    def test_REM_283_outcome_response_schema_has_delta_fields(self):
+        fields = RemediationOutcomeResponse.model_fields
+        for field in (
+            "verification_delta",
+            "freshness_delta",
+            "forecast_delta",
+            "governance_health_delta",
+        ):
+            assert field in fields, f"Missing field: {field}"
+
+    def test_REM_284_deltas_persisted_and_retrievable(self, db):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+            verification_before=50.0,
+            verification_after=72.0,
+            freshness_before=58.0,
+            freshness_after=80.0,
+        )
+        created = _engine(db).record_outcome(req)
+        fetched = _engine(db).get_outcome(created.id)
+        assert fetched is not None
+        assert fetched.verification_delta == 22.0
+        assert fetched.freshness_delta == 22.0
+        assert fetched.forecast_delta is None
+        assert fetched.governance_health_delta is None

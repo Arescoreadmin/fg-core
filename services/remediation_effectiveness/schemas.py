@@ -36,6 +36,18 @@ class RemediationOutcomeResponse(BaseModel):
     roi_score: float
     roi_classification: str
     remediation_category: str
+    verification_before: Optional[float]
+    verification_after: Optional[float]
+    verification_delta: Optional[float]
+    freshness_before: Optional[float]
+    freshness_after: Optional[float]
+    freshness_delta: Optional[float]
+    forecast_before: Optional[float]
+    forecast_after: Optional[float]
+    forecast_delta: Optional[float]
+    governance_health_before: Optional[float]
+    governance_health_after: Optional[float]
+    governance_health_delta: Optional[float]
     status: str
     measured_at: str
     generated_at: str
@@ -56,6 +68,14 @@ class RecordOutcomeRequest(BaseModel):
     before_effectiveness_level: str
     after_effectiveness_level: str
     remediation_category: Optional[str] = None
+    verification_before: Optional[float] = None
+    verification_after: Optional[float] = None
+    freshness_before: Optional[float] = None
+    freshness_after: Optional[float] = None
+    forecast_before: Optional[float] = None
+    forecast_after: Optional[float] = None
+    governance_health_before: Optional[float] = None
+    governance_health_after: Optional[float] = None
 
 
 class UpdateOutcomeRequest(BaseModel):
