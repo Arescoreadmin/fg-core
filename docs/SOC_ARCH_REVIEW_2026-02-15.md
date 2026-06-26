@@ -3259,3 +3259,42 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - All CI gates pass
 
 **SOC review outcome:** approved. Route inventory update is purely additive: 14 new endpoints appended. No existing route entries removed or modified. No auth, session, middleware, OPA, or security files changed. All 14 routes require `audit:read` or `audit:write` scope via existing `require_scopes()` + `require_bound_tenant()`. All DB queries filter by `tenant_id`; cross-tenant access raises domain exceptions converted to 404 — no tenant identity disclosed in error body. `fa_freshness_exceptions` delete-only ORM guard ensures immutability of exception records while allowing legitimate status updates for revocation. Freshness scoring is deterministic pure-function computation — no probabilistic values, no external calls, no secrets accessed. Migration 0131 adds 3 tables + 1 delete-prevention trigger — backward compatible; safe to apply under live traffic.
+
+---
+
+## PR 17.6 — Canonical Governance Chain Authority (2026-06-26)
+
+**Scope:** New bounded context at `services/governance_chain/`. Adds 8 routes under `/governance-chain` prefix, 4 new DB tables, and a bridge engine that orchestrates existing authorities without replacing them.
+
+**Security review points:**
+
+1. **Scope enforcement:** All 6 read routes require `governance:read`; both write routes require `governance:write`. All use `dependencies=[Depends(require_scopes(...))]` + `require_bound_tenant()`. No scope relaxation.
+
+2. **Tenant isolation:** `GovernanceChainEngine` and `GovernanceChainRepository` accept `tenant_id` from `request.state` only — never from request body. All 4 tables have `tenant_id` columns with index; all queries are filtered by tenant.
+
+3. **CGIN anonymization:** `get_cgin_snapshot()` returns `tenant_fingerprint = sha256("cgin:v1:{tenant_id}")[:32]`. Raw `tenant_id` never appears in CGIN output.
+
+4. **Append-only tables:** `fa_governance_chain_events`, `fa_governance_chain_executions`, and `fa_governance_health_snapshots` are protected at both ORM layer (`before_update` and `before_delete` SQLAlchemy event guards) and PostgreSQL layer (triggers in migration 0136). `fa_governance_chain_snapshots` is mutable (CGIN cache).
+
+5. **Bridge safety:** All 8 bridge methods wrap downstream authority calls in try/except. Bridges that lack required data return `SKIPPED_UNAVAILABLE` or `NOOP_SAFE` — no fake success, no exception propagation to caller.
+
+6. **Non-disclosure:** Bridge execution errors logged but not surfaced in API responses. Unknown bridge type returns HTTP 400. Extra request fields rejected via `ConfigDict(extra="forbid")` on all schemas.
+
+7. **Actor resolution:** `actor_id` always from `request.state.key_prefix`; `actor_type` from `request.state.actor_type`. Never from body.
+
+**Critical-path files changed:**
+- `api/governance_chain.py` — 8 new routes; all gated on `require_scopes()` + `require_bound_tenant()`
+- `api/db_models_governance_chain.py` — 4 new ORM models with append-only guards
+- `migrations/postgres/0136_governance_chain.sql` — 4 new tables + PG append-only triggers on 3 tables
+- `services/plane_registry/registry.py` — `/governance-chain` added to `control` plane (additive)
+- `tools/ci/route_inventory.json` — 8 new route entries (additive)
+- `tools/ci/route_inventory_summary.json` — regenerated (additive)
+- `tools/ci/plane_registry_snapshot.json` — regenerated (additive)
+- `tools/ci/topology.sha256` — regenerated
+
+**Validation:**
+- `make fg-contract`: OK
+- `pytest tests/test_governance_chain.py`: 210/210 passed
+- `pytest tests/test_plane_registry.py tests/test_platform_inventory_determinism.py`: 5/5 passed
+
+**SOC review outcome:** approved. Route inventory update is purely additive: 8 new endpoints appended to the `control` plane. No auth, session, middleware, OPA, or security files changed. All 8 routes require `governance:read` or `governance:write` via existing `require_scopes()` + `require_bound_tenant()`. CGIN snapshot anonymizes tenant identity via SHA-256. All 3 audit tables are append-only at both ORM and PG layers. Bridge engine never surfaces downstream exceptions to callers. Migration 0136 adds 4 tables + 3 append-only triggers — backward compatible; safe to apply under live traffic.
