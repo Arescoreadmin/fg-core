@@ -6,6 +6,19 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-26 — fix/concurrent-report-version-allocator: Concurrent report version uniqueness
+
+**Root cause:** `get_next_version` read `MAX(version)` and returned `max + 1` without holding any lock. Under concurrent SQLite writes, the losing thread received `OperationalError: database is locked` (not `IntegrityError`), so the existing `IntegrityError`-only retry loop never fired — the request surfaced as an unhandled 500 instead of retrying with an incremented version.
+
+**Fix applied:** Added `acquire_next_version` context manager in `services/governance/report/versioning.py`. It acquires a per-`(tenant_id, engagement_id)` `threading.Lock` and holds it from the `SELECT MAX(version)` through `db.flush()`, serialising allocation within the process. Replaced the 5-attempt `IntegrityError` retry loop in `create_engagement_report_route` with a single `with acquire_next_version(...) as version:` block. `get_next_version` is preserved for direct callers and existing mocks.
+
+**Files changed:**
+- `services/governance/report/versioning.py` (modified — added `acquire_next_version` context manager with per-engagement threading lock)
+- `api/field_assessment.py` (modified — replaced `IntegrityError` retry loop with `acquire_next_version` context manager)
+- `docs/ai/PR_FIX_LOG.md` (modified — this entry)
+
+---
+
 ### 2026-06-26 — PR 17.5: Remediation Effectiveness Analytics Authority
 
 **New implementation.** No prior defects to fix. Initial ship.
