@@ -272,6 +272,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_control_effectiveness_explainability"
     )  # PR 16.5.1: Explainability & Governance Action Engine
+    importlib.import_module(
+        "api.db_models_remediation_effectiveness"
+    )  # PR 17.5: Remediation Effectiveness Analytics Authority
 
 
 def _get_base():

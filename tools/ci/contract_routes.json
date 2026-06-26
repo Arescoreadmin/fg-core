@@ -410,7 +410,19 @@
     },
     {
       "method": "GET",
+      "path": "/control-effectiveness/actions/{control_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-effectiveness/cgin/snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-effectiveness/contributors/{control_id}",
       "scopes": [],
       "source": "contract"
     },
@@ -422,7 +434,31 @@
     },
     {
       "method": "GET",
+      "path": "/control-effectiveness/executive-dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-effectiveness/explain/{control_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-effectiveness/history/{control_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-effectiveness/priorities",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-effectiveness/rankings",
       "scopes": [],
       "source": "contract"
     },
@@ -3698,6 +3734,66 @@
     },
     {
       "method": "GET",
+      "path": "/remediation-effectiveness",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation-effectiveness",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation-effectiveness/cgin/snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation-effectiveness/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation-effectiveness/failures",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation-effectiveness/patterns",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/remediation-effectiveness/recalculate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation-effectiveness/top-successes",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/remediation-effectiveness/{remediation_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/remediation-effectiveness/{remediation_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/remediation/tasks",
       "scopes": [],
       "source": "contract"
@@ -4255,7 +4351,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-25T22:11:38.161803+00:00",
+  "generated_at": "2026-06-26T09:53:24.127693+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

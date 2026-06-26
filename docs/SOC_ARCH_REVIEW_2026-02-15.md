@@ -1,3 +1,21 @@
+## 2026-06-26 — PR 17.5: Remediation Effectiveness Analytics Authority
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new governance-scoped read/write endpoints under new `/remediation-effectiveness` prefix registered in `control` plane; 4 new DB tables, migration 0135, new service bounded context; no new auth subsystem, no privilege escalation, no credential handling added)
+
+**Changes:**
+- `migrations/postgres/0135_remediation_effectiveness.sql` — creates `fa_remediation_outcome` (delete-protected), `fa_remediation_persistence` (append-only, UPDATE+DELETE blocked at ORM layer), `fa_remediation_learning` (mutable), `fa_remediation_pattern` (mutable). 4 tables, 9 indexes.
+- `api/db_models_remediation_effectiveness.py` — 4 ORM models with matching SQLAlchemy event guards: `before_delete` on outcome; `before_update` + `before_delete` on persistence.
+- `services/remediation_effectiveness/` — new bounded context: `models.py` (pure-Python classifiers + computation functions, 8 enum types, 7 pure functions), `schemas.py` (13 Pydantic schemas, all `extra="forbid"`), `repository.py` (tenant-scoped data access), `engine.py` (`RemediationEffectivenessEngine` with 10 public methods + private pattern detection and learning rebuild).
+- `api/remediation_effectiveness.py` — 11 routes: `POST /`, `GET /dashboard`, `GET /patterns`, `GET /top-successes`, `GET /failures`, `GET /cgin/snapshot`, `POST /recalculate`, `GET /`, `GET /{id}`, `PATCH /{id}`. Multi-segment routes before `/{id}`. All require `governance:read` or `governance:write`.
+- `api/observability/metrics.py` — 4 new Prometheus counters (no `tenant_id` labels).
+- `api/db.py` — `db_models_remediation_effectiveness` added to `_ensure_models_imported()`.
+- `api/main.py` — `remediation_effectiveness_router` imported and registered in both app builders.
+- `services/plane_registry/registry.py` — `/remediation-effectiveness` added to `control` plane route_prefixes.
+
+**Security posture:** all routes under new `/remediation-effectiveness` prefix, `control`-plane-scoped. All outputs are deterministic arithmetic — no ML, no AI, no external calls. Data is strictly tenant-scoped; no cross-tenant read/write path exists. No credential storage, no PII, no PHI.
+
+---
+
 ## 2026-06-25 — PR 16.5.1: Control Effectiveness Explainability & Governance Action Engine
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (new governance-scoped read-only explainability endpoints under existing `/control-effectiveness` prefix; 1 new DB table; no new auth subsystem; all outputs are deterministic derivations from existing effectiveness data)
