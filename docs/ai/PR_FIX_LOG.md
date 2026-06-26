@@ -6,6 +6,35 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-26 — feat/governance-chain-17-6: Canonical Governance Chain Authority + Authority Integration Gate
+
+**Changes shipped:**
+
+PR 17.6 — new bounded context `services/governance_chain/` orchestrating existing governance authorities through an 8-bridge engine. Adds deterministic governance health scoring, CGIN anonymization via `sha256("cgin:v1:{tenant_id}")[:32]`, 4 append-only DB tables (migration 0136), 8 routes in the control plane, and 210 tests (GC-1–GC-210).
+
+Also added `tools/ci/check_authority_integration.py` — a structural wiring gate that catches undeclared services, unregistered db_models, missing routers, and CGIN tenant_id exposure. Registered in `make fg-fast` and `codex_gates.sh`. `authority_manifest.yaml` covers 19 authorities.
+
+**Fixes applied during implementation:**
+- Removed unused imports (`UniqueConstraint`, `ChainEventResponse`, `EmitChainEventRequest`, `GovernanceHealthHistoryResponse`, `ChainEventNotFound`, `FaGovernanceChainSnapshot`, `Path`, `Any`) — ruff F401
+- Removed unused local variables (`result`, `resp`, `engine`) — ruff F841
+- Fixed redefined `Path` import in test file — ruff F811
+- Fixed mypy errors: `priority` arg type `str` → `int` (50); `EvidenceFreshnessAuthorityEngine` → `EvidenceFreshnessEngine`; `ControlEffectivenessExplainabilityEngine` → `ExplainabilityEngine`
+- Added SOC review entry to `docs/SOC_ARCH_REVIEW_2026-02-15.md` to satisfy `soc-review-sync` gate (tools/ci/ files changed)
+- Refreshed contract authority SHA via `scripts/refresh_contract_authority.py`
+- Fixed route inventory test (GC-172) to use `data` key from route_inventory.json structure
+
+**Files changed:** 29 files, 8,732 insertions
+
+**Verified with:**
+- pytest tests/test_governance_chain.py (210/210)
+- pytest tests/test_plane_registry.py tests/test_platform_inventory_determinism.py (5/5)
+- make fg-contract
+- make fg-security (1154 passed)
+- make fg-fast
+- codex_gates.sh (ruff, mypy, pytest all clean)
+
+---
+
 ### 2026-06-26 — fix/concurrent-report-version-allocator: Concurrent report version uniqueness
 
 **Root cause:** `get_next_version` read `MAX(version)` and returned `max + 1` without holding any lock. Under concurrent SQLite writes, the losing thread received `OperationalError: database is locked` (not `IntegrityError`), so the existing `IntegrityError`-only retry loop never fired — the request surfaced as an unhandled 500 instead of retrying with an incremented version.
