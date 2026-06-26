@@ -162,7 +162,7 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 709,
+  "contract_count": 725,
   "contract_only": [],
   "internal_allowed": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
@@ -280,7 +280,7 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 631,
+    "control": 641,
     "data": 54,
     "evidence": 86,
     "rbac": 5,
@@ -340,7 +340,7 @@
     "POST /ui/devices/{device_id}/enable"
   ],
   "removed": [],
-  "runtime_count": 881,
+  "runtime_count": 891,
   "runtime_only": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
     "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -398,12 +398,6 @@
     "GET /admin/tenants/{tenant_id}/subscriptions/items",
     "GET /admin/tenants/{tenant_id}/usage",
     "GET /admin/usage/all",
-    "GET /control-effectiveness/actions/{control_id}",
-    "GET /control-effectiveness/contributors/{control_id}",
-    "GET /control-effectiveness/executive-dashboard",
-    "GET /control-effectiveness/explain/{control_id}",
-    "GET /control-effectiveness/priorities",
-    "GET /control-effectiveness/rankings",
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
@@ -508,12 +502,5 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": [
-    "GET /control-effectiveness/actions/{control_id}",
-    "GET /control-effectiveness/contributors/{control_id}",
-    "GET /control-effectiveness/executive-dashboard",
-    "GET /control-effectiveness/explain/{control_id}",
-    "GET /control-effectiveness/priorities",
-    "GET /control-effectiveness/rankings"
-  ]
+  "unauthorized_runtime_only": []
 }

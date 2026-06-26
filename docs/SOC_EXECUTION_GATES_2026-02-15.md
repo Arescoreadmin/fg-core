@@ -1,3 +1,18 @@
+## 2026-06-26 — PR 17.5: Remediation Effectiveness Analytics Authority
+
+**Classification:** New remediation analytics bounded context. 4 new DB tables, 11 new routes under new `/remediation-effectiveness` prefix registered in the `control` plane. No auth logic changes. DB schema change is additive-only. No secrets stored.
+
+**Critical-path files changed:**
+- `migrations/postgres/0135_remediation_effectiveness.sql` — 4 new tables + indexes.
+- `api/db_models_remediation_effectiveness.py` — ORM models with SQLAlchemy event guards.
+- `services/plane_registry/registry.py` — `/remediation-effectiveness` added to `control` plane.
+- `api/main.py` — `remediation_effectiveness_router` registered in both app builders.
+- `api/db.py` — `db_models_remediation_effectiveness` added to `_ensure_models_imported()`.
+
+**SOC review outcome:** approved. Route inventory update is additive: 11 new endpoints under `/remediation-effectiveness` registered in the `control` plane. No existing route entries removed or modified. All routes require `governance:read` or `governance:write` enforced by `require_scopes()` + `require_bound_tenant()`. All computation is deterministic arithmetic — outcome classification, ROI scoring, persistence classification, pattern detection — no ML, no AI inference, no external calls. `fa_remediation_outcome` is delete-protected at ORM layer; `fa_remediation_persistence` is fully append-only with both update and delete ORM guards. `fa_remediation_learning` and `fa_remediation_pattern` are mutable (recalculate updates in place). 4 new Prometheus counters with no `tenant_id` labels. Migration 0135 is backward compatible; safe to apply under live traffic. Route ordering invariant preserved: dashboard/patterns/top-successes/failures/cgin/recalculate registered before `/{remediation_id}` catch-all.
+
+---
+
 ## 2026-06-25 — PR 16.5.1: Control Effectiveness Explainability & Governance Action Engine
 
 **Classification:** New explainability layer on top of PR 16.5's effectiveness engine. 1 new DB table, 6 new read-only routes under existing `/control-effectiveness` prefix, 1 new service bounded context. No auth logic changes. No new planes. No new route prefixes.

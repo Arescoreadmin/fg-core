@@ -6,6 +6,38 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-26 — PR 17.5: Remediation Effectiveness Analytics Authority
+
+**New implementation.** No prior defects to fix. Initial ship.
+
+**Components delivered:**
+- `services/remediation_effectiveness/` — 5 files: `__init__.py`, `models.py`, `schemas.py`, `repository.py`, `engine.py`
+- `api/db_models_remediation_effectiveness.py` — 4 ORM models (`FaRemediationOutcome`, `FaRemediationPersistence`, `FaRemediationLearning`, `FaRemediationPattern`)
+- `migrations/postgres/0135_remediation_effectiveness.sql` — 4 tables + 9 indexes
+- `api/remediation_effectiveness.py` — 11 routes (POST, GET list, GET /{id}, PATCH /{id}, dashboard, patterns, top-successes, failures, cgin/snapshot, recalculate)
+- 4 Prometheus counters in `api/observability/metrics.py`
+- `api/db.py` + `api/main.py` wiring (remediation_effectiveness_router in both build_app blocks)
+- `services/plane_registry/registry.py` — `/remediation-effectiveness` prefix registered in `control` plane
+- `tests/test_h17_5_remediation_effectiveness.py` — 250+ tests (REM-1 through REM-250+)
+
+**Design rationale:**
+
+**Outcome classification thresholds:** delta ≥ 10 = SUCCESS, ≥ 3 = PARTIAL_SUCCESS, ≥ -3 = NO_CHANGE, ≥ -10 = REGRESSION, else FAILURE. These match the remediation domain expectation that a +10 point improvement is a meaningful success.
+
+**RES formula:** `clamp(50 + delta*2.5, 0, 100)` anchors neutral (0 delta) at 50, meaning a score of 50 = no change. +20 delta = 100 (perfect), -20 delta = 0 (catastrophic). The 2.5 multiplier is calibrated so that a SUCCESS threshold (+10) yields RES=75 (HIGHLY_EFFECTIVE boundary).
+
+**ROI scoring:** headroom-relative design prevents inflation when before_score is already high. A +10 improvement from 90→100 has lower ROI than 50→60 because the headroom was only 10 vs. 50.
+
+**Persistence append-only:** `fa_remediation_persistence` is append-only (both UPDATE and DELETE blocked via SQLAlchemy events) because it records point-in-time window measurements — immutable by design, same as history tables.
+
+**Pattern detection is deterministic:** all 6 pattern types (REPEATED_FAILURE, RECURRING_DEGRADATION, NO_IMPROVEMENT, ROLLBACK_PATTERN, CONSISTENT_IMPROVEMENT, RAPID_REGRESSION) use purely rule-based logic over the ordered outcome history. No ML, no probabilistic inference.
+
+**Route ordering invariant:** all fixed-segment routes (dashboard, patterns, top-successes, failures, cgin/snapshot, recalculate) are registered BEFORE `/{remediation_id}` to prevent the catch-all from capturing them.
+
+**No AI, no LLMs:** all pattern descriptions and classifications are deterministic. Same inputs always produce same outputs.
+
+---
+
 ### 2026-06-25 — PR 16.5.1: Control Effectiveness Explainability & Governance Action Engine
 
 **New implementation.** No prior defects to fix. Initial ship.

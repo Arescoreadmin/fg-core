@@ -12715,6 +12715,176 @@
         "auth",
         "tenant"
       ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "GET",
+      "path": "/remediation-effectiveness",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "POST",
+      "path": "/remediation-effectiveness",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "GET",
+      "path": "/remediation-effectiveness/cgin/snapshot",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "GET",
+      "path": "/remediation-effectiveness/dashboard",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "GET",
+      "path": "/remediation-effectiveness/failures",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "GET",
+      "path": "/remediation-effectiveness/patterns",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "POST",
+      "path": "/remediation-effectiveness/recalculate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "GET",
+      "path": "/remediation-effectiveness/top-successes",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "GET",
+      "path": "/remediation-effectiveness/{remediation_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/remediation_effectiveness.py",
+      "method": "PATCH",
+      "path": "/remediation-effectiveness/{remediation_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/remediation.py",
       "method": "GET",
       "path": "/remediation/tasks",
@@ -15121,7 +15291,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-25T22:11:38.142917+00:00",
+  "generated_at": "2026-06-26T09:53:24.109675+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

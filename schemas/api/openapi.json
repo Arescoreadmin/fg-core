@@ -4816,6 +4816,50 @@
         "title": "CGINEffectivenessSnapshot",
         "type": "object"
       },
+      "CGINRemediationSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "average_roi_score": {
+            "title": "Average Roi Score",
+            "type": "number"
+          },
+          "average_score_delta": {
+            "title": "Average Score Delta",
+            "type": "number"
+          },
+          "patterns_detected": {
+            "title": "Patterns Detected",
+            "type": "integer"
+          },
+          "snapshot_at": {
+            "title": "Snapshot At",
+            "type": "string"
+          },
+          "success_rate": {
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_remediations": {
+            "title": "Total Remediations",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_remediations",
+          "success_rate",
+          "average_score_delta",
+          "average_roi_score",
+          "patterns_detected",
+          "snapshot_at"
+        ],
+        "title": "CGINRemediationSnapshot",
+        "type": "object"
+      },
       "CGINSnapshotBundle": {
         "additionalProperties": false,
         "properties": {
@@ -14979,6 +15023,43 @@
         "title": "FailureCategory",
         "type": "string"
       },
+      "FailuresResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RemediationOutcomeResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_failures": {
+            "title": "Total Failures",
+            "type": "integer"
+          },
+          "total_regressions": {
+            "title": "Total Regressions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "items",
+          "total_failures",
+          "total_regressions",
+          "generated_at"
+        ],
+        "title": "FailuresResponse",
+        "type": "object"
+      },
       "FeedItem": {
         "properties": {
           "action_reason": {
@@ -19711,6 +19792,70 @@
         "title": "KeywordPayload",
         "type": "object"
       },
+      "LearningItem": {
+        "additionalProperties": false,
+        "properties": {
+          "average_roi_score": {
+            "title": "Average Roi Score",
+            "type": "number"
+          },
+          "average_score_delta": {
+            "title": "Average Score Delta",
+            "type": "number"
+          },
+          "failure_count": {
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "last_updated_at": {
+            "title": "Last Updated At",
+            "type": "string"
+          },
+          "no_change_count": {
+            "title": "No Change Count",
+            "type": "integer"
+          },
+          "partial_success_count": {
+            "title": "Partial Success Count",
+            "type": "integer"
+          },
+          "regression_count": {
+            "title": "Regression Count",
+            "type": "integer"
+          },
+          "remediation_category": {
+            "title": "Remediation Category",
+            "type": "string"
+          },
+          "success_count": {
+            "title": "Success Count",
+            "type": "integer"
+          },
+          "success_rate": {
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "total_remediations": {
+            "title": "Total Remediations",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "remediation_category",
+          "total_remediations",
+          "success_count",
+          "partial_success_count",
+          "no_change_count",
+          "regression_count",
+          "failure_count",
+          "success_rate",
+          "average_score_delta",
+          "average_roi_score",
+          "last_updated_at"
+        ],
+        "title": "LearningItem",
+        "type": "object"
+      },
       "LifecycleTransitionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -21436,6 +21581,48 @@
         "title": "OrgLifecycleStatus",
         "type": "string"
       },
+      "OutcomeListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "failure_count": {
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RemediationOutcomeResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "success_count": {
+            "title": "Success Count",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "items",
+          "total",
+          "success_count",
+          "failure_count",
+          "generated_at"
+        ],
+        "title": "OutcomeListResponse",
+        "type": "object"
+      },
       "OwnerResponse": {
         "properties": {
           "asset_id": {
@@ -21523,6 +21710,92 @@
           }
         },
         "title": "PatchEngagementRequest",
+        "type": "object"
+      },
+      "PatternItem": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "detected_at": {
+            "title": "Detected At",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "occurrence_count": {
+            "title": "Occurrence Count",
+            "type": "integer"
+          },
+          "pattern_type": {
+            "title": "Pattern Type",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_id",
+          "pattern_type",
+          "severity",
+          "occurrence_count",
+          "description",
+          "detected_at",
+          "last_seen_at"
+        ],
+        "title": "PatternItem",
+        "type": "object"
+      },
+      "PatternsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "critical_count": {
+            "title": "Critical Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "high_count": {
+            "title": "High Count",
+            "type": "integer"
+          },
+          "patterns": {
+            "items": {
+              "$ref": "#/components/schemas/PatternItem"
+            },
+            "title": "Patterns",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "patterns",
+          "total",
+          "critical_count",
+          "high_count",
+          "generated_at"
+        ],
+        "title": "PatternsResponse",
         "type": "object"
       },
       "PinBaselineBody": {
@@ -25022,42 +25295,6 @@
         "title": "RecalculateRequest",
         "type": "object"
       },
-      "RecalculateResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "calculated_at": {
-            "title": "Calculated At",
-            "type": "string"
-          },
-          "control_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Control Id"
-          },
-          "controls_recalculated": {
-            "title": "Controls Recalculated",
-            "type": "integer"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tenant_id",
-          "controls_recalculated",
-          "control_id",
-          "calculated_at"
-        ],
-        "title": "RecalculateResponse",
-        "type": "object"
-      },
       "ReceiptRequest": {
         "additionalProperties": false,
         "properties": {
@@ -25224,6 +25461,164 @@
           "liveness_result"
         ],
         "title": "RecordHealthRequest",
+        "type": "object"
+      },
+      "RecordOutcomeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "after_effectiveness_level": {
+            "title": "After Effectiveness Level",
+            "type": "string"
+          },
+          "after_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "After Score",
+            "type": "number"
+          },
+          "before_effectiveness_level": {
+            "title": "Before Effectiveness Level",
+            "type": "string"
+          },
+          "before_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Before Score",
+            "type": "number"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "governance_health_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health After"
+          },
+          "governance_health_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Before"
+          },
+          "remediation_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Category"
+          },
+          "remediation_task_id": {
+            "title": "Remediation Task Id",
+            "type": "string"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
+          }
+        },
+        "required": [
+          "remediation_task_id",
+          "control_id",
+          "before_score",
+          "after_score",
+          "before_effectiveness_level",
+          "after_effectiveness_level"
+        ],
+        "title": "RecordOutcomeRequest",
         "type": "object"
       },
       "RecordResultRequest": {
@@ -25741,6 +26136,117 @@
         "title": "RelationshipResponse",
         "type": "object"
       },
+      "RemediationDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_patterns": {
+            "title": "Active Patterns",
+            "type": "integer"
+          },
+          "average_effectiveness_score": {
+            "title": "Average Effectiveness Score",
+            "type": "number"
+          },
+          "average_roi_score": {
+            "title": "Average Roi Score",
+            "type": "number"
+          },
+          "average_score_delta": {
+            "title": "Average Score Delta",
+            "type": "number"
+          },
+          "critical_patterns": {
+            "title": "Critical Patterns",
+            "type": "integer"
+          },
+          "failure_count": {
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "learning": {
+            "items": {
+              "$ref": "#/components/schemas/LearningItem"
+            },
+            "title": "Learning",
+            "type": "array"
+          },
+          "no_change_count": {
+            "title": "No Change Count",
+            "type": "integer"
+          },
+          "partial_success_count": {
+            "title": "Partial Success Count",
+            "type": "integer"
+          },
+          "regression_count": {
+            "title": "Regression Count",
+            "type": "integer"
+          },
+          "success_count": {
+            "title": "Success Count",
+            "type": "integer"
+          },
+          "success_rate": {
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "top_performing_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Performing Category"
+          },
+          "total_remediations": {
+            "title": "Total Remediations",
+            "type": "integer"
+          },
+          "worst_performing_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worst Performing Category"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_remediations",
+          "success_count",
+          "partial_success_count",
+          "no_change_count",
+          "regression_count",
+          "failure_count",
+          "success_rate",
+          "average_score_delta",
+          "average_roi_score",
+          "average_effectiveness_score",
+          "top_performing_category",
+          "worst_performing_category",
+          "active_patterns",
+          "critical_patterns",
+          "learning",
+          "generated_at"
+        ],
+        "title": "RemediationDashboardResponse",
+        "type": "object"
+      },
       "RemediationFactorResponse": {
         "properties": {
           "description": {
@@ -25762,6 +26268,249 @@
           "severity"
         ],
         "title": "RemediationFactorResponse",
+        "type": "object"
+      },
+      "RemediationOutcomeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "after_effectiveness_level": {
+            "title": "After Effectiveness Level",
+            "type": "string"
+          },
+          "after_score": {
+            "title": "After Score",
+            "type": "number"
+          },
+          "before_effectiveness_level": {
+            "title": "Before Effectiveness Level",
+            "type": "string"
+          },
+          "before_score": {
+            "title": "Before Score",
+            "type": "number"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "effectiveness_level": {
+            "title": "Effectiveness Level",
+            "type": "string"
+          },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "forecast_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Delta"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "freshness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Delta"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "governance_health_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health After"
+          },
+          "governance_health_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Before"
+          },
+          "governance_health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Delta"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "measured_at": {
+            "title": "Measured At",
+            "type": "string"
+          },
+          "outcome_classification": {
+            "title": "Outcome Classification",
+            "type": "string"
+          },
+          "remediation_category": {
+            "title": "Remediation Category",
+            "type": "string"
+          },
+          "remediation_effectiveness_score": {
+            "title": "Remediation Effectiveness Score",
+            "type": "number"
+          },
+          "remediation_task_id": {
+            "title": "Remediation Task Id",
+            "type": "string"
+          },
+          "roi_classification": {
+            "title": "Roi Classification",
+            "type": "string"
+          },
+          "roi_score": {
+            "title": "Roi Score",
+            "type": "number"
+          },
+          "score_delta": {
+            "title": "Score Delta",
+            "type": "number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
+          },
+          "verification_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Delta"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "remediation_task_id",
+          "control_id",
+          "before_score",
+          "after_score",
+          "score_delta",
+          "before_effectiveness_level",
+          "after_effectiveness_level",
+          "outcome_classification",
+          "remediation_effectiveness_score",
+          "effectiveness_level",
+          "roi_score",
+          "roi_classification",
+          "remediation_category",
+          "verification_before",
+          "verification_after",
+          "verification_delta",
+          "freshness_before",
+          "freshness_after",
+          "freshness_delta",
+          "forecast_before",
+          "forecast_after",
+          "forecast_delta",
+          "governance_health_before",
+          "governance_health_after",
+          "governance_health_delta",
+          "status",
+          "measured_at",
+          "generated_at"
+        ],
+        "title": "RemediationOutcomeResponse",
         "type": "object"
       },
       "RemediationPhase": {
@@ -30909,6 +31658,33 @@
         "title": "TopItem",
         "type": "object"
       },
+      "TopSuccessesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RemediationOutcomeResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "items",
+          "generated_at"
+        ],
+        "title": "TopSuccessesResponse",
+        "type": "object"
+      },
       "TransitionBlockerResponse": {
         "properties": {
           "blocked_by_gate_ids": {
@@ -31954,6 +32730,24 @@
           }
         },
         "title": "UpdateObservationRequest",
+        "type": "object"
+      },
+      "UpdateOutcomeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "UpdateOutcomeRequest",
         "type": "object"
       },
       "UpdateReportRequest": {
@@ -34891,6 +35685,42 @@
         "title": "GenerateReportRequest",
         "type": "object"
       },
+      "services__control_effectiveness__schemas__RecalculateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "calculated_at": {
+            "title": "Calculated At",
+            "type": "string"
+          },
+          "control_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "controls_recalculated": {
+            "title": "Controls Recalculated",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "controls_recalculated",
+          "control_id",
+          "calculated_at"
+        ],
+        "title": "RecalculateResponse",
+        "type": "object"
+      },
       "services__control_registry__schemas__ControlResponse": {
         "additionalProperties": false,
         "properties": {
@@ -36347,6 +37177,35 @@
           "metadata"
         ],
         "title": "TimelineEventResponse",
+        "type": "object"
+      },
+      "services__remediation_effectiveness__schemas__RecalculateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "learning_categories_updated": {
+            "title": "Learning Categories Updated",
+            "type": "integer"
+          },
+          "patterns_detected": {
+            "title": "Patterns Detected",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "patterns_detected",
+          "learning_categories_updated",
+          "generated_at"
+        ],
+        "title": "RecalculateResponse",
         "type": "object"
       },
       "services__remediation_portal__schemas__PortalAuditListResponse": {
@@ -41469,7 +42328,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecalculateResponse"
+                  "$ref": "#/components/schemas/services__control_effectiveness__schemas__RecalculateResponse"
                 }
               }
             },
@@ -80608,6 +81467,666 @@
         "summary": "List available built-in roles and their scope bundles",
         "tags": [
           "rbac"
+        ]
+      }
+    },
+    "/remediation-effectiveness": {
+      "get": {
+        "operationId": "list_outcomes_remediation_effectiveness_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome_classification",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome Classification"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Outcomes",
+        "tags": [
+          "remediation-effectiveness"
+        ]
+      },
+      "post": {
+        "operationId": "record_outcome_remediation_effectiveness_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordOutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemediationOutcomeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "409": {
+            "description": "Outcome already recorded for this remediation task and control"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Outcome",
+        "tags": [
+          "remediation-effectiveness"
+        ]
+      }
+    },
+    "/remediation-effectiveness/cgin/snapshot": {
+      "get": {
+        "operationId": "cgin_snapshot_remediation_effectiveness_cgin_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CGINRemediationSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cgin Snapshot",
+        "tags": [
+          "remediation-effectiveness"
+        ]
+      }
+    },
+    "/remediation-effectiveness/dashboard": {
+      "get": {
+        "operationId": "get_dashboard_remediation_effectiveness_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemediationDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "remediation-effectiveness"
+        ]
+      }
+    },
+    "/remediation-effectiveness/failures": {
+      "get": {
+        "operationId": "get_failures_remediation_effectiveness_failures_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailuresResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Failures",
+        "tags": [
+          "remediation-effectiveness"
+        ]
+      }
+    },
+    "/remediation-effectiveness/patterns": {
+      "get": {
+        "operationId": "get_patterns_remediation_effectiveness_patterns_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatternsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Patterns",
+        "tags": [
+          "remediation-effectiveness"
+        ]
+      }
+    },
+    "/remediation-effectiveness/recalculate": {
+      "post": {
+        "operationId": "recalculate_remediation_effectiveness_recalculate_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "control_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Control Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_effectiveness__schemas__RecalculateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recalculate",
+        "tags": [
+          "remediation-effectiveness"
+        ]
+      }
+    },
+    "/remediation-effectiveness/top-successes": {
+      "get": {
+        "operationId": "get_top_successes_remediation_effectiveness_top_successes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopSuccessesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Top Successes",
+        "tags": [
+          "remediation-effectiveness"
+        ]
+      }
+    },
+    "/remediation-effectiveness/{remediation_id}": {
+      "get": {
+        "operationId": "get_outcome_remediation_effectiveness__remediation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remediation_id",
+            "required": true,
+            "schema": {
+              "title": "Remediation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemediationOutcomeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Remediation outcome not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Outcome",
+        "tags": [
+          "remediation-effectiveness"
+        ]
+      },
+      "patch": {
+        "operationId": "update_outcome_status_remediation_effectiveness__remediation_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "remediation_id",
+            "required": true,
+            "schema": {
+              "title": "Remediation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemediationOutcomeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Remediation outcome not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Outcome Status",
+        "tags": [
+          "remediation-effectiveness"
         ]
       }
     },

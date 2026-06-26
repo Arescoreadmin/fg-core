@@ -984,3 +984,25 @@ CONTROL_EXPLAINABILITY_ACTIONS_GENERATED_TOTAL = Counter(
     "Total governance actions generated across all requests",
     [],
 )
+
+# PR 17.5 — Remediation Effectiveness Analytics Authority metrics
+REMEDIATION_EFFECTIVENESS_OUTCOMES_TOTAL = Counter(
+    "frostgate_remediation_effectiveness_outcomes_total",
+    "Total remediation outcomes recorded",
+    [],
+)
+REMEDIATION_EFFECTIVENESS_SUCCESSES_TOTAL = Counter(
+    "frostgate_remediation_effectiveness_successes_total",
+    "Total remediation outcomes classified as SUCCESS",
+    [],
+)
+REMEDIATION_EFFECTIVENESS_FAILURES_TOTAL = Counter(
+    "frostgate_remediation_effectiveness_failures_total",
+    "Total remediation outcomes classified as FAILURE or REGRESSION",
+    [],
+)
+REMEDIATION_EFFECTIVENESS_PATTERNS_DETECTED_TOTAL = Counter(
+    "frostgate_remediation_effectiveness_patterns_detected_total",
+    "Total remediation patterns detected",
+    [],
+)
