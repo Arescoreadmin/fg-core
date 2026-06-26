@@ -100,9 +100,7 @@ class RemediationEffectivenessRepository:
         self._db.flush()
         return True
 
-    def get_outcomes_for_control(
-        self, control_id: str
-    ) -> list[FaRemediationOutcome]:
+    def get_outcomes_for_control(self, control_id: str) -> list[FaRemediationOutcome]:
         """Fetch all outcomes for a control, ordered by measured_at ascending."""
         return (
             self._db.query(FaRemediationOutcome)
@@ -157,9 +155,7 @@ class RemediationEffectivenessRepository:
         self._db.add(row)
         self._db.flush()
 
-    def get_persistence(
-        self, remediation_id: str
-    ) -> list[FaRemediationPersistence]:
+    def get_persistence(self, remediation_id: str) -> list[FaRemediationPersistence]:
         """Fetch all persistence windows for a remediation."""
         return (
             self._db.query(FaRemediationPersistence)
@@ -202,9 +198,7 @@ class RemediationEffectivenessRepository:
             .all()
         )
 
-    def get_learning_for_category(
-        self, category: str
-    ) -> FaRemediationLearning | None:
+    def get_learning_for_category(self, category: str) -> FaRemediationLearning | None:
         """Fetch a learning record for a specific category."""
         return (
             self._db.query(FaRemediationLearning)
@@ -251,9 +245,7 @@ class RemediationEffectivenessRepository:
             .all()
         )
 
-    def get_patterns_for_control(
-        self, control_id: str
-    ) -> list[FaRemediationPattern]:
+    def get_patterns_for_control(self, control_id: str) -> list[FaRemediationPattern]:
         """Fetch all patterns for a specific control."""
         return (
             self._db.query(FaRemediationPattern)

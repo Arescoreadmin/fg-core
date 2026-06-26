@@ -13,10 +13,10 @@ from enum import Enum
 REMEDIATION_EFFECTIVENESS_VERSION = "1.0"
 
 # Outcome classification thresholds
-OUTCOME_SUCCESS_THRESHOLD = 10.0    # delta >= 10 → SUCCESS
-OUTCOME_PARTIAL_THRESHOLD = 3.0     # delta >= 3 → PARTIAL_SUCCESS
-OUTCOME_NO_CHANGE_FLOOR = -3.0      # delta >= -3 → NO_CHANGE
-OUTCOME_REGRESSION_FLOOR = -10.0    # delta >= -10 → REGRESSION (else FAILURE)
+OUTCOME_SUCCESS_THRESHOLD = 10.0  # delta >= 10 → SUCCESS
+OUTCOME_PARTIAL_THRESHOLD = 3.0  # delta >= 3 → PARTIAL_SUCCESS
+OUTCOME_NO_CHANGE_FLOOR = -3.0  # delta >= -3 → NO_CHANGE
+OUTCOME_REGRESSION_FLOOR = -10.0  # delta >= -10 → REGRESSION (else FAILURE)
 
 
 # ---------------------------------------------------------------------------
