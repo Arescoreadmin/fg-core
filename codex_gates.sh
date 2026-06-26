@@ -77,6 +77,9 @@ if [ -f Makefile ]; then
   fi
 fi
 
+echo "==> Gates: authority integration (wiring completeness)"
+PYTHONPATH=. python tools/ci/check_authority_integration.py
+
 echo "Running PR fix log enforcement..."
 scripts/ci/enforce_pr_fix_log.sh
 

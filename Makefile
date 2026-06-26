@@ -511,6 +511,12 @@ route-inventory-generate: venv
 route-inventory-audit: venv
 	@PYTHONPATH=. $(PY) tools/ci/check_route_inventory.py
 
+authority-manifest-generate: venv
+	@PYTHONPATH=. $(PY) tools/ci/check_authority_integration.py --write
+
+authority-integration-check: venv
+	@PYTHONPATH=. $(PY) tools/ci/check_authority_integration.py
+
 check_plane_registry: venv
 	@PYTHONPATH=. $(PY) tools/ci/check_plane_registry.py
 
@@ -733,7 +739,7 @@ connectors-gate: venv _require-pytest-venv
 
 fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	prod-unsafe-config-check safe-telemetry-check security-regression-gates soc-invariants soc-manifest-verify \
-	route-inventory-audit check-decision-roe test-quality-gate soc-review-sync pr-base-mainline-check \
+	route-inventory-audit authority-integration-check check-decision-roe test-quality-gate soc-review-sync pr-base-mainline-check \
 	audit-chain-verify audit-coverage-check dos-hardening-check sql-migration-percent-guard gap-audit check-connectors-rls check-core-rls \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
