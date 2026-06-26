@@ -8130,10 +8130,8 @@ def create_engagement_report_route(
     import json
     import uuid
 
-    from sqlalchemy.exc import IntegrityError
-
     from services.governance.report.signing import ReportSigningKeyError, sign_report
-    from services.governance.report.versioning import get_next_version
+    from services.governance.report.versioning import acquire_next_version
 
     if body.report_type not in _VALID_REPORT_TYPES:
         raise HTTPException(
@@ -8164,13 +8162,15 @@ def create_engagement_report_route(
     )
 
     now = report_json.get("generated_at", "")
-    record: GovernanceReportRecord | None = None
-    _MAX_VERSION_RETRIES = 5
 
-    for _attempt in range(_MAX_VERSION_RETRIES):
+    # acquire_next_version holds a per-(tenant, engagement) mutex across the
+    # SELECT and the flush, so two concurrent requests in the same process can
+    # never read the same max and claim the same version slot.
+    with acquire_next_version(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    ) as version:
         # Version must be stamped into report_json before canonical serialization
         # and signing — the stored payload and the signed payload must be identical.
-        version = get_next_version(db, tenant_id=tenant_id, engagement_id=engagement_id)
         report_json["version"] = version
 
         canonical_str = json.dumps(
@@ -8189,7 +8189,7 @@ def create_engagement_report_route(
         record_id = (
             uuid.uuid4().hex[:16]
             + hashlib.sha256(
-                f"{tenant_id}:{engagement_id}:{version}:{_attempt}".encode()
+                f"{tenant_id}:{engagement_id}:{version}".encode()
             ).hexdigest()[:16]
         )
         record = GovernanceReportRecord(
@@ -8214,21 +8214,7 @@ def create_engagement_report_route(
             is_finalized=True,
         )
         db.add(record)
-        try:
-            db.flush()
-            break
-        except IntegrityError:
-            db.rollback()
-            record = None
-            continue
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=api_error(
-                "REPORT_VERSION_CONFLICT",
-                "Unable to assign a unique report version after concurrent requests. Retry.",
-            ),
-        )
+        db.flush()
 
     # Emit audit BEFORE commit so report row and audit event commit atomically.
     # (Previously: commit happened first; audit was in a new transaction that was
