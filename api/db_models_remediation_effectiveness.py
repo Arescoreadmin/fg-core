@@ -105,9 +105,7 @@ class FaRemediationOutcome(Base):
 
 @sa_event.listens_for(FaRemediationOutcome, "before_delete")
 def _block_outcome_delete(mapper, connection, target):
-    raise RuntimeError(
-        "fa_remediation_outcome rows cannot be deleted"
-    )
+    raise RuntimeError("fa_remediation_outcome rows cannot be deleted")
 
 
 # ---------------------------------------------------------------------------
@@ -148,16 +146,12 @@ class FaRemediationPersistence(Base):
 
 @sa_event.listens_for(FaRemediationPersistence, "before_update")
 def _block_persistence_update(mapper, connection, target):
-    raise RuntimeError(
-        "fa_remediation_persistence is append-only (update not allowed)"
-    )
+    raise RuntimeError("fa_remediation_persistence is append-only (update not allowed)")
 
 
 @sa_event.listens_for(FaRemediationPersistence, "before_delete")
 def _block_persistence_delete(mapper, connection, target):
-    raise RuntimeError(
-        "fa_remediation_persistence is append-only (delete not allowed)"
-    )
+    raise RuntimeError("fa_remediation_persistence is append-only (delete not allowed)")
 
 
 # ---------------------------------------------------------------------------

@@ -56,7 +56,9 @@ router = APIRouter(tags=["remediation-effectiveness"])
     responses={
         401: {"description": "Unauthorized"},
         403: {"description": "Forbidden"},
-        409: {"description": "Outcome already recorded for this remediation task and control"},
+        409: {
+            "description": "Outcome already recorded for this remediation task and control"
+        },
     },
 )
 def record_outcome(
@@ -258,9 +260,7 @@ def get_outcome(
             remediation_id
         )
         if result is None:
-            raise HTTPException(
-                status_code=404, detail="Remediation outcome not found"
-            )
+            raise HTTPException(status_code=404, detail="Remediation outcome not found")
         return result
 
 
@@ -301,7 +301,5 @@ def update_outcome_status(
             remediation_id, body.status
         )
         if result is None:
-            raise HTTPException(
-                status_code=404, detail="Remediation outcome not found"
-            )
+            raise HTTPException(status_code=404, detail="Remediation outcome not found")
         return result
