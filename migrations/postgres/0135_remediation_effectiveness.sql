@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS fa_remediation_outcome (
     governance_health_delta DOUBLE PRECISION,
     status VARCHAR(32) NOT NULL DEFAULT 'COMPLETE',
     measured_at VARCHAR(64) NOT NULL,
-    calculation_version VARCHAR(16) NOT NULL DEFAULT '1.0'
+    calculation_version VARCHAR(16) NOT NULL DEFAULT '1.0',
+    UNIQUE (tenant_id, remediation_task_id, control_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_fa_remediation_outcome_tenant ON fa_remediation_outcome(tenant_id);

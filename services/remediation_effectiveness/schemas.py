@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -63,19 +63,19 @@ class RecordOutcomeRequest(BaseModel):
 
     remediation_task_id: str
     control_id: str
-    before_score: float
-    after_score: float
+    before_score: float = Field(ge=0.0, le=100.0)
+    after_score: float = Field(ge=0.0, le=100.0)
     before_effectiveness_level: str
     after_effectiveness_level: str
     remediation_category: Optional[str] = None
-    verification_before: Optional[float] = None
-    verification_after: Optional[float] = None
-    freshness_before: Optional[float] = None
-    freshness_after: Optional[float] = None
-    forecast_before: Optional[float] = None
-    forecast_after: Optional[float] = None
-    governance_health_before: Optional[float] = None
-    governance_health_after: Optional[float] = None
+    verification_before: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    verification_after: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    freshness_before: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    freshness_after: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    forecast_before: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    forecast_after: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    governance_health_before: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    governance_health_after: Optional[float] = Field(default=None, ge=0.0, le=100.0)
 
 
 class UpdateOutcomeRequest(BaseModel):

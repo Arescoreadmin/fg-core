@@ -25471,6 +25471,8 @@
             "type": "string"
           },
           "after_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
             "title": "After Score",
             "type": "number"
           },
@@ -25479,12 +25481,92 @@
             "type": "string"
           },
           "before_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
             "title": "Before Score",
             "type": "number"
           },
           "control_id": {
             "title": "Control Id",
             "type": "string"
+          },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "governance_health_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health After"
+          },
+          "governance_health_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Before"
           },
           "remediation_category": {
             "anyOf": [
@@ -25500,6 +25582,32 @@
           "remediation_task_id": {
             "title": "Remediation Task Id",
             "type": "string"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
           }
         },
         "required": [
@@ -26189,9 +26297,108 @@
             "title": "Effectiveness Level",
             "type": "string"
           },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "forecast_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Delta"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "freshness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Delta"
+          },
           "generated_at": {
             "title": "Generated At",
             "type": "string"
+          },
+          "governance_health_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health After"
+          },
+          "governance_health_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Before"
+          },
+          "governance_health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Delta"
           },
           "id": {
             "title": "Id",
@@ -26236,6 +26443,39 @@
           "tenant_id": {
             "title": "Tenant Id",
             "type": "string"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
+          },
+          "verification_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Delta"
           }
         },
         "required": [
@@ -26254,6 +26494,18 @@
           "roi_score",
           "roi_classification",
           "remediation_category",
+          "verification_before",
+          "verification_after",
+          "verification_delta",
+          "freshness_before",
+          "freshness_after",
+          "freshness_delta",
+          "forecast_before",
+          "forecast_after",
+          "forecast_delta",
+          "governance_health_before",
+          "governance_health_after",
+          "governance_health_delta",
           "status",
           "measured_at",
           "generated_at"
@@ -81357,6 +81609,9 @@
           },
           "403": {
             "description": "Forbidden"
+          },
+          "409": {
+            "description": "Outcome already recorded for this remediation task and control"
           },
           "422": {
             "content": {

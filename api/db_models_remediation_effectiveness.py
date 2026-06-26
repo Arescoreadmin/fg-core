@@ -83,6 +83,12 @@ class FaRemediationOutcome(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "remediation_task_id",
+            "control_id",
+            name="uidx_fa_remediation_outcome_tenant_task_control",
+        ),
         Index("idx_fa_remediation_outcome_tenant", "tenant_id"),
         Index(
             "idx_fa_remediation_outcome_tenant_control",

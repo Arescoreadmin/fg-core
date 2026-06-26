@@ -34,6 +34,20 @@ class RemediationEffectivenessRepository:
         self._db.add(row)
         self._db.flush()
 
+    def get_outcome_by_task(
+        self, remediation_task_id: str, control_id: str
+    ) -> FaRemediationOutcome | None:
+        """Look up an existing outcome by (tenant, task, control) identity key."""
+        return (
+            self._db.query(FaRemediationOutcome)
+            .filter(
+                FaRemediationOutcome.tenant_id == self._tenant_id,
+                FaRemediationOutcome.remediation_task_id == remediation_task_id,
+                FaRemediationOutcome.control_id == control_id,
+            )
+            .first()
+        )
+
     def get_outcome(self, remediation_id: str) -> FaRemediationOutcome | None:
         """Fetch a single outcome by ID, scoped to this tenant."""
         return (

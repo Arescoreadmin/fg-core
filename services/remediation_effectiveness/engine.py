@@ -75,6 +75,12 @@ def _component_delta(before: float | None, after: float | None) -> float | None:
     return round(after - before, 4)
 
 
+class DuplicateRemediationOutcome(Exception):
+    def __init__(self, outcome_id: str) -> None:
+        self.outcome_id = outcome_id
+        super().__init__(f"Outcome already exists: {outcome_id}")
+
+
 class RemediationEffectivenessEngine:
     """Derives remediation effectiveness analytics from stored outcome data."""
 
@@ -355,6 +361,12 @@ class RemediationEffectivenessEngine:
         self, request: RecordOutcomeRequest
     ) -> RemediationOutcomeResponse:
         """Record a new remediation outcome and compute all derived metrics."""
+        existing = self._repo.get_outcome_by_task(
+            request.remediation_task_id, request.control_id
+        )
+        if existing is not None:
+            raise DuplicateRemediationOutcome(existing.id)
+
         now = _now_iso()
         score_delta = request.after_score - request.before_score
         outcome_cls = classify_outcome(score_delta)
@@ -622,17 +634,13 @@ class RemediationEffectivenessEngine:
     def get_failures(self) -> FailuresResponse:
         """Return failure and regression outcomes."""
         now = _now_iso()
+        total_failures = self._repo.count_outcomes(
+            outcome_classification=OutcomeClassification.FAILURE.value
+        )
+        total_regressions = self._repo.count_outcomes(
+            outcome_classification=OutcomeClassification.REGRESSION.value
+        )
         rows = self._repo.get_failures()
-        total_failures = sum(
-            1
-            for r in rows
-            if r.outcome_classification == OutcomeClassification.FAILURE.value
-        )
-        total_regressions = sum(
-            1
-            for r in rows
-            if r.outcome_classification == OutcomeClassification.REGRESSION.value
-        )
         return FailuresResponse(
             tenant_id=self._tenant_id,
             items=[self._outcome_to_response(r) for r in rows],

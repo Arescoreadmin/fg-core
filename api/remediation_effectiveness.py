@@ -22,7 +22,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
-from services.remediation_effectiveness.engine import RemediationEffectivenessEngine
+from services.remediation_effectiveness.engine import (
+    DuplicateRemediationOutcome,
+    RemediationEffectivenessEngine,
+)
 from services.remediation_effectiveness.schemas import (
     CGINRemediationSnapshot,
     FailuresResponse,
@@ -53,6 +56,7 @@ router = APIRouter(tags=["remediation-effectiveness"])
     responses={
         401: {"description": "Unauthorized"},
         403: {"description": "Forbidden"},
+        409: {"description": "Outcome already recorded for this remediation task and control"},
     },
 )
 def record_outcome(
@@ -61,7 +65,13 @@ def record_outcome(
 ) -> RemediationOutcomeResponse:
     tenant_id = require_bound_tenant(request)
     with Session(get_engine()) as db:
-        return RemediationEffectivenessEngine(db, tenant_id).record_outcome(body)
+        try:
+            return RemediationEffectivenessEngine(db, tenant_id).record_outcome(body)
+        except DuplicateRemediationOutcome as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Outcome already recorded for this remediation task and control. Existing id: {exc.outcome_id}",
+            )
 
 
 # ---------------------------------------------------------------------------

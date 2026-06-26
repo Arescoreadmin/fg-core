@@ -2358,3 +2358,257 @@ class TestComponentScoreFields:
         assert fetched.freshness_delta == 22.0
         assert fetched.forecast_delta is None
         assert fetched.governance_health_delta is None
+
+
+# ===========================================================================
+# REM-285 to REM-300: P2 badge fixes
+# ===========================================================================
+
+
+class TestScoreValidation:
+    """REM-285 through REM-292: before_score/after_score must be 0-100."""
+
+    def test_REM_285_before_score_above_100_rejected(self):
+        with pytest.raises(Exception):
+            RecordOutcomeRequest(
+                remediation_task_id=_uid(),
+                control_id=_uid(),
+                before_score=101.0,
+                after_score=80.0,
+                before_effectiveness_level="ADEQUATE",
+                after_effectiveness_level="EFFECTIVE",
+            )
+
+    def test_REM_286_after_score_above_100_rejected(self):
+        with pytest.raises(Exception):
+            RecordOutcomeRequest(
+                remediation_task_id=_uid(),
+                control_id=_uid(),
+                before_score=60.0,
+                after_score=100.1,
+                before_effectiveness_level="ADEQUATE",
+                after_effectiveness_level="EFFECTIVE",
+            )
+
+    def test_REM_287_before_score_negative_rejected(self):
+        with pytest.raises(Exception):
+            RecordOutcomeRequest(
+                remediation_task_id=_uid(),
+                control_id=_uid(),
+                before_score=-1.0,
+                after_score=50.0,
+                before_effectiveness_level="ADEQUATE",
+                after_effectiveness_level="EFFECTIVE",
+            )
+
+    def test_REM_288_after_score_negative_rejected(self):
+        with pytest.raises(Exception):
+            RecordOutcomeRequest(
+                remediation_task_id=_uid(),
+                control_id=_uid(),
+                before_score=60.0,
+                after_score=-0.1,
+                before_effectiveness_level="ADEQUATE",
+                after_effectiveness_level="EFFECTIVE",
+            )
+
+    def test_REM_289_scores_at_boundary_accepted(self):
+        req = RecordOutcomeRequest(
+            remediation_task_id=_uid(),
+            control_id=_uid(),
+            before_score=0.0,
+            after_score=100.0,
+            before_effectiveness_level="INEFFECTIVE",
+            after_effectiveness_level="HIGHLY_EFFECTIVE",
+        )
+        assert req.before_score == 0.0
+        assert req.after_score == 100.0
+
+    def test_REM_290_component_score_above_100_rejected(self):
+        with pytest.raises(Exception):
+            RecordOutcomeRequest(
+                remediation_task_id=_uid(),
+                control_id=_uid(),
+                before_score=60.0,
+                after_score=75.0,
+                before_effectiveness_level="ADEQUATE",
+                after_effectiveness_level="EFFECTIVE",
+                verification_before=101.0,
+            )
+
+    def test_REM_291_component_score_negative_rejected(self):
+        with pytest.raises(Exception):
+            RecordOutcomeRequest(
+                remediation_task_id=_uid(),
+                control_id=_uid(),
+                before_score=60.0,
+                after_score=75.0,
+                before_effectiveness_level="ADEQUATE",
+                after_effectiveness_level="EFFECTIVE",
+                freshness_after=-1.0,
+            )
+
+    def test_REM_292_http_post_101_score_returns_422(self, client):
+        payload = {
+            "remediation_task_id": _uid(),
+            "control_id": _uid(),
+            "before_score": 101.0,
+            "after_score": 80.0,
+            "before_effectiveness_level": "ADEQUATE",
+            "after_effectiveness_level": "EFFECTIVE",
+        }
+        r = client.post("/remediation-effectiveness", json=payload)
+        assert r.status_code == 422
+
+
+class TestDuplicatePrevention:
+    """REM-293 through REM-297: duplicate outcome prevention."""
+
+    def test_REM_293_duplicate_task_control_raises_engine_error(self, db):
+        from services.remediation_effectiveness.engine import DuplicateRemediationOutcome
+
+        task_id = _uid()
+        ctrl_id = _uid()
+        req = RecordOutcomeRequest(
+            remediation_task_id=task_id,
+            control_id=ctrl_id,
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+        )
+        _engine(db).record_outcome(req)
+        req2 = RecordOutcomeRequest(
+            remediation_task_id=task_id,
+            control_id=ctrl_id,
+            before_score=65.0,
+            after_score=80.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+        )
+        with pytest.raises(DuplicateRemediationOutcome) as exc_info:
+            _engine(db).record_outcome(req2)
+        assert exc_info.value.outcome_id is not None
+
+    def test_REM_294_different_control_same_task_allowed(self, db):
+        task_id = _uid()
+        req1 = RecordOutcomeRequest(
+            remediation_task_id=task_id,
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+        )
+        req2 = RecordOutcomeRequest(
+            remediation_task_id=task_id,
+            control_id=_uid(),
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+        )
+        r1 = _engine(db).record_outcome(req1)
+        r2 = _engine(db).record_outcome(req2)
+        assert r1.id != r2.id
+
+    def test_REM_295_same_task_different_tenant_allowed(self, db):
+        task_id = _uid()
+        ctrl_id = _uid()
+        req = RecordOutcomeRequest(
+            remediation_task_id=task_id,
+            control_id=ctrl_id,
+            before_score=60.0,
+            after_score=75.0,
+            before_effectiveness_level="ADEQUATE",
+            after_effectiveness_level="EFFECTIVE",
+        )
+        r1 = _engine(db, tenant_id=_TENANT).record_outcome(req)
+        r2 = _engine(db, tenant_id=_TENANT_B).record_outcome(req)
+        assert r1.id != r2.id
+
+    def test_REM_296_http_duplicate_returns_409(self, client):
+        task_id = _uid()
+        ctrl_id = _uid()
+        payload = {
+            "remediation_task_id": task_id,
+            "control_id": ctrl_id,
+            "before_score": 60.0,
+            "after_score": 75.0,
+            "before_effectiveness_level": "ADEQUATE",
+            "after_effectiveness_level": "EFFECTIVE",
+        }
+        r1 = client.post("/remediation-effectiveness", json=payload)
+        assert r1.status_code == 201
+        r2 = client.post("/remediation-effectiveness", json=payload)
+        assert r2.status_code == 409
+
+    def test_REM_297_409_body_contains_existing_id(self, client):
+        task_id = _uid()
+        ctrl_id = _uid()
+        payload = {
+            "remediation_task_id": task_id,
+            "control_id": ctrl_id,
+            "before_score": 60.0,
+            "after_score": 75.0,
+            "before_effectiveness_level": "ADEQUATE",
+            "after_effectiveness_level": "EFFECTIVE",
+        }
+        r1 = client.post("/remediation-effectiveness", json=payload)
+        existing_id = r1.json()["id"]
+        r2 = client.post("/remediation-effectiveness", json=payload)
+        assert existing_id in r2.json()["detail"]
+
+
+class TestFailureCounts:
+    """REM-298 through REM-300: failure totals from DB counts, not limited list."""
+
+    def test_REM_298_failure_totals_exceed_page_limit(self, db):
+        ctrl_id = _uid()
+        for _ in range(55):
+            row = _make_outcome_row(
+                control_id=ctrl_id,
+                before_score=70.0,
+                after_score=55.0,
+                outcome_classification="FAILURE",
+            )
+            db.add(row)
+        db.flush()
+        result = _engine(db).get_failures()
+        assert result.total_failures == 55
+        assert len(result.items) == 50  # capped by default limit
+
+    def test_REM_299_regression_totals_exceed_page_limit(self, db):
+        ctrl_id = _uid()
+        for _ in range(52):
+            row = _make_outcome_row(
+                control_id=ctrl_id,
+                before_score=70.0,
+                after_score=62.0,
+                outcome_classification="REGRESSION",
+            )
+            db.add(row)
+        db.flush()
+        result = _engine(db).get_failures()
+        assert result.total_regressions == 52
+        assert len(result.items) == 50
+
+    def test_REM_300_totals_count_across_pages_independently(self, db):
+        ctrl_id = _uid()
+        for _ in range(30):
+            row = _make_outcome_row(
+                control_id=ctrl_id, before_score=70.0, after_score=55.0,
+                outcome_classification="FAILURE",
+            )
+            db.add(row)
+        for _ in range(25):
+            row = _make_outcome_row(
+                control_id=ctrl_id, before_score=70.0, after_score=62.0,
+                outcome_classification="REGRESSION",
+            )
+            db.add(row)
+        db.flush()
+        result = _engine(db).get_failures()
+        assert result.total_failures == 30
+        assert result.total_regressions == 25
+        assert len(result.items) == 50  # combined, capped
