@@ -10,7 +10,7 @@
   "governance": {
     "contract_count": 725,
     "contract_only": [],
-    "runtime_count": 891,
+    "runtime_count": 899,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -71,6 +71,12 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
+      "GET /governance-chain/cgin/snapshot",
+      "GET /governance-chain/diagnostics",
+      "GET /governance-chain/events/{correlation_id}",
+      "GET /governance-chain/executions",
+      "GET /governance-chain/executions/{execution_id}",
+      "GET /governance-chain/health",
       "GET /health",
       "GET /metrics",
       "GET /ui/ai",
@@ -163,6 +169,8 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
+      "POST /governance-chain/execute",
+      "POST /governance-chain/recalculate-health",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -179,7 +187,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "09124c0b2224b7d72d56132998416d217d3b117662ecbcde273e9f3d5657d7d6",
+  "governance_fingerprint": "a2c66b09d0b9bb921a9caa7cfe1fd7efe25c2f2e8d0ab36066f0add0aa7e8d89",
   "planes": [
     {
       "compat": {
@@ -251,6 +259,7 @@
         "/field-assessment",
         "/frameworks",
         "/governance",
+        "/governance-chain",
         "/governance-reports",
         "/health",
         "/internal",
@@ -682,6 +691,12 @@
       "GET /frameworks/{framework_id}/controls",
       "GET /frameworks/{framework_id}/controls/{framework_control_id}",
       "GET /frameworks/{framework_id}/coverage",
+      "GET /governance-chain/cgin/snapshot",
+      "GET /governance-chain/diagnostics",
+      "GET /governance-chain/events/{correlation_id}",
+      "GET /governance-chain/executions",
+      "GET /governance-chain/executions/{execution_id}",
+      "GET /governance-chain/health",
       "GET /governance-reports",
       "GET /governance-reports/{report_id}",
       "GET /governance-reports/{report_id}/attestations",
@@ -986,6 +1001,8 @@
       "POST /frameworks",
       "POST /frameworks/{framework_id}/controls",
       "POST /frameworks/{framework_id}/transitions",
+      "POST /governance-chain/execute",
+      "POST /governance-chain/recalculate-health",
       "POST /governance-reports",
       "POST /governance-reports/{report_id}/attest",
       "POST /governance-reports/{report_id}/export/html",

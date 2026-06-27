@@ -4177,6 +4177,37 @@
         "title": "AuditListResponse",
         "type": "object"
       },
+      "AuthorityAvailability": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "authority",
+          "available",
+          "reason"
+        ],
+        "title": "AuthorityAvailability",
+        "type": "object"
+      },
       "BackupScope": {
         "enum": [
           "full",
@@ -4753,6 +4784,123 @@
         "title": "BulkObservationImportResult",
         "type": "object"
       },
+      "CGINChainAuthoritySnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "average_duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Duration Ms"
+          },
+          "execution_count": {
+            "title": "Execution Count",
+            "type": "integer"
+          },
+          "failure_count": {
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "skipped_count": {
+            "title": "Skipped Count",
+            "type": "integer"
+          },
+          "success_count": {
+            "title": "Success Count",
+            "type": "integer"
+          },
+          "success_rate": {
+            "title": "Success Rate",
+            "type": "number"
+          }
+        },
+        "required": [
+          "authority",
+          "execution_count",
+          "success_count",
+          "failure_count",
+          "skipped_count",
+          "success_rate",
+          "average_duration_ms"
+        ],
+        "title": "CGINChainAuthoritySnapshot",
+        "type": "object"
+      },
+      "CGINChainSnapshotBundle": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/CGINChainAuthoritySnapshot"
+            },
+            "title": "Authority Snapshots",
+            "type": "array"
+          },
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "bundle_version": {
+            "title": "Bundle Version",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "governance_health_rating": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Rating"
+          },
+          "governance_health_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Score"
+          },
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
+            "type": "string"
+          },
+          "total_chain_events": {
+            "title": "Total Chain Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bundle_id",
+          "bundle_version",
+          "tenant_fingerprint",
+          "authority_snapshots",
+          "total_chain_events",
+          "governance_health_score",
+          "governance_health_rating",
+          "generated_at"
+        ],
+        "title": "CGINChainSnapshotBundle",
+        "type": "object"
+      },
       "CGINEffectivenessSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -5232,6 +5380,346 @@
           "expires_at"
         ],
         "title": "CertEnrollResponse",
+        "type": "object"
+      },
+      "ChainDiagnosticsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_availability": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorityAvailability"
+            },
+            "title": "Authority Availability",
+            "type": "array"
+          },
+          "bridge_execution_distribution": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Bridge Execution Distribution",
+            "type": "object"
+          },
+          "event_type_distribution": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Event Type Distribution",
+            "type": "object"
+          },
+          "execution_success_rate": {
+            "title": "Execution Success Rate",
+            "type": "number"
+          },
+          "failed_executions": {
+            "title": "Failed Executions",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "latest_governance_health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GovernanceHealthResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "skipped_executions": {
+            "title": "Skipped Executions",
+            "type": "integer"
+          },
+          "successful_executions": {
+            "title": "Successful Executions",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_bridge_executions": {
+            "title": "Total Bridge Executions",
+            "type": "integer"
+          },
+          "total_chain_events": {
+            "title": "Total Chain Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_chain_events",
+          "total_bridge_executions",
+          "successful_executions",
+          "failed_executions",
+          "skipped_executions",
+          "execution_success_rate",
+          "event_type_distribution",
+          "bridge_execution_distribution",
+          "authority_availability",
+          "latest_governance_health",
+          "missing_inputs",
+          "generated_at"
+        ],
+        "title": "ChainDiagnosticsResponse",
+        "type": "object"
+      },
+      "ChainEventListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ChainEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "total"
+        ],
+        "title": "ChainEventListResponse",
+        "type": "object"
+      },
+      "ChainEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "actor_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Type"
+          },
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "object_id": {
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "title": "Object Type",
+            "type": "string"
+          },
+          "payload_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload Json"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "event_type",
+          "authority",
+          "object_type",
+          "object_id",
+          "correlation_id",
+          "actor_id",
+          "actor_type",
+          "reason",
+          "payload_json",
+          "created_at"
+        ],
+        "title": "ChainEventResponse",
+        "type": "object"
+      },
+      "ChainExecutionListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "executions": {
+            "items": {
+              "$ref": "#/components/schemas/ChainExecutionResponse"
+            },
+            "title": "Executions",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "executions",
+          "total"
+        ],
+        "title": "ChainExecutionListResponse",
+        "type": "object"
+      },
+      "ChainExecutionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bridge_type": {
+            "title": "Bridge Type",
+            "type": "string"
+          },
+          "chain_execution_id": {
+            "title": "Chain Execution Id",
+            "type": "string"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "executed_at": {
+            "title": "Executed At",
+            "type": "string"
+          },
+          "execution_result": {
+            "title": "Execution Result",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source_authority": {
+            "title": "Source Authority",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "target_authority": {
+            "title": "Target Authority",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "trigger_object_id": {
+            "title": "Trigger Object Id",
+            "type": "string"
+          },
+          "trigger_object_type": {
+            "title": "Trigger Object Type",
+            "type": "string"
+          },
+          "trigger_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Reason"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "chain_execution_id",
+          "source_authority",
+          "target_authority",
+          "bridge_type",
+          "trigger_reason",
+          "trigger_object_id",
+          "trigger_object_type",
+          "execution_result",
+          "success",
+          "failure_reason",
+          "duration_ms",
+          "executed_at"
+        ],
+        "title": "ChainExecutionResponse",
         "type": "object"
       },
       "ChangeDetectionSummary": {
@@ -14638,6 +15126,255 @@
         "title": "ExceptionRequestCreate",
         "type": "object"
       },
+      "ExecuteBridgeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "actor_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Type"
+          },
+          "after_effectiveness_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Effectiveness Level"
+          },
+          "before_effectiveness_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Effectiveness Level"
+          },
+          "bridge": {
+            "title": "Bridge",
+            "type": "string"
+          },
+          "control_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "effectiveness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness After"
+          },
+          "effectiveness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness Before"
+          },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "governance_health_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health After"
+          },
+          "governance_health_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Before"
+          },
+          "remediation_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Category"
+          },
+          "trigger_object_id": {
+            "title": "Trigger Object Id",
+            "type": "string"
+          },
+          "trigger_object_type": {
+            "title": "Trigger Object Type",
+            "type": "string"
+          },
+          "trigger_reason": {
+            "title": "Trigger Reason",
+            "type": "string"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
+          },
+          "verification_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Id"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "bridge",
+          "trigger_object_id",
+          "trigger_object_type",
+          "trigger_reason"
+        ],
+        "title": "ExecuteBridgeRequest",
+        "type": "object"
+      },
       "ExecutionStateResponse": {
         "properties": {
           "assessment_type": {
@@ -18154,6 +18891,78 @@
           "expires_at"
         ],
         "title": "GovernanceExceptionCreateBody",
+        "type": "object"
+      },
+      "GovernanceHealthResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "calculation_version": {
+            "title": "Calculation Version",
+            "type": "string"
+          },
+          "effectiveness_health": {
+            "title": "Effectiveness Health",
+            "type": "number"
+          },
+          "forecast_health": {
+            "title": "Forecast Health",
+            "type": "number"
+          },
+          "freshness_health": {
+            "title": "Freshness Health",
+            "type": "number"
+          },
+          "governance_health_rating": {
+            "title": "Governance Health Rating",
+            "type": "string"
+          },
+          "governance_health_score": {
+            "title": "Governance Health Score",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "remediation_health": {
+            "title": "Remediation Health",
+            "type": "number"
+          },
+          "snapshot_at": {
+            "title": "Snapshot At",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "verification_health": {
+            "title": "Verification Health",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "verification_health",
+          "freshness_health",
+          "effectiveness_health",
+          "remediation_health",
+          "forecast_health",
+          "governance_health_score",
+          "governance_health_rating",
+          "missing_inputs",
+          "snapshot_at",
+          "calculation_version"
+        ],
+        "title": "GovernanceHealthResponse",
         "type": "object"
       },
       "GovernanceOverrideResponse": {
@@ -25275,6 +26084,24 @@
           }
         },
         "title": "RebuildRequest",
+        "type": "object"
+      },
+      "RecalculateHealthRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          }
+        },
+        "title": "RecalculateHealthRequest",
         "type": "object"
       },
       "RecalculateRequest": {
@@ -71490,6 +72317,491 @@
         "summary": "Recompute Freshness",
         "tags": [
           "evidence-freshness"
+        ]
+      }
+    },
+    "/governance-chain/cgin/snapshot": {
+      "get": {
+        "operationId": "get_cgin_snapshot_governance_chain_cgin_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CGINChainSnapshotBundle"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Cgin Snapshot",
+        "tags": [
+          "governance-chain"
+        ]
+      }
+    },
+    "/governance-chain/diagnostics": {
+      "get": {
+        "operationId": "get_chain_diagnostics_governance_chain_diagnostics_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainDiagnosticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chain Diagnostics",
+        "tags": [
+          "governance-chain"
+        ]
+      }
+    },
+    "/governance-chain/events/{correlation_id}": {
+      "get": {
+        "operationId": "list_events_by_correlation_governance_chain_events__correlation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "correlation_id",
+            "required": true,
+            "schema": {
+              "title": "Correlation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainEventListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Events By Correlation",
+        "tags": [
+          "governance-chain"
+        ]
+      }
+    },
+    "/governance-chain/execute": {
+      "post": {
+        "operationId": "execute_bridge_governance_chain_execute_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteBridgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainExecutionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Bridge",
+        "tags": [
+          "governance-chain"
+        ]
+      }
+    },
+    "/governance-chain/executions": {
+      "get": {
+        "operationId": "list_executions_governance_chain_executions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "bridge_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bridge Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "success",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Success"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainExecutionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Executions",
+        "tags": [
+          "governance-chain"
+        ]
+      }
+    },
+    "/governance-chain/executions/{execution_id}": {
+      "get": {
+        "operationId": "get_execution_governance_chain_executions__execution_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainExecutionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Execution",
+        "tags": [
+          "governance-chain"
+        ]
+      }
+    },
+    "/governance-chain/health": {
+      "get": {
+        "operationId": "get_governance_health_governance_chain_health_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Governance Health",
+        "tags": [
+          "governance-chain"
+        ]
+      }
+    },
+    "/governance-chain/recalculate-health": {
+      "post": {
+        "operationId": "recalculate_health_governance_chain_recalculate_health_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecalculateHealthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recalculate Health",
+        "tags": [
+          "governance-chain"
         ]
       }
     },

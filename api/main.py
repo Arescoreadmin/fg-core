@@ -110,6 +110,7 @@ from api.control_effectiveness_explainability import (
     router as control_effectiveness_explainability_router,
 )
 from api.remediation_effectiveness import router as remediation_effectiveness_router
+from api.governance_chain import router as governance_chain_router
 from api.risk_acceptance import router as risk_acceptance_router
 from api.risk_governance import router as risk_governance_router
 from api.entitlements import (
@@ -735,6 +736,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(control_effectiveness_explainability_router)
     app.include_router(control_effectiveness_router)
     app.include_router(remediation_effectiveness_router)
+    app.include_router(governance_chain_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
     app.include_router(rag_corpus_ingestion_router)
@@ -1180,6 +1182,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(control_effectiveness_explainability_router)
     app.include_router(control_effectiveness_router)
     app.include_router(remediation_effectiveness_router)
+    app.include_router(governance_chain_router)
     app.include_router(connectors_msgraph_report_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)

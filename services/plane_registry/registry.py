@@ -65,6 +65,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/timeline-authority",
             "/control-effectiveness",
             "/remediation-effectiveness",
+            "/governance-chain",
         ),
         allowed_dependency_categories=("auth", "tenant", "db", "rate", "breakglass"),
         required_make_targets=("control-plane-check", "plane-registry-spot"),

@@ -275,6 +275,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_remediation_effectiveness"
     )  # PR 17.5: Remediation Effectiveness Analytics Authority
+    importlib.import_module(
+        "api.db_models_governance_chain"
+    )  # PR 17.6: Canonical Governance Chain Authority
 
 
 def _get_base():

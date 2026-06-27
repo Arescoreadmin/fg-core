@@ -1,0 +1,346 @@
+# authority_manifest.yaml
+# Machine-verifiable declaration of every governance authority's integration surface.
+#
+# Maintained by: humans (consumers, events, reports, cgin_anonymized)
+# Verified by:   python tools/ci/check_authority_integration.py
+# Regenerate:    python tools/ci/check_authority_integration.py --write
+#
+# Fields auto-discovered by --write:
+#   engine, api_file, db_models, tables, route_prefixes, tests, cgin_snapshot
+# Fields requiring human input after --write:
+#   consumers, cgin_anonymized (set true only when sha256 fingerprinting is used)
+#   _warn_db_not_registered / _warn_not_in_main — fix these before committing
+
+manifest_version: '1.0'
+generated_at: '2026-06-26T23:10:29Z'
+library_services:
+- audit_engine
+- notifications
+- remediation_portal
+authorities:
+  billing:
+    engine: services/billing
+    api_file: api/billing.py
+    db_models: api/db_models_billing.py
+    route_prefixes:
+    - /billing
+    tables:
+    - billing_accounts
+    - billing_event_ledger
+    - billing_subscription_links
+    - usage_events
+    - usage_meters
+    tests: []
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
+    skip_checks:
+    - db_registration
+    - tests
+  control_effectiveness:
+    engine: services/control_effectiveness
+    api_file: api/control_effectiveness.py
+    db_models: api/db_models_control_effectiveness.py
+    route_prefixes:
+    - /control-effectiveness
+    tables:
+    - fa_control_effectiveness
+    - fa_control_effectiveness_history
+    tests:
+    - tests/test_h16_5_control_effectiveness.py
+    cgin_snapshot: true
+    cgin_anonymized: false
+    consumers:
+    - services/control_effectiveness_explainability/engine.py
+    - services/governance_chain/engine.py
+  control_effectiveness_explainability:
+    engine: services/control_effectiveness_explainability
+    api_file: api/control_effectiveness_explainability.py
+    db_models: api/db_models_control_effectiveness_explainability.py
+    route_prefixes:
+    - /control-effectiveness/explain
+    - /control-effectiveness/rankings
+    - /control-effectiveness/priorities
+    - /control-effectiveness/executive-dashboard
+    - /control-effectiveness/actions
+    - /control-effectiveness/contributors
+    tables:
+    - fa_control_ranking
+    tests:
+    - tests/test_h16_5_1_control_effectiveness_explainability.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers:
+    - services/governance_chain/engine.py
+  control_registry:
+    engine: services/control_registry
+    api_file: api/control_registry.py
+    db_models: api/db_models_control_registry.py
+    route_prefixes:
+    - /control-registry
+    tables:
+    - control_audits
+    - control_evidence_links
+    - control_registry
+    - control_reviews
+    - risk_acceptance_control_links
+    tests:
+    - tests/test_control_registry.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers:
+    - services/control_effectiveness/engine.py
+    - services/governance_chain/engine.py
+  evidence_authority:
+    engine: services/evidence_authority
+    api_file: api/evidence_authority.py
+    db_models: api/db_models_evidence_authority.py
+    route_prefixes:
+    - /evidence
+    tables:
+    - fa_evidence
+    - fa_evidence_ownership
+    - fa_evidence_relationships
+    - fa_evidence_trust_events
+    - fa_evidence_audit_events
+    - fa_verifications
+    - fa_evidence_control_links
+    - fa_evidence_risk_links
+    tests:
+    - tests/test_evidence_authority.py
+    - tests/test_h14_6_5a_evidence_hardening.py
+    - tests/test_h14_6_5_evidence_status_model.py
+    cgin_snapshot: true
+    cgin_anonymized: false
+    consumers:
+    - services/governance_chain/engine.py
+    - services/governance_portal/engine.py
+  evidence_freshness_authority:
+    engine: services/evidence_freshness_authority
+    api_file: api/evidence_freshness_authority.py
+    db_models: api/db_models_evidence_freshness_authority.py
+    route_prefixes:
+    - /freshness
+    - /freshness-policies
+    tables:
+    - fa_freshness_policies
+    - fa_evidence_freshness_records
+    - fa_freshness_exceptions
+    tests:
+    - tests/test_h14_6_7_evidence_freshness_authority.py
+    cgin_snapshot: true
+    cgin_anonymized: false
+    consumers:
+    - services/governance_chain/engine.py
+    - services/freshness_score_history/engine.py
+  framework_authority:
+    engine: services/framework_authority
+    api_file: api/framework_authority.py
+    db_models: api/db_models_framework_authority.py
+    route_prefixes:
+    - /framework
+    tables:
+    - control_framework_mapping_audits
+    - control_framework_mappings
+    - fa_framework_controls
+    - fa_frameworks
+    tests:
+    - tests/test_framework_authority.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
+  freshness_score_history:
+    engine: services/freshness_score_history
+    api_file: api/freshness_score_history.py
+    db_models: api/db_models_freshness_score_history.py
+    route_prefixes:
+    - /freshness/snapshots
+    - /freshness/history
+    - /freshness/trends
+    tables:
+    - fa_freshness_score_snapshots
+    - fa_freshness_daily_snapshots
+    - fa_freshness_trend_snapshots
+    tests:
+    - tests/test_h14_6_8_freshness_score_history.py
+    cgin_snapshot: true
+    cgin_anonymized: false
+    consumers:
+    - services/governance_chain/engine.py
+  governance_chain:
+    engine: services/governance_chain
+    api_file: api/governance_chain.py
+    db_models: api/db_models_governance_chain.py
+    route_prefixes:
+    - /governance-chain
+    tables:
+    - fa_governance_chain_events
+    - fa_governance_chain_executions
+    - fa_governance_health_snapshots
+    - fa_governance_chain_snapshots
+    tests:
+    - tests/test_governance_chain.py
+    cgin_snapshot: true
+    cgin_anonymized: true
+    consumers: []
+  governance_portal:
+    engine: services/governance_portal
+    api_file: api/governance_portal.py
+    db_models: api/db_models_governance_portal.py
+    route_prefixes:
+    - /portal/governance
+    tables:
+    - portal_acknowledgements
+    - governance_portal_audits
+    tests:
+    - tests/test_governance_portal.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
+  governance_reporting:
+    engine: services/governance_reporting
+    api_file: api/governance_reporting.py
+    db_models: api/db_models_governance_reporting.py
+    route_prefixes:
+    - /governance-reports
+    tables:
+    - risk_governance_reports
+    - risk_governance_report_manifests
+    - risk_governance_attestations
+    - risk_governance_report_audits
+    tests:
+    - tests/test_governance_reporting.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
+  governance_workflows:
+    engine: services/governance_workflows
+    api_file: api/governance_workflows.py
+    db_models: api/db_models_governance_workflows.py
+    route_prefixes:
+    - /governance-workflows
+    tables:
+    - governance_workflows
+    tests: []
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
+    skip_checks:
+    - tests
+  remediation:
+    engine: services/remediation
+    api_file: api/remediation.py
+    db_models: api/db_models_remediation.py
+    route_prefixes:
+    - /remediation
+    tables:
+    - remediation_task_audits
+    - remediation_tasks
+    tests:
+    - tests/test_remediation_engine.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers:
+    - services/governance_chain/engine.py
+    - services/remediation_effectiveness/engine.py
+  remediation_effectiveness:
+    engine: services/remediation_effectiveness
+    api_file: api/remediation_effectiveness.py
+    db_models: api/db_models_remediation_effectiveness.py
+    route_prefixes:
+    - /remediation-effectiveness
+    tables:
+    - fa_remediation_outcome
+    - fa_remediation_persistence
+    - fa_remediation_learning
+    - fa_remediation_pattern
+    tests:
+    - tests/test_h17_5_remediation_effectiveness.py
+    - tests/test_governance_chain.py
+    cgin_snapshot: true
+    cgin_anonymized: false
+    consumers:
+    - services/governance_chain/engine.py
+  risk_acceptance:
+    engine: services/risk_acceptance
+    api_file: api/risk_acceptance.py
+    db_models: api/db_models_risk_acceptance.py
+    route_prefixes:
+    - /risk-acceptances
+    tables:
+    - risk_acceptance_audits
+    - risk_acceptances
+    tests:
+    - tests/test_risk_acceptance.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
+  risk_governance:
+    engine: services/risk_governance
+    api_file: api/risk_governance.py
+    db_models: api/db_models_risk_governance.py
+    route_prefixes:
+    - /risk-governance
+    tables:
+    - risk_acceptance_approval_audits
+    - risk_acceptance_approvals
+    - risk_approval_policies
+    - risk_governance_escalations
+    - risk_reviews
+    tests:
+    - tests/test_risk_governance.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
+  subscriptions:
+    engine: services/subscriptions
+    api_file: api/subscriptions.py
+    db_models: api/db_models_subscriptions.py
+    route_prefixes:
+    - /subscriptions
+    tables:
+    - subscription_contracts
+    - subscription_event_ledger
+    - subscription_items
+    tests: []
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
+    skip_checks:
+    - db_registration
+    - tests
+  timeline_authority:
+    engine: services/timeline_authority
+    api_file: api/timeline_authority.py
+    db_models: api/db_models_timeline_authority.py
+    route_prefixes:
+    - /timeline-authority
+    tables:
+    - fa_timeline_events
+    tests:
+    - tests/test_timeline_authority.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers:
+    - services/evidence_authority/engine.py
+    - services/evidence_freshness_authority/engine.py
+    - services/verification_authority/engine.py
+    - services/control_effectiveness/engine.py
+    - services/governance_portal/engine.py
+  verification_authority:
+    engine: services/verification_authority
+    api_file: api/verification_authority.py
+    db_models: api/db_models_verification_authority.py
+    route_prefixes:
+    - /verification-requests
+    tables:
+    - fa_verification_requests
+    - fa_verification_results
+    - fa_verification_request_audits
+    tests:
+    - tests/test_h14_6_6_verification_workflow.py
+    cgin_snapshot: true
+    cgin_anonymized: false
+    consumers:
+    - services/governance_chain/engine.py
+    - services/evidence_freshness_authority/engine.py
