@@ -348,16 +348,29 @@ class GovernanceChainEngine:
 
             ea_engine = EvidenceAuthorityEngine(self._db, self._tenant_id)
 
-            # Check idempotency: if trigger_object_id is an existing evidence record
-            evidence_id = request.trigger_object_id
-            try:
-                ea_engine.get_evidence(evidence_id)
-                # Evidence already exists — NOOP_SAFE
+            # Idempotency: two paths.
+            # (a) trigger_object_id is the primary key of an existing evidence row
+            #     (pre-created externally and referenced by real ID).
+            # (b) trigger_object_id was used as source_ref on a prior bridge-created
+            #     evidence row. create_evidence() generates its own UUID so the ID
+            #     never equals the trigger — source_ref is the dedup key for retries.
+            from api.db_models_evidence_authority import FaEvidence
+
+            trigger_id = request.trigger_object_id
+            existing_ev = (
+                self._db.query(FaEvidence)
+                .filter(
+                    FaEvidence.tenant_id == self._tenant_id,
+                    (FaEvidence.id == trigger_id)
+                    | (FaEvidence.source_ref == trigger_id),
+                )
+                .first()
+            )
+            if existing_ev is not None:
                 result = ChainExecutionResult.NOOP_SAFE
                 success = True
                 failure_reason = None
-            except Exception:
-                # Evidence does not exist — create it
+            else:
                 source_type_str = request.evidence_source_type or "ATTESTATION"
                 collection_method_str = (
                     request.evidence_collection_method or "ATTESTATION_SUBMISSION"
@@ -373,7 +386,7 @@ class GovernanceChainEngine:
 
                 title = (
                     request.evidence_title
-                    or f"Assessment Evidence {request.trigger_object_id[:8]}"
+                    or f"Assessment Evidence {trigger_id[:8]}"
                 )
                 create_req = CreateEvidenceRequest(
                     title=title,
@@ -382,6 +395,7 @@ class GovernanceChainEngine:
                     collected_at=_now(),
                     engagement_id=request.evidence_engagement_id,
                     description=request.trigger_reason,
+                    source_ref=trigger_id,
                 )
                 ea_engine.create_evidence(
                     create_req, actor_id=actor_id, actor_type=actor_type
@@ -481,7 +495,7 @@ class GovernanceChainEngine:
                 return self._execution_to_response(exec_row)
 
             # Second: check for existing active verification request
-            _TERMINAL_STATES = ("VERIFIED", "REJECTED", "CANCELLED")
+            _TERMINAL_STATES = ("APPROVED", "REJECTED", "EXPIRED", "CANCELLED", "COMPLETED")
             existing = (
                 self._db.query(FaVerificationRequest)
                 .filter(
@@ -1251,7 +1265,7 @@ class GovernanceChainEngine:
                 self._db.query(FaVerificationRequest)
                 .filter(
                     FaVerificationRequest.tenant_id == self._tenant_id,
-                    FaVerificationRequest.workflow_state == "VERIFIED",
+                    FaVerificationRequest.workflow_state == "APPROVED",
                 )
                 .count()
             )
@@ -1487,7 +1501,7 @@ class GovernanceChainEngine:
                     self._db.query(FaVerificationRequest)
                     .filter(
                         FaVerificationRequest.tenant_id == self._tenant_id,
-                        FaVerificationRequest.workflow_state == "VERIFIED",
+                        FaVerificationRequest.workflow_state == "APPROVED",
                     )
                     .count()
                 )

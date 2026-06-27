@@ -6,6 +6,25 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-27 — fix/governance-chain-17-6a-bot-review: P2 bot review fixes for PR 17.6A
+
+**Root causes (3 bugs, all in `services/governance_chain/engine.py`):**
+
+1. **Wrong terminal states in `EVIDENCE_TO_VERIFICATION`**: `_TERMINAL_STATES = ("VERIFIED", "REJECTED", "CANCELLED")` used `"VERIFIED"` which is not a `VerificationWorkflowState` value, and omitted `APPROVED`, `EXPIRED`, `COMPLETED`. Active requests in APPROVED/EXPIRED/COMPLETED states were treated as non-terminal, causing NOOP_SAFE to block new verification requests even when the prior one was fully resolved.
+   **Fix:** `_TERMINAL_STATES = ("APPROVED", "REJECTED", "EXPIRED", "CANCELLED", "COMPLETED")`
+
+2. **Wrong state in health compute and validate_chain**: Both `_compute_verification_health()` and `validate_chain()` queried `workflow_state == "VERIFIED"` — not a real state. No verification request would ever count as verified, so health score always used the no-data default and `validate_chain` would always emit `NO_VERIFIED_EVIDENCE` on healthy chains.
+   **Fix:** Changed to `workflow_state == "APPROVED"` in both locations.
+
+3. **ASSESSMENT_TO_EVIDENCE idempotency key mismatch**: `create_evidence()` generates its own internal UUID; the old idempotency check called `get_evidence(trigger_object_id)` which queries by primary key — this never matched the generated UUID, so every retry created duplicate evidence.
+   **Fix:** Query by `(FaEvidence.id == trigger_id) | (FaEvidence.source_ref == trigger_id)`. On create, `source_ref=trigger_id` is stored. On retry, `source_ref` matches. The OR also handles the case where `trigger_object_id` IS a real evidence primary key (externally pre-created evidence). Verified idempotency test (GC-228) continues to pass.
+
+**Files changed:** `services/governance_chain/engine.py` (3 targeted edits), `docs/ai/PR_FIX_LOG.md`
+
+**Verified with:** pytest tests/test_governance_chain.py tests/test_governance_chain_end_to_end.py (248/248)
+
+---
+
 ### 2026-06-27 — feat/governance-chain-completion-17-6a: Governance Chain Completion
 
 **Changes shipped:**
