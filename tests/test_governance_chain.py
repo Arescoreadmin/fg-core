@@ -43,7 +43,10 @@ from services.governance_chain.models import (
     ChainExecutionResult,
     GovernanceHealthRating,
     classify_governance_health,
+    compute_governance_confidence,
     compute_governance_health_score,
+    compute_governance_momentum,
+    compute_governance_stability,
 )
 from services.governance_chain.schemas import (
     CGINChainSnapshotBundle,
@@ -256,7 +259,8 @@ class TestModels:
             assert len(val) == 2
 
     def test_GC_28_governance_chain_version_string(self):
-        assert GOVERNANCE_CHAIN_VERSION == "1.0"
+        # PR 17.6A: version bumped to 2.0
+        assert GOVERNANCE_CHAIN_VERSION == "2.0"
 
     def test_GC_29_health_default_no_data_between_0_100(self):
         assert 0.0 <= HEALTH_DEFAULT_NO_DATA <= 100.0
@@ -593,7 +597,10 @@ class TestRepositoryAndEngine:
             for e in resp.events:
                 assert e.correlation_id == cid
 
-    def test_GC_66_bridge_assessment_to_evidence_records_noop(self, build_app):
+    def test_GC_66_bridge_assessment_to_evidence_records_execution(self, build_app):
+        # PR 17.6A: bridge is now real — creates evidence or returns NOOP_SAFE if
+        # evidence_id already exists. With a random UUID, it will attempt to create
+        # evidence and record SUCCESS or FAILURE (engine may fail if EA rejects).
         build_app(auth_enabled=False)
         with Session(get_engine()) as db:
             engine = GovernanceChainEngine(db, _TENANT)
@@ -604,8 +611,12 @@ class TestRepositoryAndEngine:
                 trigger_reason="test",
             )
             result = engine.register_assessment_evidence(req, "actor", "human")
-            assert result.execution_result == ChainExecutionResult.NOOP_SAFE.value
-            assert result.success is True
+            assert result.execution_result in (
+                ChainExecutionResult.SUCCESS.value,
+                ChainExecutionResult.NOOP_SAFE.value,
+                ChainExecutionResult.FAILURE.value,
+            )
+            assert result.bridge_type == BridgeType.ASSESSMENT_TO_EVIDENCE.value
 
     def test_GC_67_bridge_evidence_to_verification_records_execution(self, build_app):
         build_app(auth_enabled=False)
@@ -624,20 +635,23 @@ class TestRepositoryAndEngine:
             assert result.duration_ms >= 0
 
     def test_GC_68_bridge_execution_always_recorded_even_on_failure(self, build_app):
+        # PR 17.6A: with empty/unknown evidence_id, bridge checks evidence existence
+        # first and returns SKIPPED_UNAVAILABLE — still always records an execution row
         build_app(auth_enabled=False)
         with Session(get_engine()) as db:
             engine = GovernanceChainEngine(db, _TENANT)
             req = ExecuteBridgeRequest(
                 bridge=BridgeType.EVIDENCE_TO_VERIFICATION.value,
-                trigger_object_id="",  # will trigger empty evidence_id error
+                trigger_object_id="",  # evidence not found in evidence_authority
                 trigger_object_type="evidence",
                 trigger_reason="failure test",
             )
             result = engine.ensure_verification_requested(req, "actor", "human")
-            # Should record FAILURE without raising
+            # Should record execution without raising (FAILURE or SKIPPED_UNAVAILABLE)
             assert result.execution_result in (
                 ChainExecutionResult.FAILURE.value,
                 ChainExecutionResult.SUCCESS.value,
+                ChainExecutionResult.SKIPPED_UNAVAILABLE.value,
             )
 
     def test_GC_69_bridge_verification_to_freshness_records_execution(self, build_app):
@@ -691,7 +705,11 @@ class TestRepositoryAndEngine:
                 == ChainExecutionResult.SKIPPED_UNAVAILABLE.value
             )
 
-    def test_GC_72_bridge_action_to_remediation_noop_safe(self, build_app):
+    def test_GC_72_bridge_action_to_remediation_skipped_without_context(
+        self, build_app
+    ):
+        # PR 17.6A: bridge is now real — without finding_id+assessment_id it returns
+        # SKIPPED_UNAVAILABLE instead of NOOP_SAFE
         build_app(auth_enabled=False)
         with Session(get_engine()) as db:
             engine = GovernanceChainEngine(db, _TENANT)
@@ -702,8 +720,11 @@ class TestRepositoryAndEngine:
                 trigger_reason="action accepted",
             )
             result = engine.create_remediation_from_action(req, "actor", "human")
-            assert result.execution_result == ChainExecutionResult.NOOP_SAFE.value
-            assert result.success is True
+            assert (
+                result.execution_result
+                == ChainExecutionResult.SKIPPED_UNAVAILABLE.value
+            )
+            assert result.success is False
 
     def test_GC_73_bridge_remediation_to_outcome_skipped_missing_params(
         self, build_app
@@ -1512,9 +1533,10 @@ class TestIntegration:
         assert _TENANT not in raw
 
     def test_GC_149_cgin_has_bundle_version(self, rw_client):
+        # PR 17.6A: version bumped to 2.0
         resp = rw_client.get("/governance-chain/cgin/snapshot")
         data = resp.json()
-        assert data["bundle_version"] == "1.0"
+        assert data["bundle_version"] == "2.0"
 
     def test_GC_150_events_by_correlation_id(self, rw_client):
         cid = _uid()
@@ -1615,19 +1637,22 @@ class TestIntegration:
         data = resp.json()
         assert data["execution_result"] == "SKIPPED_UNAVAILABLE"
 
-    def test_GC_156_execute_action_to_remediation_noop(self, rw_client):
+    def test_GC_156_execute_action_to_remediation_skipped_without_context(
+        self, rw_client
+    ):
+        # PR 17.6A: without finding_id+assessment_id, returns SKIPPED_UNAVAILABLE
         resp = rw_client.post(
             "/governance-chain/execute",
             json={
                 "bridge": "ACTION_TO_REMEDIATION",
                 "trigger_object_id": _uid(),
                 "trigger_object_type": "governance_action",
-                "trigger_reason": "bridge 6 noop",
+                "trigger_reason": "bridge 6 no context",
             },
         )
         assert resp.status_code == 201
         data = resp.json()
-        assert data["execution_result"] == "NOOP_SAFE"
+        assert data["execution_result"] == "SKIPPED_UNAVAILABLE"
 
     def test_GC_157_execute_remediation_to_outcome_skipped_no_scores(self, rw_client):
         resp = rw_client.post(
@@ -1877,7 +1902,11 @@ class TestEdgeCases:
             with pytest.raises(ValueError, match="object_id"):
                 engine.emit_chain_event(req, "a", "human")
 
-    def test_GC_179_noop_bridge_records_success(self, build_app):
+    def test_GC_179_action_to_remediation_skipped_without_context_records_execution(
+        self, build_app
+    ):
+        # PR 17.6A: ACTION_TO_REMEDIATION without finding_id/assessment_id returns
+        # SKIPPED_UNAVAILABLE (not NOOP_SAFE). Execution row is still recorded.
         build_app(auth_enabled=False)
         with Session(get_engine()) as db:
             engine = GovernanceChainEngine(db, _TENANT)
@@ -1885,10 +1914,14 @@ class TestEdgeCases:
                 bridge=BridgeType.ACTION_TO_REMEDIATION.value,
                 trigger_object_id=_uid(),
                 trigger_object_type="governance_action",
-                trigger_reason="noop",
+                trigger_reason="no context",
             )
             result = engine.create_remediation_from_action(req, "a", "human")
-            assert result.success is True
+            assert (
+                result.execution_result
+                == ChainExecutionResult.SKIPPED_UNAVAILABLE.value
+            )
+            assert result.id is not None
 
     def test_GC_180_skipped_bridge_records_failure_false(self, build_app):
         build_app(auth_enabled=False)
@@ -2039,7 +2072,7 @@ class TestEdgeCases:
 
     def test_GC_190_execute_bridge_all_bridges_covered(self, build_app):
         build_app(auth_enabled=False)
-        # All BridgeType values except ALL_TO_REPORTING should be dispatchable
+        # All BridgeType values are now dispatchable including ALL_TO_REPORTING (PR 17.6A)
         dispatchable = {
             BridgeType.ASSESSMENT_TO_EVIDENCE.value,
             BridgeType.EVIDENCE_TO_VERIFICATION.value,
@@ -2048,6 +2081,7 @@ class TestEdgeCases:
             BridgeType.EFFECTIVENESS_TO_EXPLAINABILITY.value,
             BridgeType.ACTION_TO_REMEDIATION.value,
             BridgeType.REMEDIATION_TO_OUTCOME.value,
+            BridgeType.ALL_TO_REPORTING.value,
         }
         with Session(get_engine()) as db2:
             engine2 = GovernanceChainEngine(db2, _TENANT)
@@ -2246,3 +2280,382 @@ class TestEdgeCases:
             "All authority_snapshots have average_duration_ms=None — "
             "key mismatch between bridge_type and target_authority likely regressed"
         )
+
+
+# ===========================================================================
+# PR 17.6A — Governance Chain Completion tests
+# GC-213 to GC-240
+# ===========================================================================
+
+
+class TestGovernanceChainCompletion:
+    """PR 17.6A: Bridge completion, v2 health metrics, validate endpoint."""
+
+    # -----------------------------------------------------------------------
+    # Model unit tests
+    # -----------------------------------------------------------------------
+
+    def test_GC_213_compute_momentum_neutral_when_no_previous(self):
+        result = compute_governance_momentum(80.0, None)
+        assert result == 50.0
+
+    def test_GC_214_compute_momentum_improving(self):
+        result = compute_governance_momentum(90.0, 80.0)
+        assert result == 60.0  # 50 + (90-80) = 60
+
+    def test_GC_215_compute_momentum_declining(self):
+        result = compute_governance_momentum(70.0, 80.0)
+        assert result == 40.0  # 50 + (70-80) = 40
+
+    def test_GC_216_compute_momentum_clamped_at_100(self):
+        result = compute_governance_momentum(100.0, 0.0)
+        assert result == 100.0
+
+    def test_GC_217_compute_momentum_clamped_at_0(self):
+        result = compute_governance_momentum(0.0, 100.0)
+        assert result == 0.0
+
+    def test_GC_218_compute_stability_neutral_single_score(self):
+        result = compute_governance_stability([80.0])
+        assert result == 50.0
+
+    def test_GC_219_compute_stability_neutral_no_scores(self):
+        result = compute_governance_stability([])
+        assert result == 50.0
+
+    def test_GC_220_compute_stability_high_when_no_variance(self):
+        result = compute_governance_stability([80.0, 80.0, 80.0])
+        assert result == 100.0
+
+    def test_GC_221_compute_stability_lower_with_variance(self):
+        result = compute_governance_stability([50.0, 100.0])
+        assert result < 100.0
+
+    def test_GC_222_compute_confidence_full_no_issues(self):
+        result = compute_governance_confidence(0, 10, 0, 0)
+        assert result == 100.0
+
+    def test_GC_223_compute_confidence_reduced_by_missing_inputs(self):
+        result = compute_governance_confidence(2, 0, 0, 0)
+        assert result == 80.0  # 100 - 2*10
+
+    def test_GC_224_compute_confidence_missing_inputs_capped_at_50(self):
+        result = compute_governance_confidence(10, 0, 0, 0)
+        assert result == 50.0  # cap: min(50, 10*10)=50
+
+    def test_GC_225_compute_confidence_reduced_by_failures(self):
+        result = compute_governance_confidence(0, 10, 5, 0)
+        assert result == 85.0  # 100 - (5/10)*30 = 85
+
+    def test_GC_226_compute_confidence_result_in_range(self):
+        result = compute_governance_confidence(10, 10, 10, 10)
+        assert 0.0 <= result <= 100.0
+
+    # -----------------------------------------------------------------------
+    # ASSESSMENT_TO_EVIDENCE real bridge
+    # -----------------------------------------------------------------------
+
+    def test_GC_227_assessment_to_evidence_creates_evidence(self, build_app):
+        """ASSESSMENT_TO_EVIDENCE with new evidence_id creates evidence → SUCCESS."""
+        build_app(auth_enabled=False)
+        with Session(get_engine()) as db:
+            engine = GovernanceChainEngine(db, f"t-a2e-{_uid()[:8]}")
+            req = ExecuteBridgeRequest(
+                bridge=BridgeType.ASSESSMENT_TO_EVIDENCE.value,
+                trigger_object_id=_uid(),
+                trigger_object_type="assessment",
+                trigger_reason="create evidence test",
+                evidence_title="Test Evidence",
+                evidence_source_type="ATTESTATION",
+                evidence_collection_method="ATTESTATION_SUBMISSION",
+            )
+            result = engine.register_assessment_evidence(req, "actor", "human")
+            # With new evidence_id, creates evidence → SUCCESS
+            assert result.success is True
+            assert result.execution_result in (
+                ChainExecutionResult.SUCCESS.value,
+                ChainExecutionResult.NOOP_SAFE.value,
+            )
+
+    def test_GC_228_assessment_to_evidence_idempotent_existing_id(self, build_app):
+        """ASSESSMENT_TO_EVIDENCE with existing evidence_id → NOOP_SAFE."""
+        from services.evidence_authority.engine import EvidenceAuthorityEngine
+        from services.evidence_authority.models import (
+            EvidenceCollectionMethod,
+            EvidenceSourceType,
+        )
+        from services.evidence_authority.schemas import CreateEvidenceRequest
+
+        build_app(auth_enabled=False)
+        tid = f"t-idem-{_uid()[:8]}"
+        with Session(get_engine()) as db:
+            # Create evidence first
+            ea = EvidenceAuthorityEngine(db, tid)
+            ev = ea.create_evidence(
+                CreateEvidenceRequest(
+                    title="Pre-existing",
+                    source_type=EvidenceSourceType.ATTESTATION,
+                    collection_method=EvidenceCollectionMethod.ATTESTATION_SUBMISSION,
+                    collected_at=_now_str(),
+                ),
+                actor_id="seeder",
+                actor_type="human",
+            )
+            db.commit()
+
+            engine = GovernanceChainEngine(db, tid)
+            req = ExecuteBridgeRequest(
+                bridge=BridgeType.ASSESSMENT_TO_EVIDENCE.value,
+                trigger_object_id=ev.id,  # existing evidence_id
+                trigger_object_type="assessment",
+                trigger_reason="idempotency test",
+            )
+            result = engine.register_assessment_evidence(req, "actor", "human")
+            assert result.execution_result == ChainExecutionResult.NOOP_SAFE.value
+            assert result.success is True
+
+    # -----------------------------------------------------------------------
+    # EVIDENCE_TO_VERIFICATION strengthened
+    # -----------------------------------------------------------------------
+
+    def test_GC_229_evidence_to_verification_unknown_evidence_skipped(self, build_app):
+        """EVIDENCE_TO_VERIFICATION with unknown evidence_id → SKIPPED_UNAVAILABLE."""
+        build_app(auth_enabled=False)
+        with Session(get_engine()) as db:
+            engine = GovernanceChainEngine(db, f"t-e2v-{_uid()[:8]}")
+            req = ExecuteBridgeRequest(
+                bridge=BridgeType.EVIDENCE_TO_VERIFICATION.value,
+                trigger_object_id=_uid(),  # does not exist
+                trigger_object_type="evidence",
+                trigger_reason="no evidence test",
+            )
+            result = engine.ensure_verification_requested(req, "actor", "human")
+            assert (
+                result.execution_result
+                == ChainExecutionResult.SKIPPED_UNAVAILABLE.value
+            )
+
+    def test_GC_230_evidence_to_verification_duplicate_active_request_noop(
+        self, build_app
+    ):
+        """EVIDENCE_TO_VERIFICATION with active verification request → NOOP_SAFE."""
+        from services.evidence_authority.engine import EvidenceAuthorityEngine
+        from services.evidence_authority.models import (
+            EvidenceCollectionMethod,
+            EvidenceSourceType,
+        )
+        from services.evidence_authority.schemas import CreateEvidenceRequest
+        from services.verification_authority.engine import VerificationAuthorityEngine
+        from services.verification_authority.schemas import (
+            CreateVerificationRequestRequest,
+        )
+
+        build_app(auth_enabled=False)
+        tid = f"t-dup-{_uid()[:8]}"
+        with Session(get_engine()) as db:
+            # Create evidence
+            ea = EvidenceAuthorityEngine(db, tid)
+            ev = ea.create_evidence(
+                CreateEvidenceRequest(
+                    title="Evidence for dup test",
+                    source_type=EvidenceSourceType.ATTESTATION,
+                    collection_method=EvidenceCollectionMethod.ATTESTATION_SUBMISSION,
+                    collected_at=_now_str(),
+                ),
+                actor_id="seeder",
+                actor_type="human",
+            )
+            db.commit()
+
+            # Create active verification request
+            va = VerificationAuthorityEngine(db, tid)
+            va.create_request(
+                CreateVerificationRequestRequest(
+                    evidence_id=ev.id,
+                    priority=50,
+                    notes="initial request",
+                ),
+                actor_id="seeder",
+                actor_type="human",
+            )
+            db.commit()
+
+            # Now run bridge — should detect duplicate and return NOOP_SAFE
+            engine = GovernanceChainEngine(db, tid)
+            req = ExecuteBridgeRequest(
+                bridge=BridgeType.EVIDENCE_TO_VERIFICATION.value,
+                trigger_object_id=ev.id,
+                trigger_object_type="evidence",
+                trigger_reason="duplicate test",
+            )
+            result = engine.ensure_verification_requested(req, "actor", "human")
+            assert result.execution_result == ChainExecutionResult.NOOP_SAFE.value
+            assert result.success is True
+
+    def test_GC_231_evidence_to_verification_valid_creates_request(self, build_app):
+        """EVIDENCE_TO_VERIFICATION with valid evidence creates request → SUCCESS."""
+        from services.evidence_authority.engine import EvidenceAuthorityEngine
+        from services.evidence_authority.models import (
+            EvidenceCollectionMethod,
+            EvidenceSourceType,
+        )
+        from services.evidence_authority.schemas import CreateEvidenceRequest
+
+        build_app(auth_enabled=False)
+        tid = f"t-e2vsuc-{_uid()[:8]}"
+        with Session(get_engine()) as db:
+            ea = EvidenceAuthorityEngine(db, tid)
+            ev = ea.create_evidence(
+                CreateEvidenceRequest(
+                    title="Evidence for verification",
+                    source_type=EvidenceSourceType.ATTESTATION,
+                    collection_method=EvidenceCollectionMethod.ATTESTATION_SUBMISSION,
+                    collected_at=_now_str(),
+                ),
+                actor_id="seeder",
+                actor_type="human",
+            )
+            db.commit()
+
+            engine = GovernanceChainEngine(db, tid)
+            req = ExecuteBridgeRequest(
+                bridge=BridgeType.EVIDENCE_TO_VERIFICATION.value,
+                trigger_object_id=ev.id,
+                trigger_object_type="evidence",
+                trigger_reason="create verification test",
+            )
+            result = engine.ensure_verification_requested(req, "actor", "human")
+            assert result.execution_result == ChainExecutionResult.SUCCESS.value
+            assert result.success is True
+
+    # -----------------------------------------------------------------------
+    # ACTION_TO_REMEDIATION real bridge
+    # -----------------------------------------------------------------------
+
+    def test_GC_232_action_to_remediation_without_context_skipped(self, build_app):
+        """ACTION_TO_REMEDIATION without finding_id/assessment_id → SKIPPED_UNAVAILABLE."""
+        build_app(auth_enabled=False)
+        with Session(get_engine()) as db:
+            engine = GovernanceChainEngine(db, f"t-a2r-{_uid()[:8]}")
+            req = ExecuteBridgeRequest(
+                bridge=BridgeType.ACTION_TO_REMEDIATION.value,
+                trigger_object_id=_uid(),
+                trigger_object_type="governance_action",
+                trigger_reason="no context",
+            )
+            result = engine.create_remediation_from_action(req, "actor", "human")
+            assert (
+                result.execution_result
+                == ChainExecutionResult.SKIPPED_UNAVAILABLE.value
+            )
+            assert result.success is False
+
+    # -----------------------------------------------------------------------
+    # ALL_TO_REPORTING bridge
+    # -----------------------------------------------------------------------
+
+    def test_GC_233_all_to_reporting_no_data_skipped(self, build_app):
+        """ALL_TO_REPORTING with no data → SKIPPED_UNAVAILABLE."""
+        build_app(auth_enabled=False)
+        tid = f"t-rep-{_uid()[:8]}"
+        with Session(get_engine()) as db:
+            engine = GovernanceChainEngine(db, tid)
+            req = ExecuteBridgeRequest(
+                bridge=BridgeType.ALL_TO_REPORTING.value,
+                trigger_object_id=_uid(),
+                trigger_object_type="report",
+                trigger_reason="readiness check",
+            )
+            result = engine.check_reporting_readiness(req, "actor", "human")
+            # With no data, all authorities are missing → SKIPPED_UNAVAILABLE
+            assert (
+                result.execution_result
+                == ChainExecutionResult.SKIPPED_UNAVAILABLE.value
+            )
+            assert result.bridge_type == BridgeType.ALL_TO_REPORTING.value
+
+    def test_GC_234_all_to_reporting_dispatched_via_execute_bridge(self, build_app):
+        """ALL_TO_REPORTING is dispatched correctly via execute_bridge."""
+        build_app(auth_enabled=False)
+        with Session(get_engine()) as db:
+            engine = GovernanceChainEngine(db, f"t-rep2-{_uid()[:8]}")
+            req = ExecuteBridgeRequest(
+                bridge=BridgeType.ALL_TO_REPORTING.value,
+                trigger_object_id=_uid(),
+                trigger_object_type="report",
+                trigger_reason="dispatch test",
+            )
+            result = engine.execute_bridge(req, "a", "human")
+            assert result.bridge_type == BridgeType.ALL_TO_REPORTING.value
+
+    # -----------------------------------------------------------------------
+    # Governance Health v2 metrics
+    # -----------------------------------------------------------------------
+
+    def test_GC_235_health_snapshot_v2_fields_present(self, build_app):
+        """Health snapshot returns v2 fields: momentum, stability, confidence."""
+        build_app(auth_enabled=False)
+        with Session(get_engine()) as db:
+            engine = GovernanceChainEngine(db, f"t-hv2-{_uid()[:8]}")
+            result = engine.generate_governance_health_snapshot()
+        assert result.governance_momentum is not None
+        assert result.governance_stability is not None
+        assert result.governance_confidence is not None
+        assert 0.0 <= result.governance_momentum <= 100.0
+        assert 0.0 <= result.governance_stability <= 100.0
+        assert 0.0 <= result.governance_confidence <= 100.0
+
+    def test_GC_236_health_snapshot_first_momentum_is_neutral(self, build_app):
+        """First snapshot has momentum=50.0 (no previous score)."""
+        build_app(auth_enabled=False)
+        with Session(get_engine()) as db:
+            engine = GovernanceChainEngine(db, f"t-mom-{_uid()[:8]}")
+            result = engine.generate_governance_health_snapshot()
+        assert result.governance_momentum == 50.0
+
+    # -----------------------------------------------------------------------
+    # POST /governance-chain/validate route
+    # -----------------------------------------------------------------------
+
+    def test_GC_237_validate_chain_no_auth_denied(self, build_app):
+        app = build_app(auth_enabled=True)
+        client = TestClient(app)
+        resp = client.post("/governance-chain/validate")
+        assert resp.status_code in (401, 403)
+
+    def test_GC_238_validate_chain_no_data_returns_warning(self, build_app):
+        """POST /governance-chain/validate with no data returns WARNING status."""
+        app = build_app(auth_enabled=True)
+        key = mint_key(
+            "governance:read", "governance:write", tenant_id=f"t-val-{_uid()[:8]}"
+        )
+        client = TestClient(app, headers={"X-API-Key": key})
+        resp = client.post("/governance-chain/validate")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] in ("WARNING", "PASS", "FAIL")
+        assert isinstance(data["findings"], list)
+        assert "checked_at" in data
+        # With no data, expect WARNING (NO_CHAIN_DATA finding)
+        assert data["status"] == "WARNING"
+
+    def test_GC_239_validate_chain_tenant_isolation(self, build_app):
+        """Validate chain returns tenant_id from auth context, not body."""
+        app = build_app(auth_enabled=True)
+        tid = f"t-iso-{_uid()[:8]}"
+        key = mint_key("governance:read", "governance:write", tenant_id=tid)
+        client = TestClient(app, headers={"X-API-Key": key})
+        resp = client.post("/governance-chain/validate")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["tenant_id"] == tid
+
+    def test_GC_240_cgin_no_raw_tenant_id_in_bundle(self, build_app):
+        """CGIN bundle does not expose raw tenant_id."""
+        app = build_app(auth_enabled=True)
+        tid = f"t-cgin-{_uid()[:8]}"
+        key = mint_key("governance:read", "governance:write", tenant_id=tid)
+        client = TestClient(app, headers={"X-API-Key": key})
+        resp = client.get("/governance-chain/cgin/snapshot")
+        assert resp.status_code == 200
+        assert tid not in resp.text

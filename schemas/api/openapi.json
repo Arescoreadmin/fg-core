@@ -5722,6 +5722,73 @@
         "title": "ChainExecutionResponse",
         "type": "object"
       },
+      "ChainFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "finding_type": {
+            "title": "Finding Type",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_type",
+          "severity",
+          "description"
+        ],
+        "title": "ChainFinding",
+        "type": "object"
+      },
+      "ChainValidationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "checked_at": {
+            "title": "Checked At",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ChainFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "findings",
+          "checked_at",
+          "tenant_id"
+        ],
+        "title": "ChainValidationResponse",
+        "type": "object"
+      },
       "ChangeDetectionSummary": {
         "additionalProperties": false,
         "properties": {
@@ -15173,6 +15240,17 @@
             ],
             "title": "After Effectiveness Level"
           },
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
           "before_effectiveness_level": {
             "anyOf": [
               {
@@ -15231,6 +15309,61 @@
               }
             ],
             "title": "Effectiveness Before"
+          },
+          "evidence_collection_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Collection Method"
+          },
+          "evidence_engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Engagement Id"
+          },
+          "evidence_source_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Source Type"
+          },
+          "evidence_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Title"
+          },
+          "finding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Id"
           },
           "forecast_after": {
             "anyOf": [
@@ -15308,6 +15441,17 @@
               }
             ],
             "title": "Remediation Category"
+          },
+          "remediation_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Title"
           },
           "trigger_object_id": {
             "title": "Trigger Object Id",
@@ -18893,6 +19037,28 @@
         "title": "GovernanceExceptionCreateBody",
         "type": "object"
       },
+      "GovernanceHealthHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/GovernanceHealthResponse"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "snapshots",
+          "total"
+        ],
+        "title": "GovernanceHealthHistoryResponse",
+        "type": "object"
+      },
       "GovernanceHealthResponse": {
         "additionalProperties": false,
         "properties": {
@@ -18912,6 +19078,17 @@
             "title": "Freshness Health",
             "type": "number"
           },
+          "governance_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Confidence"
+          },
           "governance_health_rating": {
             "title": "Governance Health Rating",
             "type": "string"
@@ -18919,6 +19096,28 @@
           "governance_health_score": {
             "title": "Governance Health Score",
             "type": "number"
+          },
+          "governance_momentum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Momentum"
+          },
+          "governance_stability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Stability"
           },
           "id": {
             "title": "Id",
@@ -72746,6 +72945,78 @@
         ]
       }
     },
+    "/governance-chain/health/history": {
+      "get": {
+        "operationId": "get_health_history_governance_chain_health_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceHealthHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Health History",
+        "tags": [
+          "governance-chain"
+        ]
+      }
+    },
     "/governance-chain/recalculate-health": {
       "post": {
         "operationId": "recalculate_health_governance_chain_recalculate_health_post",
@@ -72800,6 +73071,55 @@
           }
         },
         "summary": "Recalculate Health",
+        "tags": [
+          "governance-chain"
+        ]
+      }
+    },
+    "/governance-chain/validate": {
+      "post": {
+        "operationId": "validate_chain_governance_chain_validate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainValidationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Chain",
         "tags": [
           "governance-chain"
         ]

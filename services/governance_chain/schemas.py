@@ -109,6 +109,15 @@ class ExecuteBridgeRequest(BaseModel):
     governance_health_before: Optional[float] = None
     governance_health_after: Optional[float] = None
     verified_at: Optional[str] = None
+    # ASSESSMENT_TO_EVIDENCE fields
+    evidence_title: Optional[str] = None
+    evidence_source_type: Optional[str] = None
+    evidence_collection_method: Optional[str] = None
+    evidence_engagement_id: Optional[str] = None
+    # ACTION_TO_REMEDIATION fields
+    finding_id: Optional[str] = None
+    assessment_id: Optional[str] = None
+    remediation_title: Optional[str] = None
 
 
 class ChainExecutionResponse(BaseModel):
@@ -163,6 +172,9 @@ class GovernanceHealthResponse(BaseModel):
     missing_inputs: list[str]
     snapshot_at: str
     calculation_version: str
+    governance_momentum: Optional[float] = None
+    governance_stability: Optional[float] = None
+    governance_confidence: Optional[float] = None
 
 
 class GovernanceHealthHistoryResponse(BaseModel):
@@ -231,3 +243,40 @@ class ChainDiagnosticsResponse(BaseModel):
     latest_governance_health: Optional[GovernanceHealthResponse]
     missing_inputs: list[str]
     generated_at: str
+
+
+# ---------------------------------------------------------------------------
+# Chain validation schemas (PR 17.6A)
+# ---------------------------------------------------------------------------
+
+
+class ChainFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    finding_type: str
+    severity: str  # INFO, WARNING, ERROR
+    description: str
+    context: Optional[dict] = None
+
+
+class ChainValidationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str  # PASS, WARNING, FAIL
+    findings: list[ChainFinding]
+    checked_at: str
+    tenant_id: str
+
+
+# ---------------------------------------------------------------------------
+# Report readiness schema (PR 17.6A)
+# ---------------------------------------------------------------------------
+
+
+class ReportReadinessResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str  # READY, PARTIAL, NOT_READY
+    missing_inputs: list[str]
+    authority_counts: dict[str, int]
+    checked_at: str

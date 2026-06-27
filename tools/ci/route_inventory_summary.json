@@ -162,7 +162,7 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 725,
+  "contract_count": 735,
   "contract_only": [],
   "internal_allowed": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
@@ -280,7 +280,7 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 649,
+    "control": 651,
     "data": 54,
     "evidence": 86,
     "rbac": 5,
@@ -340,7 +340,7 @@
     "POST /ui/devices/{device_id}/enable"
   ],
   "removed": [],
-  "runtime_count": 899,
+  "runtime_count": 901,
   "runtime_only": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
     "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -401,12 +401,6 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
-    "GET /governance-chain/cgin/snapshot",
-    "GET /governance-chain/diagnostics",
-    "GET /governance-chain/events/{correlation_id}",
-    "GET /governance-chain/executions",
-    "GET /governance-chain/executions/{execution_id}",
-    "GET /governance-chain/health",
     "GET /health",
     "GET /metrics",
     "GET /ui/ai",
@@ -499,8 +493,6 @@
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
-    "POST /governance-chain/execute",
-    "POST /governance-chain/recalculate-health",
     "POST /ui/ai/chat",
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
@@ -510,14 +502,5 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": [
-    "GET /governance-chain/cgin/snapshot",
-    "GET /governance-chain/diagnostics",
-    "GET /governance-chain/events/{correlation_id}",
-    "GET /governance-chain/executions",
-    "GET /governance-chain/executions/{execution_id}",
-    "GET /governance-chain/health",
-    "POST /governance-chain/execute",
-    "POST /governance-chain/recalculate-health"
-  ]
+  "unauthorized_runtime_only": []
 }

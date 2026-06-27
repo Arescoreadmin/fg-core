@@ -219,6 +219,17 @@ class GovernanceChainRepository:
             .first()
         )
 
+    def list_recent_health_scores(self, n: int = 10) -> list[float]:
+        """Return last N governance_health_score values for momentum/stability."""
+        rows = (
+            self._db.query(FaGovernanceHealthSnapshot.governance_health_score)
+            .filter(FaGovernanceHealthSnapshot.tenant_id == self._tenant_id)
+            .order_by(FaGovernanceHealthSnapshot.snapshot_at.desc())
+            .limit(n)
+            .all()
+        )
+        return [r[0] for r in rows]
+
     def list_health_snapshots(
         self, limit: int = 50, offset: int = 0
     ) -> tuple[list[FaGovernanceHealthSnapshot], int]:

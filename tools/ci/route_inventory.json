@@ -10348,8 +10348,42 @@
         "tenant"
       ],
       "file": "api/governance_chain.py",
+      "method": "GET",
+      "path": "/governance-chain/health/history",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_chain.py",
       "method": "POST",
       "path": "/governance-chain/recalculate-health",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_chain.py",
+      "method": "POST",
+      "path": "/governance-chain/validate",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -15427,7 +15461,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-26T21:50:23.193575+00:00",
+  "generated_at": "2026-06-27T14:08:38.505993+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

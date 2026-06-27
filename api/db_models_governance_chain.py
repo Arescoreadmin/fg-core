@@ -142,6 +142,9 @@ class FaGovernanceHealthSnapshot(Base):
     calculation_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
+    governance_momentum: Mapped[float | None] = mapped_column(Float, nullable=True)
+    governance_stability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    governance_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     __table_args__ = (
         Index("idx_gc_health_tenant", "tenant_id"),
