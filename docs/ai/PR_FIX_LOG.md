@@ -6,6 +6,40 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-27 — feat/governance-learning-loop-17-6b: Governance Learning Loop Authority
+
+**Changes shipped:**
+
+PR 17.6B — new bounded context `services/governance_learning/` implementing a deterministic governance intelligence loop. Ingests remediation outcome events, maintains per-category running aggregates, and surfaces deterministic recommendations, momentum classification, and an anonymized CGIN snapshot.
+
+**New files:**
+- `migrations/postgres/0138_governance_learning_loop.sql` — `fa_governance_learning_records` (append-only; PG triggers) + `fa_governance_learning_aggregates` (mutable; UNIQUE on `(tenant_id, remediation_category)`)
+- `api/db_models_governance_learning.py` — `FaGovernanceLearningRecord` (append-only ORM guards) + `FaGovernanceLearningAggregate`
+- `services/governance_learning/models.py` — 5 enums + 6 pure computation functions (success/confidence scoring, signal detection, classification)
+- `services/governance_learning/learning_rules.py` — 3 deterministic recommendation rules
+- `services/governance_learning/schemas.py` — 12 Pydantic schemas (`extra="forbid"`)
+- `services/governance_learning/repository.py` — tenant-scoped read/write; upsert aggregate
+- `services/governance_learning/engine.py` — `GovernanceLearningEngine` with 10 public methods
+- `api/governance_learning.py` — 10 routes under `/governance-learning`
+- `tests/test_governance_learning.py` — 127 unit tests (GL-1 to GL-127)
+- `tests/test_governance_learning_end_to_end.py` — 5 E2E tests
+
+**Modified files:**
+- `api/db.py` — `db_models_governance_learning` added to `_ensure_models_imported()`
+- `api/main.py` — `governance_learning_router` registered in both app builders
+- `services/plane_registry/registry.py` — `/governance-learning` added to `control` plane
+- `authority_manifest.yaml` — `governance_learning` entry added
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated (10 new routes)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — PR 17.6B entry prepended
+- `ROADMAP.md` — PR 17.6B row added
+
+**Verified with:**
+- pytest tests/test_governance_learning.py tests/test_governance_learning_end_to_end.py (132/132)
+- make fg-contract
+- make fg-fast (all gates pass)
+
+---
+
 ### 2026-06-27 — fix/governance-chain-17-6a-bot-review: P2 bot review fixes for PR 17.6A
 
 **Root causes (3 bugs, all in `services/governance_chain/engine.py`):**

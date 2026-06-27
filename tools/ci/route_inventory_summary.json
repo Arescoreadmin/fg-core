@@ -280,7 +280,7 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 651,
+    "control": 661,
     "data": 54,
     "evidence": 86,
     "rbac": 5,
@@ -340,7 +340,7 @@
     "POST /ui/devices/{device_id}/enable"
   ],
   "removed": [],
-  "runtime_count": 901,
+  "runtime_count": 911,
   "runtime_only": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
     "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -401,6 +401,14 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
+    "GET /governance-learning/aggregates",
+    "GET /governance-learning/cgin/snapshot",
+    "GET /governance-learning/dashboard",
+    "GET /governance-learning/learning-records",
+    "GET /governance-learning/momentum",
+    "GET /governance-learning/recommendations",
+    "GET /governance-learning/top-failures",
+    "GET /governance-learning/top-performers",
     "GET /health",
     "GET /metrics",
     "GET /ui/ai",
@@ -493,6 +501,8 @@
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
+    "POST /governance-learning/ingest-outcome",
+    "POST /governance-learning/recalculate",
     "POST /ui/ai/chat",
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
@@ -502,5 +512,16 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": []
+  "unauthorized_runtime_only": [
+    "GET /governance-learning/aggregates",
+    "GET /governance-learning/cgin/snapshot",
+    "GET /governance-learning/dashboard",
+    "GET /governance-learning/learning-records",
+    "GET /governance-learning/momentum",
+    "GET /governance-learning/recommendations",
+    "GET /governance-learning/top-failures",
+    "GET /governance-learning/top-performers",
+    "POST /governance-learning/ingest-outcome",
+    "POST /governance-learning/recalculate"
+  ]
 }

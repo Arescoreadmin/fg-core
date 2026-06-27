@@ -1,3 +1,34 @@
+## 2026-06-27 — PR 17.6B: Governance Learning Loop Authority
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new bounded context at `services/governance_learning/`; 10 new routes under new `/governance-learning` prefix registered in `control` plane; 2 new DB tables in migration 0138; no new auth subsystem; no privilege escalation; no credential handling; all computation deterministic)
+
+**Changes:**
+- `migrations/postgres/0138_governance_learning_loop.sql` — creates `fa_governance_learning_records` (append-only; `before_update` + `before_delete` ORM guards + PG triggers) and `fa_governance_learning_aggregates` (mutable; UNIQUE constraint on `(tenant_id, remediation_category)`). 2 tables, 7 indexes.
+- `api/db_models_governance_learning.py` — `FaGovernanceLearningRecord` (append-only ORM guards) and `FaGovernanceLearningAggregate` (mutable, no guards). All columns NOT NULL with `tenant_id` index.
+- `services/governance_learning/models.py` — 5 enums (`LearningCategory`, `LearningSignal`, `MomentumClass`, `StabilityClass`, `ConfidenceLevel`) and 6 pure computation functions (`compute_success_score`, `compute_confidence_score`, `classify_confidence`, `classify_momentum`, `classify_stability`, `detect_signals`). No ML, no external calls.
+- `services/governance_learning/learning_rules.py` — 3 deterministic rule functions in `generate_recommendations()`: prioritize best category, escalate worst, governance review on declining health.
+- `services/governance_learning/schemas.py` — 12 Pydantic schemas all with `extra="forbid"`. `IngestOutcomeRequest` accepts no `tenant_id` field (resolved from `request.state`).
+- `services/governance_learning/repository.py` — tenant-scoped read/write for both tables; `upsert_aggregate()` uses `INSERT … ON CONFLICT DO UPDATE` (no cross-tenant query path).
+- `services/governance_learning/engine.py` — `GovernanceLearningEngine` with 10 methods: `ingest_outcome`, `_update_aggregate`, `get_dashboard`, `list_records`, `list_aggregates`, `get_recommendations`, `get_top_performers`, `get_failures`, `get_momentum`, `get_cgin_snapshot`, `recalculate`. All tenant-scoped; no mutation outside of `ingest_outcome` and `recalculate`.
+- `api/governance_learning.py` — 10 routes: `GET /dashboard`, `GET /learning-records`, `GET /aggregates`, `GET /recommendations`, `GET /top-performers`, `GET /top-failures`, `GET /momentum`, `GET /cgin/snapshot`, `POST /ingest-outcome`, `POST /recalculate`. All gated on `require_scopes()` + `require_bound_tenant()`.
+- `api/db.py` — `db_models_governance_learning` added to `_ensure_models_imported()`.
+- `api/main.py` — `governance_learning_router` imported and registered in both app builders.
+- `services/plane_registry/registry.py` — `/governance-learning` added to `control` plane `route_prefixes`.
+- `authority_manifest.yaml` — `governance_learning` entry added.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — regenerated to include 10 new routes.
+
+**Security posture:** all routes under new `/governance-learning` prefix, `control`-plane-scoped. GET routes require `governance:read`; POST routes require `governance:write`. Tenant isolation enforced via `require_bound_tenant()` in all routes; `tenant_id` resolved from `request.state` only — never from request body. CGIN snapshot (`/cgin/snapshot`) anonymizes tenant identity via `sha256("cgin:v1:{tenant_id}")[:32]` — raw `tenant_id` never appears in output. `fa_governance_learning_records` is append-only at both ORM and PG layers. `ingest_outcome` records immutable per-event rows; `_update_aggregate` modifies per-category running totals using upsert (idempotent). All scores and classifications are deterministic arithmetic — no AI, no ML, no external calls. No credential storage, no PII, no PHI.
+
+**Validation:**
+- `make fg-contract`: OK
+- `pytest tests/test_governance_learning.py tests/test_governance_learning_end_to_end.py`: 132/132 passed
+- `make route-inventory-generate`: OK
+- All CI gates pass
+
+**SOC review outcome:** approved. Route inventory update is purely additive: 10 new endpoints appended to the `control` plane. No auth, session, middleware, OPA, or security files changed. All 10 routes require `governance:read` or `governance:write` scope via existing `require_scopes()` + `require_bound_tenant()`. CGIN snapshot anonymizes tenant identity; raw `tenant_id` not disclosed. Append-only guard on `fa_governance_learning_records` prevents post-write mutations at both ORM and DB trigger layers. Migration 0138 adds 2 tables + PG append-only triggers — backward compatible; safe to apply under live traffic.
+
+---
+
 ## 2026-06-27 — PR 17.6A: Governance Chain Completion
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (2 new routes under existing `/governance-chain` prefix, already registered in `control` plane; 1 new migration 0137 adding nullable columns to existing table; no new auth subsystem; no new credential paths; no privilege escalation; all outputs deterministic)

@@ -183,6 +183,21 @@ authorities:
     cgin_snapshot: true
     cgin_anonymized: true
     consumers: []
+  governance_learning:
+    engine: services/governance_learning
+    api_file: api/governance_learning.py
+    db_models: api/db_models_governance_learning.py
+    route_prefixes:
+    - /governance-learning
+    tables:
+    - fa_governance_learning_records
+    - fa_governance_learning_aggregates
+    tests:
+    - tests/test_governance_learning.py
+    cgin_snapshot: true
+    cgin_anonymized: true
+    consumers:
+    - services/governance_chain/engine.py
   governance_portal:
     engine: services/governance_portal
     api_file: api/governance_portal.py
