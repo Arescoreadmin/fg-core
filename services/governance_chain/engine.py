@@ -385,8 +385,7 @@ class GovernanceChainEngine:
                     collection_method = EvidenceCollectionMethod.ATTESTATION_SUBMISSION
 
                 title = (
-                    request.evidence_title
-                    or f"Assessment Evidence {trigger_id[:8]}"
+                    request.evidence_title or f"Assessment Evidence {trigger_id[:8]}"
                 )
                 create_req = CreateEvidenceRequest(
                     title=title,
@@ -495,7 +494,13 @@ class GovernanceChainEngine:
                 return self._execution_to_response(exec_row)
 
             # Second: check for existing active verification request
-            _TERMINAL_STATES = ("APPROVED", "REJECTED", "EXPIRED", "CANCELLED", "COMPLETED")
+            _TERMINAL_STATES = (
+                "APPROVED",
+                "REJECTED",
+                "EXPIRED",
+                "CANCELLED",
+                "COMPLETED",
+            )
             existing = (
                 self._db.query(FaVerificationRequest)
                 .filter(
@@ -890,7 +895,10 @@ class GovernanceChainEngine:
 
         try:
             from services.remediation.engine import RemediationEngine
-            from services.remediation.schemas import CreateTaskRequest, RemediationPriority
+            from services.remediation.schemas import (
+                CreateTaskRequest,
+                RemediationPriority,
+            )
 
             title = (
                 request.remediation_title
@@ -992,7 +1000,11 @@ class GovernanceChainEngine:
             ),
         }
 
-        for auth_name, (module_name, class_name, tid_field) in _AUTHORITY_MODELS.items():
+        for auth_name, (
+            module_name,
+            class_name,
+            tid_field,
+        ) in _AUTHORITY_MODELS.items():
             try:
                 import importlib
 
