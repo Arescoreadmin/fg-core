@@ -1,3 +1,18 @@
+## 2026-06-27 — PR 17.6B fix pass: RLS, no_change_count, outcome idempotency
+
+**Classification:** Fix-pass only. No new routes, no new auth surfaces. Changes are security hardening and data correctness fixes within the existing `governance_learning` bounded context.
+
+**Critical-path files changed:**
+- `migrations/postgres/0139_governance_learning_loop_fixes.sql` — (1) `ENABLE/FORCE ROW LEVEL SECURITY` + tenant isolation policy on `fa_governance_learning_records` and `fa_governance_learning_aggregates` (the P1 gap: tables existed without RLS, allowing direct SQL paths to bypass tenant isolation that all other `fa_` tables enforce); (2) `ADD COLUMN IF NOT EXISTS no_change_count INTEGER NOT NULL DEFAULT 0` on `fa_governance_learning_aggregates`; (3) replaces plain `idx_gl_record_source_outcome` with `uidx_gl_record_tenant_outcome` — a partial UNIQUE INDEX on `(tenant_id, source_outcome_id) WHERE source_outcome_id IS NOT NULL`.
+- `api/db_models_governance_learning.py` — `no_change_count` field added to `FaGovernanceLearningAggregate`; index on `FaGovernanceLearningRecord` changed from `(source_outcome_id)` to `(tenant_id, source_outcome_id)` to align with the unique constraint scoping.
+- `services/governance_learning/engine.py` — (1) `_update_aggregate` counts neutral `NO_CHANGE` outcomes (`delta > -1.0`) into `no_change_count`; all `total` computations include `no_change_count`; (2) 30-day windows in `get_dashboard`, `get_recommendations`, `get_momentum` now filter `r.created_at >= cutoff` (ISO lexicographic comparison) instead of slicing the last 30 records; (3) `ingest_outcome` wraps the DB flush in a try/except `IntegrityError` to handle the race between the pre-check read and the unique constraint violation on concurrent inserts.
+
+**Security posture:** RLS additions align both governance-learning tables with the DB-level tenant isolation applied to all other `fa_` tables. The unique index on `(tenant_id, source_outcome_id)` is scoped per-tenant (a `source_outcome_id` may be reused across tenants). No auth, session, middleware, or OPA files changed.
+
+**SOC review outcome:** approved. Migration 0139 is additive (column + RLS + index) and backward compatible — no data migration, no table drops. No new routes or scope changes.
+
+---
+
 ## 2026-06-27 — PR 17.6B: Governance Learning Loop Authority
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (new bounded context at `services/governance_learning/`; 10 new routes under new `/governance-learning` prefix registered in `control` plane; 2 new DB tables in migration 0138; no new auth subsystem; no privilege escalation; no credential handling; all computation deterministic)
@@ -2338,7 +2353,7 @@ P1 reviewer comment on PR #435: `POST /ingest/assessment/orgs` (pre-tenant onboa
 **Reason:**
 Post-P0-4 audit identified two issues:
 
-1. **RLS GUC mismatch (security):** Migrations 0093–0097, 0105, 0107, 0108, 0109 created tenant_isolation policies referencing `current_setting('app.current_tenant_id', true)`. The application exclusively sets `app.tenant_id` (via `set_tenant_context()` in `api/db.py` and `_set_pg_tenant()` in `api/auth_scopes/store.py`). Because `app.current_tenant_id` is never set, `current_setting('app.current_tenant_id', true)` evaluates to NULL, making all affected FA table policies silent deny-all.
+1. **RLS GUC mismatch (security):** Migrations 0093–0097, 0105, 0107, 0108, 0109 created tenant_isolation policies referencing `current_setting('app.tenant_id', true)`. The application exclusively sets `app.tenant_id` (via `set_tenant_context()` in `api/db.py` and `_set_pg_tenant()` in `api/auth_scopes/store.py`). Because `app.current_tenant_id` is never set, `current_setting('app.tenant_id', true)` evaluates to NULL, making all affected FA table policies silent deny-all.
 
 2. **Report job signature drift (correctness):** P0-4 updated `_do_generate_report`, `_handle_timeout`, and `_generate_report_core_async` to require a `tenant_id: str` parameter, but 18 tests in `test_report_jobs.py` and `test_report_hardening.py` still called the old single-argument signatures.
 

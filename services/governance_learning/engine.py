@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.db_models_governance_learning import (
@@ -122,7 +123,12 @@ class GovernanceLearningEngine:
     def _aggregate_to_response(
         self, row: FaGovernanceLearningAggregate
     ) -> LearningAggregateResponse:
-        total = row.success_count + row.failure_count + row.partial_success_count
+        total = (
+            row.success_count
+            + row.failure_count
+            + row.partial_success_count
+            + row.no_change_count
+        )
         success_rate = (
             round((row.success_count + row.partial_success_count * 0.5) / total, 4)
             if total > 0
@@ -175,6 +181,13 @@ class GovernanceLearningEngine:
                 r.outcome_type == "NO_CHANGE" and (r.effectiveness_delta or 0.0) <= -1.0
             )
         )
+        # neutral NO_CHANGE (delta > -1.0) — tracked separately so totals are complete
+        no_change_count = sum(
+            1
+            for r in records
+            if r.outcome_type == "NO_CHANGE"
+            and (r.effectiveness_delta or 0.0) > -1.0
+        )
 
         avg_eff = _avg([r.effectiveness_delta for r in records])
         avg_ver = _avg([r.verification_delta for r in records])
@@ -192,6 +205,7 @@ class GovernanceLearningEngine:
                 "success_count": success_count,
                 "failure_count": failure_count,
                 "partial_success_count": partial_count,
+                "no_change_count": no_change_count,
                 "average_effectiveness_delta": avg_eff,
                 "average_verification_delta": avg_ver,
                 "average_freshness_delta": avg_fre,
@@ -251,9 +265,16 @@ class GovernanceLearningEngine:
             source_outcome_id=request.source_outcome_id,
             created_at=_now_iso(),
         )
-        self._repo.create_record(row)
-        self._update_aggregate(request.remediation_category)
-        self._db.commit()
+        try:
+            self._repo.create_record(row)
+            self._update_aggregate(request.remediation_category)
+            self._db.commit()
+        except IntegrityError:
+            self._db.rollback()
+            existing = self._repo.get_record_by_outcome(request.source_outcome_id)
+            if existing is not None:
+                return self._record_to_response(existing)
+            raise
         return self._record_to_response(row)
 
     # ------------------------------------------------------------------
@@ -326,7 +347,12 @@ class GovernanceLearningEngine:
         if all_aggs:
 
             def _sr(a: FaGovernanceLearningAggregate) -> float:
-                t = a.success_count + a.failure_count + a.partial_success_count
+                t = (
+                    a.success_count
+                    + a.failure_count
+                    + a.partial_success_count
+                    + a.no_change_count
+                )
                 return (
                     (a.success_count + a.partial_success_count * 0.5) / t
                     if t > 0
@@ -338,10 +364,13 @@ class GovernanceLearningEngine:
             top_cat = best.remediation_category
             worst_cat = worst.remediation_category
 
-        # Momentum and stability from recent records
-        recent_30 = sorted(all_records, key=lambda r: r.created_at, reverse=True)[:30]
-        avg_health_30d = _avg([r.health_delta for r in recent_30])
-        avg_eff_30d = _avg([r.effectiveness_delta for r in recent_30])
+        # Momentum from records in the last 30 calendar days
+        cutoff_30d = (
+            datetime.now(tz=timezone.utc) - timedelta(days=30)
+        ).isoformat()
+        recent_30d = [r for r in all_records if r.created_at >= cutoff_30d]
+        avg_health_30d = _avg([r.health_delta for r in recent_30d])
+        avg_eff_30d = _avg([r.effectiveness_delta for r in recent_30d])
         momentum = classify_momentum(avg_health_30d, avg_eff_30d)
 
         health_deltas = [
@@ -355,7 +384,12 @@ class GovernanceLearningEngine:
         # Active signals across all aggregates
         active_signals: list[str] = []
         for agg in all_aggs:
-            t = agg.success_count + agg.failure_count + agg.partial_success_count
+            t = (
+                agg.success_count
+                + agg.failure_count
+                + agg.partial_success_count
+                + agg.no_change_count
+            )
             sr = (
                 (agg.success_count + agg.partial_success_count * 0.5) / t
                 if t > 0
@@ -399,15 +433,15 @@ class GovernanceLearningEngine:
         """Generate deterministic recommendations from aggregates."""
         now = _now_iso()
         all_aggs = self._repo.get_all_aggregates()
-        total_records = len(self._repo.list_all_records())
+        all_records = self._repo.list_all_records()
+        total_records = len(all_records)
 
-        # Compute avg health delta from recent records
-        recent_30 = sorted(
-            self._repo.list_all_records(),
-            key=lambda r: r.created_at,
-            reverse=True,
-        )[:30]
-        avg_health_30d = _avg([r.health_delta for r in recent_30])
+        # Avg health delta from records in the last 30 calendar days
+        cutoff_30d = (
+            datetime.now(tz=timezone.utc) - timedelta(days=30)
+        ).isoformat()
+        recent_30d = [r for r in all_records if r.created_at >= cutoff_30d]
+        avg_health_30d = _avg([r.health_delta for r in recent_30d])
 
         recs = learning_rules.generate_recommendations(
             aggregates=all_aggs,
@@ -429,7 +463,12 @@ class GovernanceLearningEngine:
         all_aggs = self._repo.get_all_aggregates()
 
         def _sr(a: FaGovernanceLearningAggregate) -> float:
-            t = a.success_count + a.failure_count + a.partial_success_count
+            t = (
+                a.success_count
+                + a.failure_count
+                + a.partial_success_count
+                + a.no_change_count
+            )
             return (
                 (a.success_count + a.partial_success_count * 0.5) / t if t > 0 else 0.0
             )
@@ -449,7 +488,12 @@ class GovernanceLearningEngine:
         all_aggs = self._repo.get_all_aggregates()
 
         def _fr(a: FaGovernanceLearningAggregate) -> float:
-            t = a.success_count + a.failure_count + a.partial_success_count
+            t = (
+                a.success_count
+                + a.failure_count
+                + a.partial_success_count
+                + a.no_change_count
+            )
             return a.failure_count / t if t > 0 else 0.0
 
         sorted_aggs = sorted(all_aggs, key=_fr, reverse=True)[:limit]
@@ -475,9 +519,12 @@ class GovernanceLearningEngine:
             1 for r in all_records if r.outcome_type in ("FAILURE", "REGRESSION")
         )
 
-        recent_30 = sorted(all_records, key=lambda r: r.created_at, reverse=True)[:30]
-        avg_health_30d = _avg([r.health_delta for r in recent_30])
-        avg_eff_30d = _avg([r.effectiveness_delta for r in recent_30])
+        cutoff_30d = (
+            datetime.now(tz=timezone.utc) - timedelta(days=30)
+        ).isoformat()
+        recent_30d = [r for r in all_records if r.created_at >= cutoff_30d]
+        avg_health_30d = _avg([r.health_delta for r in recent_30d])
+        avg_eff_30d = _avg([r.effectiveness_delta for r in recent_30d])
 
         momentum = classify_momentum(avg_health_30d, avg_eff_30d)
 
@@ -530,7 +577,12 @@ class GovernanceLearningEngine:
         # Per-category snapshots
         category_snapshots = []
         for agg in all_aggs:
-            t = agg.success_count + agg.failure_count + agg.partial_success_count
+            t = (
+                agg.success_count
+                + agg.failure_count
+                + agg.partial_success_count
+                + agg.no_change_count
+            )
             sr = (
                 (agg.success_count + agg.partial_success_count * 0.5) / t
                 if t > 0

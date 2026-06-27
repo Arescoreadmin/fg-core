@@ -75,7 +75,7 @@ class FaGovernanceLearningRecord(Base):
         Index("idx_gl_record_tenant_category", "tenant_id", "learning_category"),
         Index("idx_gl_record_tenant_control", "tenant_id", "control_id"),
         Index("idx_gl_record_tenant_rem_category", "tenant_id", "remediation_category"),
-        Index("idx_gl_record_source_outcome", "source_outcome_id"),
+        Index("idx_gl_record_tenant_source_outcome", "tenant_id", "source_outcome_id"),
     )
 
 
@@ -112,6 +112,7 @@ class FaGovernanceLearningAggregate(Base):
     partial_success_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
+    no_change_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     average_effectiveness_delta: Mapped[float | None] = mapped_column(
         Float, nullable=True
