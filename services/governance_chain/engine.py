@@ -44,7 +44,10 @@ from services.governance_chain.models import (
     ChainEventType,
     ChainExecutionResult,
     classify_governance_health,
+    compute_governance_confidence,
     compute_governance_health_score,
+    compute_governance_momentum,
+    compute_governance_stability,
 )
 from services.governance_chain.repository import GovernanceChainRepository
 from services.governance_chain.schemas import (
@@ -58,6 +61,8 @@ from services.governance_chain.schemas import (
     ChainExecutionListResponse,
     ChainExecutionNotFound,
     ChainExecutionResponse,
+    ChainFinding,
+    ChainValidationResponse,
     EmitChainEventRequest,
     ExecuteBridgeRequest,
     GovernanceHealthNotFound,
@@ -150,6 +155,9 @@ class GovernanceChainEngine:
             missing_inputs=missing,
             snapshot_at=row.snapshot_at,
             calculation_version=row.calculation_version,
+            governance_momentum=row.governance_momentum,
+            governance_stability=row.governance_stability,
+            governance_confidence=row.governance_confidence,
         )
 
     def _write_execution(
@@ -318,16 +326,72 @@ class GovernanceChainEngine:
         actor_id: str,
         actor_type: str,
     ) -> ChainExecutionResponse:
-        """Bridge 1: Record that assessment evidence has been registered."""
+        """Bridge 1: Register assessment evidence via EvidenceAuthorityEngine.
+
+        Idempotent: if trigger_object_id already resolves to an evidence record,
+        returns NOOP_SAFE. Otherwise creates the evidence and returns SUCCESS.
+        """
         chain_execution_id = _new_id()
         correlation_id = request.correlation_id or _new_id()
         start = time.monotonic()
-
-        # This bridge records the event — does not call a downstream engine
-        # (evidence already exists in evidence_authority; this marks chain awareness)
-        result = ChainExecutionResult.NOOP_SAFE
-        success = True
+        success = False
         failure_reason: Optional[str] = None
+        result = ChainExecutionResult.FAILURE
+
+        try:
+            from services.evidence_authority.engine import EvidenceAuthorityEngine
+            from services.evidence_authority.models import (
+                EvidenceCollectionMethod,
+                EvidenceSourceType,
+            )
+            from services.evidence_authority.schemas import CreateEvidenceRequest
+
+            ea_engine = EvidenceAuthorityEngine(self._db, self._tenant_id)
+
+            # Check idempotency: if trigger_object_id is an existing evidence record
+            evidence_id = request.trigger_object_id
+            try:
+                ea_engine.get_evidence(evidence_id)
+                # Evidence already exists — NOOP_SAFE
+                result = ChainExecutionResult.NOOP_SAFE
+                success = True
+                failure_reason = None
+            except Exception:
+                # Evidence does not exist — create it
+                source_type_str = request.evidence_source_type or "ATTESTATION"
+                collection_method_str = (
+                    request.evidence_collection_method or "ATTESTATION_SUBMISSION"
+                )
+                try:
+                    source_type = EvidenceSourceType(source_type_str)
+                except ValueError:
+                    source_type = EvidenceSourceType.ATTESTATION
+                try:
+                    collection_method = EvidenceCollectionMethod(collection_method_str)
+                except ValueError:
+                    collection_method = EvidenceCollectionMethod.ATTESTATION_SUBMISSION
+
+                title = (
+                    request.evidence_title
+                    or f"Assessment Evidence {request.trigger_object_id[:8]}"
+                )
+                create_req = CreateEvidenceRequest(
+                    title=title,
+                    source_type=source_type,
+                    collection_method=collection_method,
+                    collected_at=_now(),
+                    engagement_id=request.evidence_engagement_id,
+                    description=request.trigger_reason,
+                )
+                ea_engine.create_evidence(
+                    create_req, actor_id=actor_id, actor_type=actor_type
+                )
+                success = True
+                result = ChainExecutionResult.SUCCESS
+        except Exception as exc:
+            failure_reason = str(exc)[:500]
+            success = False
+            result = ChainExecutionResult.FAILURE
 
         duration_ms = round((time.monotonic() - start) * 1000, 2)
 
@@ -343,19 +407,20 @@ class GovernanceChainEngine:
             chain_execution_id=chain_execution_id,
         )
 
-        try:
-            self._emit_event_internal(
-                event_type=ChainEventType.EVIDENCE_REGISTERED.value,
-                authority="evidence_authority",
-                object_type=request.trigger_object_type,
-                object_id=request.trigger_object_id,
-                reason=request.trigger_reason,
-                correlation_id=correlation_id,
-                actor_id=actor_id,
-                actor_type=actor_type,
-            )
-        except Exception:
-            pass
+        if success and result != ChainExecutionResult.NOOP_SAFE:
+            try:
+                self._emit_event_internal(
+                    event_type=ChainEventType.EVIDENCE_REGISTERED.value,
+                    authority="evidence_authority",
+                    object_type=request.trigger_object_type,
+                    object_id=request.trigger_object_id,
+                    reason=request.trigger_reason,
+                    correlation_id=correlation_id,
+                    actor_id=actor_id,
+                    actor_type=actor_type,
+                )
+            except Exception:
+                pass
 
         self._db.commit()
         return self._execution_to_response(exec_row)
@@ -370,7 +435,12 @@ class GovernanceChainEngine:
         actor_id: str,
         actor_type: str,
     ) -> ChainExecutionResponse:
-        """Bridge 2: Create a verification request for the given evidence."""
+        """Bridge 2: Create a verification request for the given evidence.
+
+        Guards:
+        - Evidence must exist in evidence_authority (SKIPPED_UNAVAILABLE if not)
+        - Active verification request already exists → NOOP_SAFE (duplicate prevention)
+        """
         chain_execution_id = _new_id()
         correlation_id = request.correlation_id or _new_id()
         start = time.monotonic()
@@ -378,7 +448,11 @@ class GovernanceChainEngine:
         failure_reason: Optional[str] = None
         result = ChainExecutionResult.FAILURE
 
+        evidence_id = request.trigger_object_id
+
         try:
+            from api.db_models_verification_authority import FaVerificationRequest
+            from services.evidence_authority.engine import EvidenceAuthorityEngine
             from services.verification_authority.engine import (
                 VerificationAuthorityEngine,
             )
@@ -386,10 +460,61 @@ class GovernanceChainEngine:
                 CreateVerificationRequestRequest,
             )
 
+            # First: verify evidence exists
+            try:
+                ea_engine = EvidenceAuthorityEngine(self._db, self._tenant_id)
+                ea_engine.get_evidence(evidence_id)
+            except Exception:
+                duration_ms = round((time.monotonic() - start) * 1000, 2)
+                exec_row = self._write_execution(
+                    bridge_type=BridgeType.EVIDENCE_TO_VERIFICATION.value,
+                    trigger_object_id=request.trigger_object_id,
+                    trigger_object_type=request.trigger_object_type,
+                    trigger_reason=request.trigger_reason,
+                    execution_result=ChainExecutionResult.SKIPPED_UNAVAILABLE,
+                    success=False,
+                    failure_reason=f"Evidence {evidence_id!r} not found in evidence_authority",
+                    duration_ms=duration_ms,
+                    chain_execution_id=chain_execution_id,
+                )
+                self._db.commit()
+                return self._execution_to_response(exec_row)
+
+            # Second: check for existing active verification request
+            _TERMINAL_STATES = ("VERIFIED", "REJECTED", "CANCELLED")
+            existing = (
+                self._db.query(FaVerificationRequest)
+                .filter(
+                    FaVerificationRequest.tenant_id == self._tenant_id,
+                    FaVerificationRequest.evidence_id == evidence_id,
+                    ~FaVerificationRequest.workflow_state.in_(_TERMINAL_STATES),
+                )
+                .first()
+            )
+            if existing is not None:
+                result = ChainExecutionResult.NOOP_SAFE
+                success = True
+                failure_reason = "verification_already_exists"
+                duration_ms = round((time.monotonic() - start) * 1000, 2)
+                exec_row = self._write_execution(
+                    bridge_type=BridgeType.EVIDENCE_TO_VERIFICATION.value,
+                    trigger_object_id=request.trigger_object_id,
+                    trigger_object_type=request.trigger_object_type,
+                    trigger_reason=request.trigger_reason,
+                    execution_result=result,
+                    success=success,
+                    failure_reason=failure_reason,
+                    duration_ms=duration_ms,
+                    chain_execution_id=chain_execution_id,
+                )
+                self._db.commit()
+                return self._execution_to_response(exec_row)
+
+            # No active request — create one
             va_engine = VerificationAuthorityEngine(self._db, self._tenant_id)
             va_engine.create_request(
                 CreateVerificationRequestRequest(
-                    evidence_id=request.trigger_object_id,
+                    evidence_id=evidence_id,
                     priority=50,
                     notes=request.trigger_reason,
                 ),
@@ -398,6 +523,7 @@ class GovernanceChainEngine:
             )
             success = True
             result = ChainExecutionResult.SUCCESS
+
         except Exception as exc:
             failure_reason = str(exc)[:500]
             success = False
@@ -418,21 +544,17 @@ class GovernanceChainEngine:
         )
 
         try:
-            event_type = (
-                ChainEventType.VERIFICATION_CREATED
-                if success
-                else ChainEventType.EVIDENCE_REGISTERED
-            )
-            self._emit_event_internal(
-                event_type=event_type.value,
-                authority="verification_authority",
-                object_type="verification_request",
-                object_id=request.trigger_object_id,
-                reason=request.trigger_reason,
-                correlation_id=correlation_id,
-                actor_id=actor_id,
-                actor_type=actor_type,
-            )
+            if success and result == ChainExecutionResult.SUCCESS:
+                self._emit_event_internal(
+                    event_type=ChainEventType.VERIFICATION_CREATED.value,
+                    authority="verification_authority",
+                    object_type="verification_request",
+                    object_id=evidence_id,
+                    reason=request.trigger_reason,
+                    correlation_id=correlation_id,
+                    actor_id=actor_id,
+                    actor_type=actor_type,
+                )
         except Exception:
             pass
 
@@ -686,20 +808,97 @@ class GovernanceChainEngine:
         actor_id: str,
         actor_type: str,
     ) -> ChainExecutionResponse:
-        """Bridge 6: Record that a governance action has been accepted for remediation.
+        """Bridge 6: Create a remediation task from a governance action.
 
-        The remediation module owns the actual remediation lifecycle. This bridge
-        records the governance chain event (ACTION_ACCEPTED → REMEDIATION_CREATED)
-        as NOOP_SAFE — the chain awareness is the primary deliverable here.
+        Requires finding_id and assessment_id in request. Without them returns
+        SKIPPED_UNAVAILABLE. Idempotent: if a remediation task already exists for
+        the same finding+assessment, returns NOOP_SAFE.
         """
         chain_execution_id = _new_id()
         correlation_id = request.correlation_id or _new_id()
         start = time.monotonic()
 
-        # Record chain awareness — remediation creation is owned by remediation module
-        result = ChainExecutionResult.NOOP_SAFE
-        success = True
+        finding_id = request.finding_id
+        assessment_id = request.assessment_id
+
+        if not finding_id or not assessment_id:
+            duration_ms = round((time.monotonic() - start) * 1000, 2)
+            exec_row = self._write_execution(
+                bridge_type=BridgeType.ACTION_TO_REMEDIATION.value,
+                trigger_object_id=request.trigger_object_id,
+                trigger_object_type=request.trigger_object_type,
+                trigger_reason=request.trigger_reason,
+                execution_result=ChainExecutionResult.SKIPPED_UNAVAILABLE,
+                success=False,
+                failure_reason=(
+                    "finding_id and assessment_id required for remediation task creation"
+                ),
+                duration_ms=duration_ms,
+                chain_execution_id=chain_execution_id,
+            )
+            self._db.commit()
+            return self._execution_to_response(exec_row)
+
+        # Check idempotency: if a remediation task already exists for this action
+        try:
+            from api.db_models_remediation import RemediationTask
+
+            existing = (
+                self._db.query(RemediationTask)
+                .filter(
+                    RemediationTask.tenant_id == self._tenant_id,
+                    RemediationTask.finding_id == finding_id,
+                    RemediationTask.assessment_id == assessment_id,
+                )
+                .first()
+            )
+            if existing is not None:
+                duration_ms = round((time.monotonic() - start) * 1000, 2)
+                exec_row = self._write_execution(
+                    bridge_type=BridgeType.ACTION_TO_REMEDIATION.value,
+                    trigger_object_id=request.trigger_object_id,
+                    trigger_object_type=request.trigger_object_type,
+                    trigger_reason=request.trigger_reason,
+                    execution_result=ChainExecutionResult.NOOP_SAFE,
+                    success=True,
+                    failure_reason="remediation_already_exists",
+                    duration_ms=duration_ms,
+                    chain_execution_id=chain_execution_id,
+                )
+                self._db.commit()
+                return self._execution_to_response(exec_row)
+        except Exception:
+            pass
+
+        success = False
         failure_reason: Optional[str] = None
+        result = ChainExecutionResult.FAILURE
+
+        try:
+            from services.remediation.engine import RemediationEngine
+            from services.remediation.schemas import CreateTaskRequest, RemediationPriority
+
+            title = (
+                request.remediation_title
+                or f"Governance Action {request.trigger_object_id[:8]}"
+            )
+            rem_engine = RemediationEngine(self._db, tenant_id=self._tenant_id)
+            rem_engine.create_task(
+                request=CreateTaskRequest(
+                    finding_id=finding_id,
+                    assessment_id=assessment_id,
+                    title=title,
+                    description=request.trigger_reason,
+                    priority=RemediationPriority.MEDIUM,
+                ),
+                actor=actor_id or "governance_chain",
+            )
+            success = True
+            result = ChainExecutionResult.SUCCESS
+        except Exception as exc:
+            failure_reason = str(exc)[:500]
+            success = False
+            result = ChainExecutionResult.FAILURE
 
         duration_ms = round((time.monotonic() - start) * 1000, 2)
 
@@ -716,16 +915,122 @@ class GovernanceChainEngine:
         )
 
         try:
-            self._emit_event_internal(
-                event_type=ChainEventType.ACTION_ACCEPTED.value,
-                authority="governance_chain",
-                object_type=request.trigger_object_type,
-                object_id=request.trigger_object_id,
-                reason=request.trigger_reason,
-                correlation_id=correlation_id,
-                actor_id=actor_id,
-                actor_type=actor_type,
-            )
+            if success:
+                self._emit_event_internal(
+                    event_type=ChainEventType.REMEDIATION_CREATED.value,
+                    authority="remediation",
+                    object_type=request.trigger_object_type,
+                    object_id=request.trigger_object_id,
+                    reason=request.trigger_reason,
+                    correlation_id=correlation_id,
+                    actor_id=actor_id,
+                    actor_type=actor_type,
+                )
+        except Exception:
+            pass
+
+        self._db.commit()
+        return self._execution_to_response(exec_row)
+
+    # ------------------------------------------------------------------
+    # Bridge: check_reporting_readiness (ALL_TO_REPORTING)
+    # ------------------------------------------------------------------
+
+    def check_reporting_readiness(
+        self,
+        request: ExecuteBridgeRequest,
+        actor_id: str,
+        actor_type: str,
+    ) -> ChainExecutionResponse:
+        """Bridge 8: Check that all authorities have data for reporting."""
+        chain_execution_id = _new_id()
+        correlation_id = request.correlation_id or _new_id()
+        start = time.monotonic()
+
+        authority_counts: dict[str, int] = {}
+        missing: list[str] = []
+
+        _AUTHORITY_MODELS = {
+            "evidence_authority": (
+                "api.db_models_evidence_authority",
+                "FaEvidence",
+                "tenant_id",
+            ),
+            "verification_authority": (
+                "api.db_models_verification_authority",
+                "FaVerificationRequest",
+                "tenant_id",
+            ),
+            "evidence_freshness_authority": (
+                "api.db_models_evidence_freshness_authority",
+                "FaEvidenceFreshnessRecord",
+                "tenant_id",
+            ),
+            "control_effectiveness": (
+                "api.db_models_control_effectiveness",
+                "FaControlEffectiveness",
+                "tenant_id",
+            ),
+            "remediation_effectiveness": (
+                "api.db_models_remediation_effectiveness",
+                "FaRemediationOutcome",
+                "tenant_id",
+            ),
+        }
+
+        for auth_name, (module_name, class_name, tid_field) in _AUTHORITY_MODELS.items():
+            try:
+                import importlib
+
+                mod = importlib.import_module(module_name)
+                cls = getattr(mod, class_name)
+                count = (
+                    self._db.query(cls)
+                    .filter(getattr(cls, tid_field) == self._tenant_id)
+                    .count()
+                )
+                authority_counts[auth_name] = count
+                if count == 0:
+                    missing.append(auth_name)
+            except Exception:
+                authority_counts[auth_name] = 0
+                missing.append(auth_name)
+
+        success = len(missing) == 0
+        result = (
+            ChainExecutionResult.SUCCESS
+            if success
+            else ChainExecutionResult.SKIPPED_UNAVAILABLE
+        )
+        failure_reason: Optional[str] = (
+            f"missing data in: {', '.join(missing)}" if missing else None
+        )
+
+        duration_ms = round((time.monotonic() - start) * 1000, 2)
+        exec_row = self._write_execution(
+            bridge_type=BridgeType.ALL_TO_REPORTING.value,
+            trigger_object_id=request.trigger_object_id,
+            trigger_object_type=request.trigger_object_type,
+            trigger_reason=request.trigger_reason,
+            execution_result=result,
+            success=success,
+            failure_reason=failure_reason,
+            duration_ms=duration_ms,
+            chain_execution_id=chain_execution_id,
+        )
+
+        try:
+            if success:
+                self._emit_event_internal(
+                    event_type=ChainEventType.REPORT_GENERATED.value,
+                    authority="governance_chain",
+                    object_type="reporting_readiness",
+                    object_id=request.trigger_object_id,
+                    reason=request.trigger_reason,
+                    correlation_id=correlation_id,
+                    actor_id=actor_id,
+                    actor_type=actor_type,
+                )
         except Exception:
             pass
 
@@ -861,6 +1166,7 @@ class GovernanceChainEngine:
             BridgeType.EFFECTIVENESS_TO_EXPLAINABILITY.value: self.regenerate_explainability,
             BridgeType.ACTION_TO_REMEDIATION.value: self.create_remediation_from_action,
             BridgeType.REMEDIATION_TO_OUTCOME.value: self.record_remediation_outcome,
+            BridgeType.ALL_TO_REPORTING.value: self.check_reporting_readiness,
         }
         fn = dispatch.get(bridge)
         if fn is None:
@@ -893,6 +1199,21 @@ class GovernanceChainEngine:
         )
         rating = classify_governance_health(score)
 
+        # v2: momentum, stability, confidence
+        recent_scores = self._repo.list_recent_health_scores(n=10)
+        previous_score = recent_scores[0] if recent_scores else None
+        momentum = compute_governance_momentum(score, previous_score)
+        stability = compute_governance_stability(recent_scores[:5])
+        total_exec, _success_count, failed_count, skipped_count = (
+            self._repo.count_executions_success_failure()
+        )
+        confidence = compute_governance_confidence(
+            missing_input_count=len(missing_inputs),
+            total_executions=total_exec,
+            failed_executions=failed_count,
+            skipped_executions=skipped_count,
+        )
+
         row = FaGovernanceHealthSnapshot(
             id=_new_id(),
             tenant_id=self._tenant_id,
@@ -906,6 +1227,9 @@ class GovernanceChainEngine:
             missing_inputs_json=json.dumps(missing_inputs) if missing_inputs else None,
             snapshot_at=_now(),
             calculation_version=GOVERNANCE_CHAIN_VERSION,
+            governance_momentum=momentum,
+            governance_stability=stability,
+            governance_confidence=confidence,
         )
         self._repo.create_health_snapshot(row)
         self._db.commit()
@@ -1116,6 +1440,140 @@ class GovernanceChainEngine:
             return False, str(exc)[:200]
 
     # ------------------------------------------------------------------
+    # Public: validate_chain
+    # ------------------------------------------------------------------
+
+    def validate_chain(self) -> ChainValidationResponse:
+        """Validate governance chain integrity and return a list of findings."""
+        findings: list[ChainFinding] = []
+
+        # Check 1: Failed bridge executions
+        _, _, failed_count, _ = self._repo.count_executions_success_failure()
+        if failed_count > 0:
+            findings.append(
+                ChainFinding(
+                    finding_type="FAILED_BRIDGE_EXECUTIONS",
+                    severity="ERROR",
+                    description=f"{failed_count} bridge execution(s) recorded as FAILURE",
+                    context={"failed_count": failed_count},
+                )
+            )
+
+        # Check 2: No governance health snapshot
+        latest_health = self._repo.get_latest_health_snapshot()
+        if latest_health is None:
+            findings.append(
+                ChainFinding(
+                    finding_type="NO_HEALTH_SNAPSHOT",
+                    severity="WARNING",
+                    description="No governance health snapshot exists for this tenant",
+                )
+            )
+
+        evidence_count = 0
+
+        # Check 3: Missing verification coverage
+        try:
+            from api.db_models_evidence_authority import FaEvidence
+            from api.db_models_verification_authority import FaVerificationRequest
+
+            evidence_count = (
+                self._db.query(FaEvidence)
+                .filter(FaEvidence.tenant_id == self._tenant_id)
+                .count()
+            )
+            if evidence_count > 0:
+                verified_evidence = (
+                    self._db.query(FaVerificationRequest)
+                    .filter(
+                        FaVerificationRequest.tenant_id == self._tenant_id,
+                        FaVerificationRequest.workflow_state == "VERIFIED",
+                    )
+                    .count()
+                )
+                if verified_evidence == 0:
+                    findings.append(
+                        ChainFinding(
+                            finding_type="NO_VERIFIED_EVIDENCE",
+                            severity="WARNING",
+                            description=(
+                                f"{evidence_count} evidence record(s) exist but "
+                                "none have been verified"
+                            ),
+                            context={"evidence_count": evidence_count},
+                        )
+                    )
+        except Exception:
+            pass
+
+        # Check 4: Missing freshness after verified evidence
+        try:
+            from api.db_models_evidence_freshness_authority import (
+                FaEvidenceFreshnessRecord,
+            )
+
+            freshness_count = (
+                self._db.query(FaEvidenceFreshnessRecord)
+                .filter(FaEvidenceFreshnessRecord.tenant_id == self._tenant_id)
+                .count()
+            )
+            if freshness_count == 0 and evidence_count > 0:
+                findings.append(
+                    ChainFinding(
+                        finding_type="NO_FRESHNESS_RECORDS",
+                        severity="WARNING",
+                        description=(
+                            "Evidence exists but no freshness records have been created"
+                        ),
+                    )
+                )
+        except Exception:
+            pass
+
+        # Check 5: Count executions for orphan check
+        event_dist = self._repo.count_events_by_type()
+        total_events = sum(event_dist.values())
+        total_exec_count = 0
+        try:
+            total_exec_count = (
+                self._db.query(FaGovernanceChainExecution)
+                .filter(FaGovernanceChainExecution.tenant_id == self._tenant_id)
+                .count()
+            )
+        except Exception:
+            pass
+
+        # Check 6: No data at all
+        if total_events == 0 and total_exec_count == 0 and latest_health is None:
+            findings.append(
+                ChainFinding(
+                    finding_type="NO_CHAIN_DATA",
+                    severity="WARNING",
+                    description=(
+                        "No governance chain data found — chain has not been initialized"
+                    ),
+                )
+            )
+
+        # Determine status
+        has_errors = any(f.severity == "ERROR" for f in findings)
+        has_warnings = any(f.severity == "WARNING" for f in findings)
+
+        if has_errors:
+            status = "FAIL"
+        elif has_warnings:
+            status = "WARNING"
+        else:
+            status = "PASS"
+
+        return ChainValidationResponse(
+            status=status,
+            findings=findings,
+            checked_at=_now(),
+            tenant_id=self._tenant_id,
+        )
+
+    # ------------------------------------------------------------------
     # Public: get_cgin_snapshot
     # ------------------------------------------------------------------
 
@@ -1159,9 +1617,7 @@ class GovernanceChainEngine:
             success = counts["success_count"]
             success_rate = round(success / exec_count, 4) if exec_count > 0 else 0.0
             dc = counts["duration_count"]
-            avg_ms = (
-                round(counts["total_duration_ms"] / dc, 2) if dc > 0 else None
-            )
+            avg_ms = round(counts["total_duration_ms"] / dc, 2) if dc > 0 else None
             snapshots.append(
                 CGINChainAuthoritySnapshot(
                     authority=auth,

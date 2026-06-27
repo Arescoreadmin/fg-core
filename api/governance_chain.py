@@ -31,7 +31,9 @@ from services.governance_chain.schemas import (
     ChainExecutionListResponse,
     ChainExecutionNotFound,
     ChainExecutionResponse,
+    ChainValidationResponse,
     ExecuteBridgeRequest,
+    GovernanceHealthHistoryResponse,
     GovernanceHealthNotFound,
     GovernanceHealthResponse,
     RecalculateHealthRequest,
@@ -210,3 +212,42 @@ def recalculate_health(
     with Session(get_engine()) as db:
         engine = GovernanceChainEngine(db, tenant_id=tenant_id)
         return engine.generate_governance_health_snapshot(body)
+
+
+# ---------------------------------------------------------------------------
+# GET /governance-chain/health/history — health snapshot history
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/governance-chain/health/history",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=GovernanceHealthHistoryResponse,
+)
+def get_health_history(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> GovernanceHealthHistoryResponse:
+    tenant_id = require_bound_tenant(request)
+    with Session(get_engine()) as db:
+        engine = GovernanceChainEngine(db, tenant_id=tenant_id)
+        return engine.list_health_history(limit=limit, offset=offset)
+
+
+# ---------------------------------------------------------------------------
+# POST /governance-chain/validate — validate chain integrity
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/governance-chain/validate",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=ChainValidationResponse,
+    status_code=status.HTTP_200_OK,
+)
+def validate_chain(request: Request) -> ChainValidationResponse:
+    tenant_id = require_bound_tenant(request)
+    with Session(get_engine()) as db:
+        engine = GovernanceChainEngine(db, tenant_id=tenant_id)
+        return engine.validate_chain()

@@ -1,3 +1,21 @@
+## 2026-06-27 — PR 17.6A: Governance Chain Completion
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (2 new routes under existing `/governance-chain` prefix, already registered in `control` plane; 1 new migration 0137 adding nullable columns to existing table; no new auth subsystem; no new credential paths; no privilege escalation; all outputs deterministic)
+
+**Changes:**
+- `migrations/postgres/0137_governance_chain_completion.sql` — `ALTER TABLE fa_governance_health_snapshots ADD COLUMN IF NOT EXISTS` for `governance_momentum`, `governance_stability`, `governance_confidence` (all `DOUBLE PRECISION`, nullable). No new tables, no triggers changed.
+- `api/db_models_governance_chain.py` — 3 new nullable Float columns on `FaGovernanceHealthSnapshot`. Append-only guards unchanged.
+- `services/governance_chain/models.py` — 3 new pure-Python deterministic computation functions (`compute_governance_momentum`, `compute_governance_stability`, `compute_governance_confidence`). No AI, no ML.
+- `services/governance_chain/schemas.py` — 7 new optional fields on `ExecuteBridgeRequest` (all caller-supplied context, no auto-trust); 3 optional fields on `GovernanceHealthResponse`; new `ChainFinding`, `ChainValidationResponse`, `ReportReadinessResponse` schemas.
+- `services/governance_chain/repository.py` — added `list_recent_health_scores(n)` (tenant-scoped read).
+- `services/governance_chain/engine.py` — converted `ASSESSMENT_TO_EVIDENCE` from NOOP_SAFE to real (calls `EvidenceAuthorityEngine.create_evidence()` with idempotency check); strengthened `EVIDENCE_TO_VERIFICATION` (evidence existence check + duplicate-active-request prevention); converted `ACTION_TO_REMEDIATION` from NOOP_SAFE to real when `finding_id`+`assessment_id` provided; added `ALL_TO_REPORTING` bridge (authority readiness probe); `validate_chain()` method (6 integrity checks, no mutations); health snapshot v2 (computes momentum/stability/confidence).
+- `api/governance_chain.py` — 2 new routes: `GET /governance-chain/health/history`, `POST /governance-chain/validate`. Both tenant-scoped; GET requires `governance:read`, POST requires `governance:write`.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — regenerated to include new routes.
+
+**Security posture:** all new routes under existing `/governance-chain` prefix in `control` plane. Tenant isolation enforced via `require_bound_tenant()` in all routes; no body-trust for tenant_id. `POST /validate` reads only (no mutations except optional chain event, guarded). `GET /health/history` is read-only. No credential storage, no PII, no PHI. CGIN anonymization unchanged (`sha256("cgin:v1:{tenant_id}")[:32]`).
+
+---
+
 ## 2026-06-26 — PR 17.5: Remediation Effectiveness Analytics Authority
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (new governance-scoped read/write endpoints under new `/remediation-effectiveness` prefix registered in `control` plane; 4 new DB tables, migration 0135, new service bounded context; no new auth subsystem, no privilege escalation, no credential handling added)

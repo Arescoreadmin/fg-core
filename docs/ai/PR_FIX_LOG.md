@@ -6,6 +6,35 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-27 — feat/governance-chain-completion-17-6a: Governance Chain Completion
+
+**Changes shipped:**
+
+PR 17.6A — converts remaining NOOP_SAFE/skipped bridges to real propagation. Adds Governance Health v2 (momentum/stability/confidence), `POST /governance-chain/validate` chain integrity endpoint, `GET /governance-chain/health/history`, `ALL_TO_REPORTING` readiness bridge, and end-to-end chain test. 36 new/updated tests (GC-213–GC-240 + GCE2E-01–GCE2E-08); 248 total pass.
+
+**Bridge conversions:**
+- `ASSESSMENT_TO_EVIDENCE`: NOOP_SAFE → real (calls `EvidenceAuthorityEngine.create_evidence()`; idempotent via get_evidence check → NOOP_SAFE if already exists)
+- `EVIDENCE_TO_VERIFICATION`: weak → hardened (evidence existence check → SKIPPED_UNAVAILABLE if not found; duplicate active request check → NOOP_SAFE if exists)
+- `ACTION_TO_REMEDIATION`: NOOP_SAFE → real when `finding_id`+`assessment_id` provided; SKIPPED_UNAVAILABLE otherwise with explicit reason
+- `ALL_TO_REPORTING`: newly dispatched (probes 5 authority tables; SKIPPED_UNAVAILABLE lists missing authorities)
+
+**Fixes applied during implementation:**
+- Removed unused imports (`pytest`, inline `json` import) — ruff F401
+- Removed unused imports `ChainFinding`, `ChainValidationResponse` from test file — ruff F401
+- Reformatted test files to satisfy ruff format gate
+- Regenerated `tools/ci/route_inventory.json` (2 new routes: `/governance-chain/health/history`, `/governance-chain/validate`)
+- Refreshed contract authority SHA via `scripts/refresh_contract_authority.py`
+- Added SOC review entry to `docs/SOC_ARCH_REVIEW_2026-02-15.md` (route inventory + topology files changed)
+
+**Files changed:** ~10 files, migration 0137
+
+**Verified with:**
+- pytest tests/test_governance_chain.py tests/test_governance_chain_end_to_end.py (248/248)
+- make fg-contract
+- make fg-fast (all gates pass, 398 passed in fast suite)
+
+---
+
 ### 2026-06-26 — feat/governance-chain-17-6: Canonical Governance Chain Authority + Authority Integration Gate
 
 **Changes shipped:**

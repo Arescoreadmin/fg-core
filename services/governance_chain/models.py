@@ -3,13 +3,16 @@
 All computation is deterministic. No AI. No heuristics without documentation.
 
 PR 17.6 — Canonical Governance Chain Authority
+PR 17.6A — Governance Chain Completion
 """
 
 from __future__ import annotations
 
+import math
 from enum import Enum
+from typing import Optional
 
-GOVERNANCE_CHAIN_VERSION = "1.0"
+GOVERNANCE_CHAIN_VERSION = "2.0"
 
 
 # ---------------------------------------------------------------------------
@@ -153,3 +156,49 @@ def classify_governance_health(score: float) -> GovernanceHealthRating:
 
 # Default health when no data is available (not zero — absence ≠ failure)
 HEALTH_DEFAULT_NO_DATA: float = 75.0
+
+
+# ---------------------------------------------------------------------------
+# Governance chain v2: momentum, stability, confidence
+# ---------------------------------------------------------------------------
+
+
+def compute_governance_momentum(
+    current_score: float,
+    previous_score: Optional[float],
+) -> float:
+    """Momentum: direction of health score change. 50=neutral, >50=improving."""
+    if previous_score is None:
+        return 50.0
+    delta = current_score - previous_score
+    # Map [-100, +100] delta to [0, 100] momentum
+    return round(min(100.0, max(0.0, 50.0 + delta)), 2)
+
+
+def compute_governance_stability(scores: list[float]) -> float:
+    """Stability: inverse of score variance across recent snapshots."""
+    if len(scores) < 2:
+        return 50.0
+    mean = sum(scores) / len(scores)
+    variance = sum((s - mean) ** 2 for s in scores) / len(scores)
+    stddev = math.sqrt(variance)
+    # Higher stddev = lower stability; clamp to [0, 100]
+    return round(min(100.0, max(0.0, 100.0 - stddev * 2.0)), 2)
+
+
+def compute_governance_confidence(
+    missing_input_count: int,
+    total_executions: int,
+    failed_executions: int,
+    skipped_executions: int,
+) -> float:
+    """Confidence: starts at 100, reduced by missing inputs and execution failures."""
+    score = 100.0
+    # Each missing input deducts 10, capped at 50
+    score -= min(50.0, missing_input_count * 10.0)
+    if total_executions > 0:
+        fail_ratio = failed_executions / total_executions
+        skip_ratio = skipped_executions / total_executions
+        score -= fail_ratio * 30.0
+        score -= skip_ratio * 10.0
+    return round(min(100.0, max(0.0, score)), 2)
