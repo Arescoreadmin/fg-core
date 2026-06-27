@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import logoImage from '../public/logo-original.png';
 
 const FRAMEWORKS = ['NIST AI RMF', 'HIPAA', 'SOC 2', 'CMMC', 'ISO 27001'];
 
@@ -50,7 +51,14 @@ export default function Home() {
       <header className="fixed top-0 inset-x-0 z-50 border-b border-white/10 bg-[#0d0d0d]/85 backdrop-blur">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/logo-original.png" alt="FrostGate" width={32} height={32} className="mix-blend-screen" />
+            <Image
+              src={logoImage}
+              alt="FrostGate"
+              width={32}
+              height={32}
+              sizes="32px"
+              className="mix-blend-screen"
+            />
             <span className="text-sm font-semibold tracking-widest uppercase text-gray-200">
               FrostGate
             </span>
@@ -82,10 +90,12 @@ export default function Home() {
             {/* Shield logo — large */}
             <div className="flex justify-center">
               <Image
-                src="/logo-original.png"
+                src={logoImage}
                 alt="FrostGate Shield"
                 width={96}
                 height={96}
+                sizes="96px"
+                priority
                 className="mix-blend-screen"
               />
             </div>
@@ -199,7 +209,14 @@ export default function Home() {
         {/* CTA */}
         <section className="py-24 px-6">
           <div className="max-w-2xl mx-auto text-center rounded-2xl border border-steel-700/40 bg-steel-900/30 px-8 py-16 space-y-6">
-            <Image src="/logo-original.png" alt="FrostGate" width={56} height={56} className="mx-auto mix-blend-screen" />
+            <Image
+              src={logoImage}
+              alt="FrostGate"
+              width={56}
+              height={56}
+              sizes="56px"
+              className="mx-auto mix-blend-screen"
+            />
             <h2 className="text-2xl font-semibold text-white">
               Ready to run your first assessment?
             </h2>
@@ -224,7 +241,14 @@ export default function Home() {
       <footer className="border-t border-white/10 py-8 px-6">
         <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4 text-xs text-gray-600">
           <div className="flex items-center gap-2">
-            <Image src="/logo-original.png" alt="FrostGate" width={18} height={18} className="mix-blend-screen opacity-60" />
+            <Image
+              src={logoImage}
+              alt="FrostGate"
+              width={18}
+              height={18}
+              sizes="18px"
+              className="mix-blend-screen opacity-60"
+            />
             <span>© {new Date().getFullYear()} FrostGate. All rights reserved.</span>
           </div>
           <div className="flex gap-6">
