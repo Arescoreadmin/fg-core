@@ -19164,6 +19164,79 @@
         "title": "GovernanceHealthResponse",
         "type": "object"
       },
+      "GovernanceMomentumResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "avg_effectiveness_delta_30d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Effectiveness Delta 30D"
+          },
+          "avg_health_delta_30d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Health Delta 30D"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "momentum_class": {
+            "title": "Momentum Class",
+            "type": "string"
+          },
+          "stability_class": {
+            "title": "Stability Class",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_failed": {
+            "title": "Total Failed",
+            "type": "integer"
+          },
+          "total_learning_records": {
+            "title": "Total Learning Records",
+            "type": "integer"
+          },
+          "total_successful": {
+            "title": "Total Successful",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "momentum_class",
+          "stability_class",
+          "avg_health_delta_30d",
+          "avg_effectiveness_delta_30d",
+          "total_learning_records",
+          "total_successful",
+          "total_failed",
+          "confidence",
+          "computed_at"
+        ],
+        "title": "GovernanceMomentumResponse",
+        "type": "object"
+      },
       "GovernanceOverrideResponse": {
         "properties": {
           "approved_at": {
@@ -19210,6 +19283,86 @@
           "approved_at"
         ],
         "title": "GovernanceOverrideResponse",
+        "type": "object"
+      },
+      "GovernanceRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_summary": {
+            "title": "Evidence Summary",
+            "type": "string"
+          },
+          "expected_health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Health Delta"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "recommendation_confidence": {
+            "title": "Recommendation Confidence",
+            "type": "string"
+          },
+          "recommendation_id": {
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "recommendation_reason": {
+            "title": "Recommendation Reason",
+            "type": "string"
+          },
+          "recommended_control_focus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Control Focus"
+          },
+          "recommended_next_action": {
+            "title": "Recommended Next Action",
+            "type": "string"
+          },
+          "recommended_remediation_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Remediation Category"
+          },
+          "supporting_outcome_count": {
+            "title": "Supporting Outcome Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recommendation_id",
+          "recommended_next_action",
+          "recommended_remediation_category",
+          "recommended_control_focus",
+          "recommendation_reason",
+          "recommendation_confidence",
+          "evidence_summary",
+          "supporting_outcome_count",
+          "expected_health_delta",
+          "generated_at"
+        ],
+        "title": "GovernanceRecommendation",
         "type": "object"
       },
       "GovernanceReportDetail": {
@@ -19924,6 +20077,150 @@
           "entity_id"
         ],
         "title": "HeartbeatRequest",
+        "type": "object"
+      },
+      "IngestOutcomeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "effectiveness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness After"
+          },
+          "effectiveness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness Before"
+          },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "health_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health After"
+          },
+          "health_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Before"
+          },
+          "outcome_classification": {
+            "title": "Outcome Classification",
+            "type": "string"
+          },
+          "remediation_category": {
+            "title": "Remediation Category",
+            "type": "string"
+          },
+          "score_delta": {
+            "title": "Score Delta",
+            "type": "number"
+          },
+          "source_outcome_id": {
+            "title": "Source Outcome Id",
+            "type": "string"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
+          }
+        },
+        "required": [
+          "source_outcome_id",
+          "control_id",
+          "outcome_classification",
+          "score_delta",
+          "remediation_category"
+        ],
+        "title": "IngestOutcomeRequest",
         "type": "object"
       },
       "IngestPayload": {
@@ -20800,6 +21097,319 @@
         "title": "KeywordPayload",
         "type": "object"
       },
+      "LearningAggregateListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregates": {
+            "items": {
+              "$ref": "#/components/schemas/LearningAggregateResponse"
+            },
+            "title": "Aggregates",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "aggregates",
+          "total"
+        ],
+        "title": "LearningAggregateListResponse",
+        "type": "object"
+      },
+      "LearningAggregateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "average_effectiveness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Effectiveness Delta"
+          },
+          "average_forecast_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Forecast Delta"
+          },
+          "average_freshness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Freshness Delta"
+          },
+          "average_health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Health Delta"
+          },
+          "average_verification_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Verification Delta"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "failure_count": {
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "failure_rate": {
+            "title": "Failure Rate",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_updated_at": {
+            "title": "Last Updated At",
+            "type": "string"
+          },
+          "partial_success_count": {
+            "title": "Partial Success Count",
+            "type": "integer"
+          },
+          "remediation_category": {
+            "title": "Remediation Category",
+            "type": "string"
+          },
+          "signals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "success_count": {
+            "title": "Success Count",
+            "type": "integer"
+          },
+          "success_rate": {
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "remediation_category",
+          "success_count",
+          "failure_count",
+          "partial_success_count",
+          "total_count",
+          "success_rate",
+          "failure_rate",
+          "average_effectiveness_delta",
+          "average_verification_delta",
+          "average_freshness_delta",
+          "average_forecast_delta",
+          "average_health_delta",
+          "confidence",
+          "last_updated_at",
+          "signals"
+        ],
+        "title": "LearningAggregateResponse",
+        "type": "object"
+      },
+      "LearningCGINSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "bundle_version": {
+            "title": "Bundle Version",
+            "type": "string"
+          },
+          "category_snapshots": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Category Snapshots",
+            "type": "array"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "overall_avg_health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Avg Health Delta"
+          },
+          "overall_success_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Success Rate"
+          },
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
+            "type": "string"
+          },
+          "total_records": {
+            "title": "Total Records",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_fingerprint",
+          "bundle_id",
+          "bundle_version",
+          "category_snapshots",
+          "overall_success_rate",
+          "overall_avg_health_delta",
+          "total_records",
+          "generated_at"
+        ],
+        "title": "LearningCGINSnapshot",
+        "type": "object"
+      },
+      "LearningDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_signals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Active Signals",
+            "type": "array"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "momentum": {
+            "title": "Momentum",
+            "type": "string"
+          },
+          "overall_average_health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Average Health Delta"
+          },
+          "overall_success_rate": {
+            "title": "Overall Success Rate",
+            "type": "number"
+          },
+          "stability": {
+            "title": "Stability",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "top_performing_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Performing Category"
+          },
+          "total_aggregates": {
+            "title": "Total Aggregates",
+            "type": "integer"
+          },
+          "total_learning_records": {
+            "title": "Total Learning Records",
+            "type": "integer"
+          },
+          "worst_performing_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worst Performing Category"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_learning_records",
+          "total_aggregates",
+          "top_performing_category",
+          "worst_performing_category",
+          "overall_success_rate",
+          "overall_average_health_delta",
+          "momentum",
+          "stability",
+          "confidence",
+          "active_signals",
+          "generated_at"
+        ],
+        "title": "LearningDashboardResponse",
+        "type": "object"
+      },
       "LearningItem": {
         "additionalProperties": false,
         "properties": {
@@ -20862,6 +21472,281 @@
           "last_updated_at"
         ],
         "title": "LearningItem",
+        "type": "object"
+      },
+      "LearningRecordListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/LearningRecordResponse"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "records",
+          "total"
+        ],
+        "title": "LearningRecordListResponse",
+        "type": "object"
+      },
+      "LearningRecordResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_score": {
+            "title": "Confidence Score",
+            "type": "number"
+          },
+          "control_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "effectiveness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness After"
+          },
+          "effectiveness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness Before"
+          },
+          "effectiveness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness Delta"
+          },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "forecast_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Delta"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "freshness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Delta"
+          },
+          "health_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health After"
+          },
+          "health_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Before"
+          },
+          "health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Delta"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "learning_category": {
+            "title": "Learning Category",
+            "type": "string"
+          },
+          "outcome_type": {
+            "title": "Outcome Type",
+            "type": "string"
+          },
+          "remediation_category": {
+            "title": "Remediation Category",
+            "type": "string"
+          },
+          "source_outcome_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Outcome Id"
+          },
+          "success_score": {
+            "title": "Success Score",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
+          },
+          "verification_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Delta"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "learning_category",
+          "control_id",
+          "remediation_category",
+          "outcome_type",
+          "effectiveness_before",
+          "effectiveness_after",
+          "effectiveness_delta",
+          "verification_before",
+          "verification_after",
+          "verification_delta",
+          "freshness_before",
+          "freshness_after",
+          "freshness_delta",
+          "forecast_before",
+          "forecast_after",
+          "forecast_delta",
+          "health_before",
+          "health_after",
+          "health_delta",
+          "success_score",
+          "confidence_score",
+          "source_outcome_id",
+          "created_at"
+        ],
+        "title": "LearningRecordResponse",
         "type": "object"
       },
       "LifecycleTransitionRequest": {
@@ -26383,6 +27268,33 @@
           "ok"
         ],
         "title": "ReceiptRequest",
+        "type": "object"
+      },
+      "RecommendationListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/GovernanceRecommendation"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recommendations",
+          "total",
+          "generated_at"
+        ],
+        "title": "RecommendationListResponse",
         "type": "object"
       },
       "RecordAssessmentResultRequest": {
@@ -73122,6 +74034,630 @@
         "summary": "Validate Chain",
         "tags": [
           "governance-chain"
+        ]
+      }
+    },
+    "/governance-learning/aggregates": {
+      "get": {
+        "operationId": "list_aggregates_governance_learning_aggregates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningAggregateListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Aggregates",
+        "tags": [
+          "governance-learning"
+        ]
+      }
+    },
+    "/governance-learning/cgin/snapshot": {
+      "get": {
+        "operationId": "get_cgin_snapshot_governance_learning_cgin_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningCGINSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Cgin Snapshot",
+        "tags": [
+          "governance-learning"
+        ]
+      }
+    },
+    "/governance-learning/dashboard": {
+      "get": {
+        "operationId": "get_dashboard_governance_learning_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "governance-learning"
+        ]
+      }
+    },
+    "/governance-learning/ingest-outcome": {
+      "post": {
+        "operationId": "ingest_outcome_governance_learning_ingest_outcome_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestOutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Outcome",
+        "tags": [
+          "governance-learning"
+        ]
+      }
+    },
+    "/governance-learning/learning-records": {
+      "get": {
+        "operationId": "list_learning_records_governance_learning_learning_records_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "learning_category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Learning Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "remediation_category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Remediation Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "control_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Control Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningRecordListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Learning Records",
+        "tags": [
+          "governance-learning"
+        ]
+      }
+    },
+    "/governance-learning/momentum": {
+      "get": {
+        "operationId": "get_momentum_governance_learning_momentum_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceMomentumResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Momentum",
+        "tags": [
+          "governance-learning"
+        ]
+      }
+    },
+    "/governance-learning/recalculate": {
+      "post": {
+        "operationId": "recalculate_governance_learning_recalculate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecalculateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recalculate",
+        "tags": [
+          "governance-learning"
+        ]
+      }
+    },
+    "/governance-learning/recommendations": {
+      "get": {
+        "operationId": "get_recommendations_governance_learning_recommendations_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Recommendations",
+        "tags": [
+          "governance-learning"
+        ]
+      }
+    },
+    "/governance-learning/top-failures": {
+      "get": {
+        "operationId": "get_top_failures_governance_learning_top_failures_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningAggregateListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Top Failures",
+        "tags": [
+          "governance-learning"
+        ]
+      }
+    },
+    "/governance-learning/top-performers": {
+      "get": {
+        "operationId": "get_top_performers_governance_learning_top_performers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningAggregateListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Top Performers",
+        "tags": [
+          "governance-learning"
         ]
       }
     },

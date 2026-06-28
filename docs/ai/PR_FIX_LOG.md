@@ -6,6 +6,62 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-27 — fix/governance-learning-17-6b-bot-review: P1+P2 bot review fixes
+
+**Root causes (4 bugs):**
+
+1. **P1 — RLS missing on both governance-learning tables**: `fa_governance_learning_records` and `fa_governance_learning_aggregates` were created in migration 0138 without `ENABLE/FORCE ROW LEVEL SECURITY` or tenant policies. Direct SQL paths bypassed the DB-level tenant isolation that all other `fa_` tables enforce. The migration 0094 dynamic RLS repair is marked applied and does not revisit newly created tables.
+   **Fix:** Migration 0139 adds `ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY`, and a `USING (tenant_id = current_setting('app.current_tenant_id', true) OR ...)` policy for both tables.
+
+2. **P2 — NO_CHANGE outcomes not counted in aggregate totals**: `_aggregate_to_response()` computed `total = success_count + failure_count + partial_success_count`. Neutral `NO_CHANGE` outcomes (`delta > -1.0`) weren't classified into any bucket in `_update_aggregate`, so a tenant with only NO_CHANGE outcomes got `total_count=0` — corrupting rates, signals, and recommendations.
+   **Fix:** Added `no_change_count` column to aggregate table (migration 0139 + ORM + engine). `_update_aggregate` now counts `NO_CHANGE where delta > -1.0` into `no_change_count`. All `total` computations now include `+ no_change_count`.
+
+3. **P2 — 30-day window was last-30-records, not last-30-days**: `get_dashboard`, `get_recommendations`, and `get_momentum` all did `sorted(all_records, ...)[:30]` — a record-count slice, not a date filter. Low-volume tenants would include months-old outcomes in "30d" momentum and the declining-health recommendation rule.
+   **Fix:** Replaced slices with `r.created_at >= cutoff` where `cutoff = (now - timedelta(days=30)).isoformat()`. ISO strings are lexicographically sortable, so the comparison is correct. Variable renamed `recent_30d` throughout. `get_recommendations` also fixed a double `list_all_records()` call.
+
+4. **P2 — No DB-level unique constraint on (tenant_id, source_outcome_id)**: Plain `source_outcome_id` index didn't prevent two concurrent requests with the same `source_outcome_id` from both passing the pre-check read and inserting duplicate records. Also the index wasn't scoped by `tenant_id`.
+   **Fix:** Migration 0139 creates `uidx_gl_record_tenant_outcome` — a partial UNIQUE INDEX on `(tenant_id, source_outcome_id) WHERE source_outcome_id IS NOT NULL`. ORM index updated to `(tenant_id, source_outcome_id)`. `ingest_outcome` now catches `IntegrityError`, rolls back, and returns the existing record — handling the race correctly.
+
+**Files changed:** `migrations/postgres/0139_governance_learning_loop_fixes.sql` (new), `api/db_models_governance_learning.py`, `services/governance_learning/engine.py`, `docs/SOC_ARCH_REVIEW_2026-02-15.md`
+
+**Verified with:** pytest tests/test_governance_learning.py tests/test_governance_learning_end_to_end.py (132/132)
+
+---
+
+### 2026-06-27 — feat/governance-learning-loop-17-6b: Governance Learning Loop Authority
+
+**Changes shipped:**
+
+PR 17.6B — new bounded context `services/governance_learning/` implementing a deterministic governance intelligence loop. Ingests remediation outcome events, maintains per-category running aggregates, and surfaces deterministic recommendations, momentum classification, and an anonymized CGIN snapshot.
+
+**New files:**
+- `migrations/postgres/0138_governance_learning_loop.sql` — `fa_governance_learning_records` (append-only; PG triggers) + `fa_governance_learning_aggregates` (mutable; UNIQUE on `(tenant_id, remediation_category)`)
+- `api/db_models_governance_learning.py` — `FaGovernanceLearningRecord` (append-only ORM guards) + `FaGovernanceLearningAggregate`
+- `services/governance_learning/models.py` — 5 enums + 6 pure computation functions (success/confidence scoring, signal detection, classification)
+- `services/governance_learning/learning_rules.py` — 3 deterministic recommendation rules
+- `services/governance_learning/schemas.py` — 12 Pydantic schemas (`extra="forbid"`)
+- `services/governance_learning/repository.py` — tenant-scoped read/write; upsert aggregate
+- `services/governance_learning/engine.py` — `GovernanceLearningEngine` with 10 public methods
+- `api/governance_learning.py` — 10 routes under `/governance-learning`
+- `tests/test_governance_learning.py` — 127 unit tests (GL-1 to GL-127)
+- `tests/test_governance_learning_end_to_end.py` — 5 E2E tests
+
+**Modified files:**
+- `api/db.py` — `db_models_governance_learning` added to `_ensure_models_imported()`
+- `api/main.py` — `governance_learning_router` registered in both app builders
+- `services/plane_registry/registry.py` — `/governance-learning` added to `control` plane
+- `authority_manifest.yaml` — `governance_learning` entry added
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated (10 new routes)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — PR 17.6B entry prepended
+- `ROADMAP.md` — PR 17.6B row added
+
+**Verified with:**
+- pytest tests/test_governance_learning.py tests/test_governance_learning_end_to_end.py (132/132)
+- make fg-contract
+- make fg-fast (all gates pass)
+
+---
+
 ### 2026-06-27 — fix/governance-chain-17-6a-bot-review: P2 bot review fixes for PR 17.6A
 
 **Root causes (3 bugs, all in `services/governance_chain/engine.py`):**

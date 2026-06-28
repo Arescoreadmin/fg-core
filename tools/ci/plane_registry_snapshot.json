@@ -634,7 +634,8 @@
         "/timeline-authority",
         "/control-effectiveness",
         "/remediation-effectiveness",
-        "/governance-chain"
+        "/governance-chain",
+        "/governance-learning"
       ]
     },
     {
@@ -1170,7 +1171,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-27T14:08:38.517717+00:00",
+  "generated_at": "2026-06-27T21:39:07.116342+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
