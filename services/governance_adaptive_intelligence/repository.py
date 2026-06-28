@@ -97,25 +97,27 @@ class GovernanceAdaptiveIntelligenceRepository:
         offset: int = 0,
     ) -> tuple[list[FaGovernanceRecommendationHistory], int]:
         """List latest history rows per recommendation_id with optional status filter."""
-        # First, get all rows for this tenant
-        q = self._db.query(FaGovernanceRecommendationHistory).filter(
-            FaGovernanceRecommendationHistory.tenant_id == self._tenant_id
-        )
-        if status is not None:
-            q = q.filter(FaGovernanceRecommendationHistory.status == status)
-
-        # To get only the latest per recommendation_id, load all and deduplicate
+        # Load all rows for this tenant — status filter applied AFTER dedup so that
+        # newer status rows (e.g. ACCEPTED) are not excluded before the per-
+        # recommendation_id dedupe runs, which would surface stale earlier rows.
         all_rows: list[FaGovernanceRecommendationHistory] = (
-            q.order_by(FaGovernanceRecommendationHistory.generated_at.desc()).all()
+            self._db.query(FaGovernanceRecommendationHistory)
+            .filter(FaGovernanceRecommendationHistory.tenant_id == self._tenant_id)
+            .order_by(FaGovernanceRecommendationHistory.generated_at.desc())
+            .all()
         )
 
-        # Deduplicate: keep latest per recommendation_id
+        # Deduplicate: keep latest row per recommendation_id
         seen: set[str] = set()
         deduped: list[FaGovernanceRecommendationHistory] = []
         for row in all_rows:
             if row.recommendation_id not in seen:
                 seen.add(row.recommendation_id)
                 deduped.append(row)
+
+        # Apply status filter to the deduplicated current-state list
+        if status is not None:
+            deduped = [r for r in deduped if r.status == status]
 
         total = len(deduped)
         paginated = deduped[offset : offset + limit]
@@ -127,6 +129,21 @@ class GovernanceAdaptiveIntelligenceRepository:
             self._db.query(FaGovernanceRecommendationHistory)
             .filter(FaGovernanceRecommendationHistory.tenant_id == self._tenant_id)
             .order_by(FaGovernanceRecommendationHistory.generated_at.desc())
+            .all()
+        )
+
+    def list_history_for_type(
+        self, recommendation_type: str
+    ) -> list[FaGovernanceRecommendationHistory]:
+        """Fetch all history rows for a recommendation_type (used for aggregate rebuild)."""
+        return (
+            self._db.query(FaGovernanceRecommendationHistory)
+            .filter(
+                FaGovernanceRecommendationHistory.tenant_id == self._tenant_id,
+                FaGovernanceRecommendationHistory.recommendation_type
+                == recommendation_type,
+            )
+            .order_by(FaGovernanceRecommendationHistory.generated_at.asc())
             .all()
         )
 

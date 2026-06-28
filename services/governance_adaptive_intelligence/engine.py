@@ -34,10 +34,8 @@ from api.db_models_governance_adaptive_intelligence import (
     FaGovernanceRecommendationHistory,
     FaGovernanceRecommendationOutcome,
 )
-from api.db_models_governance_learning import FaGovernanceLearningAggregate
 from services.governance_adaptive_intelligence import recommendation_rules
 from services.governance_adaptive_intelligence.models import (
-    GOVERNANCE_ADAPTIVE_INTELLIGENCE_VERSION,
     CalibratedConfidence,
     PlaybookType,
     RecommendationType,
@@ -67,7 +65,6 @@ from services.governance_adaptive_intelligence.schemas import (
 )
 from services.governance_adaptive_intelligence.strategy_profiles import (
     STRATEGY_PROFILES,
-    get_strategy_profile,
 )
 
 
@@ -184,6 +181,15 @@ class GovernanceAdaptiveIntelligenceEngine:
         successful = sum(1 for o in outcomes if o.success)
         failed = sum(1 for o in outcomes if not o.success)
 
+        # Count generated and accepted from history rows — outcomes only cover the
+        # executed phase; generated/accepted counts require the history table.
+        _ACCEPTED_OR_LATER = {"ACCEPTED", "EXECUTED", "CLOSED"}
+        history_rows = self._repo.list_history_for_type(recommendation_type)
+        generated = len({r.recommendation_id for r in history_rows})
+        accepted = len(
+            {r.recommendation_id for r in history_rows if r.status in _ACCEPTED_OR_LATER}
+        )
+
         acc_score = compute_accuracy_score(successful, executed)
         cal_conf = classify_calibrated_confidence(acc_score, executed)
 
@@ -199,6 +205,8 @@ class GovernanceAdaptiveIntelligenceEngine:
         self._repo.upsert_accuracy_aggregate(
             recommendation_type=recommendation_type,
             updates={
+                "recommendations_generated": generated,
+                "recommendations_accepted": accepted,
                 "recommendations_executed": executed,
                 "recommendations_successful": successful,
                 "recommendations_failed": failed,

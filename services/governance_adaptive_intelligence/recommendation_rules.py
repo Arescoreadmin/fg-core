@@ -29,12 +29,22 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
+def _total(agg) -> int:
+    """Total outcomes including neutral NO_CHANGE."""
+    return (
+        agg.success_count
+        + agg.failure_count
+        + agg.partial_success_count
+        + agg.no_change_count
+    )
+
+
 def _success_rate(agg) -> float:
-    """Weighted success rate from learning aggregate."""
-    total = agg.success_count + agg.failure_count + agg.partial_success_count
-    if total <= 0:
+    """Weighted success rate from learning aggregate (includes no_change in denominator)."""
+    t = _total(agg)
+    if t <= 0:
         return 0.0
-    return (agg.success_count + agg.partial_success_count * 0.5) / total
+    return (agg.success_count + agg.partial_success_count * 0.5) / t
 
 
 def _accuracy_for_type(
@@ -93,7 +103,7 @@ def generate_adaptive_recommendations(
 
     if not skip_best:
         sr = _success_rate(best)
-        total_best = best.success_count + best.failure_count + best.partial_success_count
+        total_best = _total(best)
         recs.append(
             AdaptiveRecommendation(
                 recommendation_id=_new_id(),
@@ -128,7 +138,7 @@ def generate_adaptive_recommendations(
         worst_hist_sr = None
 
     sr_worst = _success_rate(worst)
-    total_worst = worst.success_count + worst.failure_count + worst.partial_success_count
+    total_worst = _total(worst)
     recs.append(
         AdaptiveRecommendation(
             recommendation_id=_new_id(),
@@ -189,11 +199,7 @@ def generate_adaptive_recommendations(
                     expected_health_delta=agg.average_health_delta,
                     historical_success_rate=None,
                     should_deprioritize=False,
-                    supporting_outcome_count=(
-                        agg.success_count
-                        + agg.failure_count
-                        + agg.partial_success_count
-                    ),
+                    supporting_outcome_count=_total(agg),
                     generated_at=now,
                 )
             )
@@ -219,11 +225,7 @@ def generate_adaptive_recommendations(
                     expected_health_delta=agg.average_health_delta,
                     historical_success_rate=None,
                     should_deprioritize=False,
-                    supporting_outcome_count=(
-                        agg.success_count
-                        + agg.failure_count
-                        + agg.partial_success_count
-                    ),
+                    supporting_outcome_count=_total(agg),
                     generated_at=now,
                 )
             )
