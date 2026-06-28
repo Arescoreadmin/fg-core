@@ -201,6 +201,23 @@ authorities:
     cgin_anonymized: true
     consumers:
     - services/governance_learning/engine.py
+    - services/governance_optimization/engine.py
+  governance_optimization:
+    engine: services/governance_optimization
+    api_file: api/governance_optimization.py
+    db_models: api/db_models_governance_optimization.py
+    route_prefixes:
+    - /governance-optimization
+    tables:
+    - fa_governance_optimization_decisions
+    - fa_governance_optimization_aggregates
+    - fa_governance_optimization_snapshots
+    tests:
+    - tests/test_governance_optimization.py
+    - tests/test_governance_optimization_end_to_end.py
+    cgin_snapshot: true
+    cgin_anonymized: true
+    consumers: []
   governance_learning:
     engine: services/governance_learning
     api_file: api/governance_learning.py

@@ -2869,6 +2869,90 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/accept",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/accuracy",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/calibration",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/cgin/snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/execute",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/outcomes",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/playbooks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/recalculate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/recommendations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/recommendations/{recommendation_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/record-outcome",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/strategy-profiles",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/track",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/governance-chain/cgin/snapshot",
       "scopes": [],
@@ -2985,6 +3069,96 @@
     {
       "method": "GET",
       "path": "/governance-learning/top-performers",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/aggregates",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/bridge-priorities",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/cgin/snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/control-priorities",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/decisions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-optimization/rank-bridges",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-optimization/rank-controls",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-optimization/rank-recommendations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-optimization/rank-remediations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-optimization/recalculate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/recommendation-rankings",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/remediation-priorities",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/snapshots",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-optimization/strategy-weights",
       "scopes": [],
       "source": "contract"
     },
@@ -4471,7 +4645,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-28T11:51:34.300379+00:00",
+  "generated_at": "2026-06-28T19:54:05.202709+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

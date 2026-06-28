@@ -115,6 +115,7 @@ from api.governance_learning import router as governance_learning_router
 from api.governance_adaptive_intelligence import (
     router as governance_adaptive_intelligence_router,
 )
+from api.governance_optimization import router as governance_optimization_router
 from api.risk_acceptance import router as risk_acceptance_router
 from api.risk_governance import router as risk_governance_router
 from api.entitlements import (
@@ -743,6 +744,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(governance_chain_router)
     app.include_router(governance_learning_router)
     app.include_router(governance_adaptive_intelligence_router)
+    app.include_router(governance_optimization_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
     app.include_router(rag_corpus_ingestion_router)
@@ -1191,6 +1193,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(governance_chain_router)
     app.include_router(governance_learning_router)
     app.include_router(governance_adaptive_intelligence_router)
+    app.include_router(governance_optimization_router)
     app.include_router(connectors_msgraph_report_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
