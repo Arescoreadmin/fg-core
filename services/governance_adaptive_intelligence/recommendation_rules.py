@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from api.db_models_governance_adaptive_intelligence import FaGovernanceAccuracyAggregate
 from services.governance_adaptive_intelligence.models import (
     CalibratedConfidence,
     RecommendationType,
@@ -48,8 +49,8 @@ def _success_rate(agg) -> float:
 
 
 def _accuracy_for_type(
-    accuracy_aggregates: list, recommendation_type: str
-) -> Optional[object]:
+    accuracy_aggregates: list[FaGovernanceAccuracyAggregate], recommendation_type: str
+) -> FaGovernanceAccuracyAggregate | None:
     """Return the accuracy aggregate for a given recommendation_type, or None."""
     for agg in accuracy_aggregates:
         if agg.recommendation_type == recommendation_type:
@@ -59,7 +60,7 @@ def _accuracy_for_type(
 
 def generate_adaptive_recommendations(
     aggregates: list,
-    accuracy_aggregates: list,
+    accuracy_aggregates: list[FaGovernanceAccuracyAggregate],
     total_records: int,
     avg_health_delta_30d: Optional[float],
 ) -> list[AdaptiveRecommendation]:

@@ -187,7 +187,11 @@ class GovernanceAdaptiveIntelligenceEngine:
         history_rows = self._repo.list_history_for_type(recommendation_type)
         generated = len({r.recommendation_id for r in history_rows})
         accepted = len(
-            {r.recommendation_id for r in history_rows if r.status in _ACCEPTED_OR_LATER}
+            {
+                r.recommendation_id
+                for r in history_rows
+                if r.status in _ACCEPTED_OR_LATER
+            }
         )
 
         acc_score = compute_accuracy_score(successful, executed)
@@ -287,9 +291,7 @@ class GovernanceAdaptiveIntelligenceEngine:
         total_records = len(all_records)
 
         # 30-day health delta window
-        cutoff_30d = (
-            datetime.now(tz=timezone.utc) - timedelta(days=30)
-        ).isoformat()
+        cutoff_30d = (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat()
         recent_30d = [r for r in all_records if r.created_at >= cutoff_30d]
         avg_health_30d_vals = [
             r.health_delta for r in recent_30d if r.health_delta is not None
@@ -520,12 +522,8 @@ class GovernanceAdaptiveIntelligenceEngine:
             1 for r in latest_per_rec if r.status in ("PENDING", "ACCEPTED")
         )
 
-        total_executed = sum(
-            row.recommendations_executed for row in acc_aggs
-        )
-        total_successful = sum(
-            row.recommendations_successful for row in acc_aggs
-        )
+        total_executed = sum(row.recommendations_executed for row in acc_aggs)
+        total_successful = sum(row.recommendations_successful for row in acc_aggs)
 
         overall_acc = compute_accuracy_score(total_successful, total_executed)
         overall_conf = classify_calibrated_confidence(overall_acc, total_executed)
@@ -680,9 +678,9 @@ class GovernanceAdaptiveIntelligenceEngine:
     def get_cgin_snapshot(self) -> CGINAdaptiveSnapshot:
         """Return anonymized CGIN benchmark snapshot. Never includes raw tenant_id."""
         now = _now_iso()
-        fingerprint = hashlib.sha256(
-            f"cgin:v1:{self._tenant_id}".encode()
-        ).hexdigest()[:32]
+        fingerprint = hashlib.sha256(f"cgin:v1:{self._tenant_id}".encode()).hexdigest()[
+            :32
+        ]
 
         acc_aggs = self._repo.list_all_accuracy_aggregates()
         playbooks = self._repo.list_all_playbooks()
@@ -753,7 +751,9 @@ class GovernanceAdaptiveIntelligenceEngine:
             all_outcomes = self._repo.list_all_outcomes()
             all_history = self._repo.list_all_history()
             # Map history_id → recommendation_type
-            hist_map: dict[str, str] = {row.id: row.recommendation_type for row in all_history}
+            hist_map: dict[str, str] = {
+                row.id: row.recommendation_type for row in all_history
+            }
             types_to_rebuild = list(
                 {
                     hist_map[o.recommendation_history_id]
