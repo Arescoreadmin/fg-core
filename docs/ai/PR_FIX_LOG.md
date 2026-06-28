@@ -28,6 +28,28 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-28 — fix/governance-optimization-17-6d-bot-review: P1+P2 bot review fixes
+
+**Root causes (4 bugs):**
+
+1. **P1 — Control score not normalized before inversion**: `rank_controls` fetched `effectiveness_score` (which the control effectiveness model stores as 0–100) and applied `(1.0 - eff_score) * 60.0`. Any real score above 1 (e.g. 75) produced a negative number clamped to 0, so every existing control ranked as zero priority instead of surfacing weak controls first.
+   **Fix:** Divide by 100 before inversion: `eff_fraction = eff_score / 100.0; priority_score = clamp((1.0 - eff_fraction) * 60.0, 0.0, 100.0)`.
+
+2. **P2 — Hardcoded `sample_size=1` bypassed zero-sample guard**: `_finalize_ranking` called `should_surface_as_optimization_target(item.target_type, item.priority_score, 1)` with a hardcoded `1`, so aggregates with no execution data (e.g. `recommendations_executed == 0` or strategy profiles with no playbooks) were never filtered, letting zero-evidence decisions and aggregates persist and inflate dashboards.
+   **Fix:** Added `sample_size: int = 0` to `RankedItem` dataclass; each ranking function (`rank_recommendations`, `rank_remediations`, `rank_bridges`, `rank_strategies`, `rank_controls`) passes its actual sample count. `_finalize_ranking` now uses `item.sample_size`.
+
+3. **P2 — Persist path returned in-memory items with new IDs, not the persisted rows**: When `persist=True`, `_finalize_ranking` inserted rows then returned `_decision_row_to_response_from_item(item, ...)` — generating fresh UUIDs and an empty `optimization_id`. Clients comparing returned IDs with `list_decisions()` output would never find them.
+   **Fix:** Collect persisted `FaGovernanceOptimizationDecision` rows from `_persist_decision`, then return `_decision_row_to_response(row)` for each. Non-persist path unchanged.
+
+4. **P2 — `or` falsiness treated 0.0 as missing for aggregate low watermark**: `min(existing.lowest_priority_score or item.priority_score, ...)` treated a stored `0.0` low watermark as `None`/missing and replaced it with the new score. Any target that previously scored zero would have its minimum corrupted on subsequent runs.
+   **Fix:** Replaced `or` with explicit `is not None` guards: `prev_low = existing.lowest_priority_score if existing.lowest_priority_score is not None else item.priority_score`.
+
+**Files changed:** `services/governance_optimization/engine.py`, `services/governance_optimization/ranking.py`, `docs/ai/PR_FIX_LOG.md`
+
+**Verified with:** pytest tests/test_governance_optimization.py tests/test_governance_optimization_end_to_end.py (95/95)
+
+---
+
 ### 2026-06-28 — feat/governance-adaptive-intelligence-17-6c: Governance Adaptive Intelligence Authority
 
 **Changes shipped:**

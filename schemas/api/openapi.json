@@ -5286,6 +5286,82 @@
         "title": "CGINEffectivenessSnapshot",
         "type": "object"
       },
+      "CGINOptimizationSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "average_priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Priority Score"
+          },
+          "bridge_priority_stats": {
+            "title": "Bridge Priority Stats",
+            "type": "object"
+          },
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "confidence_distribution": {
+            "title": "Confidence Distribution",
+            "type": "object"
+          },
+          "control_priority_stats": {
+            "title": "Control Priority Stats",
+            "type": "object"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "optimization_version": {
+            "title": "Optimization Version",
+            "type": "string"
+          },
+          "recommendation_ranking_stats": {
+            "title": "Recommendation Ranking Stats",
+            "type": "object"
+          },
+          "remediation_priority_stats": {
+            "title": "Remediation Priority Stats",
+            "type": "object"
+          },
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
+            "type": "string"
+          },
+          "top_strategy_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Strategy Profile"
+          }
+        },
+        "required": [
+          "tenant_fingerprint",
+          "bundle_id",
+          "optimization_version",
+          "recommendation_ranking_stats",
+          "control_priority_stats",
+          "remediation_priority_stats",
+          "bridge_priority_stats",
+          "confidence_distribution",
+          "generated_at"
+        ],
+        "title": "CGINOptimizationSnapshot",
+        "type": "object"
+      },
       "CGINRemediationSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -23749,6 +23825,368 @@
         "title": "ObservationType",
         "type": "string"
       },
+      "OptimizationAggregateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "average_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Confidence"
+          },
+          "average_effectiveness_lift": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Effectiveness Lift"
+          },
+          "average_health_lift": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Health Lift"
+          },
+          "average_priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Priority Score"
+          },
+          "highest_priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Highest Priority Score"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_ranked_at": {
+            "title": "Last Ranked At",
+            "type": "string"
+          },
+          "latest_priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Priority Score"
+          },
+          "lowest_priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lowest Priority Score"
+          },
+          "optimization_type": {
+            "title": "Optimization Type",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "times_ranked": {
+            "title": "Times Ranked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "target_type",
+          "target_id",
+          "optimization_type",
+          "times_ranked",
+          "last_ranked_at"
+        ],
+        "title": "OptimizationAggregateResponse",
+        "type": "object"
+      },
+      "OptimizationDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "average_priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Priority Score"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "overall_confidence": {
+            "title": "Overall Confidence",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "top_bridge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Bridge"
+          },
+          "top_recommendation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Recommendation Type"
+          },
+          "top_remediation_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Remediation Category"
+          },
+          "total_aggregates": {
+            "title": "Total Aggregates",
+            "type": "integer"
+          },
+          "total_decisions": {
+            "title": "Total Decisions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_decisions",
+          "total_aggregates",
+          "overall_confidence",
+          "generated_at"
+        ],
+        "title": "OptimizationDashboardResponse",
+        "type": "object"
+      },
+      "OptimizationDecisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_summary": {
+            "title": "Evidence Summary",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "optimization_id": {
+            "title": "Optimization Id",
+            "type": "string"
+          },
+          "optimization_type": {
+            "title": "Optimization Type",
+            "type": "string"
+          },
+          "priority_score": {
+            "title": "Priority Score",
+            "type": "number"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "source_authorities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Authorities",
+            "type": "array"
+          },
+          "source_record_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Record Ids"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "optimization_id",
+          "optimization_type",
+          "target_type",
+          "target_id",
+          "priority_score",
+          "rank",
+          "reason",
+          "evidence_summary",
+          "source_authorities",
+          "confidence",
+          "created_at"
+        ],
+        "title": "OptimizationDecisionResponse",
+        "type": "object"
+      },
+      "OptimizationSnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "average_priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Priority Score"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "optimization_confidence": {
+            "title": "Optimization Confidence",
+            "type": "string"
+          },
+          "snapshot_type": {
+            "title": "Snapshot Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "top_priority_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Priority Score"
+          },
+          "top_priority_target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Priority Target Id"
+          },
+          "total_items_ranked": {
+            "title": "Total Items Ranked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "snapshot_type",
+          "total_items_ranked",
+          "optimization_confidence",
+          "generated_at"
+        ],
+        "title": "OptimizationSnapshotResponse",
+        "type": "object"
+      },
       "OrgCreateRequest": {
         "properties": {
           "email": {
@@ -27074,6 +27512,18 @@
         "title": "ROEPolicy",
         "type": "object"
       },
+      "RankRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "persist": {
+            "default": true,
+            "title": "Persist",
+            "type": "boolean"
+          }
+        },
+        "title": "RankRequest",
+        "type": "object"
+      },
       "RankingItem": {
         "additionalProperties": false,
         "properties": {
@@ -27641,6 +28091,24 @@
           }
         },
         "title": "RecalculateHealthRequest",
+        "type": "object"
+      },
+      "RecalculateOptimizationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "optimization_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Optimization Type"
+          }
+        },
+        "title": "RecalculateOptimizationRequest",
         "type": "object"
       },
       "RecalculateRequest": {
@@ -76547,6 +77015,972 @@
         "summary": "Get Top Performers",
         "tags": [
           "governance-learning"
+        ]
+      }
+    },
+    "/governance-optimization/aggregates": {
+      "get": {
+        "operationId": "list_aggregates_governance_optimization_aggregates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationAggregateResponse"
+                  },
+                  "title": "Response List Aggregates Governance Optimization Aggregates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Aggregates",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/bridge-priorities": {
+      "get": {
+        "operationId": "get_bridge_priorities_governance_optimization_bridge_priorities_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response Get Bridge Priorities Governance Optimization Bridge Priorities Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Bridge Priorities",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/cgin/snapshot": {
+      "get": {
+        "operationId": "get_cgin_snapshot_governance_optimization_cgin_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CGINOptimizationSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Cgin Snapshot",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/control-priorities": {
+      "get": {
+        "description": "Placeholder \u2014 control data requires running POST /rank-controls first.",
+        "operationId": "get_control_priorities_governance_optimization_control_priorities_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response Get Control Priorities Governance Optimization Control Priorities Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Control Priorities",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/dashboard": {
+      "get": {
+        "operationId": "get_dashboard_governance_optimization_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptimizationDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/decisions": {
+      "get": {
+        "operationId": "list_decisions_governance_optimization_decisions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "optimization_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Optimization Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response List Decisions Governance Optimization Decisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Decisions",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/rank-bridges": {
+      "post": {
+        "operationId": "rank_bridges_governance_optimization_rank_bridges_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RankRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response Rank Bridges Governance Optimization Rank Bridges Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rank Bridges",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/rank-controls": {
+      "post": {
+        "description": "Placeholder \u2014 returns empty list until control effectiveness data is ingested.",
+        "operationId": "rank_controls_governance_optimization_rank_controls_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RankRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response Rank Controls Governance Optimization Rank Controls Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rank Controls",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/rank-recommendations": {
+      "post": {
+        "operationId": "rank_recommendations_governance_optimization_rank_recommendations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RankRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response Rank Recommendations Governance Optimization Rank Recommendations Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rank Recommendations",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/rank-remediations": {
+      "post": {
+        "operationId": "rank_remediations_governance_optimization_rank_remediations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RankRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response Rank Remediations Governance Optimization Rank Remediations Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rank Remediations",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/recalculate": {
+      "post": {
+        "operationId": "recalculate_governance_optimization_recalculate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecalculateOptimizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recalculate",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/recommendation-rankings": {
+      "get": {
+        "operationId": "get_recommendation_rankings_governance_optimization_recommendation_rankings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response Get Recommendation Rankings Governance Optimization Recommendation Rankings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Recommendation Rankings",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/remediation-priorities": {
+      "get": {
+        "operationId": "get_remediation_priorities_governance_optimization_remediation_priorities_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response Get Remediation Priorities Governance Optimization Remediation Priorities Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Remediation Priorities",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/snapshots": {
+      "get": {
+        "operationId": "list_snapshots_governance_optimization_snapshots_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "snapshot_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Snapshot Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationSnapshotResponse"
+                  },
+                  "title": "Response List Snapshots Governance Optimization Snapshots Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Snapshots",
+        "tags": [
+          "governance-optimization"
+        ]
+      }
+    },
+    "/governance-optimization/strategy-weights": {
+      "get": {
+        "operationId": "get_strategy_weights_governance_optimization_strategy_weights_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationDecisionResponse"
+                  },
+                  "title": "Response Get Strategy Weights Governance Optimization Strategy Weights Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Strategy Weights",
+        "tags": [
+          "governance-optimization"
         ]
       }
     },

@@ -162,7 +162,7 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 745,
+  "contract_count": 774,
   "contract_only": [],
   "internal_allowed": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
@@ -280,7 +280,7 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 675,
+    "control": 690,
     "data": 54,
     "evidence": 86,
     "rbac": 5,
@@ -340,7 +340,7 @@
     "POST /ui/devices/{device_id}/enable"
   ],
   "removed": [],
-  "runtime_count": 925,
+  "runtime_count": 940,
   "runtime_only": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
     "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -401,15 +401,6 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
-    "GET /governance-adaptive-intelligence/accuracy",
-    "GET /governance-adaptive-intelligence/calibration",
-    "GET /governance-adaptive-intelligence/cgin/snapshot",
-    "GET /governance-adaptive-intelligence/dashboard",
-    "GET /governance-adaptive-intelligence/outcomes",
-    "GET /governance-adaptive-intelligence/playbooks",
-    "GET /governance-adaptive-intelligence/recommendations",
-    "GET /governance-adaptive-intelligence/recommendations/{recommendation_id}",
-    "GET /governance-adaptive-intelligence/strategy-profiles",
     "GET /health",
     "GET /metrics",
     "GET /ui/ai",
@@ -502,11 +493,6 @@
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
-    "POST /governance-adaptive-intelligence/accept",
-    "POST /governance-adaptive-intelligence/execute",
-    "POST /governance-adaptive-intelligence/recalculate",
-    "POST /governance-adaptive-intelligence/record-outcome",
-    "POST /governance-adaptive-intelligence/track",
     "POST /ui/ai/chat",
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
@@ -516,20 +502,5 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": [
-    "GET /governance-adaptive-intelligence/accuracy",
-    "GET /governance-adaptive-intelligence/calibration",
-    "GET /governance-adaptive-intelligence/cgin/snapshot",
-    "GET /governance-adaptive-intelligence/dashboard",
-    "GET /governance-adaptive-intelligence/outcomes",
-    "GET /governance-adaptive-intelligence/playbooks",
-    "GET /governance-adaptive-intelligence/recommendations",
-    "GET /governance-adaptive-intelligence/recommendations/{recommendation_id}",
-    "GET /governance-adaptive-intelligence/strategy-profiles",
-    "POST /governance-adaptive-intelligence/accept",
-    "POST /governance-adaptive-intelligence/execute",
-    "POST /governance-adaptive-intelligence/recalculate",
-    "POST /governance-adaptive-intelligence/record-outcome",
-    "POST /governance-adaptive-intelligence/track"
-  ]
+  "unauthorized_runtime_only": []
 }

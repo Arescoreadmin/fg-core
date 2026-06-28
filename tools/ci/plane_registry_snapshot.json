@@ -636,7 +636,8 @@
         "/remediation-effectiveness",
         "/governance-chain",
         "/governance-learning",
-        "/governance-adaptive-intelligence"
+        "/governance-adaptive-intelligence",
+        "/governance-optimization"
       ]
     },
     {
@@ -1172,7 +1173,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-28T11:51:34.294187+00:00",
+  "generated_at": "2026-06-28T19:54:05.195799+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

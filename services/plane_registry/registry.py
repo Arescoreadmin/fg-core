@@ -68,6 +68,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/governance-chain",
             "/governance-learning",
             "/governance-adaptive-intelligence",
+            "/governance-optimization",
         ),
         allowed_dependency_categories=("auth", "tenant", "db", "rate", "breakglass"),
         required_make_targets=("control-plane-check", "plane-registry-spot"),
