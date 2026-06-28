@@ -28,6 +28,35 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-28 — feat/governance-adaptive-intelligence-17-6c: Governance Adaptive Intelligence Authority
+
+**Changes shipped:**
+
+PR 17.6C — new bounded context `services/governance_adaptive_intelligence/`. Transforms Governance Learning from historical reporting into adaptive governance intelligence by tracking recommendation outcomes, calibrating confidence from historical correctness, and building deterministic playbooks from outcome data.
+
+**New files:**
+- `migrations/postgres/0140_governance_adaptive_intelligence.sql` — 4 new tables + RLS on all + PG append-only trigger on `fa_governance_recommendation_history`
+- `api/db_models_governance_adaptive_intelligence.py` — 4 ORM models
+- `services/governance_adaptive_intelligence/models.py` — 5 enums + 4 pure functions (`compute_accuracy_score`, `classify_calibrated_confidence`, `compute_avg_delta`, `classify_strategy_profile`)
+- `services/governance_adaptive_intelligence/recommendation_rules.py` — 5 deterministic adaptive rules in `generate_adaptive_recommendations()` (consumes both learning aggregates AND historical accuracy)
+- `services/governance_adaptive_intelligence/strategy_profiles.py` — 7 static industry profiles (HEALTHCARE, FINANCIAL, INSURANCE, GOVERNMENT, LEGAL, MSP, GENERAL)
+- `services/governance_adaptive_intelligence/schemas.py` — 13 Pydantic schemas (`extra="forbid"`)
+- `services/governance_adaptive_intelligence/repository.py` — tenant-scoped read/write for all 4 tables; latest-row-per-recommendation_id query
+- `services/governance_adaptive_intelligence/engine.py` — `GovernanceAdaptiveIntelligenceEngine` with 14 methods
+- `api/governance_adaptive_intelligence.py` — 15 routes under `/governance-adaptive-intelligence`
+- `tests/test_governance_adaptive_intelligence.py` — 132 unit tests
+- `tests/test_governance_adaptive_intelligence_end_to_end.py` — 7 E2E tests
+
+**Modified files:**
+- `api/db.py`, `api/main.py`, `services/plane_registry/registry.py`, `authority_manifest.yaml`, `tools/ci/*.json`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+
+**Verified with:**
+- pytest tests/test_governance_adaptive_intelligence.py tests/test_governance_adaptive_intelligence_end_to_end.py (139/139)
+- make fg-contract
+- make fg-fast (all gates pass)
+
+---
+
 ### 2026-06-27 — feat/governance-learning-loop-17-6b: Governance Learning Loop Authority
 
 **Changes shipped:**

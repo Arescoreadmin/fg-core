@@ -24,20 +24,30 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
+def _total(agg) -> int:
+    """Total outcomes including neutral NO_CHANGE (no_change_count)."""
+    return (
+        agg.success_count
+        + agg.failure_count
+        + agg.partial_success_count
+        + agg.no_change_count
+    )
+
+
 def _success_rate(agg) -> float:
-    """Weighted success rate: success=1.0, partial=0.5, failure=0."""
-    total = agg.success_count + agg.failure_count + agg.partial_success_count
-    if total <= 0:
+    """Weighted success rate: success=1.0, partial=0.5, failure/no_change=0."""
+    t = _total(agg)
+    if t <= 0:
         return 0.0
-    return (agg.success_count + agg.partial_success_count * 0.5) / total
+    return (agg.success_count + agg.partial_success_count * 0.5) / t
 
 
 def _failure_rate(agg) -> float:
-    """Failure rate: failures / total."""
-    total = agg.success_count + agg.failure_count + agg.partial_success_count
-    if total <= 0:
+    """Failure rate: failures / total (including no_change outcomes)."""
+    t = _total(agg)
+    if t <= 0:
         return 0.0
-    return agg.failure_count / total
+    return agg.failure_count / t
 
 
 def generate_recommendations(
@@ -81,9 +91,7 @@ def generate_recommendations(
     best = sorted_aggs[0]
     sr = _success_rate(best)
     if sr >= 0.6:
-        total_best = (
-            best.success_count + best.failure_count + best.partial_success_count
-        )
+        total_best = _total(best)
         recs.append(
             GovernanceRecommendation(
                 recommendation_id=_new_id(),
@@ -108,9 +116,7 @@ def generate_recommendations(
     # Rec 2: Avoid worst category if high failure rate
     worst = sorted_aggs[-1]
     fr = _failure_rate(worst)
-    total_worst = (
-        worst.success_count + worst.failure_count + worst.partial_success_count
-    )
+    total_worst = _total(worst)
     if fr >= 0.5 and total_worst >= 3:
         recs.append(
             GovernanceRecommendation(

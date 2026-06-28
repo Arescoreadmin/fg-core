@@ -183,6 +183,24 @@ authorities:
     cgin_snapshot: true
     cgin_anonymized: true
     consumers: []
+  governance_adaptive_intelligence:
+    engine: services/governance_adaptive_intelligence
+    api_file: api/governance_adaptive_intelligence.py
+    db_models: api/db_models_governance_adaptive_intelligence.py
+    route_prefixes:
+    - /governance-adaptive-intelligence
+    tables:
+    - fa_governance_recommendation_history
+    - fa_governance_recommendation_outcomes
+    - fa_governance_accuracy_aggregates
+    - fa_governance_playbooks
+    tests:
+    - tests/test_governance_adaptive_intelligence.py
+    - tests/test_governance_adaptive_intelligence_end_to_end.py
+    cgin_snapshot: true
+    cgin_anonymized: true
+    consumers:
+    - services/governance_learning/engine.py
   governance_learning:
     engine: services/governance_learning
     api_file: api/governance_learning.py

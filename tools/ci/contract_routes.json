@@ -2930,6 +2930,66 @@
     },
     {
       "method": "GET",
+      "path": "/governance-learning/aggregates",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-learning/cgin/snapshot",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-learning/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-learning/ingest-outcome",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-learning/learning-records",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-learning/momentum",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-learning/recalculate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-learning/recommendations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-learning/top-failures",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-learning/top-performers",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/governance-reports",
       "scopes": [],
       "source": "contract"
@@ -4411,7 +4471,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-27T14:08:38.525275+00:00",
+  "generated_at": "2026-06-28T11:51:34.300379+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
