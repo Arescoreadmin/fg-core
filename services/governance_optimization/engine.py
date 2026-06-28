@@ -126,9 +126,21 @@ class GovernanceOptimizationEngine:
         else:
             n = existing.times_ranked + 1
             prev_avg = existing.average_priority_score or 0.0
-            new_avg = round((prev_avg * existing.times_ranked + item.priority_score) / n, 4)
-            highest = max(existing.highest_priority_score or item.priority_score, item.priority_score)
-            lowest = min(existing.lowest_priority_score or item.priority_score, item.priority_score)
+            new_avg = round(
+                (prev_avg * existing.times_ranked + item.priority_score) / n, 4
+            )
+            prev_high = (
+                existing.highest_priority_score
+                if existing.highest_priority_score is not None
+                else item.priority_score
+            )
+            prev_low = (
+                existing.lowest_priority_score
+                if existing.lowest_priority_score is not None
+                else item.priority_score
+            )
+            highest = max(prev_high, item.priority_score)
+            lowest = min(prev_low, item.priority_score)
             updates = {
                 "times_ranked": n,
                 "average_priority_score": new_avg,
@@ -194,20 +206,26 @@ class GovernanceOptimizationEngine:
             item
             for item in raw_items
             if should_surface_as_optimization_target(
-                item.target_type, item.priority_score, 1
+                item.target_type, item.priority_score, item.sample_size
             )
         ]
         ranked = apply_optimization_context(surfaced, optimization_type)
 
         if persist and ranked:
             optimization_id = _new_id()
+            persisted: list[FaGovernanceOptimizationDecision] = []
             for item in ranked:
-                self._persist_decision(item, optimization_id)
+                row = self._persist_decision(item, optimization_id)
                 self._update_aggregate(item)
+                persisted.append(row)
             self._create_snapshot(snapshot_type, ranked)
             self._db.commit()
+            return [_decision_row_to_response(row) for row in persisted]
 
-        return [_decision_row_to_response_from_item(item, self._tenant_id) for item in ranked]
+        return [
+            _decision_row_to_response_from_item(item, self._tenant_id)
+            for item in ranked
+        ]
 
     # ------------------------------------------------------------------
     # Public: rank recommendations
@@ -265,10 +283,11 @@ class GovernanceOptimizationEngine:
         items = []
         for ctrl in controls:
             eff_score = getattr(ctrl, "effectiveness_score", None) or 0.0
+            # effectiveness_score is 0–100; normalize to 0–1 before inversion
+            eff_fraction = eff_score / 100.0
             # Lower effectiveness = higher priority (needs more attention)
-            priority_score = clamp((1.0 - eff_score) * 60.0, 0.0, 100.0)
-            sample_size = 1
-            confidence = classify_optimization_confidence(priority_score, sample_size)
+            priority_score = clamp((1.0 - eff_fraction) * 60.0, 0.0, 100.0)
+            confidence = classify_optimization_confidence(priority_score, 1)
             items.append(
                 RankedItem(
                     target_id=getattr(ctrl, "control_id", ctrl.id),
@@ -277,13 +296,14 @@ class GovernanceOptimizationEngine:
                     priority_score=round(priority_score, 4),
                     rank=0,
                     reason=(
-                        f"Control has effectiveness score {round(eff_score * 100, 1)}%. "
+                        f"Control has effectiveness score {round(eff_score, 1)}%. "
                         "Lower effectiveness = higher optimization priority."
                     ),
                     evidence_summary=f"effectiveness_score={eff_score}",
                     source_authorities=["control_effectiveness"],
                     source_record_ids=[ctrl.id],
                     confidence=confidence.value,
+                    sample_size=1,
                 )
             )
 
@@ -342,7 +362,9 @@ class GovernanceOptimizationEngine:
     # Public: rank strategies
     # ------------------------------------------------------------------
 
-    def rank_strategies(self, persist: bool = True) -> list[OptimizationDecisionResponse]:
+    def rank_strategies(
+        self, persist: bool = True
+    ) -> list[OptimizationDecisionResponse]:
         """Rank strategy profiles by playbook performance."""
         from api.db_models_governance_adaptive_intelligence import FaGovernancePlaybook
         from services.governance_adaptive_intelligence.strategy_profiles import (
@@ -484,9 +506,9 @@ class GovernanceOptimizationEngine:
     def get_cgin_snapshot(self) -> CGINOptimizationSnapshot:
         """Return anonymized CGIN benchmark snapshot. Never includes raw tenant_id."""
         now = _now_iso()
-        fingerprint = hashlib.sha256(
-            f"cgin:v1:{self._tenant_id}".encode()
-        ).hexdigest()[:32]
+        fingerprint = hashlib.sha256(f"cgin:v1:{self._tenant_id}".encode()).hexdigest()[
+            :32
+        ]
 
         all_aggs = self._repo.list_all_aggregates()
 
@@ -495,7 +517,11 @@ class GovernanceOptimizationEngine:
             aggs = [a for a in all_aggs if a.optimization_type == opt_type]
             if not aggs:
                 return {"count": 0, "avg_score": None, "top_target": None}
-            scores = [a.average_priority_score for a in aggs if a.average_priority_score is not None]
+            scores = [
+                a.average_priority_score
+                for a in aggs
+                if a.average_priority_score is not None
+            ]
             top = max(aggs, key=lambda a: a.latest_priority_score or 0.0)
             return {
                 "count": len(aggs),
@@ -553,15 +579,24 @@ class GovernanceOptimizationEngine:
 
         run_all = optimization_type is None
 
-        if run_all or optimization_type == OptimizationType.RECOMMENDATION_RANKING.value:
+        if (
+            run_all
+            or optimization_type == OptimizationType.RECOMMENDATION_RANKING.value
+        ):
             items = self.rank_recommendations(persist=True)
             results[OptimizationType.RECOMMENDATION_RANKING.value] = len(items)
 
-        if run_all or optimization_type == OptimizationType.CONTROL_PRIORITIZATION.value:
+        if (
+            run_all
+            or optimization_type == OptimizationType.CONTROL_PRIORITIZATION.value
+        ):
             items = self.rank_controls(persist=True)
             results[OptimizationType.CONTROL_PRIORITIZATION.value] = len(items)
 
-        if run_all or optimization_type == OptimizationType.REMEDIATION_PRIORITIZATION.value:
+        if (
+            run_all
+            or optimization_type == OptimizationType.REMEDIATION_PRIORITIZATION.value
+        ):
             items = self.rank_remediations(persist=True)
             results[OptimizationType.REMEDIATION_PRIORITIZATION.value] = len(items)
 

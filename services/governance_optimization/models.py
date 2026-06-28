@@ -35,9 +35,9 @@ class TargetType(str, Enum):
 
 
 class OptimizationConfidence(str, Enum):
-    HIGH = "HIGH"      # >= 5 samples, score >= 70
+    HIGH = "HIGH"  # >= 5 samples, score >= 70
     MEDIUM = "MEDIUM"  # >= 3 samples or score >= 50
-    LOW = "LOW"        # < 3 samples or score < 50
+    LOW = "LOW"  # < 3 samples or score < 50
     INSUFFICIENT = "INSUFFICIENT"  # 0 samples
 
 

@@ -32,6 +32,7 @@ class RankedItem:
     source_authorities: list[str] = field(default_factory=list)
     source_record_ids: list[str] = field(default_factory=list)
     confidence: str = "INSUFFICIENT"
+    sample_size: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +102,7 @@ def rank_recommendations(
                 source_authorities=["governance_adaptive_intelligence"],
                 source_record_ids=[agg.id],
                 confidence=confidence.value,
+                sample_size=executed,
             )
         )
 
@@ -134,9 +136,7 @@ def rank_remediations(
             success_rate = 0.0
             failure_rate = 0.0
         else:
-            success_rate = (
-                agg.success_count + agg.partial_success_count * 0.5
-            ) / total
+            success_rate = (agg.success_count + agg.partial_success_count * 0.5) / total
             failure_rate = agg.failure_count / total
 
         score = compute_priority_score(
@@ -174,6 +174,7 @@ def rank_remediations(
                 source_authorities=["governance_learning"],
                 source_record_ids=[agg.id],
                 confidence=confidence.value,
+                sample_size=total,
             )
         )
 
@@ -280,6 +281,7 @@ def rank_bridges(
                 source_authorities=["governance_chain"],
                 source_record_ids=stats["ids"][:10],  # cap to 10
                 confidence=confidence.value,
+                sample_size=total,
             )
         )
 
@@ -330,9 +332,7 @@ def rank_strategies(
                 for pb in matched_playbooks
                 if pb.avg_health_improvement is not None
             ]
-            avg_health = (
-                sum(health_vals) / len(health_vals) if health_vals else None
-            )
+            avg_health = sum(health_vals) / len(health_vals) if health_vals else None
             sample_size = sum(pb.sample_size for pb in matched_playbooks)
             best_success = avg_success
 
@@ -365,6 +365,7 @@ def rank_strategies(
                 source_authorities=["governance_adaptive_intelligence"],
                 source_record_ids=[pb.id for pb in matched_playbooks[:10]],
                 confidence=confidence.value,
+                sample_size=sample_size,
             )
         )
 

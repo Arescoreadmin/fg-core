@@ -61,9 +61,7 @@ class GovernanceOptimizationRepository:
                 FaGovernanceOptimizationDecision.optimization_type == optimization_type
             )
         if target_type is not None:
-            q = q.filter(
-                FaGovernanceOptimizationDecision.target_type == target_type
-            )
+            q = q.filter(FaGovernanceOptimizationDecision.target_type == target_type)
         total = q.count()
         rows = (
             q.order_by(FaGovernanceOptimizationDecision.created_at.desc())
@@ -100,7 +98,8 @@ class GovernanceOptimizationRepository:
                 FaGovernanceOptimizationAggregate.tenant_id == self._tenant_id,
                 FaGovernanceOptimizationAggregate.target_type == target_type,
                 FaGovernanceOptimizationAggregate.target_id == target_id,
-                FaGovernanceOptimizationAggregate.optimization_type == optimization_type,
+                FaGovernanceOptimizationAggregate.optimization_type
+                == optimization_type,
             )
             .first()
         )
@@ -144,9 +143,7 @@ class GovernanceOptimizationRepository:
             FaGovernanceOptimizationAggregate.tenant_id == self._tenant_id
         )
         if target_type is not None:
-            q = q.filter(
-                FaGovernanceOptimizationAggregate.target_type == target_type
-            )
+            q = q.filter(FaGovernanceOptimizationAggregate.target_type == target_type)
         total = q.count()
         rows = (
             q.order_by(FaGovernanceOptimizationAggregate.last_ranked_at.desc())
@@ -164,9 +161,7 @@ class GovernanceOptimizationRepository:
             FaGovernanceOptimizationAggregate.tenant_id == self._tenant_id
         )
         if target_type is not None:
-            q = q.filter(
-                FaGovernanceOptimizationAggregate.target_type == target_type
-            )
+            q = q.filter(FaGovernanceOptimizationAggregate.target_type == target_type)
         return q.order_by(FaGovernanceOptimizationAggregate.last_ranked_at.desc()).all()
 
     # ------------------------------------------------------------------
