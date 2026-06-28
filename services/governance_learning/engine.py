@@ -185,8 +185,7 @@ class GovernanceLearningEngine:
         no_change_count = sum(
             1
             for r in records
-            if r.outcome_type == "NO_CHANGE"
-            and (r.effectiveness_delta or 0.0) > -1.0
+            if r.outcome_type == "NO_CHANGE" and (r.effectiveness_delta or 0.0) > -1.0
         )
 
         avg_eff = _avg([r.effectiveness_delta for r in records])
@@ -365,9 +364,7 @@ class GovernanceLearningEngine:
             worst_cat = worst.remediation_category
 
         # Momentum from records in the last 30 calendar days
-        cutoff_30d = (
-            datetime.now(tz=timezone.utc) - timedelta(days=30)
-        ).isoformat()
+        cutoff_30d = (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat()
         recent_30d = [r for r in all_records if r.created_at >= cutoff_30d]
         avg_health_30d = _avg([r.health_delta for r in recent_30d])
         avg_eff_30d = _avg([r.effectiveness_delta for r in recent_30d])
@@ -437,9 +434,7 @@ class GovernanceLearningEngine:
         total_records = len(all_records)
 
         # Avg health delta from records in the last 30 calendar days
-        cutoff_30d = (
-            datetime.now(tz=timezone.utc) - timedelta(days=30)
-        ).isoformat()
+        cutoff_30d = (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat()
         recent_30d = [r for r in all_records if r.created_at >= cutoff_30d]
         avg_health_30d = _avg([r.health_delta for r in recent_30d])
 
@@ -519,9 +514,7 @@ class GovernanceLearningEngine:
             1 for r in all_records if r.outcome_type in ("FAILURE", "REGRESSION")
         )
 
-        cutoff_30d = (
-            datetime.now(tz=timezone.utc) - timedelta(days=30)
-        ).isoformat()
+        cutoff_30d = (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat()
         recent_30d = [r for r in all_records if r.created_at >= cutoff_30d]
         avg_health_30d = _avg([r.health_delta for r in recent_30d])
         avg_eff_30d = _avg([r.effectiveness_delta for r in recent_30d])
