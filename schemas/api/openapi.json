@@ -139,6 +139,149 @@
         "title": "AIPolicyUpsertRequest",
         "type": "object"
       },
+      "AcceptRecommendationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "recommendation_history_id": {
+            "title": "Recommendation History Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recommendation_history_id",
+          "accepted"
+        ],
+        "title": "AcceptRecommendationRequest",
+        "type": "object"
+      },
+      "AccuracyAggregateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accuracy_score": {
+            "title": "Accuracy Score",
+            "type": "number"
+          },
+          "avg_effectiveness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Effectiveness Delta"
+          },
+          "avg_forecast_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Forecast Delta"
+          },
+          "avg_freshness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Freshness Delta"
+          },
+          "avg_health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Health Delta"
+          },
+          "avg_verification_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Verification Delta"
+          },
+          "calibrated_confidence": {
+            "title": "Calibrated Confidence",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_updated_at": {
+            "title": "Last Updated At",
+            "type": "string"
+          },
+          "recommendation_type": {
+            "title": "Recommendation Type",
+            "type": "string"
+          },
+          "recommendations_accepted": {
+            "title": "Recommendations Accepted",
+            "type": "integer"
+          },
+          "recommendations_executed": {
+            "title": "Recommendations Executed",
+            "type": "integer"
+          },
+          "recommendations_failed": {
+            "title": "Recommendations Failed",
+            "type": "integer"
+          },
+          "recommendations_generated": {
+            "title": "Recommendations Generated",
+            "type": "integer"
+          },
+          "recommendations_successful": {
+            "title": "Recommendations Successful",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "recommendation_type",
+          "recommendations_generated",
+          "recommendations_accepted",
+          "recommendations_executed",
+          "recommendations_successful",
+          "recommendations_failed",
+          "avg_health_delta",
+          "avg_effectiveness_delta",
+          "avg_verification_delta",
+          "avg_freshness_delta",
+          "avg_forecast_delta",
+          "calibrated_confidence",
+          "last_updated_at",
+          "accuracy_score"
+        ],
+        "title": "AccuracyAggregateResponse",
+        "type": "object"
+      },
       "AcknowledgeNotificationRequest": {
         "properties": {
           "actor": {
@@ -314,6 +457,116 @@
           "created_at"
         ],
         "title": "AcknowledgementResponse",
+        "type": "object"
+      },
+      "AdaptiveAccuracyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "overall_accuracy_score": {
+            "title": "Overall Accuracy Score",
+            "type": "number"
+          },
+          "overall_calibrated_confidence": {
+            "title": "Overall Calibrated Confidence",
+            "type": "string"
+          },
+          "per_type": {
+            "items": {
+              "$ref": "#/components/schemas/AccuracyAggregateResponse"
+            },
+            "title": "Per Type",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "per_type",
+          "overall_accuracy_score",
+          "overall_calibrated_confidence",
+          "generated_at"
+        ],
+        "title": "AdaptiveAccuracyResponse",
+        "type": "object"
+      },
+      "AdaptiveDashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_recommendation_count": {
+            "title": "Active Recommendation Count",
+            "type": "integer"
+          },
+          "avg_effectiveness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Effectiveness Delta"
+          },
+          "avg_health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Health Delta"
+          },
+          "calibrated_confidence": {
+            "title": "Calibrated Confidence",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "overall_accuracy_score": {
+            "title": "Overall Accuracy Score",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_executed": {
+            "title": "Total Executed",
+            "type": "integer"
+          },
+          "total_recommendations": {
+            "title": "Total Recommendations",
+            "type": "integer"
+          },
+          "total_successful": {
+            "title": "Total Successful",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_recommendations",
+          "total_executed",
+          "total_successful",
+          "overall_accuracy_score",
+          "calibrated_confidence",
+          "avg_health_delta",
+          "avg_effectiveness_delta",
+          "active_recommendation_count",
+          "generated_at"
+        ],
+        "title": "AdaptiveDashboardResponse",
         "type": "object"
       },
       "AddCommentRequest": {
@@ -4784,6 +5037,75 @@
         "title": "BulkObservationImportResult",
         "type": "object"
       },
+      "CGINAdaptiveSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "avg_health_improvement": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Health Improvement"
+          },
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "confidence_distribution": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Confidence Distribution",
+            "type": "object"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "overall_accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Accuracy"
+          },
+          "playbook_statistics": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Playbook Statistics",
+            "type": "array"
+          },
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
+            "type": "string"
+          },
+          "total_recommendations": {
+            "title": "Total Recommendations",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_fingerprint",
+          "bundle_id",
+          "overall_accuracy",
+          "avg_health_improvement",
+          "confidence_distribution",
+          "playbook_statistics",
+          "total_recommendations",
+          "generated_at"
+        ],
+        "title": "CGINAdaptiveSnapshot",
+        "type": "object"
+      },
       "CGINChainAuthoritySnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -5059,6 +5381,38 @@
           "health"
         ],
         "title": "CGINSnapshotBundle",
+        "type": "object"
+      },
+      "CalibrationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_distribution": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Confidence Distribution",
+            "type": "object"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "overall_calibration": {
+            "title": "Overall Calibration",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "confidence_distribution",
+          "overall_calibration",
+          "generated_at"
+        ],
+        "title": "CalibrationResponse",
         "type": "object"
       },
       "CancelCommandRequest": {
@@ -15519,6 +15873,20 @@
         "title": "ExecuteBridgeRequest",
         "type": "object"
       },
+      "ExecuteRecommendationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "recommendation_history_id": {
+            "title": "Recommendation History Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recommendation_history_id"
+        ],
+        "title": "ExecuteRecommendationRequest",
+        "type": "object"
+      },
       "ExecutionStateResponse": {
         "properties": {
           "assessment_type": {
@@ -23900,6 +24268,75 @@
         "title": "PlaybookProgressResponse",
         "type": "object"
       },
+      "PlaybookResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "avg_health_improvement": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Health Improvement"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_updated_at": {
+            "title": "Last Updated At",
+            "type": "string"
+          },
+          "playbook_type": {
+            "title": "Playbook Type",
+            "type": "string"
+          },
+          "recommended_path": {
+            "title": "Recommended Path",
+            "type": "string"
+          },
+          "recommended_steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Steps",
+            "type": "array"
+          },
+          "sample_size": {
+            "title": "Sample Size",
+            "type": "integer"
+          },
+          "success_rate": {
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "playbook_type",
+          "recommended_path",
+          "recommended_steps",
+          "success_rate",
+          "avg_health_improvement",
+          "confidence",
+          "sample_size",
+          "last_updated_at"
+        ],
+        "title": "PlaybookResponse",
+        "type": "object"
+      },
       "PlaybookTriggerRequest": {
         "additionalProperties": false,
         "properties": {
@@ -27170,6 +27607,24 @@
         "title": "RebuildRequest",
         "type": "object"
       },
+      "RecalculateAdaptiveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "recommendation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Type"
+          }
+        },
+        "title": "RecalculateAdaptiveRequest",
+        "type": "object"
+      },
       "RecalculateHealthRequest": {
         "additionalProperties": false,
         "properties": {
@@ -27270,6 +27725,154 @@
         "title": "ReceiptRequest",
         "type": "object"
       },
+      "RecommendationHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "executed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executed At"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationOutcomeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommendation_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Category"
+          },
+          "recommendation_confidence": {
+            "title": "Recommendation Confidence",
+            "type": "string"
+          },
+          "recommendation_id": {
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "recommendation_reason": {
+            "title": "Recommendation Reason",
+            "type": "string"
+          },
+          "recommendation_type": {
+            "title": "Recommendation Type",
+            "type": "string"
+          },
+          "rejected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected At"
+          },
+          "source_aggregate_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Aggregate Id"
+          },
+          "source_authority": {
+            "title": "Source Authority",
+            "type": "string"
+          },
+          "source_learning_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Learning Record Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "recommendation_id",
+          "recommendation_type",
+          "recommendation_category",
+          "recommendation_reason",
+          "recommendation_confidence",
+          "generated_at",
+          "accepted_at",
+          "rejected_at",
+          "executed_at",
+          "closed_at",
+          "status",
+          "source_learning_record_id",
+          "source_aggregate_id",
+          "source_authority"
+        ],
+        "title": "RecommendationHistoryResponse",
+        "type": "object"
+      },
       "RecommendationListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -27295,6 +27898,232 @@
           "generated_at"
         ],
         "title": "RecommendationListResponse",
+        "type": "object"
+      },
+      "RecommendationOutcomeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_adjustment": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Adjustment"
+          },
+          "effectiveness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness After"
+          },
+          "effectiveness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness Before"
+          },
+          "effectiveness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness Delta"
+          },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "forecast_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Delta"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "freshness_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Delta"
+          },
+          "health_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health After"
+          },
+          "health_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Before"
+          },
+          "health_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Delta"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "recommendation_history_id": {
+            "title": "Recommendation History Id",
+            "type": "string"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
+          },
+          "verification_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Delta"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "recommendation_history_id",
+          "health_before",
+          "health_after",
+          "health_delta",
+          "effectiveness_before",
+          "effectiveness_after",
+          "effectiveness_delta",
+          "verification_before",
+          "verification_after",
+          "verification_delta",
+          "freshness_before",
+          "freshness_after",
+          "freshness_delta",
+          "forecast_before",
+          "forecast_after",
+          "forecast_delta",
+          "success",
+          "confidence_adjustment",
+          "recorded_at"
+        ],
+        "title": "RecommendationOutcomeResponse",
         "type": "object"
       },
       "RecordAssessmentResultRequest": {
@@ -27399,164 +28228,6 @@
           "liveness_result"
         ],
         "title": "RecordHealthRequest",
-        "type": "object"
-      },
-      "RecordOutcomeRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "after_effectiveness_level": {
-            "title": "After Effectiveness Level",
-            "type": "string"
-          },
-          "after_score": {
-            "maximum": 100.0,
-            "minimum": 0.0,
-            "title": "After Score",
-            "type": "number"
-          },
-          "before_effectiveness_level": {
-            "title": "Before Effectiveness Level",
-            "type": "string"
-          },
-          "before_score": {
-            "maximum": 100.0,
-            "minimum": 0.0,
-            "title": "Before Score",
-            "type": "number"
-          },
-          "control_id": {
-            "title": "Control Id",
-            "type": "string"
-          },
-          "forecast_after": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Forecast After"
-          },
-          "forecast_before": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Forecast Before"
-          },
-          "freshness_after": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Freshness After"
-          },
-          "freshness_before": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Freshness Before"
-          },
-          "governance_health_after": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Governance Health After"
-          },
-          "governance_health_before": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Governance Health Before"
-          },
-          "remediation_category": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Remediation Category"
-          },
-          "remediation_task_id": {
-            "title": "Remediation Task Id",
-            "type": "string"
-          },
-          "verification_after": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verification After"
-          },
-          "verification_before": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verification Before"
-          }
-        },
-        "required": [
-          "remediation_task_id",
-          "control_id",
-          "before_score",
-          "after_score",
-          "before_effectiveness_level",
-          "after_effectiveness_level"
-        ],
-        "title": "RecordOutcomeRequest",
         "type": "object"
       },
       "RecordResultRequest": {
@@ -32254,6 +32925,57 @@
         "title": "StatsSummaryResponse",
         "type": "object"
       },
+      "StrategyProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "historical_failure_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Historical Failure Patterns",
+            "type": "array"
+          },
+          "historical_success_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Historical Success Patterns",
+            "type": "array"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "recommended_controls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Controls",
+            "type": "array"
+          },
+          "recommended_remediation_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Remediation Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile",
+          "recommended_controls",
+          "recommended_remediation_types",
+          "historical_success_patterns",
+          "historical_failure_patterns",
+          "confidence"
+        ],
+        "title": "StrategyProfileResponse",
+        "type": "object"
+      },
       "SubmitAttestationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -33621,6 +34343,73 @@
           "generated_at"
         ],
         "title": "TopSuccessesResponse",
+        "type": "object"
+      },
+      "TrackRecommendationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "recommendation_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Category"
+          },
+          "recommendation_confidence": {
+            "title": "Recommendation Confidence",
+            "type": "string"
+          },
+          "recommendation_id": {
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "recommendation_reason": {
+            "title": "Recommendation Reason",
+            "type": "string"
+          },
+          "recommendation_type": {
+            "title": "Recommendation Type",
+            "type": "string"
+          },
+          "source_aggregate_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Aggregate Id"
+          },
+          "source_authority": {
+            "default": "governance_learning",
+            "title": "Source Authority",
+            "type": "string"
+          },
+          "source_learning_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Learning Record Id"
+          }
+        },
+        "required": [
+          "recommendation_id",
+          "recommendation_type",
+          "recommendation_reason",
+          "recommendation_confidence"
+        ],
+        "title": "TrackRecommendationRequest",
         "type": "object"
       },
       "TransitionBlockerResponse": {
@@ -38580,6 +39369,135 @@
         "title": "FrameworkTransitionRequest",
         "type": "object"
       },
+      "services__governance_adaptive_intelligence__schemas__RecordOutcomeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "effectiveness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness After"
+          },
+          "effectiveness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effectiveness Before"
+          },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "health_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health After"
+          },
+          "health_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Before"
+          },
+          "recommendation_history_id": {
+            "title": "Recommendation History Id",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
+          }
+        },
+        "required": [
+          "recommendation_history_id",
+          "success"
+        ],
+        "title": "RecordOutcomeRequest",
+        "type": "object"
+      },
       "services__governance_portal__schemas__PortalAuditListResponse": {
         "properties": {
           "items": {
@@ -39144,6 +40062,164 @@
           "generated_at"
         ],
         "title": "RecalculateResponse",
+        "type": "object"
+      },
+      "services__remediation_effectiveness__schemas__RecordOutcomeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "after_effectiveness_level": {
+            "title": "After Effectiveness Level",
+            "type": "string"
+          },
+          "after_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "After Score",
+            "type": "number"
+          },
+          "before_effectiveness_level": {
+            "title": "Before Effectiveness Level",
+            "type": "string"
+          },
+          "before_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Before Score",
+            "type": "number"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "forecast_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast After"
+          },
+          "forecast_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Before"
+          },
+          "freshness_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness After"
+          },
+          "freshness_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Before"
+          },
+          "governance_health_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health After"
+          },
+          "governance_health_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Health Before"
+          },
+          "remediation_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Category"
+          },
+          "remediation_task_id": {
+            "title": "Remediation Task Id",
+            "type": "string"
+          },
+          "verification_after": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification After"
+          },
+          "verification_before": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Before"
+          }
+        },
+        "required": [
+          "remediation_task_id",
+          "control_id",
+          "before_score",
+          "after_score",
+          "before_effectiveness_level",
+          "after_effectiveness_level"
+        ],
+        "title": "RecordOutcomeRequest",
         "type": "object"
       },
       "services__remediation_portal__schemas__PortalAuditListResponse": {
@@ -73431,6 +74507,819 @@
         ]
       }
     },
+    "/governance-adaptive-intelligence/accept": {
+      "post": {
+        "operationId": "accept_recommendation_governance_adaptive_intelligence_accept_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptRecommendationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Recommendation",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/accuracy": {
+      "get": {
+        "operationId": "get_accuracy_governance_adaptive_intelligence_accuracy_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdaptiveAccuracyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Accuracy",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/calibration": {
+      "get": {
+        "operationId": "get_calibration_governance_adaptive_intelligence_calibration_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalibrationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Calibration",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/cgin/snapshot": {
+      "get": {
+        "operationId": "get_cgin_snapshot_governance_adaptive_intelligence_cgin_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CGINAdaptiveSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Cgin Snapshot",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/dashboard": {
+      "get": {
+        "operationId": "get_dashboard_governance_adaptive_intelligence_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdaptiveDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/execute": {
+      "post": {
+        "operationId": "execute_recommendation_governance_adaptive_intelligence_execute_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRecommendationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Recommendation",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/outcomes": {
+      "get": {
+        "operationId": "list_outcomes_governance_adaptive_intelligence_outcomes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RecommendationOutcomeResponse"
+                  },
+                  "title": "Response List Outcomes Governance Adaptive Intelligence Outcomes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Outcomes",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/playbooks": {
+      "get": {
+        "operationId": "list_playbooks_governance_adaptive_intelligence_playbooks_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlaybookResponse"
+                  },
+                  "title": "Response List Playbooks Governance Adaptive Intelligence Playbooks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Playbooks",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/recalculate": {
+      "post": {
+        "operationId": "recalculate_governance_adaptive_intelligence_recalculate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecalculateAdaptiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recalculate",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/recommendations": {
+      "get": {
+        "operationId": "list_recommendations_governance_adaptive_intelligence_recommendations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RecommendationHistoryResponse"
+                  },
+                  "title": "Response List Recommendations Governance Adaptive Intelligence Recommendations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Recommendations",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/recommendations/{recommendation_id}": {
+      "get": {
+        "operationId": "get_recommendation_detail_governance_adaptive_intelligence_recommendations__recommendation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recommendation_id",
+            "required": true,
+            "schema": {
+              "title": "Recommendation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Recommendation Detail",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/record-outcome": {
+      "post": {
+        "operationId": "record_outcome_governance_adaptive_intelligence_record_outcome_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__governance_adaptive_intelligence__schemas__RecordOutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Outcome",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/strategy-profiles": {
+      "get": {
+        "operationId": "list_strategy_profiles_governance_adaptive_intelligence_strategy_profiles_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StrategyProfileResponse"
+                  },
+                  "title": "Response List Strategy Profiles Governance Adaptive Intelligence Strategy Profiles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Strategy Profiles",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
+    "/governance-adaptive-intelligence/track": {
+      "post": {
+        "operationId": "track_recommendation_governance_adaptive_intelligence_track_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackRecommendationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Track Recommendation",
+        "tags": [
+          "governance-adaptive-intelligence"
+        ]
+      }
+    },
     "/governance-chain/cgin/snapshot": {
       "get": {
         "operationId": "get_cgin_snapshot_governance_chain_cgin_snapshot_get",
@@ -84755,7 +86644,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RecordOutcomeRequest"
+                "$ref": "#/components/schemas/services__remediation_effectiveness__schemas__RecordOutcomeRequest"
               }
             }
           },

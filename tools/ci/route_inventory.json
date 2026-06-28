@@ -10228,6 +10228,244 @@
         "auth",
         "tenant"
       ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/accept",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/accuracy",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/calibration",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/cgin/snapshot",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/dashboard",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/execute",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/outcomes",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/playbooks",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/recalculate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/recommendations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/recommendations/{recommendation_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/record-outcome",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "GET",
+      "path": "/governance-adaptive-intelligence/strategy-profiles",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_adaptive_intelligence.py",
+      "method": "POST",
+      "path": "/governance-adaptive-intelligence/track",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/governance_chain.py",
       "method": "GET",
       "path": "/governance-chain/cgin/snapshot",
@@ -15631,7 +15869,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-27T21:39:07.104084+00:00",
+  "generated_at": "2026-06-28T11:51:34.283743+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
