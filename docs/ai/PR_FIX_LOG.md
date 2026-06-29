@@ -16424,3 +16424,10 @@ Result:
 - `tools/ci/check_cgin_privacy.py` (modified — type annotations; 17.7A trailing cleanup)
 - `tools/ci/check_authority_integration.py` (modified — ruff reflow; no logic change)
 - `Makefile`, `services/cgin/privacy.py`, `tests/test_cgin_privacy.py`, `tests/test_h14_6_5a_evidence_hardening.py` (minor formatting/annotation fixes)
+
+### 2026-06-29 — fix(ci): mypy type annotations in test_context_registry.py
+
+**Summary:** `_BASE` fixture inferred as `dict[str, object]` by mypy, causing 21 "object is not indexable" errors across the test suite. Fix: annotate `_BASE: dict[str, Any]`, `_make() -> dict[str, Any]`, `_load_raw(raw: dict[str, Any])`. `copy.deepcopy` is generic so all inline deepcopy locals inherit the type automatically. Zero `type: ignore` added. No behavior changes.
+
+**Files changed:**
+- `tests/test_context_registry.py` (modified — `from typing import Any` import; `_BASE`, `_make`, `_load_raw` type annotations)
