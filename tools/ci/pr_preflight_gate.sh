@@ -30,6 +30,12 @@ python tools/ci/check_cgin_privacy.py
 python tools/ci/check_authority_integration.py
 python tools/ci/check_plane_registry.py
 python scripts/generate_platform_inventory.py
+if ! git diff --exit-code --quiet; then
+  echo "ERROR: generate_platform_inventory.py rewrote tracked artifacts."
+  echo "Commit the regenerated files before merging."
+  git diff --name-only
+  exit 1
+fi
 
 echo
 echo "== Contract gate =="

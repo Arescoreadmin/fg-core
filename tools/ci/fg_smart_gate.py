@@ -21,7 +21,14 @@ def changed_files() -> list[str]:
     try:
         raw = output(["git", "diff", "--name-only", f"{BASE_REF}...HEAD"])
     except subprocess.CalledProcessError:
-        raw = output(["git", "diff", "--name-only"])
+        try:
+            # Shallow clone or missing base ref — fall back to last commit range.
+            raw = output(["git", "diff", "--name-only", "HEAD~1..HEAD"])
+        except subprocess.CalledProcessError as exc:
+            raise SystemExit(
+                f"fg-smart: cannot determine changed files "
+                f"(tried {BASE_REF}...HEAD and HEAD~1..HEAD): {exc}"
+            ) from exc
     return [line for line in raw.splitlines() if line.strip()]
 
 
