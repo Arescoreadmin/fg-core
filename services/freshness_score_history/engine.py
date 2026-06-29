@@ -25,6 +25,7 @@ from services.freshness_score_history.models import (
     compute_score_delta,
     compute_trend_direction,
 )
+from services.cgin.privacy import fingerprint_tenant
 from services.freshness_score_history.repository import FreshnessScoreHistoryRepository
 from services.freshness_score_history.schemas import (
     FreshnessCGINTrendSnapshot,
@@ -546,7 +547,7 @@ class FreshnessScoreHistoryEngine:
 
         if current is None:
             return FreshnessCGINTrendSnapshot(
-                tenant_id=self._tenant_id,
+                tenant_fingerprint=fingerprint_tenant(self._tenant_id),
                 average_score=0.0,
                 score_delta_30d=None,
                 score_delta_90d=None,
@@ -593,7 +594,7 @@ class FreshnessScoreHistoryEngine:
             improvement_velocity = round(score_delta_30d / 30.0, 4)
 
         return FreshnessCGINTrendSnapshot(
-            tenant_id=self._tenant_id,
+            tenant_fingerprint=fingerprint_tenant(self._tenant_id),
             average_score=current_avg,
             score_delta_30d=score_delta_30d,
             score_delta_90d=score_delta_90d,

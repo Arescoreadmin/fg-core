@@ -246,11 +246,12 @@ def verify(manifest: dict) -> int:
                         f"in {api_file}"
                     )
 
-        # Check 7: CGIN anonymization acknowledgement
+        # Check 7: CGIN anonymization — FAIL if not anonymized
         if auth.get("cgin_snapshot") and not auth.get("cgin_anonymized"):
-            warnings.append(
+            errors.append(
                 f"{prefix} CGIN snapshot uses raw tenant_id (cgin_anonymized: false). "
-                f"Acknowledged tech debt — new authorities must use tenant_fingerprint."
+                "All CGIN-producing authorities must use tenant_fingerprint. "
+                "Import from services.cgin.privacy and set cgin_anonymized: true in authority_manifest.yaml."
             )
 
         # Check 8: declared consumer files exist

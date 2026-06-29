@@ -483,7 +483,8 @@ class TestGetCGINTrends:
 
     def test_cgin_response_structure(self, client: TestClient):
         data = client.get("/freshness/cgin/trends").json()
-        assert "tenant_id" in data
+        assert "tenant_fingerprint" in data
+        assert "tenant_id" not in data
         assert "average_score" in data
         assert "score_delta_30d" in data
         assert "score_delta_90d" in data
@@ -493,7 +494,8 @@ class TestGetCGINTrends:
 
     def test_cgin_tenant_id_correct(self, client: TestClient):
         data = client.get("/freshness/cgin/trends").json()
-        assert data["tenant_id"] == _TENANT
+        assert "tenant_id" not in data
+        assert len(data["tenant_fingerprint"]) == 32
 
     def test_cgin_no_data_all_none(self, client: TestClient):
         data = client.get("/freshness/cgin/trends").json()

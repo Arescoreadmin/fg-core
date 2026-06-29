@@ -710,7 +710,7 @@ class EvidenceStatusSnapshot(BaseModel):
 
     snapshot_id: str
     snapshot_version: str
-    tenant_id: str
+    tenant_fingerprint: str
     generated_at: str
     evidence_id: str
     lifecycle_state: str
@@ -730,7 +730,7 @@ class VerificationSnapshot(BaseModel):
 
     snapshot_id: str
     snapshot_version: str
-    tenant_id: str
+    tenant_fingerprint: str
     evidence_id: str
     generated_at: str
     verification_count: int
@@ -746,7 +746,7 @@ class CoverageSnapshot(BaseModel):
 
     snapshot_id: str
     snapshot_version: str
-    tenant_id: str
+    tenant_fingerprint: str
     generated_at: str
     controls_with_evidence: int
     controls_without_evidence: int
@@ -763,7 +763,7 @@ class HealthSnapshot(BaseModel):
 
     snapshot_id: str
     snapshot_version: str
-    tenant_id: str
+    tenant_fingerprint: str
     generated_at: str
     verification_overdue_count: int
     review_overdue_count: int
@@ -781,7 +781,7 @@ class CGINSnapshotBundle(BaseModel):
 
     bundle_id: str
     bundle_version: str
-    tenant_id: str
+    tenant_fingerprint: str
     generated_at: str
     evidence_snapshots: list[EvidenceStatusSnapshot]
     verification_snapshots: list[VerificationSnapshot]

@@ -35,6 +35,7 @@ from services.verification_authority.models import (
     WorkflowSlaStatus,
     validate_workflow_transition,
 )
+from services.cgin.privacy import fingerprint_tenant
 from services.verification_authority.repository import VerificationWorkflowRepository
 from services.verification_authority.schemas import (
     AssignVerificationRequest,
@@ -874,7 +875,7 @@ class VerificationAuthorityEngine:
 
         return WorkflowCginSnapshot(
             snapshot_at=now_iso,
-            tenant_id=self._tenant_id,
+            tenant_fingerprint=fingerprint_tenant(self._tenant_id),
             total_requests=total_requests,
             by_state=by_state,
             overdue_count=overdue_count,

@@ -247,7 +247,7 @@ class RecalculateResponse(BaseModel):
 class CGINRemediationSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    tenant_id: str
+    tenant_fingerprint: str
     total_remediations: int
     success_rate: float
     average_score_delta: float

@@ -47,6 +47,7 @@ from services.evidence_authority.models import (
     validate_lifecycle_transition,
     validate_trust_transition,
 )
+from services.cgin.privacy import fingerprint_tenant
 from services.evidence_authority.repository import EvidenceRepository
 from services.evidence_authority.quality import compute_quality_scores
 from services.evidence_authority.schemas import (
@@ -1638,6 +1639,7 @@ class EvidenceAuthorityEngine:
     def get_cgin_snapshot(self) -> "CGINSnapshotBundle":
         bundle_id = _new_id()
         generated_at = _now()
+        fingerprint = fingerprint_tenant(self._tenant_id)
         items, _ = self._repo.list_all_evidence_for_status_report(offset=0, limit=500)
         ev_snapshots = []
         ver_snapshots = []
@@ -1647,7 +1649,7 @@ class EvidenceAuthorityEngine:
                 EvidenceStatusSnapshot(
                     snapshot_id=_new_id(),
                     snapshot_version="1.0",
-                    tenant_id=self._tenant_id,
+                    tenant_fingerprint=fingerprint,
                     generated_at=generated_at,
                     evidence_id=ev.id,
                     lifecycle_state=ev.lifecycle_state,
@@ -1671,7 +1673,7 @@ class EvidenceAuthorityEngine:
                 VerificationSnapshot(
                     snapshot_id=_new_id(),
                     snapshot_version="1.0",
-                    tenant_id=self._tenant_id,
+                    tenant_fingerprint=fingerprint,
                     evidence_id=ev.id,
                     generated_at=generated_at,
                     verification_count=summary.verification_count,
@@ -1687,14 +1689,14 @@ class EvidenceAuthorityEngine:
         return CGINSnapshotBundle(
             bundle_id=bundle_id,
             bundle_version="1.0",
-            tenant_id=self._tenant_id,
+            tenant_fingerprint=fingerprint,
             generated_at=generated_at,
             evidence_snapshots=ev_snapshots,
             verification_snapshots=ver_snapshots,
             coverage=CoverageSnapshot(
                 snapshot_id=_new_id(),
                 snapshot_version="1.0",
-                tenant_id=self._tenant_id,
+                tenant_fingerprint=fingerprint,
                 generated_at=generated_at,
                 controls_with_evidence=cov.controls_with_evidence,
                 controls_without_evidence=cov.controls_without_evidence,
@@ -1706,7 +1708,7 @@ class EvidenceAuthorityEngine:
             health=HealthSnapshot(
                 snapshot_id=_new_id(),
                 snapshot_version="1.0",
-                tenant_id=self._tenant_id,
+                tenant_fingerprint=fingerprint,
                 generated_at=generated_at,
                 **health.model_dump(exclude={"tenant_id", "generated_at"}),
             ),
