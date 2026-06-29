@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -20,7 +21,7 @@ from tools.ci.context_registry import (
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-_BASE = {
+_BASE: dict[str, Any] = {
     "version": 1,
     "global": {
         "always_tests": ["tests/test_smoke.py"],
@@ -65,16 +66,16 @@ _BASE = {
 }
 
 
-def _make(overrides: dict | None = None) -> dict:
+def _make(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     import copy
 
-    d = copy.deepcopy(_BASE)
+    d: dict[str, Any] = copy.deepcopy(_BASE)
     if overrides:
         d.update(overrides)
     return d
 
 
-def _load_raw(raw: dict) -> ContextRegistry:
+def _load_raw(raw: dict[str, Any]) -> ContextRegistry:
     return ContextRegistry._parse_and_validate(raw)
 
 
