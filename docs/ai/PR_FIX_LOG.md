@@ -16406,3 +16406,21 @@ Result:
 - `Makefile` (modified — `cgin-privacy-check` target added; wired into `fg-fast` chain)
 - `tests/test_cgin_privacy.py` (modified — `TestFingerprintAlgorithm` (10 tests), `TestBuildCGINMetadata` (13 tests), `TestFuzzAssertSnapshotSafe` (20 fuzz tests))
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — 17.7A entry updated with enhanced gate docs)
+
+
+## 2026-06-29
+
+### 2026-06-29 — PR CI-1: Smart Gate Context Registry
+
+**Summary:** Replaced five hardcoded Python dicts in `tools/ci/fg_smart_gate.py` with a declarative `tools/ci/context_registry.yaml`. 12 authority contexts registered. Added `ContextRegistry` class with full validation (circular deps, duplicates, unknown gates). 109 tests. Also tracked `tools/ci/pr_preflight_gate.sh` and committed 17.7A formatting/annotation trailing cleanup.
+
+**Files changed:**
+- `tools/ci/context_registry.yaml` (new — declarative registry v1; 12 contexts)
+- `tools/ci/context_registry.py` (new — ContextRegistry class; validation, detection, expansion, collection)
+- `tools/ci/fg_smart_gate.py` (rewritten — zero hardcoded authority metadata; uses ContextRegistry)
+- `tools/ci/pr_preflight_gate.sh` (tracked — pre-existing developer helper for `make fg-pr`)
+- `tests/test_context_registry.py` (new — 109 tests)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — CI-1 security review entry)
+- `tools/ci/check_cgin_privacy.py` (modified — type annotations; 17.7A trailing cleanup)
+- `tools/ci/check_authority_integration.py` (modified — ruff reflow; no logic change)
+- `Makefile`, `services/cgin/privacy.py`, `tests/test_cgin_privacy.py`, `tests/test_h14_6_5a_evidence_hardening.py` (minor formatting/annotation fixes)
