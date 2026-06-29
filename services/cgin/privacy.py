@@ -67,7 +67,7 @@ ACTIVE_FINGERPRINT_ALGORITHM = FingerprintAlgorithm.SHA256_CGIN_V1
 
 def fingerprint_tenant(
     tenant_id: str,
-    algorithm: FingerprintAlgorithm = ACTIVE_FINGERPRINT_ALGORITHM,
+    algorithm: FingerprintAlgorithm | str = ACTIVE_FINGERPRINT_ALGORITHM,
 ) -> str:
     """Return a deterministic, irreversible 32-char hex fingerprint for tenant_id.
 
@@ -79,10 +79,18 @@ def fingerprint_tenant(
     - Irreversible: cannot recover tenant_id from fingerprint.
     - Stable: reproducible across builds, runtimes, and deployments.
     """
-    if algorithm is FingerprintAlgorithm.SHA256_CGIN_V1:
+    try:
+        resolved = FingerprintAlgorithm(algorithm)
+    except ValueError as exc:
+        raise NotImplementedError(
+            f"Unsupported fingerprint algorithm: {algorithm}"
+        ) from exc
+
+    if resolved == FingerprintAlgorithm.SHA256_CGIN_V1:
         return hashlib.sha256(
             f"{CGIN_FINGERPRINT_NAMESPACE}:{tenant_id}".encode()
         ).hexdigest()[:32]
+
     raise NotImplementedError(f"Unsupported fingerprint algorithm: {algorithm}")
 
 

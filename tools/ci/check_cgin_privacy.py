@@ -60,7 +60,7 @@ def _is_cgin_class(class_name: str) -> bool:
 
 def _get_field_names_from_class(node: ast.ClassDef) -> list[str]:
     """Extract field names from a Pydantic-style class (annotated assignments)."""
-    fields = []
+    fields: list[str] = []
     for item in node.body:
         if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
             fields.append(item.target.id)
@@ -69,7 +69,7 @@ def _get_field_names_from_class(node: ast.ClassDef) -> list[str]:
 
 def check_file(path: Path, verbose: bool) -> list[str]:
     """Return list of violations found in this schema file."""
-    violations = []
+    violations: list[str] = []
     try:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))

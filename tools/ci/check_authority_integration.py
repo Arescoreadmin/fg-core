@@ -287,9 +287,7 @@ def verify(manifest: dict) -> int:
     # CGIN Privacy Score
     # -----------------------------------------------------------------------
     cgin_producers = [
-        name
-        for name, auth in authorities.items()
-        if auth.get("cgin_snapshot")
+        name for name, auth in authorities.items() if auth.get("cgin_snapshot")
     ]
     cgin_anonymized = [
         name for name in cgin_producers if authorities[name].get("cgin_anonymized")

@@ -1449,3 +1449,15 @@ compliance-scap:
 prod-check:
 	python tools/ci/check_required_env.py
 
+.PHONY: fg-pr
+fg-pr:
+	bash tools/ci/pr_preflight_gate.sh
+
+.PHONY: fg-smart
+fg-smart:
+	python tools/ci/fg_smart_gate.py
+
+.PHONY: fg-release
+fg-release:
+	bash codex_gates.sh
+

@@ -1,0 +1,297 @@
+version: 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADDING A NEW AUTHORITY
+#
+# Add one entry under `contexts:`. No Python changes required.
+#
+# Required fields: description, owners, paths, tests, dependencies, gates, smoke
+# gates keys: authority | contract | privacy | security  (boolean values)
+# ─────────────────────────────────────────────────────────────────────────────
+
+global:
+  always_tests:
+    - tests/test_plane_registry.py
+    - tests/test_platform_inventory_determinism.py
+
+  always_gates:
+    - [python, tools/ci/check_authority_integration.py]
+    - [python, tools/ci/check_plane_registry.py]
+
+  # Files whose change triggers the CGIN privacy gate regardless of context.
+  privacy_paths:
+    - services/cgin/
+    - tools/ci/check_cgin_privacy.py
+    - authority_manifest.yaml
+
+  # Files whose change triggers the contract gate regardless of context.
+  contract_paths:
+    - api/
+    - services/
+    - authority_manifest.yaml
+    - services/plane_registry/
+
+gate_commands:
+  privacy: [python, tools/ci/check_cgin_privacy.py]
+  contract: [make, fg-contract]
+
+contexts:
+
+  # ── CGIN Privacy Layer ────────────────────────────────────────────────────
+  cgin:
+    description: CGIN Privacy Layer — cross-authority tenant anonymization
+    owners:
+      - platform
+    paths:
+      - services/cgin/
+      - tools/ci/check_cgin_privacy.py
+      - tests/test_cgin_privacy.py
+    tests:
+      - tests/test_cgin_privacy.py
+      - tests/test_h14_6_5a_evidence_hardening.py::TestCGINSnapshot
+    dependencies: []
+    gates:
+      authority: false
+      contract: false
+      privacy: true
+      security: false
+    smoke:
+      enabled: false
+
+  # ── Evidence Authority ────────────────────────────────────────────────────
+  evidence_authority:
+    description: Evidence Authority — evidence ingestion, status, and hardening
+    owners:
+      - evidence
+    paths:
+      - services/evidence_authority/
+      - api/evidence_authority.py
+      - api/db_models_evidence_authority.py
+    tests:
+      - tests/test_evidence_authority.py
+      - tests/test_ea_canonical_14_6_1.py
+      - tests/test_h14_6_5_evidence_status_model.py
+    dependencies:
+      - cgin
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Verification Authority ────────────────────────────────────────────────
+  verification_authority:
+    description: Verification Authority — workflow and verification bundle
+    owners:
+      - evidence
+    paths:
+      - services/verification_authority/
+      - api/verification_authority.py
+      - api/db_models_verification_authority.py
+    tests:
+      - tests/test_h14_6_6_verification_workflow.py
+    dependencies:
+      - cgin
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Evidence Freshness Authority ──────────────────────────────────────────
+  evidence_freshness_authority:
+    description: Evidence Freshness Authority — per-evidence freshness scoring
+    owners:
+      - evidence
+    paths:
+      - services/evidence_freshness_authority/
+      - api/evidence_freshness_authority.py
+      - api/db_models_evidence_freshness_authority.py
+    tests:
+      - tests/test_h14_6_7_evidence_freshness_authority.py
+    dependencies:
+      - cgin
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Freshness Score History ───────────────────────────────────────────────
+  freshness_score_history:
+    description: Freshness Score History — trend persistence and governance forecasting
+    owners:
+      - evidence
+    paths:
+      - services/freshness_score_history/
+      - api/freshness_score_history.py
+      - api/db_models_freshness_score_history.py
+    tests:
+      - tests/test_h14_6_8_freshness_score_history.py
+    dependencies:
+      - cgin
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Governance Chain ──────────────────────────────────────────────────────
+  governance_chain:
+    description: Governance Chain Authority — execution chain and event sourcing
+    owners:
+      - governance
+    paths:
+      - services/governance_chain/
+      - api/governance_chain.py
+      - api/db_models_governance_chain.py
+    tests:
+      - tests/test_governance_chain.py
+      - tests/test_governance_chain_end_to_end.py
+    dependencies: []
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Governance Learning ───────────────────────────────────────────────────
+  governance_learning:
+    description: Governance Learning Authority — playbook outcomes and adaptive scoring
+    owners:
+      - governance
+    paths:
+      - services/governance_learning/
+      - api/governance_learning.py
+      - api/db_models_governance_learning.py
+    tests:
+      - tests/test_governance_learning.py
+      - tests/test_governance_learning_end_to_end.py
+    dependencies:
+      - governance_chain
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Governance Adaptive Intelligence ─────────────────────────────────────
+  governance_adaptive_intelligence:
+    description: Governance Adaptive Intelligence — confidence and playbook recommendation
+    owners:
+      - governance
+    paths:
+      - services/governance_adaptive_intelligence/
+      - api/governance_adaptive_intelligence.py
+      - api/db_models_governance_adaptive_intelligence.py
+    tests:
+      - tests/test_governance_adaptive_intelligence.py
+      - tests/test_governance_adaptive_intelligence_end_to_end.py
+    dependencies:
+      - governance_learning
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Governance Optimization ───────────────────────────────────────────────
+  governance_optimization:
+    description: Governance Optimization Engine — priority ranking and decision surfacing
+    owners:
+      - governance
+    paths:
+      - services/governance_optimization/
+      - api/governance_optimization.py
+      - api/db_models_governance_optimization.py
+    tests:
+      - tests/test_governance_optimization.py
+      - tests/test_governance_optimization_end_to_end.py
+    dependencies:
+      - governance_adaptive_intelligence
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Control Effectiveness ─────────────────────────────────────────────────
+  control_effectiveness:
+    description: Control Effectiveness Authority — control scoring and risk distribution
+    owners:
+      - controls
+    paths:
+      - services/control_effectiveness/
+      - api/control_effectiveness.py
+      - api/db_models_control_effectiveness.py
+    tests:
+      - tests/test_h16_5_control_effectiveness.py
+    dependencies:
+      - cgin
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Remediation ───────────────────────────────────────────────────────────
+  remediation:
+    description: Remediation — remediation engine, scoring, roadmap, and timeline
+    owners:
+      - remediation
+    paths:
+      - services/remediation/
+      - api/remediation.py
+      - api/db_models_remediation.py
+    tests:
+      - tests/test_remediation_engine.py
+      - tests/test_remediation_scoring.py
+      - tests/test_remediation_roadmap.py
+      - tests/test_remediation_timeline.py
+    dependencies: []
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true
+
+  # ── Remediation Effectiveness ─────────────────────────────────────────────
+  remediation_effectiveness:
+    description: Remediation Effectiveness Authority — ROI scoring and outcome tracking
+    owners:
+      - remediation
+    paths:
+      - services/remediation_effectiveness/
+      - api/remediation_effectiveness.py
+      - api/db_models_remediation_effectiveness.py
+    tests:
+      - tests/test_h17_5_remediation_effectiveness.py
+    dependencies:
+      - governance_learning
+    gates:
+      authority: true
+      contract: true
+      privacy: false
+      security: false
+    smoke:
+      enabled: true

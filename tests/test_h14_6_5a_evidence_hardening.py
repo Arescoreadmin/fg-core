@@ -1008,7 +1008,8 @@ class TestCGINSnapshot:
         data = resp.json()
         assert "bundle_id" in data
         assert "bundle_version" in data
-        assert "tenant_id" in data
+        assert "tenant_fingerprint" in data
+        assert "tenant_id" not in data
         assert "generated_at" in data
         assert "evidence_snapshots" in data
         assert "verification_snapshots" in data
@@ -1060,7 +1061,10 @@ class TestCGINSnapshot:
 
     def test_cgin_tenant_id_correct(self, client):
         resp = client.get("/evidence/cgin/snapshot")
-        assert resp.json()["tenant_id"] == _TENANT
+        data = resp.json()
+        assert data["tenant_fingerprint"]
+        assert len(data["tenant_fingerprint"]) == 32
+        assert "tenant_id" not in data
 
     def test_cgin_verification_snapshots_count_matches(self, client):
         resp = client.get("/evidence/cgin/snapshot")
