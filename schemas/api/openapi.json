@@ -5249,8 +5249,8 @@
             "title": "High Risk Controls",
             "type": "integer"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           },
           "top_controls": {
@@ -5273,7 +5273,7 @@
           }
         },
         "required": [
-          "tenant_id",
+          "tenant_fingerprint",
           "average_effectiveness",
           "effectiveness_distribution",
           "total_controls",
@@ -5385,8 +5385,8 @@
             "title": "Success Rate",
             "type": "number"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           },
           "total_remediations": {
@@ -5395,7 +5395,7 @@
           }
         },
         "required": [
-          "tenant_id",
+          "tenant_fingerprint",
           "total_remediations",
           "success_rate",
           "average_score_delta",
@@ -5434,8 +5434,8 @@
           "health": {
             "$ref": "#/components/schemas/HealthSnapshot"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           },
           "verification_snapshots": {
@@ -5449,7 +5449,7 @@
         "required": [
           "bundle_id",
           "bundle_version",
-          "tenant_id",
+          "tenant_fingerprint",
           "generated_at",
           "evidence_snapshots",
           "verification_snapshots",
@@ -9107,8 +9107,8 @@
             "title": "Snapshot Version",
             "type": "string"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           },
           "verified_controls": {
@@ -9119,7 +9119,7 @@
         "required": [
           "snapshot_id",
           "snapshot_version",
-          "tenant_id",
+          "tenant_fingerprint",
           "generated_at",
           "controls_with_evidence",
           "controls_without_evidence",
@@ -15233,8 +15233,8 @@
             "title": "Snapshot Version",
             "type": "string"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           },
           "trust_score": {
@@ -15267,7 +15267,7 @@
         "required": [
           "snapshot_id",
           "snapshot_version",
-          "tenant_id",
+          "tenant_fingerprint",
           "generated_at",
           "evidence_id",
           "lifecycle_state",
@@ -17780,14 +17780,14 @@
             "title": "Stale Evidence",
             "type": "integer"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           }
         },
         "required": [
           "snapshot_at",
-          "tenant_id",
+          "tenant_fingerprint",
           "fresh_evidence",
           "stale_evidence",
           "expired_evidence",
@@ -17853,13 +17853,13 @@
             ],
             "title": "Score Delta 90D"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           }
         },
         "required": [
-          "tenant_id",
+          "tenant_fingerprint",
           "average_score",
           "score_delta_30d",
           "score_delta_90d",
@@ -20422,8 +20422,8 @@
             "title": "Snapshot Version",
             "type": "string"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           },
           "unlinked_evidence_count": {
@@ -20442,7 +20442,7 @@
         "required": [
           "snapshot_id",
           "snapshot_version",
-          "tenant_id",
+          "tenant_fingerprint",
           "generated_at",
           "verification_overdue_count",
           "review_overdue_count",
@@ -37345,8 +37345,8 @@
             "title": "Snapshot Version",
             "type": "string"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           },
           "verification_age_days": {
@@ -37379,7 +37379,7 @@
         "required": [
           "snapshot_id",
           "snapshot_version",
-          "tenant_id",
+          "tenant_fingerprint",
           "evidence_id",
           "generated_at",
           "verification_count",
@@ -37840,8 +37840,8 @@
             "title": "Snapshot At",
             "type": "string"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
             "type": "string"
           },
           "total_requests": {
@@ -37851,7 +37851,7 @@
         },
         "required": [
           "snapshot_at",
-          "tenant_id",
+          "tenant_fingerprint",
           "total_requests",
           "by_state",
           "overdue_count",

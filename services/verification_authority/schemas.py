@@ -225,7 +225,7 @@ class WorkflowCginSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     snapshot_at: str
-    tenant_id: str
+    tenant_fingerprint: str
     total_requests: int
     by_state: dict[str, int]
     overdue_count: int

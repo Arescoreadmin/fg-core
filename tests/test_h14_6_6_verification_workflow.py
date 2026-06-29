@@ -943,7 +943,7 @@ class TestCginSnapshot:
         resp = client.get("/verification-requests/cgin/snapshot")
         data = resp.json()
         assert "snapshot_at" in data
-        assert "tenant_id" in data
+        assert "tenant_fingerprint" in data
         assert "total_requests" in data
         assert "by_state" in data
         assert "overdue_count" in data
@@ -952,7 +952,8 @@ class TestCginSnapshot:
 
     def test_cgin_snapshot_tenant_id_matches(self, client):
         resp = client.get("/verification-requests/cgin/snapshot")
-        assert resp.json()["tenant_id"] == _TENANT
+        assert "tenant_id" not in resp.json()
+        assert len(resp.json()["tenant_fingerprint"]) == 32
 
     def test_cgin_snapshot_counts_requests(self, client):
         _create_request(client, evidence_id="ev-cgin-001")
@@ -971,7 +972,8 @@ class TestCginSnapshot:
         resp_b = client_b.get("/verification-requests/cgin/snapshot")
         data_b = resp_b.json()
         # Tenant B's snapshot should not include tenant A's data
-        assert data_b["tenant_id"] == _TENANT_B
+        assert "tenant_id" not in data_b
+        assert len(data_b["tenant_fingerprint"]) == 32
 
 
 # ---------------------------------------------------------------------------

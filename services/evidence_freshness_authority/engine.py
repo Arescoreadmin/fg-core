@@ -35,6 +35,7 @@ from services.evidence_freshness_authority.models import (
     compute_freshness_score,
     compute_freshness_state,
 )
+from services.cgin.privacy import fingerprint_tenant
 from services.evidence_freshness_authority.repository import EvidenceFreshnessRepository
 from services.evidence_freshness_authority.schemas import (
     CreateFreshnessExceptionRequest,
@@ -726,7 +727,7 @@ class EvidenceFreshnessEngine:
 
         return FreshnessCGINSnapshot(
             snapshot_at=self._now(),
-            tenant_id=self._tenant_id,
+            tenant_fingerprint=fingerprint_tenant(self._tenant_id),
             fresh_evidence=fresh_evidence,
             stale_evidence=stale_evidence,
             expired_evidence=expired_evidence,

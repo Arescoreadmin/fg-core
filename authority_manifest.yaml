@@ -49,7 +49,9 @@ authorities:
     tests:
     - tests/test_h16_5_control_effectiveness.py
     cgin_snapshot: true
-    cgin_anonymized: false
+    cgin_anonymized: true
+    privacy_version: "1.0"
+    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/control_effectiveness_explainability/engine.py
     - services/governance_chain/engine.py
@@ -111,7 +113,9 @@ authorities:
     - tests/test_h14_6_5a_evidence_hardening.py
     - tests/test_h14_6_5_evidence_status_model.py
     cgin_snapshot: true
-    cgin_anonymized: false
+    cgin_anonymized: true
+    privacy_version: "1.0"
+    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
     - services/governance_portal/engine.py
@@ -129,7 +133,9 @@ authorities:
     tests:
     - tests/test_h14_6_7_evidence_freshness_authority.py
     cgin_snapshot: true
-    cgin_anonymized: false
+    cgin_anonymized: true
+    privacy_version: "1.0"
+    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
     - services/freshness_score_history/engine.py
@@ -164,7 +170,9 @@ authorities:
     tests:
     - tests/test_h14_6_8_freshness_score_history.py
     cgin_snapshot: true
-    cgin_anonymized: false
+    cgin_anonymized: true
+    privacy_version: "1.0"
+    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
   governance_chain:
@@ -308,7 +316,9 @@ authorities:
     - tests/test_h17_5_remediation_effectiveness.py
     - tests/test_governance_chain.py
     cgin_snapshot: true
-    cgin_anonymized: false
+    cgin_anonymized: true
+    privacy_version: "1.0"
+    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
   risk_acceptance:
@@ -390,7 +400,9 @@ authorities:
     tests:
     - tests/test_h14_6_6_verification_workflow.py
     cgin_snapshot: true
-    cgin_anonymized: false
+    cgin_anonymized: true
+    privacy_version: "1.0"
+    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
     - services/evidence_freshness_authority/engine.py

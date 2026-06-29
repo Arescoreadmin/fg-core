@@ -16391,3 +16391,18 @@ Resolution:
 Result:
 - Formatting compliance restored
 - Governance forecasting implementation remains unchanged
+
+
+## 2026-06-28
+
+### 2026-06-28 — PR 17.7A: CGIN Privacy Hardening — Enhancements
+
+**Summary:** Extended PR 17.7A with 6 improvements: cryptographic agility via `FingerprintAlgorithm` enum, centralized namespace constants, canonical `build_cgin_metadata()` helper, AST-based CI privacy gate (`check_cgin_privacy.py`), 43 new tests (algorithm, metadata builder, fuzz), and CGIN Privacy Score line in authority integration output.
+
+**Files changed:**
+- `services/cgin/privacy.py` (modified — `FingerprintAlgorithm` enum, `ACTIVE_FINGERPRINT_ALGORITHM`, `CGIN_NAMESPACE`, `CGIN_FINGERPRINT_NAMESPACE`, `CGIN_FORBIDDEN_FIELDS`, `build_cgin_metadata()`)
+- `tools/ci/check_cgin_privacy.py` (new — AST-based gate crawling `services/*/schemas.py`, fails build on forbidden CGIN snapshot field names)
+- `tools/ci/check_authority_integration.py` (modified — CGIN Privacy Score block: `N/N authorities anonymized, % compliant`)
+- `Makefile` (modified — `cgin-privacy-check` target added; wired into `fg-fast` chain)
+- `tests/test_cgin_privacy.py` (modified — `TestFingerprintAlgorithm` (10 tests), `TestBuildCGINMetadata` (13 tests), `TestFuzzAssertSnapshotSafe` (20 fuzz tests))
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — 17.7A entry updated with enhanced gate docs)

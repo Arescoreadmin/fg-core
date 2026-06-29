@@ -41,6 +41,7 @@ from services.remediation_effectiveness.models import (
     compute_remediation_effectiveness_score,
     compute_roi_score,
 )
+from services.cgin.privacy import fingerprint_tenant
 from services.remediation_effectiveness.repository import (
     RemediationEffectivenessRepository,
 )
@@ -670,7 +671,7 @@ class RemediationEffectivenessEngine:
         )
         all_patterns = self._repo.get_patterns()
         return CGINRemediationSnapshot(
-            tenant_id=self._tenant_id,
+            tenant_fingerprint=fingerprint_tenant(self._tenant_id),
             total_remediations=total,
             success_rate=success_rate,
             average_score_delta=avg_delta,

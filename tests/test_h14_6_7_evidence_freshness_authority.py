@@ -1154,7 +1154,7 @@ class TestCGINSnapshot:
         assert resp.status_code == 200
         data = resp.json()
         assert "snapshot_at" in data
-        assert "tenant_id" in data
+        assert "tenant_fingerprint" in data
         assert "fresh_evidence" in data
         assert "stale_evidence" in data
         assert "expired_evidence" in data
@@ -1164,7 +1164,8 @@ class TestCGINSnapshot:
 
     def test_snapshot_tenant_id_matches(self, client):
         resp = client.get("/freshness/cgin/snapshot")
-        assert resp.json()["tenant_id"] == _TENANT
+        assert "tenant_id" not in resp.json()
+        assert len(resp.json()["tenant_fingerprint"]) == 32
 
     def test_snapshot_deterministic(self, client):
         _create_record(client, "ev-snap-det")

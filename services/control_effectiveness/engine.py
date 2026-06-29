@@ -44,6 +44,7 @@ from services.control_effectiveness.models import (
     classify_trend,
     compute_effectiveness_score,
 )
+from services.cgin.privacy import fingerprint_tenant
 from services.control_effectiveness.repository import ControlEffectivenessRepository
 from services.control_effectiveness.schemas import (
     CGINEffectivenessSnapshot,
@@ -797,12 +798,13 @@ class ControlEffectivenessEngine:
 
     def get_cgin_snapshot(self) -> CGINEffectivenessSnapshot:
         now = _now_iso()
+        fingerprint = fingerprint_tenant(self._tenant_id)
         all_items = self._repo.list_all_effectiveness()
         total = len(all_items)
 
         if total == 0:
             return CGINEffectivenessSnapshot(
-                tenant_id=self._tenant_id,
+                tenant_fingerprint=fingerprint,
                 average_effectiveness=0.0,
                 effectiveness_distribution={
                     "HIGHLY_EFFECTIVE": 0,
@@ -839,7 +841,7 @@ class ControlEffectivenessEngine:
         weak = [r.control_id for r in all_items if r.effectiveness_score < 60]
 
         return CGINEffectivenessSnapshot(
-            tenant_id=self._tenant_id,
+            tenant_fingerprint=fingerprint,
             average_effectiveness=avg,
             effectiveness_distribution=distribution,
             total_controls=total,

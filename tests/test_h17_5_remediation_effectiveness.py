@@ -1618,7 +1618,7 @@ class TestGetRoutes:
         resp = client.get("/remediation-effectiveness/cgin/snapshot")
         data = resp.json()
         required = [
-            "tenant_id",
+            "tenant_fingerprint",
             "total_remediations",
             "success_rate",
             "average_score_delta",
@@ -1628,6 +1628,7 @@ class TestGetRoutes:
         ]
         for field in required:
             assert field in data, f"Missing field: {field}"
+        assert "tenant_id" not in data
 
     def test_REM_219_recalculate_returns_200(self, client):
         resp = client.post("/remediation-effectiveness/recalculate")

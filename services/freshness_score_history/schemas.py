@@ -119,7 +119,7 @@ class FreshnessTrendDashboardResponse(BaseModel):
 class FreshnessCGINTrendSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    tenant_id: str
+    tenant_fingerprint: str
     average_score: float
     score_delta_30d: Optional[float]
     score_delta_90d: Optional[float]

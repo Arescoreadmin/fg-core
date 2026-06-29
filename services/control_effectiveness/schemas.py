@@ -128,7 +128,7 @@ class RecalculateResponse(BaseModel):
 class CGINEffectivenessSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    tenant_id: str
+    tenant_fingerprint: str
     average_effectiveness: float
     effectiveness_distribution: dict[str, int]
     total_controls: int

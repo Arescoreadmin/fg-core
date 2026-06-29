@@ -270,7 +270,7 @@ class FreshnessCGINSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     snapshot_at: str
-    tenant_id: str
+    tenant_fingerprint: str
     fresh_evidence: int
     stale_evidence: int
     expired_evidence: int
