@@ -2754,6 +2754,74 @@
         "auth",
         "tenant"
       ],
+      "file": "api/cgin_trust.py",
+      "method": "GET",
+      "path": "/cgin/trust/algorithms",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/cgin_trust.py",
+      "method": "GET",
+      "path": "/cgin/trust/manifest/{snapshot_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/cgin_trust.py",
+      "method": "GET",
+      "path": "/cgin/trust/verify",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/cgin_trust.py",
+      "method": "POST",
+      "path": "/cgin/trust/verify",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/compliance_cp_extension.py",
       "method": "GET",
       "path": "/compliance-cp/controls",
@@ -16124,7 +16192,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-28T19:54:05.183183+00:00",
+  "generated_at": "2026-06-29T23:31:23.016941+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

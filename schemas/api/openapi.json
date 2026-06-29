@@ -2674,6 +2674,40 @@
         "title": "AlertRunSummaryResponse",
         "type": "object"
       },
+      "AlgorithmInfo": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "algorithm": {
+            "title": "Algorithm",
+            "type": "string"
+          }
+        },
+        "required": [
+          "algorithm",
+          "active"
+        ],
+        "title": "AlgorithmInfo",
+        "type": "object"
+      },
+      "AlgorithmsResponse": {
+        "properties": {
+          "algorithms": {
+            "items": {
+              "$ref": "#/components/schemas/AlgorithmInfo"
+            },
+            "title": "Algorithms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "algorithms"
+        ],
+        "title": "AlgorithmsResponse",
+        "type": "object"
+      },
       "AnomalyResponse": {
         "properties": {
           "anomaly_id": {
@@ -35309,6 +35343,74 @@
         "title": "TraversalResponse",
         "type": "object"
       },
+      "TrustManifestResponse": {
+        "properties": {
+          "authority_name": {
+            "title": "Authority Name",
+            "type": "string"
+          },
+          "authority_version": {
+            "title": "Authority Version",
+            "type": "string"
+          },
+          "benchmark_version": {
+            "title": "Benchmark Version",
+            "type": "string"
+          },
+          "canonicalization_version": {
+            "title": "Canonicalization Version",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "fingerprint_algorithm": {
+            "title": "Fingerprint Algorithm",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "privacy_version": {
+            "title": "Privacy Version",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "signing_algorithm": {
+            "title": "Signing Algorithm",
+            "type": "string"
+          },
+          "trust_version": {
+            "title": "Trust Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authority_name",
+          "authority_version",
+          "signing_algorithm",
+          "fingerprint_algorithm",
+          "schema_version",
+          "benchmark_version",
+          "privacy_version",
+          "digest",
+          "signature",
+          "generated_at",
+          "trust_version",
+          "canonicalization_version"
+        ],
+        "title": "TrustManifestResponse",
+        "type": "object"
+      },
       "UnassignRequest": {
         "additionalProperties": false,
         "properties": {
@@ -37714,6 +37816,35 @@
         "title": "VerifyReportResponse",
         "type": "object"
       },
+      "VerifyRequest": {
+        "properties": {
+          "expected_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Digest"
+          },
+          "public_key_b64": {
+            "title": "Public Key B64",
+            "type": "string"
+          },
+          "snapshot": {
+            "title": "Snapshot",
+            "type": "object"
+          }
+        },
+        "required": [
+          "snapshot",
+          "public_key_b64"
+        ],
+        "title": "VerifyRequest",
+        "type": "object"
+      },
       "VersionFloorRequest": {
         "additionalProperties": false,
         "properties": {
@@ -38130,6 +38261,47 @@
           "keyword"
         ],
         "title": "_BacktestPayload",
+        "type": "object"
+      },
+      "api__cgin_trust__VerificationResponse": {
+        "properties": {
+          "algorithm_supported": {
+            "title": "Algorithm Supported",
+            "type": "boolean"
+          },
+          "canonicalization_valid": {
+            "title": "Canonicalization Valid",
+            "type": "boolean"
+          },
+          "digest_match": {
+            "title": "Digest Match",
+            "type": "boolean"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "signature_valid": {
+            "title": "Signature Valid",
+            "type": "boolean"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "digest_match",
+          "signature_valid",
+          "algorithm_supported",
+          "canonicalization_valid",
+          "errors"
+        ],
+        "title": "VerificationResponse",
         "type": "object"
       },
       "api__deployment_manager__CreateEnvironmentRequest": {
@@ -44464,6 +44636,238 @@
         "tags": [
           "exceptions",
           "breakglass"
+        ]
+      }
+    },
+    "/cgin/trust/algorithms": {
+      "get": {
+        "operationId": "get_algorithms_cgin_trust_algorithms_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlgorithmsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Algorithms",
+        "tags": [
+          "cgin-trust"
+        ]
+      }
+    },
+    "/cgin/trust/manifest/{snapshot_id}": {
+      "get": {
+        "description": "Return a freshly generated trust manifest demonstrating the structure.\n\nReal storage integration is out of scope for PR 17.7B.",
+        "operationId": "get_manifest_cgin_trust_manifest__snapshot_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustManifestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Manifest",
+        "tags": [
+          "cgin-trust"
+        ]
+      }
+    },
+    "/cgin/trust/verify": {
+      "get": {
+        "description": "Query-param driven verify endpoint for tooling compatibility.\n\nReturns a stub response \u2014 full verification requires POST with snapshot body.",
+        "operationId": "verify_snapshot_get_cgin_trust_verify_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__cgin_trust__VerificationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Snapshot Get",
+        "tags": [
+          "cgin-trust"
+        ]
+      },
+      "post": {
+        "operationId": "verify_snapshot_post_cgin_trust_verify_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__cgin_trust__VerificationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        },
+        "summary": "Verify Snapshot Post",
+        "tags": [
+          "cgin-trust"
         ]
       }
     },

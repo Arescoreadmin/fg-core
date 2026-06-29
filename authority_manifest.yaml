@@ -17,6 +17,7 @@ library_services:
 - audit_engine
 - notifications
 - remediation_portal
+- cgin_trust
 authorities:
   billing:
     engine: services/billing
@@ -406,3 +407,12 @@ authorities:
     consumers:
     - services/governance_chain/engine.py
     - services/evidence_freshness_authority/engine.py
+cgin_trust:
+  trust_version: "1.0"
+  signing_algorithm: "ed25519-v1"
+  canonicalization_version: "1.0"
+  ci_gate: "tools/ci/check_cgin_trust.py"
+  api_file: "api/cgin_trust.py"
+  trust_module: "services/cgin/trust.py"
+  manifest_module: "services/cgin/trust_manifest.py"
+  tests: "tests/test_cgin_trust.py"
