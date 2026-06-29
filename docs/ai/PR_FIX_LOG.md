@@ -16431,3 +16431,20 @@ Result:
 
 **Files changed:**
 - `tests/test_context_registry.py` (modified — `from typing import Any` import; `_BASE`, `_make`, `_load_raw` type annotations)
+
+### 2026-06-29 — PR 17.7B: CGIN Trust & Integrity Authority
+
+**Summary:** Every CGIN snapshot is now cryptographically verifiable via Ed25519 signing. New trust library (`services/cgin/trust.py`), manifest module (`services/cgin/trust_manifest.py`), API router (`api/cgin_trust.py`), CI gate (`tools/ci/check_cgin_trust.py`), and 168 deterministic tests. Algorithm rotation = one constant change (`ACTIVE_SIGNING_ALGORITHM`). No new dependencies, no DB schema changes, no migrations.
+
+**Files changed:**
+- `services/cgin/trust.py` (new — `SigningAlgorithm` enum, `ACTIVE_SIGNING_ALGORITHM`, `canonicalize_snapshot`, `generate_digest`, `sign_payload`, `verify_payload`, `VerificationResult`, `verify_snapshot`, `build_trust_metadata`)
+- `services/cgin/trust_manifest.py` (new — `TrustManifest`, `generate_trust_manifest`, `verify_trust_manifest`)
+- `api/cgin_trust.py` (new — 4 routes under `/cgin/trust`; `governance:read`, tenant-isolated, Pydantic response models)
+- `tools/ci/check_cgin_trust.py` (new — AST-based CI gate; mirrors `check_cgin_privacy.py`)
+- `tests/test_cgin_trust.py` (new — 168 deterministic tests across 10 classes)
+- `api/main.py` (modified — `cgin_trust_router` registered in `build_app` and `build_contract_app`)
+- `authority_manifest.yaml` (modified — `cgin_trust` library service section added)
+- `services/plane_registry/registry.py` (modified — `/cgin/trust` prefix added to control plane allowlist)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — 17.7B SOC review entry)
+- `ROADMAP.md` (modified — PR 17.7B row added)
+- CI artifacts regenerated: `contracts/core/openapi.json`, `schemas/api/openapi.json`, `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/contract_routes.json`, `tools/ci/topology.sha256`
