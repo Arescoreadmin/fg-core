@@ -25,7 +25,7 @@ import ast
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Field names that must never appear in a CGIN snapshot schema
 FORBIDDEN_FIELD_NAMES = frozenset(
