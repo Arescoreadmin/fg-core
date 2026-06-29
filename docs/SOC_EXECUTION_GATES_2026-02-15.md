@@ -5161,4 +5161,10 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 **Non-critical-path additions:**
 - `tests/test_context_registry.py` — 109 tests across 13 test classes; covers YAML loading, context parsing, duplicate detection, dependency validation, context detection, dependency expansion, test collection, gate collection, global config, digest/serialisation, summary, gate commands parsing, and real registry integration.
 
+**Post-merge cleanup (17.7A trailing changes):**
+- `tools/ci/check_cgin_privacy.py` — type annotations added (`fields: list[str]`, `violations: list[str]`) for mypy strictness; ROOT depth fix (`parent.parent.parent`) already reviewed in 17.7A.
+- `tools/ci/check_authority_integration.py` — minor ruff format reflow of CGIN producers list comprehension; no logic change.
+- `tools/ci/pr_preflight_gate.sh` — tracked for the first time; existing developer script used by `make fg-pr`. Runs ruff, mypy, fg-contract, and pytest on changed files. No sensitive operations.
+- `Makefile`, `services/cgin/privacy.py`, `tests/test_cgin_privacy.py`, `tests/test_h14_6_5a_evidence_hardening.py` — minor formatting and mypy annotation fixes; no logic changes.
+
 **SOC review outcome:** approved. Pure CI infrastructure change — zero runtime impact. `fg_smart_gate.py` is invoked only by `make fg-smart` (developer-only CI target); it is not on any request path, not deployed, and not loaded at application startup. The registry file (`context_registry.yaml`) is a build-time configuration artifact — no secrets, no credentials, no sensitive data. Dependency expansion is deterministic (BFS over sorted dependency lists). Circular dependency detection uses DFS with 3-colour marking — fails fast with a human-readable error. Gate commands in the registry are identical to the previous hardcoded commands (no new CI gates added). Adding a new authority now requires only a YAML addition; no Python changes needed.

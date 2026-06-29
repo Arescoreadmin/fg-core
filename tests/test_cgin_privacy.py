@@ -1060,23 +1060,12 @@ class TestFingerprintAlgorithm:
         )
 
     def test_unsupported_algorithm_raises(self):
-        # Verify the guard in fingerprint_tenant raises for unknown algorithms
+        # Verify the guard in fingerprint_tenant raises for unknown algorithms.
+        class FakeAlg:
+            value = "unknown-alg"
+
         with pytest.raises(NotImplementedError):
-            # Directly create an unsupported value by bypassing enum
-            class FakeAlg:
-                value = "unknown-alg"
-
-            fingerprint_tenant.__wrapped__ = None  # just to verify path
-            # Call the raw hash path directly by patching
-            import services.cgin.privacy as priv
-
-            orig = priv.FingerprintAlgorithm
-            try:
-                priv.fingerprint_tenant("tid", FakeAlg())  # type: ignore[arg-type]
-            except (NotImplementedError, AttributeError):
-                pass  # expected — either error is acceptable
-            finally:
-                priv.FingerprintAlgorithm = orig
+            fingerprint_tenant("tid", FakeAlg())  # type: ignore[arg-type]
 
     def test_forbidden_fields_constant_includes_required_keys(self):
         assert "tenant_id" in CGIN_FORBIDDEN_FIELDS
