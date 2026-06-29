@@ -284,6 +284,20 @@ def verify(manifest: dict) -> int:
             )
 
     # -----------------------------------------------------------------------
+    # CGIN Privacy Score
+    # -----------------------------------------------------------------------
+    cgin_producers = [
+        name
+        for name, auth in authorities.items()
+        if auth.get("cgin_snapshot")
+    ]
+    cgin_anonymized = [
+        name for name in cgin_producers if authorities[name].get("cgin_anonymized")
+    ]
+    cgin_total = len(cgin_producers)
+    cgin_safe = len(cgin_anonymized)
+
+    # -----------------------------------------------------------------------
     # Report
     # -----------------------------------------------------------------------
     if warnings:
@@ -296,6 +310,14 @@ def verify(manifest: dict) -> int:
         for e in errors:
             print(f"  ✗  {e}")
         return 1
+
+    # Print platform privacy score
+    privacy_pct = int(cgin_safe / cgin_total * 100) if cgin_total else 100
+    privacy_label = "✅ PASS" if cgin_safe == cgin_total else "⚠  PARTIAL"
+    print(
+        f"CGIN Privacy: {privacy_label} "
+        f"({cgin_safe}/{cgin_total} authorities anonymized, {privacy_pct}% compliant)"
+    )
 
     n = len(authorities)
     print(

@@ -18,11 +18,18 @@ import pytest
 from sqlalchemy.orm import Session
 
 from services.cgin.privacy import (
+    ACTIVE_FINGERPRINT_ALGORITHM,
+    CGIN_BENCHMARK_VERSION,
+    CGIN_FINGERPRINT_NAMESPACE,
     CGIN_FINGERPRINT_VERSION,
+    CGIN_FORBIDDEN_FIELDS,
+    CGIN_NAMESPACE,
     CGIN_PRIVACY_VERSION,
     CGIN_SCHEMA_VERSION,
+    FingerprintAlgorithm,
     _check_value,
     assert_snapshot_safe,
+    build_cgin_metadata,
     fingerprint_tenant,
 )
 
@@ -1022,6 +1029,285 @@ class TestAlreadyCorrectAuthoritiesUnchanged:
 
         fields = HealthSignalsResponse.model_fields
         assert "tenant_id" in fields
+
+
+# ---------------------------------------------------------------------------
+# FingerprintAlgorithm enum + namespace constants (items 1+2)
+# ---------------------------------------------------------------------------
+
+
+class TestFingerprintAlgorithm:
+    def test_active_algorithm_is_sha256_cgin_v1(self):
+        assert ACTIVE_FINGERPRINT_ALGORITHM is FingerprintAlgorithm.SHA256_CGIN_V1
+
+    def test_algorithm_value_string(self):
+        assert FingerprintAlgorithm.SHA256_CGIN_V1.value == "sha256-cgin-v1"
+
+    def test_namespace_constant_format(self):
+        assert CGIN_NAMESPACE == "cgin"
+        assert CGIN_FINGERPRINT_VERSION == "v1"
+        assert CGIN_FINGERPRINT_NAMESPACE == "cgin:v1"
+
+    def test_fingerprint_uses_namespace_constant(self):
+        tid = "t-ns-test-01"
+        expected = hashlib.sha256(f"cgin:v1:{tid}".encode()).hexdigest()[:32]
+        assert fingerprint_tenant(tid) == expected
+
+    def test_fingerprint_explicit_algorithm_matches_active(self):
+        tid = "t-algo-explicit-01"
+        assert fingerprint_tenant(tid) == fingerprint_tenant(
+            tid, FingerprintAlgorithm.SHA256_CGIN_V1
+        )
+
+    def test_unsupported_algorithm_raises(self):
+        # Verify the guard in fingerprint_tenant raises for unknown algorithms
+        with pytest.raises(NotImplementedError):
+            # Directly create an unsupported value by bypassing enum
+            class FakeAlg:
+                value = "unknown-alg"
+
+            fingerprint_tenant.__wrapped__ = None  # just to verify path
+            # Call the raw hash path directly by patching
+            import services.cgin.privacy as priv
+
+            orig = priv.FingerprintAlgorithm
+            try:
+                priv.fingerprint_tenant("tid", FakeAlg())  # type: ignore[arg-type]
+            except (NotImplementedError, AttributeError):
+                pass  # expected — either error is acceptable
+            finally:
+                priv.FingerprintAlgorithm = orig
+
+    def test_forbidden_fields_constant_includes_required_keys(self):
+        assert "tenant_id" in CGIN_FORBIDDEN_FIELDS
+        assert "organization_name" in CGIN_FORBIDDEN_FIELDS
+        assert "customer_name" in CGIN_FORBIDDEN_FIELDS
+        assert "tenant_slug" in CGIN_FORBIDDEN_FIELDS
+        assert "account_id" in CGIN_FORBIDDEN_FIELDS
+
+    def test_benchmark_version_constant_exists(self):
+        assert CGIN_BENCHMARK_VERSION == "1.0"
+
+    def test_privacy_version_constant_exists(self):
+        assert CGIN_PRIVACY_VERSION == "1.0"
+
+    def test_schema_version_constant_exists(self):
+        assert CGIN_SCHEMA_VERSION == "2"
+
+
+# ---------------------------------------------------------------------------
+# build_cgin_metadata() helper (item 3)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildCGINMetadata:
+    def test_returns_dict_with_required_keys(self):
+        meta = build_cgin_metadata(tenant_id="t-meta-01", authority_name="test_auth")
+        required = {
+            "tenant_fingerprint",
+            "schema_version",
+            "privacy_version",
+            "benchmark_version",
+            "fingerprint_algorithm",
+            "authority_name",
+            "authority_version",
+            "generated_at",
+        }
+        assert required <= set(meta.keys())
+
+    def test_tenant_fingerprint_matches_direct_call(self):
+        tid = "t-meta-fp-01"
+        meta = build_cgin_metadata(tenant_id=tid, authority_name="auth")
+        assert meta["tenant_fingerprint"] == fingerprint_tenant(tid)
+
+    def test_no_raw_tenant_id_in_output(self):
+        tid = "t-meta-noleak-01"
+        meta = build_cgin_metadata(tenant_id=tid, authority_name="auth")
+        assert "tenant_id" not in meta
+        assert tid not in str(meta)
+
+    def test_authority_name_propagated(self):
+        meta = build_cgin_metadata(tenant_id="t-x", authority_name="my_authority")
+        assert meta["authority_name"] == "my_authority"
+
+    def test_authority_version_default(self):
+        meta = build_cgin_metadata(tenant_id="t-x", authority_name="auth")
+        assert meta["authority_version"] == "1.0"
+
+    def test_authority_version_custom(self):
+        meta = build_cgin_metadata(
+            tenant_id="t-x", authority_name="auth", authority_version="2.3"
+        )
+        assert meta["authority_version"] == "2.3"
+
+    def test_schema_version_is_canonical(self):
+        meta = build_cgin_metadata(tenant_id="t-x", authority_name="auth")
+        assert meta["schema_version"] == CGIN_SCHEMA_VERSION
+
+    def test_privacy_version_is_canonical(self):
+        meta = build_cgin_metadata(tenant_id="t-x", authority_name="auth")
+        assert meta["privacy_version"] == CGIN_PRIVACY_VERSION
+
+    def test_fingerprint_algorithm_matches_active(self):
+        meta = build_cgin_metadata(tenant_id="t-x", authority_name="auth")
+        assert meta["fingerprint_algorithm"] == ACTIVE_FINGERPRINT_ALGORITHM.value
+
+    def test_generated_at_is_iso_string(self):
+        meta = build_cgin_metadata(tenant_id="t-x", authority_name="auth")
+        from datetime import datetime
+
+        # Must be parseable as ISO datetime
+        dt = datetime.fromisoformat(meta["generated_at"])
+        assert dt is not None
+
+    def test_deterministic_fingerprint_across_calls(self):
+        tid = "t-meta-det-01"
+        meta1 = build_cgin_metadata(tenant_id=tid, authority_name="auth")
+        meta2 = build_cgin_metadata(tenant_id=tid, authority_name="auth")
+        assert meta1["tenant_fingerprint"] == meta2["tenant_fingerprint"]
+
+    def test_different_tenants_different_fingerprints(self):
+        meta1 = build_cgin_metadata(tenant_id="t-meta-a", authority_name="auth")
+        meta2 = build_cgin_metadata(tenant_id="t-meta-b", authority_name="auth")
+        assert meta1["tenant_fingerprint"] != meta2["tenant_fingerprint"]
+
+    def test_assert_snapshot_safe_passes_on_metadata(self):
+        tid = "t-meta-safe-01"
+        meta = build_cgin_metadata(tenant_id=tid, authority_name="auth")
+        # Should not raise — metadata itself is safe
+        assert_snapshot_safe(meta, tid)
+
+
+# ---------------------------------------------------------------------------
+# Fuzz / property-based regression suite (item 6)
+# ---------------------------------------------------------------------------
+
+
+class TestFuzzAssertSnapshotSafe:
+    """Property tests: assert_snapshot_safe must catch any leaked identifier
+    regardless of nesting depth, key type, or value structure.
+    """
+
+    def _make_deeply_nested(self, tenant_id: str, depth: int) -> dict:
+        obj: dict = {"leaf": tenant_id}
+        for _ in range(depth):
+            obj = {"nested": obj}
+        return obj
+
+    def test_fuzz_flat_forbidden_key(self):
+        for key in CGIN_FORBIDDEN_FIELDS:
+            with pytest.raises(ValueError, match="forbidden"):
+                assert_snapshot_safe({key: "some_value"}, "t-fuzz-001")
+
+    def test_fuzz_mixed_safe_and_forbidden(self):
+        for key in CGIN_FORBIDDEN_FIELDS:
+            with pytest.raises(ValueError):
+                assert_snapshot_safe(
+                    {"safe_key": "safe_value", key: "val", "other": 123},
+                    "t-fuzz-002",
+                )
+
+    def test_fuzz_raw_tenant_id_in_list(self):
+        tid = "t-fuzz-list-001"
+        with pytest.raises(ValueError, match="raw tenant_id"):
+            assert_snapshot_safe({"scores": [1, 2, tid, 3]}, tid)
+
+    def test_fuzz_raw_tenant_id_in_nested_list(self):
+        tid = "t-fuzz-nested-list-001"
+        with pytest.raises(ValueError, match="raw tenant_id"):
+            assert_snapshot_safe({"data": {"inner": [{"v": tid}]}}, tid)
+
+    def test_fuzz_tenant_id_nested_depth_2(self):
+        tid = "t-fuzz-d2-001"
+        with pytest.raises(ValueError):
+            assert_snapshot_safe(self._make_deeply_nested(tid, 2), tid)
+
+    def test_fuzz_tenant_id_nested_depth_5(self):
+        tid = "t-fuzz-d5-001"
+        with pytest.raises(ValueError):
+            assert_snapshot_safe(self._make_deeply_nested(tid, 5), tid)
+
+    def test_fuzz_tenant_id_nested_depth_10(self):
+        tid = "t-fuzz-d10-001"
+        with pytest.raises(ValueError):
+            assert_snapshot_safe(self._make_deeply_nested(tid, 10), tid)
+
+    def test_fuzz_safe_payload_no_raise(self):
+        tid = "t-fuzz-safe-001"
+        fingerprint = fingerprint_tenant(tid)
+        safe = {
+            "tenant_fingerprint": fingerprint,
+            "scores": [1.0, 2.0, 3.0],
+            "distribution": {"A": 5, "B": 3},
+            "metadata": {"version": "1.0"},
+        }
+        assert_snapshot_safe(safe, tid)  # must not raise
+
+    def test_fuzz_empty_payload_safe(self):
+        assert_snapshot_safe({}, "t-fuzz-empty-001")  # must not raise
+
+    def test_fuzz_numeric_values_ignored(self):
+        tid = "t-fuzz-nums-001"
+        safe = {"score": 42.5, "count": 100, "flag": True}
+        assert_snapshot_safe(safe, tid)  # numbers are safe
+
+    def test_fuzz_none_values_ignored(self):
+        tid = "t-fuzz-none-001"
+        safe = {"score": None, "other": None}
+        assert_snapshot_safe(safe, tid)  # None is safe
+
+    def test_fuzz_multiple_forbidden_keys_reports_them(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            assert_snapshot_safe(
+                {"tenant_id": "x", "organization_name": "y"}, "t-fuzz-multi-001"
+            )
+
+    def test_fuzz_substring_not_leaked(self):
+        """Partial tenant_id substrings in unrelated values should not trigger."""
+        tid = "t-fuzz-sub-001"
+        partial = tid[:5]  # "t-fuz" — a prefix of tenant_id, not the full thing
+        safe = {"safe_field": partial, "score": 1.0}
+        # partial does not equal full tid, so no leak
+        assert_snapshot_safe(safe, tid)  # must not raise
+
+    def test_fuzz_fingerprint_value_is_safe(self):
+        """The fingerprint itself should never trigger the raw-tenant-id check."""
+        tid = "t-fuzz-fp-safe-001"
+        fingerprint = fingerprint_tenant(tid)
+        safe = {"tenant_fingerprint": fingerprint}
+        assert_snapshot_safe(safe, tid)  # fingerprint ≠ tenant_id → no raise
+
+    def test_fuzz_many_random_safe_tenants(self):
+        """20 randomly-generated tenants, all safe payloads — none should raise."""
+        import random
+        import string
+
+        rng = random.Random(42)
+        for _ in range(20):
+            tid = "t-" + "".join(
+                rng.choices(string.ascii_lowercase + string.digits, k=12)
+            )
+            fp = fingerprint_tenant(tid)
+            payload = {
+                "tenant_fingerprint": fp,
+                "score": rng.random() * 100,
+                "count": rng.randint(0, 1000),
+            }
+            assert_snapshot_safe(payload, tid)  # must not raise
+
+    def test_fuzz_many_random_unsafe_tenants_caught(self):
+        """20 randomly-generated tenants, all with leaked tenant_id — all should raise."""
+        import random
+        import string
+
+        rng = random.Random(99)
+        for _ in range(20):
+            tid = "t-" + "".join(
+                rng.choices(string.ascii_lowercase + string.digits, k=12)
+            )
+            payload = {"tenant_id": tid, "score": 1.0}
+            with pytest.raises(ValueError):
+                assert_snapshot_safe(payload, tid)
 
 
 # ---------------------------------------------------------------------------
