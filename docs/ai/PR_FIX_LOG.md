@@ -6,6 +6,20 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-30 — pr/18.1-report-authority: Enterprise Assessment Report Authority
+
+**Changes shipped:**
+
+New bounded context `services/report_authority/` — the single authority for generating enterprise-grade, cryptographically verifiable, regulator-ready assessment deliverables. Deterministic PDF/HTML/JSON rendering, SHA-256+SHA-512 dual hashing, HMAC-SHA256 signed export bundles, immutable manifests with tamper detection, Report Quality Score, multi-version comparison, regulator profiles, and offline verification packages.
+
+**Files created:** `services/report_authority/__init__.py`, `services/report_authority/engine.py`, `services/report_authority/repository.py`, `services/report_authority/models.py`, `services/report_authority/schemas.py`, `services/report_authority/hashing.py`, `services/report_authority/manifest.py`, `services/report_authority/signature.py`, `services/report_authority/export.py`, `services/report_authority/renderer_pdf.py`, `services/report_authority/renderer_html.py`, `services/report_authority/renderer_json.py`, `services/report_authority/executive_summary.py`, `services/report_authority/evidence_appendix.py`, `services/report_authority/control_appendix.py`, `services/report_authority/remediation_appendix.py`, `services/report_authority/verification_appendix.py`, `services/report_authority/trust_appendix.py`, `services/report_authority/transparency_appendix.py`, `services/report_authority/versioning.py`, `services/report_authority/statistics.py`, `services/report_authority/validators.py`, `services/report_authority/metadata.py`, `api/db_models_report_authority.py`, `api/report_authority.py`, `migrations/postgres/0142_report_authority.sql`, `tools/ci/check_report_authority.py`, `tests/test_report_authority.py`, `tests/test_report_determinism.py`, `tests/test_report_rendering.py`, `tests/test_report_manifest.py`, `tests/test_report_exports.py`
+
+**Files modified:** `api/main.py` (router registered in both builders), `api/db.py` (ORM models registered), `services/plane_registry/registry.py` (`/reports` added to evidence plane; `/reports/health` as public exception), `authority_manifest.yaml` (`report_authority` entry), `ROADMAP.md` (PR 18.1 row), `docs/ai/PR_FIX_LOG.md` (this entry)
+
+**Verified with:** 348 tests across 5 files (all passing); `check_report_authority.py` PASS; `check_authority_integration.py` OK (23 authorities); `check_plane_registry.py` OK; 538 cross-authority regression tests passing (control_effectiveness, verification_workflow, governance_chain)
+
+---
+
 ### 2026-06-29 — pr/17.7d-cgin-transparency: CGIN Transparency Authority
 
 **Changes shipped:**

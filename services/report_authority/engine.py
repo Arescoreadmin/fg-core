@@ -286,6 +286,7 @@ class ReportAuthorityEngine:
             },
         )
 
+        self._db.commit()
         return _build_report_response(row)
 
     # ------------------------------------------------------------------
@@ -409,6 +410,7 @@ class ReportAuthorityEngine:
             event_metadata={"published_at": now},
         )
 
+        self._db.commit()
         return _build_report_response(row)
 
     # ------------------------------------------------------------------
@@ -448,6 +450,7 @@ class ReportAuthorityEngine:
             },
         )
 
+        self._db.commit()
         return {
             "report_id": report_id,
             "verifier_id": request.verifier_id,
@@ -507,6 +510,7 @@ class ReportAuthorityEngine:
                 reason="Export bundle initiated on first access.",
                 event_metadata={"bundle_id": bundle.id},
             )
+            self._db.commit()
 
         return _build_bundle_response(bundle)
 
