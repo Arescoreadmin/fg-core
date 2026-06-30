@@ -19,6 +19,7 @@ library_services:
 - remediation_portal
 - cgin_trust
 - cgin_key_management
+- cgin_transparency
 authorities:
   billing:
     engine: services/billing
@@ -428,3 +429,15 @@ cgin_key_management:
   registry_module: "services/cgin/key_management/registry.py"
   memory_provider: "services/cgin/key_management/providers/memory.py"
   tests: "tests/test_cgin_key_management.py"
+cgin_transparency:
+  transparency_version: "1.0"
+  schema_version: "1.0"
+  algorithm: "sha256"
+  signing_algorithm: "ed25519-v1"
+  ci_gate: "tools/ci/check_cgin_transparency.py"
+  api_file: "api/cgin_transparency.py"
+  entry_module: "services/cgin/transparency/entry.py"
+  merkle_module: "services/cgin/transparency/merkle.py"
+  store_module: "services/cgin/transparency/store.py"
+  ledger_module: "services/cgin/transparency/ledger.py"
+  tests: "tests/test_cgin_transparency.py"

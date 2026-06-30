@@ -271,6 +271,7 @@ jobs:
       ITEST_HOST: 127.0.0.1
       ITEST_PORT: 8001
       ITEST_WIPE_DB: "1"
+      FG_START_TIMEOUT_SEC: "30"
 
     steps:
       - name: Checkout

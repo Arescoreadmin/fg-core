@@ -338,6 +338,48 @@
     },
     {
       "method": "GET",
+      "path": "/cgin/transparency/entries/{entry_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/transparency/health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/transparency/proof/{entry_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/transparency/root/latest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/transparency/root/{root_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/transparency/statistics",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/cgin/transparency/verify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/cgin/trust/algorithms",
       "scopes": [],
       "source": "contract"
@@ -345,6 +387,24 @@
     {
       "method": "GET",
       "path": "/cgin/trust/manifest/{snapshot_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/trust/providers",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/trust/providers/active",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/trust/providers/{provider_name}",
       "scopes": [],
       "source": "contract"
     },
@@ -4669,7 +4729,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-29T23:04:47.150401+00:00",
+  "generated_at": "2026-06-30T13:23:47.025089+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
