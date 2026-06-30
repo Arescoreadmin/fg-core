@@ -46,7 +46,7 @@ _PROVIDER = MemoryKeyProvider(_PRIV)
 
 def _make_entry(
     entry_type: str = "cgin_snapshot",
-    artifact_digest: str = None,
+    artifact_digest: str | None = None,
     sequence_number: int = 0,
     parent_digest: str | None = None,
     tenant_fingerprint: str = "a" * 32,
