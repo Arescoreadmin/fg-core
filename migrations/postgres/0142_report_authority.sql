@@ -67,6 +67,7 @@ CREATE INDEX IF NOT EXISTS ix_fa_report_created_at       ON fa_report (created_a
 
 -- Row-level security for tenant isolation
 ALTER TABLE fa_report ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS fa_report_tenant_isolation ON fa_report;
 CREATE POLICY fa_report_tenant_isolation ON fa_report
     USING (tenant_id = current_setting('app.tenant_id', true));
 
@@ -90,11 +91,14 @@ CREATE INDEX IF NOT EXISTS ix_fa_report_audit_report ON fa_report_audit_events (
 CREATE INDEX IF NOT EXISTS ix_fa_report_audit_created ON fa_report_audit_events (created_at);
 
 ALTER TABLE fa_report_audit_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS fa_report_audit_tenant_isolation ON fa_report_audit_events;
 CREATE POLICY fa_report_audit_tenant_isolation ON fa_report_audit_events
     USING (tenant_id = current_setting('app.tenant_id', true));
 
 -- Append-only enforcement at DB level
+DROP RULE IF EXISTS fa_report_audit_no_update ON fa_report_audit_events;
 CREATE RULE fa_report_audit_no_update AS ON UPDATE TO fa_report_audit_events DO INSTEAD NOTHING;
+DROP RULE IF EXISTS fa_report_audit_no_delete ON fa_report_audit_events;
 CREATE RULE fa_report_audit_no_delete AS ON DELETE TO fa_report_audit_events DO INSTEAD NOTHING;
 
 -- fa_report_bundles
@@ -124,6 +128,7 @@ CREATE INDEX IF NOT EXISTS ix_fa_report_bundles_tenant ON fa_report_bundles (ten
 CREATE INDEX IF NOT EXISTS ix_fa_report_bundles_report ON fa_report_bundles (report_id);
 
 ALTER TABLE fa_report_bundles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS fa_report_bundles_tenant_isolation ON fa_report_bundles;
 CREATE POLICY fa_report_bundles_tenant_isolation ON fa_report_bundles
     USING (tenant_id = current_setting('app.tenant_id', true));
 

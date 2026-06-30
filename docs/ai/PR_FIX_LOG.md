@@ -6,6 +6,25 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-30 — pr/18.1-report-authority: migration replay-safe fix
+
+**Root cause:** `migrations/postgres/0142_report_authority.sql` had 3 `CREATE POLICY` and 2 `CREATE RULE` statements with no idempotency guard. On replay (CI runs migrations twice against the same DB) Postgres raises `DuplicateObject`. All `CREATE TABLE` and `CREATE INDEX` already used `IF NOT EXISTS`; only the policy and rule statements were missing guards.
+
+**Objects changed (5):**
+- `fa_report_tenant_isolation` policy on `fa_report`
+- `fa_report_audit_tenant_isolation` policy on `fa_report_audit_events`
+- `fa_report_bundles_tenant_isolation` policy on `fa_report_bundles`
+- `fa_report_audit_no_update` rule on `fa_report_audit_events`
+- `fa_report_audit_no_delete` rule on `fa_report_audit_events`
+
+**Fix:** Added `DROP POLICY IF EXISTS <name> ON <table>;` before each `CREATE POLICY` and `DROP RULE IF EXISTS <name> ON <table>;` before each `CREATE RULE`. Pattern matches established codebase convention (0139, 0125, 0042, etc.). RLS, tenant isolation, and append-only enforcement are all unchanged.
+
+**Files modified:** `migrations/postgres/0142_report_authority.sql`, `docs/ai/PR_FIX_LOG.md`
+
+**Verified with:** `make fg-smart` PASS; `make fg-contract` PASS; `pytest tests/test_migrations_postgres_replay.py` skipped locally (no FG_DB_URL — runs in CI against live Postgres).
+
+---
+
 ### 2026-06-30 — pr/18.1-report-authority: lint/mypy fix pass (ruff F401/F841 + mypy)
 
 **Root causes (10 issues):**
