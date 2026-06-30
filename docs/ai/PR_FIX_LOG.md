@@ -6,6 +6,37 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-30 — pr/18.1-report-authority: migration replay-safe fix (second pass)
+
+**Root cause (two interacting bugs):**
+
+1. **`BEGIN;`/`COMMIT;` wrapper** — `apply_migrations` wraps all migrations in a single `with engine.begin() as conn:` transaction. The manual `COMMIT;` at the end of 0142's SQL committed this outer SQLAlchemy-managed transaction early. The subsequent `INSERT INTO schema_migrations ('0142')` ran in a new implicit transaction (TX_2). In certain error-path or psycopg3 state scenarios, SQLAlchemy's context manager rolls back TX_2 on exit, losing the schema_migrations record. On the next call to `apply_migrations`, migration 0142 is not in `applied_versions`, so it runs again. The tables skip via `IF NOT EXISTS`, but the policies fail with `DuplicateObject` because they were committed by the first run's manual `COMMIT;`.
+
+2. **`DROP POLICY IF EXISTS + CREATE POLICY` pattern** — Destructive and does not match the established codebase pattern. `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE ...) THEN CREATE POLICY ... END IF; END $$` is the canonical pattern (used by migrations 0023, 0042, 0125, etc.).
+
+**Objects made idempotent (5 + the `BEGIN;`/`COMMIT;` removal):**
+- Removed `BEGIN;` / `COMMIT;` — migration runner already manages transactions
+- `fa_report_tenant_isolation` policy → `DO $$ IF NOT EXISTS pg_policies ... THEN CREATE POLICY END $$`
+- `fa_report_audit_tenant_isolation` policy → same pattern
+- `fa_report_bundles_tenant_isolation` policy → same pattern
+- `fa_report_audit_no_update` rule → `DO $$ IF NOT EXISTS pg_rules ... THEN CREATE RULE END $$`
+- `fa_report_audit_no_delete` rule → same pattern (combined with above in one block)
+
+**Patterns applied:**
+- Policies: `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='...' AND policyname='...') THEN CREATE POLICY ... END IF; END $$`
+- Rules: `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_rules WHERE tablename='...' AND rulename='...') THEN CREATE RULE ... END IF; END $$`
+- Indexes: already `CREATE INDEX IF NOT EXISTS` (unchanged)
+- Tables: already `CREATE TABLE IF NOT EXISTS` (unchanged)
+- `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`: idempotent in PostgreSQL (unchanged)
+
+RLS, tenant isolation GUC (`app.tenant_id`), and append-only guards are all intact.
+
+**Files modified:** `migrations/postgres/0142_report_authority.sql`, `docs/ai/PR_FIX_LOG.md`
+
+**Verified with:** `pytest tests/test_migrations_postgres_replay.py` skipped locally (no FG_DB_URL — runs against live Postgres in CI); `make fg-smart` PASS; `make fg-contract` PASS.
+
+---
+
 ### 2026-06-30 — pr/18.1-report-authority: migration replay-safe fix
 
 **Root cause:** `migrations/postgres/0142_report_authority.sql` had 3 `CREATE POLICY` and 2 `CREATE RULE` statements with no idempotency guard. On replay (CI runs migrations twice against the same DB) Postgres raises `DuplicateObject`. All `CREATE TABLE` and `CREATE INDEX` already used `IF NOT EXISTS`; only the policy and rule statements were missing guards.
