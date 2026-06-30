@@ -195,7 +195,19 @@ def verify_snapshot(
             errors=errors,
         )
 
-    # 2. Extract fields from trust block
+    # 2. Guard non-dict trust block (e.g. {"trust": "x"})
+    if not isinstance(trust, dict):
+        errors.append("trust block must be a dict")
+        return VerificationResult(
+            valid=False,
+            digest_match=False,
+            signature_valid=False,
+            algorithm_supported=False,
+            canonicalization_valid=False,
+            errors=errors,
+        )
+
+    # 3. Extract fields from trust block
     signing_algorithm_raw = trust.get("signing_algorithm")
     stored_digest = trust.get("digest")
     stored_signature = trust.get("signature")
@@ -217,7 +229,7 @@ def verify_snapshot(
             errors=errors,
         )
 
-    # 3. Verify algorithm is known
+    # 4. Verify algorithm is known
     try:
         algorithm = SigningAlgorithm(signing_algorithm_raw)
         algorithm_supported = True
@@ -232,10 +244,13 @@ def verify_snapshot(
             errors=errors,
         )
 
-    # 4. Re-canonicalize payload without the trust key
+    # 5. Re-canonicalize: payload minus trust, plus protected trust fields (minus self-refs)
+    _SELF_REF = {"digest", "signature"}
     try:
         payload_without_trust = {k: v for k, v in payload.items() if k != "trust"}
-        canonical_bytes = canonicalize_snapshot(payload_without_trust)
+        trust_protected = {k: v for k, v in trust.items() if k not in _SELF_REF}
+        signing_payload = {**payload_without_trust, "trust": trust_protected}
+        canonical_bytes = canonicalize_snapshot(signing_payload)
         canonicalization_valid = True
     except Exception as exc:
         errors.append(f"canonicalization failed: {exc}")
@@ -248,28 +263,28 @@ def verify_snapshot(
             errors=errors,
         )
 
-    # 5. Recompute digest
+    # 6. Recompute digest
     computed_digest = generate_digest(canonical_bytes)
 
-    # 6. Compare digests
+    # 7. Compare digests
     if computed_digest == stored_digest:
         digest_match = True
     else:
         errors.append("digest mismatch")
 
-    # 7. Verify signature
+    # 8. Verify signature
     signature_valid = verify_payload(
         canonical_bytes, stored_signature, public_key, algorithm
     )
     if not signature_valid:
         errors.append("signature verification failed")
 
-    # 8. Compare against expected_digest if provided
+    # 9. Compare against expected_digest if provided
     if expected_digest is not None and computed_digest != expected_digest:
         errors.append("digest does not match expected_digest")
         digest_match = False
 
-    # 9. Compute overall validity
+    # 10. Compute overall validity
     valid = (
         digest_match
         and signature_valid
@@ -308,14 +323,9 @@ def build_trust_metadata(
     signing authority. The payload_without_trust is canonicalized, digested,
     and signed. The returned trust dict itself is NOT part of the signed payload.
     """
-    canonical_bytes = canonicalize_snapshot(payload_without_trust)
-    digest = generate_digest(canonical_bytes)
-    signature = sign_payload(canonical_bytes, private_key)
-
-    trust: dict[str, Any] = {
+    # Build protected trust metadata (everything except self-referential digest/signature)
+    trust_meta: dict[str, Any] = {
         "schema_version": CGIN_SCHEMA_VERSION,
-        "digest": digest,
-        "signature": signature,
         "signing_algorithm": algorithm.value,
         "fingerprint_algorithm": ACTIVE_FINGERPRINT_ALGORITHM.value,
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
@@ -325,6 +335,12 @@ def build_trust_metadata(
     }
 
     if previous_snapshot_digest is not None:
-        trust["previous_snapshot_digest"] = previous_snapshot_digest
+        trust_meta["previous_snapshot_digest"] = previous_snapshot_digest
 
-    return trust
+    # Sign payload + protected trust metadata so those fields are tamper-evident
+    signing_payload = {**payload_without_trust, "trust": trust_meta}
+    canonical_bytes = canonicalize_snapshot(signing_payload)
+    digest = generate_digest(canonical_bytes)
+    signature = sign_payload(canonical_bytes, private_key)
+
+    return {**trust_meta, "digest": digest, "signature": signature}

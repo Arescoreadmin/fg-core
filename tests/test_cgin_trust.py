@@ -557,14 +557,20 @@ class TestBuildTrustMetadata:
     def test_digest_matches_recomputed(self):
         payload = _make_payload()
         trust = self._build(payload=payload)
-        canonical = canonicalize_snapshot(payload)
+        trust_meta = {
+            k: v for k, v in trust.items() if k not in ("digest", "signature")
+        }
+        canonical = canonicalize_snapshot({**payload, "trust": trust_meta})
         expected_digest = generate_digest(canonical)
         assert trust["digest"] == expected_digest
 
     def test_signature_verifiable(self):
         payload = _make_payload()
         trust = self._build(payload=payload)
-        canonical = canonicalize_snapshot(payload)
+        trust_meta = {
+            k: v for k, v in trust.items() if k not in ("digest", "signature")
+        }
+        canonical = canonicalize_snapshot({**payload, "trust": trust_meta})
         assert (
             verify_payload(
                 canonical,
@@ -739,8 +745,7 @@ class TestVerifySnapshot:
     def test_expected_digest_matches(self):
         payload = _make_payload()
         snapshot = _make_signed_snapshot(payload)
-        canonical = canonicalize_snapshot(payload)
-        expected = generate_digest(canonical)
+        expected = snapshot["trust"]["digest"]
         result = verify_snapshot(snapshot, _TEST_PUBLIC_KEY, expected_digest=expected)
         assert result.valid is True
 
@@ -749,16 +754,41 @@ class TestVerifySnapshot:
         result = verify_snapshot(snapshot, _TEST_PUBLIC_KEY, expected_digest="0" * 64)
         assert result.valid is False
 
-    def test_verify_snapshot_ignores_trust_in_digest(self):
-        # The trust block itself must NOT be part of the signed payload
+    def test_valid_signed_snapshot_is_accepted(self):
+        # Protected trust metadata (all fields except digest/signature) is included
+        # in the signed payload, so a properly built snapshot verifies cleanly.
         payload = _make_payload()
         snapshot = _make_signed_snapshot(payload)
-        # Changing trust metadata fields (not digest/sig) should NOT break digest
-        # but WILL break the signature because the trust block is not signed
-        # Actually: only payload_without_trust is signed, so adding new trust fields
-        # doesn't affect the signed data — this just confirms the invariant.
         result = verify_snapshot(snapshot, _TEST_PUBLIC_KEY)
         assert result.valid is True
+
+    def test_tampered_trust_created_at_detected(self):
+        snapshot = _make_signed_snapshot()
+        snapshot["trust"]["created_at"] = "2000-01-01T00:00:00+00:00"
+        result = verify_snapshot(snapshot, _TEST_PUBLIC_KEY)
+        assert result.valid is False
+
+    def test_tampered_trust_authority_version_detected(self):
+        snapshot = _make_signed_snapshot()
+        snapshot["trust"]["authority_version"] = "9.9"
+        result = verify_snapshot(snapshot, _TEST_PUBLIC_KEY)
+        assert result.valid is False
+
+    def test_tampered_trust_previous_snapshot_digest_detected(self):
+        fake_digest = "c" * 64
+        snapshot = _make_signed_snapshot()
+        snapshot["trust"]["previous_snapshot_digest"] = fake_digest
+        result = verify_snapshot(snapshot, _TEST_PUBLIC_KEY)
+        assert result.valid is False
+
+    def test_non_dict_trust_block_returns_verification_result(self):
+        result = verify_snapshot({"trust": "x"}, _TEST_PUBLIC_KEY)
+        assert isinstance(result, VerificationResult)
+        assert result.valid is False
+
+    def test_non_dict_trust_block_error_message(self):
+        result = verify_snapshot({"trust": 42}, _TEST_PUBLIC_KEY)
+        assert any("dict" in e for e in result.errors)
 
     def test_valid_snapshot_with_nested_payload(self):
         payload = {"meta": {"score": 0.8, "flags": [True, False]}, "version": "2"}
@@ -1010,9 +1040,13 @@ class TestChainOfTrust:
 
     def test_chain_integrity_detectable(self):
         chain = self._build_chain(3)
-        # The previous_snapshot_digest in chain[2] should equal chain[1]'s actual digest
+        # Recompute chain[1]'s digest using the same signing payload (payload + trust_meta)
+        trust_1 = chain[1]["trust"]
+        trust_meta_1 = {
+            k: v for k, v in trust_1.items() if k not in ("digest", "signature")
+        }
         payload_1 = {k: v for k, v in chain[1].items() if k != "trust"}
-        canonical_1 = canonicalize_snapshot(payload_1)
+        canonical_1 = canonicalize_snapshot({**payload_1, "trust": trust_meta_1})
         recomputed_digest_1 = generate_digest(canonical_1)
         assert chain[2]["trust"]["previous_snapshot_digest"] == recomputed_digest_1
 
