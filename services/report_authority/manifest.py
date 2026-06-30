@@ -3,13 +3,17 @@
 Immutable report manifest generation. The manifest is a cryptographically
 verifiable record of everything that produced the report.
 """
+
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from services.report_authority.hashing import compute_canonical_hash
-from services.report_authority.metadata import EXPORT_VERSION, GENERATOR_VERSION, PROVIDER_VERSION
+from services.report_authority.metadata import (
+    EXPORT_VERSION,
+    GENERATOR_VERSION,
+    PROVIDER_VERSION,
+)
 
 MANIFEST_SCHEMA_VERSION = "1.0"
 
@@ -25,7 +29,7 @@ def build_manifest(
     generation_timestamp: str,
     assessor_id: str,
     sections_included: list[str],
-    authority_versions: dict[str, str] | None = None,
+    authority_versions: dict[str, str | None] | None = None,
     transparency_root: str | None = None,
     merkle_root: str | None = None,
 ) -> dict[str, Any]:

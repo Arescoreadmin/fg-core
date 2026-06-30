@@ -2,6 +2,7 @@
 
 Deterministic JSON renderer. Same inputs always produce identical bytes.
 """
+
 from __future__ import annotations
 
 import json

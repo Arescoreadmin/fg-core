@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -34,11 +35,9 @@ from services.report_authority.models import (
     ReportSectionType,
     ReportType,
     TERMINAL_LIFECYCLE_STATES,
-    VALID_LIFECYCLE_TRANSITIONS,
     validate_lifecycle_transition,
 )
 from services.report_authority.schemas import (
-    BundleResponse,
     CompareReportsRequest,
     GenerateReportRequest,
     HealthResponse,
@@ -50,7 +49,6 @@ from services.report_authority.schemas import (
     ReportImmutableState,
     ReportInvalidTransition,
     ReportListResponse,
-    ReportManifestResponse,
     ReportNotFound,
     ReportQualityResponse,
     ReportRenderingError,
@@ -58,7 +56,6 @@ from services.report_authority.schemas import (
     ReportSigningError,
     ReportStatisticsResponse,
     ReportTenantViolation,
-    VersionComparisonResponse,
     VerifyReportRequest,
 )
 
@@ -76,7 +73,7 @@ def _uid() -> str:
 
 
 def _make_generate_request(**kwargs) -> GenerateReportRequest:
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         assessment_id=f"assess-{_uid()}",
         report_type=ReportType.EXECUTIVE,
         title="Test Report Title",
@@ -137,8 +134,15 @@ class TestModels:
 
     def test_RA_1_report_lifecycle_states_all_defined(self):
         expected = {
-            "DRAFT", "GENERATING", "GENERATED", "SIGNING",
-            "SIGNED", "PUBLISHED", "SUPERSEDED", "ARCHIVED", "FAILED",
+            "DRAFT",
+            "GENERATING",
+            "GENERATED",
+            "SIGNING",
+            "SIGNED",
+            "PUBLISHED",
+            "SUPERSEDED",
+            "ARCHIVED",
+            "FAILED",
         }
         actual = {s.value for s in ReportLifecycleState}
         assert actual == expected
@@ -491,7 +495,13 @@ class TestEngine:
         eng = _engine(db)
         req = _make_generate_request()
         result = eng.generate_report(req, actor_id="actor-1", actor_type="human")
-        assert result.quality_grade in {"EXCELLENT", "GOOD", "ACCEPTABLE", "POOR", "INCOMPLETE"}
+        assert result.quality_grade in {
+            "EXCELLENT",
+            "GOOD",
+            "ACCEPTABLE",
+            "POOR",
+            "INCOMPLETE",
+        }
 
     def test_RA_49_get_report_returns_correct_data(self, db):
         eng = _engine(db)
@@ -590,9 +600,11 @@ class TestEngine:
         eng = _engine(db)
         req = _make_generate_request()
         created = eng.generate_report(req, actor_id="actor-1", actor_type="human")
-        events = db.query(FaReportAuditEvent).filter(
-            FaReportAuditEvent.report_id == created.id
-        ).all()
+        events = (
+            db.query(FaReportAuditEvent)
+            .filter(FaReportAuditEvent.report_id == created.id)
+            .all()
+        )
         assert len(events) >= 1
         assert any(e.event_type == "report_generated" for e in events)
 
@@ -754,7 +766,9 @@ class TestRepository:
             )
         events = repo.list_audit_events(rid)
         event_types = [e.event_type for e in events]
-        assert event_types == sorted(event_types, key=lambda x: events[event_types.index(x)].created_at)
+        assert event_types == sorted(
+            event_types, key=lambda x: events[event_types.index(x)].created_at
+        )
 
     def test_RA_66_lock_for_update_returns_row(self, db):
         from services.report_authority.repository import ReportRepository
@@ -1127,10 +1141,14 @@ class TestRepository:
         req = _make_generate_request()
         created = eng.generate_report(req, actor_id="a", actor_type="human")
         publish_req = PublishReportRequest(reason="Published")
-        eng.publish_report(created.id, publish_req, actor_id="reviewer", actor_type="human")
-        events = db.query(FaReportAuditEvent).filter(
-            FaReportAuditEvent.report_id == created.id
-        ).all()
+        eng.publish_report(
+            created.id, publish_req, actor_id="reviewer", actor_type="human"
+        )
+        events = (
+            db.query(FaReportAuditEvent)
+            .filter(FaReportAuditEvent.report_id == created.id)
+            .all()
+        )
         assert any(e.event_type == "report_published" for e in events)
 
     def test_RA_79_get_bundle_creates_pending_if_none_exists(self, db):
@@ -1176,6 +1194,7 @@ class TestAPIRoutes:
     def test_RA_81_health_returns_200(self, build_app):
         app = build_app(auth_enabled=False)
         from api.report_authority import router
+
         app.include_router(router)
         c = TestClient(app)
         resp = c.get("/reports/health")
@@ -1184,6 +1203,7 @@ class TestAPIRoutes:
     def test_RA_82_health_response_has_status_ok(self, build_app):
         app = build_app(auth_enabled=False)
         from api.report_authority import router
+
         app.include_router(router)
         c = TestClient(app)
         resp = c.get("/reports/health")
@@ -1193,6 +1213,7 @@ class TestAPIRoutes:
     def test_RA_83_health_response_has_authority(self, build_app):
         app = build_app(auth_enabled=False)
         from api.report_authority import router
+
         app.include_router(router)
         c = TestClient(app)
         resp = c.get("/reports/health")
@@ -1202,6 +1223,7 @@ class TestAPIRoutes:
     def test_RA_84_statistics_requires_auth(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         c = TestClient(app)
         resp = c.get("/reports/statistics")
@@ -1210,6 +1232,7 @@ class TestAPIRoutes:
     def test_RA_85_statistics_with_valid_auth_returns_200(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("audit:read", tenant_id=_TENANT)
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
@@ -1219,6 +1242,7 @@ class TestAPIRoutes:
     def test_RA_86_statistics_response_has_required_fields(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("audit:read", tenant_id=_TENANT)
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
@@ -1231,40 +1255,49 @@ class TestAPIRoutes:
     def test_RA_87_generate_requires_audit_write_scope(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("audit:read", tenant_id=_TENANT)  # read-only, no write
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
-        resp = c.post("/reports/generate", json={
-            "assessment_id": "a1",
-            "report_type": "EXECUTIVE",
-            "title": "T",
-            "scope": "S",
-            "objectives": "O",
-            "assessor_id": "a",
-            "reviewer_id": "r",
-        })
+        resp = c.post(
+            "/reports/generate",
+            json={
+                "assessment_id": "a1",
+                "report_type": "EXECUTIVE",
+                "title": "T",
+                "scope": "S",
+                "objectives": "O",
+                "assessor_id": "a",
+                "reviewer_id": "r",
+            },
+        )
         assert resp.status_code == 403
 
     def test_RA_88_generate_with_write_scope_returns_201(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("audit:write", tenant_id=_TENANT)
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
-        resp = c.post("/reports/generate", json={
-            "assessment_id": f"assess-{_uid()}",
-            "report_type": "EXECUTIVE",
-            "title": "Test Title",
-            "scope": "Full scope",
-            "objectives": "Key objectives",
-            "assessor_id": "assessor-001",
-            "reviewer_id": "reviewer-002",
-        })
+        resp = c.post(
+            "/reports/generate",
+            json={
+                "assessment_id": f"assess-{_uid()}",
+                "report_type": "EXECUTIVE",
+                "title": "Test Title",
+                "scope": "Full scope",
+                "objectives": "Key objectives",
+                "assessor_id": "assessor-001",
+                "reviewer_id": "reviewer-002",
+            },
+        )
         assert resp.status_code == 201
 
     def test_RA_89_get_report_404_for_missing(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("audit:read", tenant_id=_TENANT)
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
@@ -1283,6 +1316,7 @@ class TestAPIRoutes:
     def test_RA_91_list_reports_returns_200(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("audit:read", tenant_id=_TENANT)
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
@@ -1292,6 +1326,7 @@ class TestAPIRoutes:
     def test_RA_92_list_reports_response_has_items_and_total(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("audit:read", tenant_id=_TENANT)
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
@@ -1303,6 +1338,7 @@ class TestAPIRoutes:
     def test_RA_93_list_reports_wrong_scope_returns_403(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("governance:read", tenant_id=_TENANT)
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
@@ -1335,31 +1371,42 @@ class TestAPIRoutes:
         )
         assert result.lifecycle_state == "PUBLISHED"
 
-    def test_RA_96_tenant_isolation_tenant_b_cannot_read_tenant_a_report(self, build_app):
+    def test_RA_96_tenant_isolation_tenant_b_cannot_read_tenant_a_report(
+        self, build_app
+    ):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         write_key_a = mint_key("audit:write", tenant_id=_TENANT)
-        c_a = TestClient(app, headers={"X-API-Key": write_key_a, "X-Tenant-Id": _TENANT})
-        resp = c_a.post("/reports/generate", json={
-            "assessment_id": f"assess-{_uid()}",
-            "report_type": "EXECUTIVE",
-            "title": "Tenant A Report",
-            "scope": "scope",
-            "objectives": "objectives",
-            "assessor_id": "assessor-001",
-            "reviewer_id": "reviewer-002",
-        })
+        c_a = TestClient(
+            app, headers={"X-API-Key": write_key_a, "X-Tenant-Id": _TENANT}
+        )
+        resp = c_a.post(
+            "/reports/generate",
+            json={
+                "assessment_id": f"assess-{_uid()}",
+                "report_type": "EXECUTIVE",
+                "title": "Tenant A Report",
+                "scope": "scope",
+                "objectives": "objectives",
+                "assessor_id": "assessor-001",
+                "reviewer_id": "reviewer-002",
+            },
+        )
         report_id = resp.json()["id"]
 
         read_key_b = mint_key("audit:read", tenant_id=_TENANT_B)
-        c_b = TestClient(app, headers={"X-API-Key": read_key_b, "X-Tenant-Id": _TENANT_B})
+        c_b = TestClient(
+            app, headers={"X-API-Key": read_key_b, "X-Tenant-Id": _TENANT_B}
+        )
         resp2 = c_b.get(f"/reports/{report_id}")
         assert resp2.status_code == 404
 
     def test_RA_97_no_auth_header_returns_401_or_403(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         c = TestClient(app)
         resp = c.get("/reports/statistics")
@@ -1368,6 +1415,7 @@ class TestAPIRoutes:
     def test_RA_98_manifest_endpoint_404_for_missing(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("audit:read", tenant_id=_TENANT)
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
@@ -1377,6 +1425,7 @@ class TestAPIRoutes:
     def test_RA_99_quality_endpoint_404_for_missing(self, build_app):
         app = build_app(auth_enabled=True)
         from api.report_authority import router
+
         app.include_router(router)
         key = mint_key("audit:read", tenant_id=_TENANT)
         c = TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
@@ -1389,5 +1438,7 @@ class TestAPIRoutes:
             assessor_id="same-person",
             reviewer_id="same-person",
         )
-        with pytest.raises(ValueError, match="assessor_id and reviewer_id must be different"):
+        with pytest.raises(
+            ValueError, match="assessor_id and reviewer_id must be different"
+        ):
             eng.generate_report(req, actor_id="actor", actor_type="human")

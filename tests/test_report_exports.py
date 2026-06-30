@@ -12,8 +12,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-
-import pytest
+from typing import Any
 
 from services.report_authority.export import build_export_bundle
 from services.report_authority.signature import sign_payload, verify_signature
@@ -52,7 +51,7 @@ _SIGNING_KEY: bytes = b"test-signing-key-for-unit-tests-only-32b"
 
 
 def _build_bundle(**kwargs) -> bytes:
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         report_id=_REPORT_ID,
         pdf_bytes=_PDF_BYTES,
         html_bytes=_HTML_BYTES,

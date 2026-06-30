@@ -30416,7 +30416,14 @@
         "properties": {
           "authority_versions": {
             "additionalProperties": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "title": "Authority Versions",
             "type": "object"
@@ -30430,8 +30437,15 @@
             "type": "string"
           },
           "generator_version": {
-            "title": "Generator Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generator Version"
           },
           "is_immutable": {
             "title": "Is Immutable",
@@ -30449,8 +30463,15 @@
             "title": "Manifest Hash"
           },
           "manifest_schema_version": {
-            "title": "Manifest Schema Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Schema Version"
           },
           "merkle_root": {
             "anyOf": [
@@ -30755,12 +30776,26 @@
             "title": "Archived At"
           },
           "assessment_id": {
-            "title": "Assessment Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
           },
           "assessor_id": {
-            "title": "Assessor Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessor Id"
           },
           "confidence_score": {
             "anyOf": [
@@ -30800,8 +30835,15 @@
             "title": "Freshness Score"
           },
           "generator_version": {
-            "title": "Generator Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generator Version"
           },
           "id": {
             "title": "Id",
@@ -30823,12 +30865,26 @@
             "title": "Manifest Hash"
           },
           "manifest_schema_version": {
-            "title": "Manifest Schema Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Schema Version"
           },
           "objectives": {
-            "title": "Objectives",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objectives"
           },
           "published_at": {
             "anyOf": [
@@ -30894,16 +30950,30 @@
             "type": "string"
           },
           "reviewer_id": {
-            "title": "Reviewer Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Id"
           },
           "schema_version": {
             "title": "Schema Version",
             "type": "string"
           },
           "scope": {
-            "title": "Scope",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
           },
           "superseded_at": {
             "anyOf": [

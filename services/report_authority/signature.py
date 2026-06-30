@@ -3,12 +3,12 @@
 Report signing utilities. Reuses platform key management patterns.
 Produces deterministic signatures where the signing algorithm supports it.
 """
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import os
-from typing import Any
 
 SIGNING_ALGORITHM = "HMAC-SHA256"
 

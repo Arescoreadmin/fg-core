@@ -3,6 +3,7 @@
 Professional PDF renderer using ReportLab. Deterministic output.
 Bookmarks, table of contents, page numbers, headers, footers.
 """
+
 from __future__ import annotations
 
 import io

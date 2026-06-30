@@ -31,7 +31,6 @@ from services.report_authority.metadata import (
     EXPORT_VERSION,
     GENERATOR_VERSION,
     PROVIDER_VERSION,
-    _now_utc,
 )
 from services.report_authority.models import (
     IMMUTABLE_LIFECYCLE_STATES,
@@ -339,7 +338,9 @@ class ReportAuthorityEngine:
             raise ReportNotFound(
                 f"Report {report_id!r} not found for tenant {self._tenant_id!r}."
             )
-        is_immutable = ReportLifecycleState(row.lifecycle_state) in IMMUTABLE_LIFECYCLE_STATES
+        is_immutable = (
+            ReportLifecycleState(row.lifecycle_state) in IMMUTABLE_LIFECYCLE_STATES
+        )
         return ReportManifestResponse(
             report_id=row.id,
             report_version=row.report_version or _initial_version(),

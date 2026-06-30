@@ -147,12 +147,18 @@ class TestVersioning:
 
     def test_RM_20b_compare_versions_assessment_revision_excluded(self):
         # assessment_revision is intentionally excluded from comparison
-        a = ReportVersion(major=1, minor=0, patch=0, assessment_revision=100, report_revision=0)
-        b = ReportVersion(major=1, minor=0, patch=0, assessment_revision=1, report_revision=0)
+        a = ReportVersion(
+            major=1, minor=0, patch=0, assessment_revision=100, report_revision=0
+        )
+        b = ReportVersion(
+            major=1, minor=0, patch=0, assessment_revision=1, report_revision=0
+        )
         assert compare_versions(a, b) == 0
 
     def test_RM_20c_str_excludes_assessment_revision(self):
-        v = ReportVersion(major=1, minor=0, patch=0, assessment_revision=5, report_revision=2)
+        v = ReportVersion(
+            major=1, minor=0, patch=0, assessment_revision=5, report_revision=2
+        )
         assert str(v) == "1.0.0-r2"
 
     def test_RM_20d_multiple_bumps_accumulate(self):
@@ -366,7 +372,9 @@ class TestValidators:
             assessor_id="same-person",
             reviewer_id="same-person",
         )
-        with pytest.raises(ValueError, match="assessor_id and reviewer_id must be different"):
+        with pytest.raises(
+            ValueError, match="assessor_id and reviewer_id must be different"
+        ):
             validate_report_request(req)
 
     def test_RM_50b_validate_report_request_passes_for_valid(self):

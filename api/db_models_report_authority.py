@@ -93,7 +93,9 @@ class FaReport(Base):
     report_revision: Mapped[int] = mapped_column(Integer, default=0)
 
     # Branding
-    branding_config: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON blob
+    branding_config: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # JSON blob
     regulatory_profile: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Metadata

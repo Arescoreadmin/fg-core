@@ -9,7 +9,6 @@ Coverage:
 from __future__ import annotations
 
 import json
-import uuid
 
 from services.report_authority.hashing import (
     compute_sha256,
@@ -57,8 +56,6 @@ class TestHashing:
         assert len(result) == 64
 
     def test_RD_2_compute_sha256_is_correct(self):
-        # Known hash for b"hello world"
-        known = "b94d27b9934d3e08a52e52d7da7dabfac484efe04294e576fb3d8c0536940e2a"
         # Just verify length and type, not exact value (avoid coupling to specific hash)
         result = compute_sha256(b"hello world")
         assert isinstance(result, str)
@@ -129,7 +126,9 @@ class TestHashing:
             "b": 2,
             "a": 1,
         }
-        assert compute_canonical_hash(payload_ordered) == compute_canonical_hash(payload_reversed)
+        assert compute_canonical_hash(payload_ordered) == compute_canonical_hash(
+            payload_reversed
+        )
 
     def test_RD_14_canonical_hash_empty_dict_is_stable(self):
         r1 = compute_canonical_hash({})
@@ -185,6 +184,7 @@ class TestHashing:
 
     def test_RD_20d_hash_string_unsupported_algorithm_raises(self):
         import pytest
+
         with pytest.raises(ValueError, match="Unsupported hash algorithm"):
             hash_string("test", algorithm="md5")
 
@@ -390,7 +390,9 @@ class TestManifest:
         args = dict(self._FIXED_MANIFEST_ARGS)
         args["sections_included"] = ["MANIFEST", "FINDINGS", "EXECUTIVE_SUMMARY"]
         m = build_manifest(**args)
-        assert m["sections_included"] == sorted(["MANIFEST", "FINDINGS", "EXECUTIVE_SUMMARY"])
+        assert m["sections_included"] == sorted(
+            ["MANIFEST", "FINDINGS", "EXECUTIVE_SUMMARY"]
+        )
 
     def test_RD_50_build_manifest_different_section_order_same_result(self):
         args1 = dict(self._FIXED_MANIFEST_ARGS)

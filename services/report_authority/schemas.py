@@ -131,14 +131,14 @@ class ReportResponse(BaseModel):
     id: str
     tenant_id: str
     report_ref: str
-    assessment_id: str
+    assessment_id: str | None
     report_type: str
     lifecycle_state: str
     title: str
-    scope: str
-    objectives: str
-    assessor_id: str
-    reviewer_id: str
+    scope: str | None
+    objectives: str | None
+    assessor_id: str | None
+    reviewer_id: str | None
     quality_score: float | None
     quality_grade: str | None
     evidence_coverage_score: float | None
@@ -150,8 +150,8 @@ class ReportResponse(BaseModel):
     manifest_hash: str | None
     transparency_root: str | None
     schema_version: str
-    manifest_schema_version: str
-    generator_version: str
+    manifest_schema_version: str | None
+    generator_version: str | None
     created_at: str
     updated_at: str
     published_at: str | None
@@ -183,15 +183,15 @@ class ReportManifestResponse(BaseModel):
     report_id: str
     report_version: str
     schema_version: str
-    manifest_schema_version: str
-    authority_versions: dict[str, str]
+    manifest_schema_version: str | None
+    authority_versions: dict[str, str | None]
     report_hash_sha256: str | None
     report_hash_sha512: str | None
     manifest_hash: str | None
     transparency_root: str | None
     merkle_root: str | None
     generation_timestamp: str
-    generator_version: str
+    generator_version: str | None
     provider_version: str
     export_version: str
     is_immutable: bool

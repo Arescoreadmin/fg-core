@@ -55,7 +55,9 @@ router = APIRouter(tags=["report-authority"])
 
 
 def _actor(request: Request) -> str:
-    return str(getattr(getattr(request, "state", None), "key_prefix", None) or "unknown")
+    return str(
+        getattr(getattr(request, "state", None), "key_prefix", None) or "unknown"
+    )
 
 
 def _actor_type(request: Request) -> str:

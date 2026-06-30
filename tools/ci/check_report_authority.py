@@ -114,9 +114,7 @@ MINIMUM_ROUTE_COUNT = 3
 
 _CLASS_RE = re.compile(r"^\s*class\s+(\w+)", re.MULTILINE)
 _FUNC_OR_CLASS_RE = re.compile(r"^\s*(?:class|def|async\s+def)\s+(\w+)", re.MULTILINE)
-_ROUTE_STR_RE = re.compile(
-    r'@router\.\w+\(\s*["\']([^"\']+)["\']', re.MULTILINE
-)
+_ROUTE_STR_RE = re.compile(r'@router\.\w+\(\s*["\']([^"\']+)["\']', re.MULTILINE)
 _SORT_KEYS_RE = re.compile(r"sort_keys\s*=\s*True")
 _JSON_DUMPS_RE = re.compile(r"json\.dumps\s*\(")
 _QUALITY_SCORE_ASSIGN_RE = re.compile(r"\bquality_score\s*=")
@@ -245,7 +243,11 @@ def main() -> int:
         else:
             routes = _extract_routes(text)
             vprint(f"  routes found: {routes}")
-            matching = [r for r in routes if r == REQUIRED_ROUTE_PREFIX or r.startswith(REQUIRED_ROUTE_PREFIX)]
+            matching = [
+                r
+                for r in routes
+                if r == REQUIRED_ROUTE_PREFIX or r.startswith(REQUIRED_ROUTE_PREFIX)
+            ]
             if len(matching) < MINIMUM_ROUTE_COUNT:
                 fail(
                     f"{API_ROUTER.relative_to(ROOT)}: "
@@ -270,8 +272,7 @@ def main() -> int:
             for cls_name in REQUIRED_ORM_CLASSES:
                 if cls_name not in classes:
                     fail(
-                        f"{DB_MODELS.relative_to(ROOT)}: "
-                        f"missing ORM class '{cls_name}'"
+                        f"{DB_MODELS.relative_to(ROOT)}: missing ORM class '{cls_name}'"
                     )
                 else:
                     vprint(f"  + {cls_name}")

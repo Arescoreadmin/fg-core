@@ -59,19 +59,14 @@ class ReportRepository:
         limit: int = 50,
     ) -> tuple[list[FaReport], int]:
         """Return (items, total) — always tenant-scoped."""
-        q = self._db.query(FaReport).filter(
-            FaReport.tenant_id == self._tenant_id
-        )
+        q = self._db.query(FaReport).filter(FaReport.tenant_id == self._tenant_id)
         if report_type is not None:
             q = q.filter(FaReport.report_type == report_type)
         if lifecycle_state is not None:
             q = q.filter(FaReport.lifecycle_state == lifecycle_state)
         total: int = q.count()
         items: list[FaReport] = (
-            q.order_by(FaReport.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+            q.order_by(FaReport.created_at.desc()).offset(offset).limit(limit).all()
         )
         return items, total
 
@@ -255,8 +250,7 @@ class ReportRepository:
                 row.lifecycle_state: row.cnt for row in by_state_rows
             },
             "by_quality_grade": {
-                (row.quality_grade or "__unknown__"): row.cnt
-                for row in by_grade_rows
+                (row.quality_grade or "__unknown__"): row.cnt for row in by_grade_rows
             },
             "generated_this_month": generated_this_month,
         }

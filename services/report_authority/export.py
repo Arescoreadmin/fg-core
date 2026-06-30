@@ -2,6 +2,7 @@
 
 Export bundle construction. Produces signed, verifiable export packages.
 """
+
 from __future__ import annotations
 
 import io
@@ -71,7 +72,9 @@ def build_export_bundle(
     buf = io.BytesIO()
     checksums: dict[str, str] = {}
 
-    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+    with zipfile.ZipFile(
+        buf, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+    ) as zf:
         # Report outputs
         zf.writestr("report.pdf", pdf_bytes)
         checksums["report.pdf"] = compute_sha256(pdf_bytes)

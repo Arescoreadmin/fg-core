@@ -180,13 +180,7 @@ class TestRendererJson:
         assert compact == pretty
 
     def test_RR_20_deeply_nested_structure_rendered(self):
-        data = {
-            "level1": {
-                "level2": {
-                    "level3": {"value": "deep"}
-                }
-            }
-        }
+        data = {"level1": {"level2": {"level3": {"value": "deep"}}}}
         result = render_json(data)
         parsed = json.loads(result)
         assert parsed["level1"]["level2"]["level3"]["value"] == "deep"

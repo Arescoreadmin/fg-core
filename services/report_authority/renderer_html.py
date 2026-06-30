@@ -3,6 +3,7 @@
 Deterministic HTML renderer. Offline capable — no external CDN assets.
 Produces accessible, printable, responsive HTML.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -51,9 +52,7 @@ def render_html(
     for section_key in sorted(report_data.keys()):
         section = report_data[section_key]
         html_parts.append(f"<div class='section' id='{_escape(section_key)}'>")
-        html_parts.append(
-            f"<h2>{_escape(section_key.replace('_', ' ').title())}</h2>"
-        )
+        html_parts.append(f"<h2>{_escape(section_key.replace('_', ' ').title())}</h2>")
         if isinstance(section, dict):
             html_parts.append(_render_dict_as_table(section))
         elif isinstance(section, list):
@@ -77,14 +76,10 @@ def _escape(value: str) -> str:
 
 
 def _render_dict_as_table(data: dict[str, Any]) -> str:
-    rows = [
-        "<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>"
-    ]
+    rows = ["<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>"]
     for k in sorted(data.keys()):
         v = data[k]
-        rows.append(
-            f"<tr><td>{_escape(k)}</td><td>{_escape(str(v))}</td></tr>"
-        )
+        rows.append(f"<tr><td>{_escape(k)}</td><td>{_escape(str(v))}</td></tr>")
     rows.append("</tbody></table>")
     return "\n".join(rows)
 

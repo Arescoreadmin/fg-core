@@ -6,6 +6,27 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-30 — pr/18.1-report-authority: lint/mypy fix pass (ruff F401/F841 + mypy)
+
+**Root causes (10 issues):**
+
+1. `tests/test_report_determinism.py` — `import uuid` unused (F401); removed.
+2. `tests/test_report_determinism.py` — `known = "b94d..."` assigned but never used in `test_RD_2_compute_sha256_is_correct` (F841); removed per the existing comment "avoid coupling to specific hash".
+3. `tests/test_report_exports.py` — `import pytest` unused (F401); removed.
+4. `services/report_authority/engine.py` — `_now_utc` imported from `metadata` but engine uses `datetime.now(tz=timezone.utc)` directly (F401); removed.
+5. `services/report_authority/manifest.py` — `import json` unused (F401); removed.
+6. `services/report_authority/signature.py` — `from typing import Any` unused (F401); removed.
+7. `tests/test_report_authority.py` — `VALID_LIFECYCLE_TRANSITIONS`, `BundleResponse`, `ReportManifestResponse`, `VersionComparisonResponse` imported but unused (F401 ×4); removed.
+8. `services/report_authority/schemas.py` — nullable ORM columns (`assessment_id`, `scope`, `objectives`, `assessor_id`, `reviewer_id`, `manifest_schema_version`, `generator_version` in `ReportResponse`; `manifest_schema_version`, `generator_version`, `authority_versions` in `ReportManifestResponse`) typed as `str`/`dict[str,str]` but ORM model allows NULL → mypy `[arg-type]` errors. Made the affected fields `str | None` / `dict[str, str | None]` to match reality.
+9. `services/report_authority/manifest.py` — `authority_versions` parameter widened to `dict[str, str | None] | None` to accept the schema change above.
+10. `tests/test_report_authority.py`, `tests/test_report_exports.py` — `_make_generate_request`/`_build_bundle` helpers typed `defaults` as `dict[str, Any]` to resolve mypy `[arg-type]` errors on `**defaults` unpacking.
+
+**Files modified:** `tests/test_report_determinism.py`, `tests/test_report_exports.py`, `tests/test_report_authority.py`, `services/report_authority/engine.py`, `services/report_authority/manifest.py`, `services/report_authority/signature.py`, `services/report_authority/schemas.py`, `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` (contract refresh after schema Optional changes), `docs/ai/PR_FIX_LOG.md` (this entry)
+
+**Verified with:** `ruff check` + `ruff format --check` (clean); `mypy .` (0 errors); `pytest tests/test_report_determinism.py tests/test_report_exports.py tests/test_report_authority.py` (233/233 passed); `make fg-smart` PASS.
+
+---
+
 ### 2026-06-30 — pr/18.1-report-authority: Enterprise Assessment Report Authority
 
 **Changes shipped:**
