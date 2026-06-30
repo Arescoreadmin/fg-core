@@ -1,3 +1,30 @@
+## 2026-06-29 — PR 17.7D: CGIN Transparency Authority
+
+**Classification:** New cryptographic transparency layer for CGIN governance operations. New library service package (`services/cgin/transparency/`), new API router (`api/cgin_transparency.py`), new CI gate (`tools/ci/check_cgin_transparency.py`), route inventory update, ROADMAP update, authority manifest update. No auth logic changes. No DB schema changes. No migrations.
+
+**Critical-path files changed:**
+- `tools/ci/check_cgin_transparency.py` — new AST-based CI gate; validates structural correctness of entry, merkle, store, and ledger modules plus API router by static analysis and lightweight runtime import probe. Runs determinism check (same input → same Merkle root) and append-only invariant check (duplicate entry_id raises ValueError). No runtime path. No secrets. No network access. Exits 0/1.
+- `api/cgin_transparency.py` — FastAPI router; 7 routes: `GET /cgin/transparency/root/latest`, `GET /cgin/transparency/root/{root_id}`, `GET /cgin/transparency/entries/{entry_id}`, `GET /cgin/transparency/proof/{entry_id}`, `POST /cgin/transparency/verify`, `GET /cgin/transparency/statistics`, `GET /cgin/transparency/health`. All routes require `governance:read` scope and are tenant-isolated via `require_bound_tenant()`. Pydantic response models. `tags=["cgin-transparency"]`. No DB reads. No secrets. No auth logic changes.
+- `api/main.py` — `cgin_transparency_router` import and `app.include_router(cgin_transparency_router)` added to both `build_app` and `build_contract_app`.
+- `services/plane_registry/registry.py` — `/cgin/transparency` prefix added to `control` plane route allowlist.
+
+**Non-critical-path additions:**
+- `services/cgin/transparency/entry.py` — `TransparencyEntry` frozen dataclass (immutable); `_compute_entry_id` (SHA-256 of `"{entry_type}:{artifact_digest}:{sequence_number}"`); `TRANSPARENCY_VERSION = "1.0"`; `TRANSPARENCY_SCHEMA_VERSION = "1.0"`.
+- `services/cgin/transparency/merkle.py` — `MerkleTree` with domain-separated hashing (leaf: `SHA256(0x00 || data)`, interior: `SHA256(0x01 || L || R)`); odd-level duplication; `MembershipProof` frozen dataclass with `to_dict`/`from_dict`; `EMPTY_LEAF = b"\x00" * 32`.
+- `services/cgin/transparency/root.py` — `TransparencyRoot` frozen dataclass.
+- `services/cgin/transparency/store.py` — `TransparencyStore` `@runtime_checkable Protocol`; `MemoryTransparencyStore` — append-only, duplicate `entry_id` raises `ValueError` immediately.
+- `services/cgin/transparency/ledger.py` — `TransparencyLedger` — `append`, `build_root` (signs via `sign_payload` from trust.py), `membership_proof`, `verify_entry`, `statistics`. Root is signed using the `KeyProvider` from `services.cgin.key_management`.
+- `services/cgin/transparency/verify.py` — `TransparencyVerificationResult` dataclass; `verify_entry_in_store` (never raises).
+- `services/cgin/transparency/statistics.py` — `IntegrityStatistics` frozen dataclass; `compute_statistics`.
+- `services/cgin/transparency/__init__.py` — `ACTIVE_TRANSPARENCY_LEDGER` singleton seeded with `MemoryTransparencyStore` + `ACTIVE_PROVIDER_REGISTRY.active()`.
+- `authority_manifest.yaml` — `cgin_transparency` section added; `- cgin_transparency` added to `library_services` list.
+- `ROADMAP.md` — PR 17.7D row added.
+- `tests/test_cgin_transparency.py` — 225+ deterministic tests across 12 classes (no mocks, no DB, pure Python).
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No DB schema changes. No migration files. No secrets stored or accessed. The transparency module never reads private keys from disk — keys are always injected through `ACTIVE_PROVIDER_REGISTRY`. `verify_entry_in_store` never raises (all exceptions caught, reported in `errors` list). All 7 new API routes follow the established `require_scopes` + `require_bound_tenant` pattern identical to all other CGIN routes. `ACTIVE_TRANSPARENCY_LEDGER` is a module-level singleton backed by `MemoryTransparencyStore` — in-process only, no persistence across restarts, appropriate for dev/test. `MemoryTransparencyStore` is strictly append-only: duplicate `entry_id` raises `ValueError`; no update or delete methods exist. `MerkleTree` uses domain-separated hashing (`0x00` for leaves, `0x01` for interior nodes) to prevent second-preimage attacks. `MembershipProof.verify_proof` never raises. `TransparencyEntry` and `TransparencyRoot` are frozen dataclasses — immutable at runtime. Signing delegates to `sign_payload` from `services.cgin.trust`, which delegates to `ACTIVE_PROVIDER_REGISTRY.active()` — no private key material in transparency code. `tools/ci/check_cgin_transparency.py` runs both AST and lightweight runtime checks — safe to run in CI without credentials. No new external dependencies (uses `hashlib`, `math`, `datetime` from stdlib + existing `cryptography`/`fastapi`/`pydantic` stack).
+
+---
+
 ## 2026-06-30 — PR 17.7C: CGIN Enterprise Key Management Authority
 
 **Classification:** New provider-based key management architecture layered on 17.7B. No new DB tables, no migrations, no new planes, no auth logic changes. Additive — 3 new GET routes under existing `/cgin/trust/providers` prefix already registered in the `control` plane. No secrets stored. No external dependencies added.

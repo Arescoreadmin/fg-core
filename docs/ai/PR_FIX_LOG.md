@@ -6,6 +6,20 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-29 — pr/17.7d-cgin-transparency: CGIN Transparency Authority
+
+**Changes shipped:**
+
+New `services/cgin/transparency/` package providing an append-only Merkle-backed transparency ledger for CGIN governance operations. No DB, no migrations, no auth changes.
+
+**Files created:** `services/cgin/transparency/__init__.py`, `services/cgin/transparency/entry.py`, `services/cgin/transparency/merkle.py`, `services/cgin/transparency/root.py`, `services/cgin/transparency/store.py`, `services/cgin/transparency/ledger.py`, `services/cgin/transparency/verify.py`, `services/cgin/transparency/statistics.py`, `api/cgin_transparency.py`, `tools/ci/check_cgin_transparency.py`, `tests/test_cgin_transparency.py`
+
+**Files modified:** `api/main.py` (router registered in both builders), `services/plane_registry/registry.py` (`/cgin/transparency` added to control plane), `authority_manifest.yaml` (`cgin_transparency` section + library_services entry), `ROADMAP.md` (PR 17.7D row), `docs/ai/PR_FIX_LOG.md` (this entry), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (SOC review entry)
+
+**Verified with:** pytest tests/test_cgin_transparency.py (225+ tests across 12 classes); make fg-fast
+
+---
+
 ### 2026-06-27 — fix/governance-learning-17-6b-bot-review: P1+P2 bot review fixes
 
 **Root causes (4 bugs):**

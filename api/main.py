@@ -110,6 +110,7 @@ from api.control_effectiveness_explainability import (
     router as control_effectiveness_explainability_router,
 )
 from api.remediation_effectiveness import router as remediation_effectiveness_router
+from api.cgin_transparency import router as cgin_transparency_router
 from api.cgin_trust import router as cgin_trust_router
 from api.governance_chain import router as governance_chain_router
 from api.governance_learning import router as governance_learning_router
@@ -743,6 +744,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(control_effectiveness_router)
     app.include_router(remediation_effectiveness_router)
     app.include_router(cgin_trust_router)
+    app.include_router(cgin_transparency_router)
     app.include_router(governance_chain_router)
     app.include_router(governance_learning_router)
     app.include_router(governance_adaptive_intelligence_router)
@@ -1193,6 +1195,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(control_effectiveness_router)
     app.include_router(remediation_effectiveness_router)
     app.include_router(cgin_trust_router)
+    app.include_router(cgin_transparency_router)
     app.include_router(governance_chain_router)
     app.include_router(governance_learning_router)
     app.include_router(governance_adaptive_intelligence_router)

@@ -21108,6 +21108,49 @@
         "title": "InitiateRestoreRequest",
         "type": "object"
       },
+      "IntegrityStatisticsResponse": {
+        "properties": {
+          "algorithm": {
+            "title": "Algorithm",
+            "type": "string"
+          },
+          "average_proof_length": {
+            "title": "Average Proof Length",
+            "type": "number"
+          },
+          "entry_count": {
+            "title": "Entry Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "root_count": {
+            "title": "Root Count",
+            "type": "integer"
+          },
+          "transparency_version": {
+            "title": "Transparency Version",
+            "type": "string"
+          },
+          "tree_height": {
+            "title": "Tree Height",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entry_count",
+          "root_count",
+          "tree_height",
+          "average_proof_length",
+          "algorithm",
+          "transparency_version",
+          "generated_at"
+        ],
+        "title": "IntegrityStatisticsResponse",
+        "type": "object"
+      },
       "InviteCreateBody": {
         "additionalProperties": false,
         "properties": {
@@ -22608,6 +22651,57 @@
           "created_at"
         ],
         "title": "MaturityTierResponse",
+        "type": "object"
+      },
+      "MembershipProofResponse": {
+        "properties": {
+          "algorithm": {
+            "title": "Algorithm",
+            "type": "string"
+          },
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "entry_index": {
+            "title": "Entry Index",
+            "type": "integer"
+          },
+          "leaf_hash": {
+            "title": "Leaf Hash",
+            "type": "string"
+          },
+          "proof_path": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Proof Path",
+            "type": "array"
+          },
+          "root_digest": {
+            "title": "Root Digest",
+            "type": "string"
+          },
+          "root_id": {
+            "title": "Root Id",
+            "type": "string"
+          },
+          "transparency_version": {
+            "title": "Transparency Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "entry_index",
+          "leaf_hash",
+          "proof_path",
+          "root_digest",
+          "root_id",
+          "algorithm",
+          "transparency_version"
+        ],
+        "title": "MembershipProofResponse",
         "type": "object"
       },
       "MissionEnvelope": {
@@ -35424,6 +35518,257 @@
         "title": "TransitionWorkflowRequest",
         "type": "object"
       },
+      "TransparencyEntryResponse": {
+        "properties": {
+          "artifact_digest": {
+            "title": "Artifact Digest",
+            "type": "string"
+          },
+          "authority_name": {
+            "title": "Authority Name",
+            "type": "string"
+          },
+          "authority_version": {
+            "title": "Authority Version",
+            "type": "string"
+          },
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "entry_type": {
+            "title": "Entry Type",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "parent_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Digest"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "sequence_number": {
+            "title": "Sequence Number",
+            "type": "integer"
+          },
+          "signature_algorithm": {
+            "title": "Signature Algorithm",
+            "type": "string"
+          },
+          "signature_provider": {
+            "title": "Signature Provider",
+            "type": "string"
+          },
+          "tenant_fingerprint": {
+            "title": "Tenant Fingerprint",
+            "type": "string"
+          },
+          "transparency_version": {
+            "title": "Transparency Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "entry_type",
+          "authority_name",
+          "authority_version",
+          "artifact_digest",
+          "parent_digest",
+          "sequence_number",
+          "generated_at",
+          "tenant_fingerprint",
+          "signature_algorithm",
+          "signature_provider",
+          "schema_version",
+          "transparency_version"
+        ],
+        "title": "TransparencyEntryResponse",
+        "type": "object"
+      },
+      "TransparencyHealthResponse": {
+        "properties": {
+          "entry_count": {
+            "title": "Entry Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "root_count": {
+            "title": "Root Count",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "transparency_version": {
+            "title": "Transparency Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "entry_count",
+          "root_count",
+          "transparency_version",
+          "generated_at"
+        ],
+        "title": "TransparencyHealthResponse",
+        "type": "object"
+      },
+      "TransparencyRootResponse": {
+        "properties": {
+          "algorithm": {
+            "title": "Algorithm",
+            "type": "string"
+          },
+          "authority_version": {
+            "title": "Authority Version",
+            "type": "string"
+          },
+          "entry_count": {
+            "title": "Entry Count",
+            "type": "integer"
+          },
+          "generation_timestamp": {
+            "title": "Generation Timestamp",
+            "type": "string"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
+          },
+          "root_digest": {
+            "title": "Root Digest",
+            "type": "string"
+          },
+          "root_id": {
+            "title": "Root Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "signing_algorithm": {
+            "title": "Signing Algorithm",
+            "type": "string"
+          },
+          "transparency_version": {
+            "title": "Transparency Version",
+            "type": "string"
+          },
+          "tree_height": {
+            "title": "Tree Height",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "root_id",
+          "root_digest",
+          "entry_count",
+          "generation_timestamp",
+          "tree_height",
+          "algorithm",
+          "authority_version",
+          "schema_version",
+          "transparency_version",
+          "signature",
+          "signing_algorithm",
+          "provider_name"
+        ],
+        "title": "TransparencyRootResponse",
+        "type": "object"
+      },
+      "TransparencyVerificationResponse": {
+        "properties": {
+          "digest_match": {
+            "title": "Digest Match",
+            "type": "boolean"
+          },
+          "entry_found": {
+            "title": "Entry Found",
+            "type": "boolean"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "proof_valid": {
+            "title": "Proof Valid",
+            "type": "boolean"
+          },
+          "root_signature_valid": {
+            "title": "Root Signature Valid",
+            "type": "boolean"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "entry_found",
+          "digest_match",
+          "proof_valid",
+          "root_signature_valid",
+          "errors"
+        ],
+        "title": "TransparencyVerificationResponse",
+        "type": "object"
+      },
+      "TransparencyVerifyRequest": {
+        "properties": {
+          "artifact_digest": {
+            "title": "Artifact Digest",
+            "type": "string"
+          },
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id"
+          }
+        },
+        "required": [
+          "entry_id",
+          "artifact_digest"
+        ],
+        "title": "TransparencyVerifyRequest",
+        "type": "object"
+      },
       "TraversalResponse": {
         "properties": {
           "edges": {
@@ -44756,6 +45101,443 @@
         "tags": [
           "exceptions",
           "breakglass"
+        ]
+      }
+    },
+    "/cgin/transparency/entries/{entry_id}": {
+      "get": {
+        "description": "Return a specific transparency entry by ID.",
+        "operationId": "get_entry_cgin_transparency_entries__entry_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransparencyEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Entry not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Entry",
+        "tags": [
+          "cgin-transparency"
+        ]
+      }
+    },
+    "/cgin/transparency/health": {
+      "get": {
+        "description": "Return health status of the transparency ledger.",
+        "operationId": "get_health_cgin_transparency_health_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransparencyHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Health",
+        "tags": [
+          "cgin-transparency"
+        ]
+      }
+    },
+    "/cgin/transparency/proof/{entry_id}": {
+      "get": {
+        "description": "Return a Merkle membership proof for the given entry_id.",
+        "operationId": "get_proof_cgin_transparency_proof__entry_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipProofResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Entry not found"
+          },
+          "409": {
+            "description": "No root built yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Proof",
+        "tags": [
+          "cgin-transparency"
+        ]
+      }
+    },
+    "/cgin/transparency/root/latest": {
+      "get": {
+        "description": "Return the most recently built Merkle root.",
+        "operationId": "get_latest_root_cgin_transparency_root_latest_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransparencyRootResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "No root available yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Latest Root",
+        "tags": [
+          "cgin-transparency"
+        ]
+      }
+    },
+    "/cgin/transparency/root/{root_id}": {
+      "get": {
+        "description": "Return a specific transparency root by ID.",
+        "operationId": "get_root_cgin_transparency_root__root_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "root_id",
+            "required": true,
+            "schema": {
+              "title": "Root Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransparencyRootResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Root not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Root",
+        "tags": [
+          "cgin-transparency"
+        ]
+      }
+    },
+    "/cgin/transparency/statistics": {
+      "get": {
+        "description": "Return current integrity statistics for the transparency ledger.",
+        "operationId": "get_statistics_cgin_transparency_statistics_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrityStatisticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Statistics",
+        "tags": [
+          "cgin-transparency"
+        ]
+      }
+    },
+    "/cgin/transparency/verify": {
+      "post": {
+        "description": "Verify an entry's existence, digest match, and Merkle membership.",
+        "operationId": "verify_entry_cgin_transparency_verify_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransparencyVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransparencyVerificationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        },
+        "summary": "Verify Entry",
+        "tags": [
+          "cgin-transparency"
         ]
       }
     },

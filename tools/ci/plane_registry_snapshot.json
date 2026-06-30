@@ -638,7 +638,8 @@
         "/governance-learning",
         "/governance-adaptive-intelligence",
         "/governance-optimization",
-        "/cgin/trust"
+        "/cgin/trust",
+        "/cgin/transparency"
       ]
     },
     {
@@ -1174,7 +1175,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-30T12:05:24.709001+00:00",
+  "generated_at": "2026-06-30T12:51:29.244366+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
