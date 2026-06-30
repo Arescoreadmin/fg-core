@@ -34,6 +34,8 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     # Public key endpoint — external auditors need this to verify report signatures
     # without possessing the private key.
     "/signing/public-key",
+    # Report Authority health probe — unauthenticated liveness check.
+    "/reports/health",
 )
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (

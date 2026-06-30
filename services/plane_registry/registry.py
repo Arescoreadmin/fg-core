@@ -596,6 +596,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/freshness/snapshots",
             "/freshness/history",
             "/freshness/trends",
+            "/reports",
         ),
         allowed_dependency_categories=("auth", "tenant", "db", "rate"),
         required_make_targets=("audit-chain-verify",),
@@ -649,6 +650,14 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "/evidence/verify",
                 "global_admin",
                 "Evidence verification can be global.",
+            ),
+        ),
+        public_routes=(
+            ex(
+                "GET",
+                "/reports/health",
+                "public",
+                "Unauthenticated Report Authority health probe.",
             ),
         ),
     ),

@@ -871,7 +871,16 @@
       ],
       "maturity_tag": "production-grade",
       "plane_id": "evidence",
-      "public_routes": [],
+      "public_routes": [
+        {
+          "class_name": "public",
+          "expires_at": "",
+          "justification": "Unauthenticated Report Authority health probe.",
+          "method": "GET",
+          "path": "/reports/health",
+          "permanent": true
+        }
+      ],
       "required_ci_gates": [
         "check_plane_registry",
         "route-inventory-audit"
@@ -895,7 +904,8 @@
         "/freshness",
         "/freshness/snapshots",
         "/freshness/history",
-        "/freshness/trends"
+        "/freshness/trends",
+        "/reports"
       ]
     },
     {
@@ -1175,7 +1185,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-30T13:23:47.018100+00:00",
+  "generated_at": "2026-06-30T18:25:02.090550+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

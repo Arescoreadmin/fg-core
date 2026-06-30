@@ -5071,6 +5071,124 @@
         "title": "BulkObservationImportResult",
         "type": "object"
       },
+      "BundleResponse": {
+        "additionalProperties": false,
+        "description": "Export bundle metadata for a report.",
+        "properties": {
+          "bundle_hash_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Hash Sha256"
+          },
+          "bundle_hash_sha512": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Hash Sha512"
+          },
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "bundle_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Signature"
+          },
+          "bundle_state": {
+            "title": "Bundle State",
+            "type": "string"
+          },
+          "contains_evidence_index": {
+            "title": "Contains Evidence Index",
+            "type": "boolean"
+          },
+          "contains_html": {
+            "title": "Contains Html",
+            "type": "boolean"
+          },
+          "contains_json": {
+            "title": "Contains Json",
+            "type": "boolean"
+          },
+          "contains_manifest": {
+            "title": "Contains Manifest",
+            "type": "boolean"
+          },
+          "contains_pdf": {
+            "title": "Contains Pdf",
+            "type": "boolean"
+          },
+          "contains_transparency_proof": {
+            "title": "Contains Transparency Proof",
+            "type": "boolean"
+          },
+          "contains_trust_manifest": {
+            "title": "Contains Trust Manifest",
+            "type": "boolean"
+          },
+          "contains_verification_instructions": {
+            "title": "Contains Verification Instructions",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_id",
+          "report_id",
+          "bundle_state",
+          "bundle_hash_sha256",
+          "bundle_hash_sha512",
+          "bundle_signature",
+          "contains_pdf",
+          "contains_html",
+          "contains_json",
+          "contains_manifest",
+          "contains_trust_manifest",
+          "contains_transparency_proof",
+          "contains_evidence_index",
+          "contains_verification_instructions",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "BundleResponse",
+        "type": "object"
+      },
       "CGINAdaptiveSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -6476,6 +6594,30 @@
           "idempotency_key"
         ],
         "title": "CommandRequest",
+        "type": "object"
+      },
+      "CompareReportsRequest": {
+        "additionalProperties": false,
+        "description": "Request to compare two report versions for diff analysis.",
+        "properties": {
+          "baseline_report_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Baseline Report Id",
+            "type": "string"
+          },
+          "comparison_report_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Comparison Report Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseline_report_id",
+          "comparison_report_id"
+        ],
+        "title": "CompareReportsRequest",
         "type": "object"
       },
       "CompensatingControl": {
@@ -20343,6 +20485,44 @@
       "Health": {
         "$ref": "schemas/api/health.schema.json"
       },
+      "HealthResponse": {
+        "additionalProperties": false,
+        "description": "Health check response for the Report Authority service.",
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "authority",
+          "version",
+          "schema_version",
+          "checks"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
       "HealthResult": {
         "enum": [
           "pass",
@@ -27306,6 +27486,23 @@
         "title": "ProvidersResponse",
         "type": "object"
       },
+      "PublishReportRequest": {
+        "additionalProperties": false,
+        "description": "Request to publish a signed or generated report.",
+        "properties": {
+          "reason": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "PublishReportRequest",
+        "type": "object"
+      },
       "QuestionnaireCoverageResponse": {
         "properties": {
           "assessed_count": {
@@ -30180,6 +30377,183 @@
         "title": "ReplayResponse",
         "type": "object"
       },
+      "ReportListResponse": {
+        "additionalProperties": false,
+        "description": "Paginated list of reports.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "ReportListResponse",
+        "type": "object"
+      },
+      "ReportManifestResponse": {
+        "additionalProperties": false,
+        "description": "Manifest metadata for a report \u2014 cryptographic proof of content.",
+        "properties": {
+          "authority_versions": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Authority Versions",
+            "type": "object"
+          },
+          "export_version": {
+            "title": "Export Version",
+            "type": "string"
+          },
+          "generation_timestamp": {
+            "title": "Generation Timestamp",
+            "type": "string"
+          },
+          "generator_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generator Version"
+          },
+          "is_immutable": {
+            "title": "Is Immutable",
+            "type": "boolean"
+          },
+          "manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Hash"
+          },
+          "manifest_schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Schema Version"
+          },
+          "merkle_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merkle Root"
+          },
+          "provider_version": {
+            "title": "Provider Version",
+            "type": "string"
+          },
+          "report_hash_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Hash Sha256"
+          },
+          "report_hash_sha512": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Hash Sha512"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "report_version": {
+            "title": "Report Version",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "transparency_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transparency Root"
+          }
+        },
+        "required": [
+          "report_id",
+          "report_version",
+          "schema_version",
+          "manifest_schema_version",
+          "authority_versions",
+          "report_hash_sha256",
+          "report_hash_sha512",
+          "manifest_hash",
+          "transparency_root",
+          "merkle_root",
+          "generation_timestamp",
+          "generator_version",
+          "provider_version",
+          "export_version",
+          "is_immutable"
+        ],
+        "title": "ReportManifestResponse",
+        "type": "object"
+      },
       "ReportQaApproveBody": {
         "properties": {
           "decision_notes": {
@@ -30282,6 +30656,464 @@
         "title": "ReportQaApproveResponse",
         "type": "object"
       },
+      "ReportQualityResponse": {
+        "additionalProperties": false,
+        "description": "Detailed quality breakdown for a single report.",
+        "properties": {
+          "completeness_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completeness Score"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "evidence_coverage_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Coverage Score"
+          },
+          "freshness_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Score"
+          },
+          "quality_grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Grade"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Score"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "verification_coverage_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Coverage Score"
+          }
+        },
+        "required": [
+          "report_id",
+          "quality_score",
+          "quality_grade",
+          "evidence_coverage_score",
+          "verification_coverage_score",
+          "freshness_score",
+          "confidence_score",
+          "completeness_score",
+          "computed_at"
+        ],
+        "title": "ReportQualityResponse",
+        "type": "object"
+      },
+      "ReportResponse": {
+        "additionalProperties": false,
+        "description": "Full representation of a report record.",
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "assessor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessor Id"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_coverage_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Coverage Score"
+          },
+          "freshness_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Score"
+          },
+          "generator_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generator Version"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Hash"
+          },
+          "manifest_schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Schema Version"
+          },
+          "objectives": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objectives"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "quality_grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Grade"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Score"
+          },
+          "report_hash_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Hash Sha256"
+          },
+          "report_hash_sha512": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Hash Sha512"
+          },
+          "report_ref": {
+            "title": "Report Ref",
+            "type": "string"
+          },
+          "report_type": {
+            "title": "Report Type",
+            "type": "string"
+          },
+          "reviewer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Id"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "transparency_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transparency Root"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verification_coverage_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Coverage Score"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "report_ref",
+          "assessment_id",
+          "report_type",
+          "lifecycle_state",
+          "title",
+          "scope",
+          "objectives",
+          "assessor_id",
+          "reviewer_id",
+          "quality_score",
+          "quality_grade",
+          "evidence_coverage_score",
+          "verification_coverage_score",
+          "freshness_score",
+          "confidence_score",
+          "report_hash_sha256",
+          "report_hash_sha512",
+          "manifest_hash",
+          "transparency_root",
+          "schema_version",
+          "manifest_schema_version",
+          "generator_version",
+          "created_at",
+          "updated_at",
+          "published_at",
+          "superseded_at",
+          "archived_at"
+        ],
+        "title": "ReportResponse",
+        "type": "object"
+      },
+      "ReportStatisticsResponse": {
+        "additionalProperties": false,
+        "description": "Tenant-level report statistics.",
+        "properties": {
+          "by_lifecycle_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Lifecycle State",
+            "type": "object"
+          },
+          "by_quality_grade": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Quality Grade",
+            "type": "object"
+          },
+          "by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Type",
+            "type": "object"
+          },
+          "failed_count": {
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "generated_this_month": {
+            "title": "Generated This Month",
+            "type": "integer"
+          },
+          "published_count": {
+            "title": "Published Count",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_reports": {
+            "title": "Total Reports",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_reports",
+          "by_type",
+          "by_lifecycle_state",
+          "by_quality_grade",
+          "published_count",
+          "failed_count",
+          "generated_this_month"
+        ],
+        "title": "ReportStatisticsResponse",
+        "type": "object"
+      },
       "ReportTimelineEntry": {
         "properties": {
           "actor": {
@@ -30347,6 +31179,21 @@
         ],
         "title": "ReportTimelineResponse",
         "type": "object"
+      },
+      "ReportType": {
+        "description": "Classification of the report audience and regulatory context.",
+        "enum": [
+          "EXECUTIVE",
+          "TECHNICAL",
+          "BOARD",
+          "REGULATORY_HEALTHCARE",
+          "REGULATORY_FINANCE",
+          "REGULATORY_LEGAL",
+          "REGULATORY_GOVERNMENT",
+          "REGULATORY_MANUFACTURING"
+        ],
+        "title": "ReportType",
+        "type": "string"
       },
       "ReproduceRequest": {
         "properties": {
@@ -38169,6 +39016,35 @@
         "title": "VerifyEvidenceRequest",
         "type": "object"
       },
+      "VerifyReportRequest": {
+        "additionalProperties": false,
+        "description": "Request to verify a report's integrity by a named verifier.",
+        "properties": {
+          "verifier_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Verifier Id",
+            "type": "string"
+          },
+          "verifier_notes": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verifier Notes"
+          }
+        },
+        "required": [
+          "verifier_id"
+        ],
+        "title": "VerifyReportRequest",
+        "type": "object"
+      },
       "VerifyReportResponse": {
         "properties": {
           "finding_count": {
@@ -38308,6 +39184,86 @@
           "public_key_b64"
         ],
         "title": "VerifyRequest",
+        "type": "object"
+      },
+      "VersionComparisonResponse": {
+        "additionalProperties": false,
+        "description": "Diff between two report versions.",
+        "properties": {
+          "added_controls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Added Controls",
+            "type": "array"
+          },
+          "added_findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Added Findings",
+            "type": "array"
+          },
+          "baseline_report_id": {
+            "title": "Baseline Report Id",
+            "type": "string"
+          },
+          "baseline_version": {
+            "title": "Baseline Version",
+            "type": "string"
+          },
+          "changed_findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Findings",
+            "type": "array"
+          },
+          "comparison_report_id": {
+            "title": "Comparison Report Id",
+            "type": "string"
+          },
+          "comparison_version": {
+            "title": "Comparison Version",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "quality_delta": {
+            "title": "Quality Delta",
+            "type": "number"
+          },
+          "removed_controls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed Controls",
+            "type": "array"
+          },
+          "removed_findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed Findings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "baseline_report_id",
+          "comparison_report_id",
+          "baseline_version",
+          "comparison_version",
+          "added_findings",
+          "removed_findings",
+          "changed_findings",
+          "added_controls",
+          "removed_controls",
+          "quality_delta",
+          "generated_at"
+        ],
+        "title": "VersionComparisonResponse",
         "type": "object"
       },
       "VersionFloorRequest": {
@@ -41459,6 +42415,85 @@
           "offset"
         ],
         "title": "PortalEvidenceListResponse",
+        "type": "object"
+      },
+      "services__report_authority__schemas__GenerateReportRequest": {
+        "additionalProperties": false,
+        "description": "Request to generate a new report for an assessment.",
+        "properties": {
+          "assessment_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "assessor_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Assessor Id",
+            "type": "string"
+          },
+          "branding_config": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branding Config"
+          },
+          "objectives": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Objectives",
+            "type": "string"
+          },
+          "regulatory_profile": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulatory Profile"
+          },
+          "report_type": {
+            "$ref": "#/components/schemas/ReportType"
+          },
+          "reviewer_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Reviewer Id",
+            "type": "string"
+          },
+          "scope": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessment_id",
+          "report_type",
+          "title",
+          "scope",
+          "objectives",
+          "assessor_id",
+          "reviewer_id"
+        ],
+        "title": "GenerateReportRequest",
         "type": "object"
       },
       "services__risk_acceptance__schemas__AllowedTransitionsResponse": {
@@ -91341,6 +92376,1005 @@
         "summary": "Unassign Remediation Task Owner",
         "tags": [
           "remediation"
+        ]
+      }
+    },
+    "/reports": {
+      "get": {
+        "description": "List reports for the tenant with optional filters.",
+        "operationId": "list_reports_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "report_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Report Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lifecycle_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Reports",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/compare": {
+      "post": {
+        "description": "Compare two report versions and return a structural diff.",
+        "operationId": "compare_reports_reports_compare_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompareReportsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionComparisonResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare Reports",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/generate": {
+      "post": {
+        "description": "Generate a new enterprise assessment report.",
+        "operationId": "generate_report_reports_generate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__report_authority__schemas__GenerateReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Report",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/health": {
+      "get": {
+        "description": "Report Authority health check \u2014 no authentication required.",
+        "operationId": "report_health_reports_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Report Health",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/statistics": {
+      "get": {
+        "description": "Tenant-level report statistics.",
+        "operationId": "report_statistics_reports_statistics_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportStatisticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Statistics",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}": {
+      "get": {
+        "description": "Get a single report by ID.",
+        "operationId": "get_report_reports__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}/bundle": {
+      "get": {
+        "description": "Get export bundle metadata for a report (creates a PENDING bundle if none exists).",
+        "operationId": "get_report_bundle_reports__report_id__bundle_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BundleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Bundle",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}/bundle/download": {
+      "get": {
+        "description": "Download the signed ZIP export bundle for a report.",
+        "operationId": "download_report_bundle_reports__report_id__bundle_download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "application/zip": {}
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Report Bundle",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}/download/html": {
+      "get": {
+        "description": "Download the HTML rendering of a report.",
+        "operationId": "download_report_html_reports__report_id__download_html_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/html": {}
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Report Html",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}/download/json": {
+      "get": {
+        "description": "Download the canonical JSON rendering of a report.",
+        "operationId": "download_report_json_reports__report_id__download_json_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Report Json",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}/download/pdf": {
+      "get": {
+        "description": "Download the PDF rendering of a report.",
+        "operationId": "download_report_pdf_reports__report_id__download_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "application/pdf": {}
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Report Pdf",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}/manifest": {
+      "get": {
+        "description": "Get the cryptographic manifest for a report.",
+        "operationId": "get_report_manifest_reports__report_id__manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportManifestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Manifest",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}/publish": {
+      "post": {
+        "description": "Publish a generated report (transitions to PUBLISHED state).",
+        "operationId": "publish_report_reports__report_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Report",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}/quality": {
+      "get": {
+        "description": "Get the quality breakdown for a report.",
+        "operationId": "get_report_quality_reports__report_id__quality_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportQualityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Quality",
+        "tags": [
+          "report-authority"
+        ]
+      }
+    },
+    "/reports/{report_id}/verify": {
+      "post": {
+        "description": "Verify a report's integrity against its stored hash and record the audit event.",
+        "operationId": "verify_report_reports__report_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Verify Report Reports  Report Id  Verify Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Report",
+        "tags": [
+          "report-authority"
         ]
       }
     },

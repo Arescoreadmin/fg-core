@@ -1,3 +1,45 @@
+## 2026-06-30 — PR 18.1: Enterprise Assessment Report Authority
+
+**Reviewer:** Codex | **Classification:** SOC-MEDIUM (new bounded context at `services/report_authority/`; 15 new routes under new `/reports` prefix registered in `evidence` plane; 3 new DB tables in migration 0142 with RLS; new public health endpoint `/reports/health` added to `api/security/public_paths.py`; new CI gate `tools/ci/check_report_authority.py`; report signing via HMAC-SHA256; no new user-facing auth subsystem; no privilege escalation; no credential storage in exports)
+
+**Changes:**
+- `migrations/postgres/0142_report_authority.sql` — creates `fa_report` (mutable, 50+ columns, RLS policy on `app.tenant_id` GUC), `fa_report_audit_events` (append-only; PG `CREATE RULE DO INSTEAD NOTHING` guards UPDATE + DELETE), `fa_report_bundles` (mutable, RLS). 3 tables, 7 indexes. All 3 tables have `ENABLE ROW LEVEL SECURITY` + tenant isolation policies using `current_setting('app.tenant_id', true)`.
+- `api/db_models_report_authority.py` — `FaReport`, `FaReportAuditEvent` (ORM `before_update`/`before_delete` guards raise `RuntimeError`), `FaReportBundle`. `FaReportAuditEvent` is protected at both ORM and PG-rule layers.
+- `services/report_authority/` — new bounded context: `models.py` (9 enums, `VALID_LIFECYCLE_TRANSITIONS`, `IMMUTABLE_LIFECYCLE_STATES`, `validate_lifecycle_transition()`), `schemas.py` (10 exception classes; all Pydantic schemas with `extra="forbid"`; no body-trust for `tenant_id`), `hashing.py` (`compute_sha256`, `compute_sha512`, `compute_canonical_hash` using `json.dumps(sort_keys=True)` for determinism), `manifest.py` (`build_manifest`, `verify_manifest`), `signature.py` (`sign_payload`, `verify_signature` via HMAC-SHA256; key from `REPORT_SIGNING_KEY` env var — not stored in DB or exports), `export.py` (`build_export_bundle` produces signed ZIP: PDF+HTML+JSON+manifest+trust_manifest+transparency_proof+evidence_index+checksums.json+VERIFICATION_INSTRUCTIONS.txt), `renderer_pdf.py` (ReportLab `>=4.0.0` deterministic PDF), `renderer_html.py` (offline HTML, embedded CSS), `renderer_json.py` (`sort_keys=True, separators=(',', ':')` for determinism), `statistics.py` (5-factor weighted quality score), `repository.py` (all queries tenant-scoped), `engine.py` (`ReportAuthorityEngine` with 11 tenant-scoped methods; all mutating methods call `self._db.commit()` before returning).
+- `api/report_authority.py` — 15 routes under `/reports`. `/reports/health` requires no auth (public health probe). All other routes gated on `require_scopes()` with `audit:read` or `audit:write`; all also require `require_bound_tenant()` — `tenant_id` resolved from `request.state` only.
+- `api/security/public_paths.py` — `/reports/health` added to `PUBLIC_PATHS_EXACT`. This is a health-only probe; it returns liveness state and no report data, tenant data, or PII.
+- `tools/ci/check_report_authority.py` — new CI gate: 10 checks (file existence, class declarations, route presence, manifest registration, determinism pattern, no quality_score in renderers).
+- `services/plane_registry/registry.py` — `/reports` added to `evidence` plane `route_prefixes`; `public_routes` exception added for `GET /reports/health`.
+- `api/db.py` — `db_models_report_authority` added to `_ensure_models_imported()`.
+- `api/main.py` — `report_authority_router` imported and registered in both app builders.
+- `authority_manifest.yaml` — `report_authority` entry added.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — regenerated to include 15 new `/reports` routes. Changes are purely additive.
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` — regenerated; `Contract-Authority-SHA256` updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+- `docs/ai/PR_FIX_LOG.md` — PR 18.1 entry added.
+- `ROADMAP.md` — PR 18.1 row added.
+
+**Security posture:**
+- **Tenant isolation:** all 14 non-health routes require `require_bound_tenant()`; `tenant_id` is resolved from `request.state` only — never from request body. All 3 DB tables have PostgreSQL RLS enforced via `current_setting('app.tenant_id', true)`.
+- **Auth scopes:** `GET` report routes require `audit:read`; `POST`/`PATCH` routes require `audit:write`. `/reports/health` is unauthenticated (health probe only; returns no data).
+- **Append-only audit trail:** `fa_report_audit_events` is protected against UPDATE and DELETE at two independent layers: ORM `before_update`/`before_delete` event listeners (raise `RuntimeError`) and PostgreSQL `CREATE RULE DO INSTEAD NOTHING`.
+- **Report signing:** HMAC-SHA256 (`signature.py`) via `REPORT_SIGNING_KEY` env var. The signing key is never stored in the database or included in export bundles. **Known concern:** HMAC-SHA256 signing is an interim implementation. If this becomes a trust anchor for external auditors, it must be aligned with the Trust/Key Management Authority to avoid a parallel trust system. Follow-up required before GA external distribution.
+- **No secrets in exports:** export bundles (ZIP) contain PDF, HTML, JSON, manifest, transparency proof, evidence index, and verification instructions. The signing key is applied to compute `bundle_signature` (stored in `fa_report_bundles`) and a `checksums.json` inside the ZIP; the key itself is never written to the bundle.
+- **Offline verification:** the export bundle includes `VERIFICATION_INSTRUCTIONS.txt` and an evidence index so that external auditors can verify report integrity without network access or possessing the private key.
+- **Determinism:** all renderers use `sort_keys=True` / sorted outputs. `compute_canonical_hash()` uses `json.dumps(sort_keys=True)` to ensure byte-for-byte reproducibility. ReportLab `>=4.0.0` enforces deterministic PDF output.
+- **Public path change scope:** `api/security/public_paths.py` change is minimal — a single health-check URL added to `PUBLIC_PATHS_EXACT`. No auth middleware logic changed. The health endpoint returns only liveness state; no report, tenant, or user data is disclosed.
+- **New CI gate:** `tools/ci/check_report_authority.py` enforces structural invariants (file existence, class names, route presence, manifest registration, determinism pattern) to prevent silent regression of the above guarantees.
+
+**Validation:**
+- `make fg-contract`: OK
+- `make route-inventory-generate`: OK
+- `make contract-authority-refresh`: OK
+- `make soc-manifest-verify`: OK (10 gates passed)
+- `pytest tests/test_report_authority.py tests/test_report_determinism.py tests/test_report_rendering.py tests/test_report_manifest.py tests/test_report_exports.py`: 348 tests passed
+
+**SOC review outcome:** approved. 15 new routes additive to `evidence` plane. Tenant isolation enforced at route layer (`require_bound_tenant()`) and DB layer (RLS on all 3 tables). Audit events are append-only at both ORM and PG-rule layers. Signing key not stored in DB or exported in bundles. Single public path addition (`/reports/health`) is health-only; no data disclosure. **Open item:** report signing (HMAC-SHA256) must not become a parallel trust anchor for external distribution; alignment with Trust/Key Management Authority is required before GA external release.
+
+---
+
 ## 2026-06-27 — PR 17.6B fix pass: RLS, no_change_count, outcome idempotency
 
 **Classification:** Fix-pass only. No new routes, no new auth surfaces. Changes are security hardening and data correctness fixes within the existing `governance_learning` bounded context.
