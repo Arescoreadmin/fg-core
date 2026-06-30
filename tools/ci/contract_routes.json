@@ -350,6 +350,24 @@
     },
     {
       "method": "GET",
+      "path": "/cgin/trust/providers",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/trust/providers/active",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/cgin/trust/providers/{provider_name}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/cgin/trust/verify",
       "scopes": [],
       "source": "contract"
@@ -4669,7 +4687,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-29T23:04:47.150401+00:00",
+  "generated_at": "2026-06-30T12:05:24.716517+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

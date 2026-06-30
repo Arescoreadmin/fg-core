@@ -162,7 +162,7 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 778,
+  "contract_count": 781,
   "contract_only": [],
   "internal_allowed": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
@@ -398,9 +398,6 @@
     "GET /admin/tenants/{tenant_id}/subscriptions/items",
     "GET /admin/tenants/{tenant_id}/usage",
     "GET /admin/usage/all",
-    "GET /cgin/trust/providers",
-    "GET /cgin/trust/providers/active",
-    "GET /cgin/trust/providers/{provider_name}",
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
@@ -505,9 +502,5 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": [
-    "GET /cgin/trust/providers",
-    "GET /cgin/trust/providers/active",
-    "GET /cgin/trust/providers/{provider_name}"
-  ]
+  "unauthorized_runtime_only": []
 }
