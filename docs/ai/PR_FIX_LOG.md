@@ -6,6 +6,28 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-06-30 — pr/18.2-engagement-portal: initial implementation
+
+**Branch:** `pr/18.2-engagement-portal`
+
+**What was done:** Full implementation of Enterprise Engagement Portal Authority (PR 18.2).
+
+**Files created/modified:**
+- `services/engagement_portal/` — new bounded context (7 modules: `engine.py`, `models.py`, `schemas.py`, `repository.py`, `validators.py`, `statistics.py`, `health.py`, `__init__.py`)
+- `api/engagement_portal.py` — 15 routes under `/portal/engagement`
+- `api/db_models_engagement_portal.py` — 3 ORM models (`PortalEngagementPreferences`, `PortalEngagementActivity`, `PortalEngagementNotification`)
+- `migrations/postgres/0143_engagement_portal.sql` — replay-safe migration (DO $ IF NOT EXISTS pattern, no BEGIN/COMMIT wrapper)
+- `tools/ci/check_engagement_portal.py` — 12-check CI gate
+- `tests/test_engagement_portal.py` + 6 additional test files — 905 tests total
+- `api/db.py`, `api/main.py`, `api/security/public_paths.py`, `authority_manifest.yaml`, `services/plane_registry/registry.py`, `ROADMAP.md` — registrations and wiring
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` — contract refresh (SHA256: `bfc24c2509d52cb73e8696e45abd5b7eebcb0ab961e0103525428332f17981d7`)
+- Route inventory and topology snapshots regenerated
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — PR 18.2 SOC review entry added
+
+**Verification:** 905 tests pass; `make fg-smart` PASS; `make fg-contract` PASS; ruff/mypy clean.
+
+---
+
 ### 2026-06-30 — pr/18.1-report-authority: migration replay-safe fix (second pass)
 
 **Root cause (two interacting bugs):**

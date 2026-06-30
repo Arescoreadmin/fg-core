@@ -13092,6 +13092,256 @@
         "auth",
         "tenant"
       ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/activity",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "POST",
+      "path": "/portal/engagement/activity",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/dashboard",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/evidence",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/health",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/notifications",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/preferences",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "PUT",
+      "path": "/portal/engagement/preferences",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/remediation",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/reports",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/search",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/statistics",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/timeline",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/transparency",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/engagement_portal.py",
+      "method": "GET",
+      "path": "/portal/engagement/trust",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "portal:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/governance_portal.py",
       "method": "GET",
       "path": "/portal/governance/acknowledgements",
@@ -16612,7 +16862,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-06-30T18:25:02.078300+00:00",
+  "generated_at": "2026-06-30T23:54:43.619897+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

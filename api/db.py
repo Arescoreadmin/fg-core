@@ -290,6 +290,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_report_authority"
     )  # PR 18.1: Enterprise Assessment Report Authority
+    importlib.import_module(
+        "api.db_models_engagement_portal"
+    )  # PR 18.2: Enterprise Engagement Portal Authority
 
 
 def _get_base():

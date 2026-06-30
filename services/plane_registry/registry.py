@@ -48,6 +48,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/field-assessment",
             "/portal",
             "/portal/governance",
+            "/portal/engagement",
             "/config",
             "/planes",
             "/health",
@@ -91,6 +92,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "audit:",
                 "keys:",
                 "dev:",
+                "portal:",
             ),
             require_any_scope=True,
             tenant_binding_required=True,
@@ -123,6 +125,12 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "Public Ed25519 report signing key endpoint. Required for external "
                 "auditor/client verification of signed reports. Returns no tenant data, "
                 "no customer data, no secrets, and no private key material.",
+            ),
+            ex(
+                "GET",
+                "/portal/engagement/health",
+                "public",
+                "PR 18.2 Engagement Portal health probe — no auth, no tenant data.",
             ),
         ),
         global_routes=(

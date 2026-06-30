@@ -3866,6 +3866,96 @@
     },
     {
       "method": "GET",
+      "path": "/portal/engagement/activity",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/engagement/activity",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/evidence",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/notifications",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/preferences",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PUT",
+      "path": "/portal/engagement/preferences",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/remediation",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/reports",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/search",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/statistics",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/timeline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/transparency",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/portal/engagement/trust",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/portal/governance/acknowledgements",
       "scopes": [],
       "source": "contract"
@@ -4819,7 +4909,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-06-30T18:25:02.098513+00:00",
+  "generated_at": "2026-06-30T23:54:43.640467+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
