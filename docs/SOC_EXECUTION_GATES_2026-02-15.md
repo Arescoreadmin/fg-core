@@ -5168,3 +5168,23 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - `Makefile`, `services/cgin/privacy.py`, `tests/test_cgin_privacy.py`, `tests/test_h14_6_5a_evidence_hardening.py` — minor formatting and mypy annotation fixes; no logic changes.
 
 **SOC review outcome:** approved. Pure CI infrastructure change — zero runtime impact. `fg_smart_gate.py` is invoked only by `make fg-smart` (developer-only CI target); it is not on any request path, not deployed, and not loaded at application startup. The registry file (`context_registry.yaml`) is a build-time configuration artifact — no secrets, no credentials, no sensitive data. Dependency expansion is deterministic (BFS over sorted dependency lists). Circular dependency detection uses DFS with 3-colour marking — fails fast with a human-readable error. Gate commands in the registry are identical to the previous hardcoded commands (no new CI gates added). Adding a new authority now requires only a YAML addition; no Python changes needed.
+
+## 2026-06-29 — PR 17.7B: CGIN Trust & Integrity Authority
+
+**Classification:** New cryptographic integrity layer for CGIN snapshots. New library service modules (`services/cgin/trust.py`, `services/cgin/trust_manifest.py`), new API router (`api/cgin_trust.py`), new CI gate (`tools/ci/check_cgin_trust.py`), route inventory update, ROADMAP update, authority manifest update. No auth logic changes. No DB schema changes. No migrations.
+
+**Critical-path files changed:**
+- `tools/ci/check_cgin_trust.py` — new AST-based CI gate; validates structural correctness of trust module, manifest module, and API router by static analysis and lightweight runtime import probe. Mirrors `check_cgin_privacy.py` structure. No runtime path. No secrets. No network access. Exits 0/1.
+
+**Non-critical-path additions:**
+- `services/cgin/trust.py` — pure library module. `SigningAlgorithm(str, Enum)` with `ED25519_V1 = "ed25519-v1"`. `ACTIVE_SIGNING_ALGORITHM = SigningAlgorithm.ED25519_V1`. Canonicalization (`canonicalize_snapshot`), digest (`generate_digest`, SHA-256, 64-char hex), signing (`sign_payload`, Ed25519 via `cryptography` 46.0.7, base64url no-padding), verification (`verify_payload`, returns bool, never raises). `VerificationResult` dataclass. `verify_snapshot` (tamper detection, never raises). `build_trust_metadata` (constructs trust block with all required fields). No filesystem I/O. No DB I/O. All functions are pure and deterministic given identical inputs.
+- `services/cgin/trust_manifest.py` — `TrustManifest` dataclass; `generate_trust_manifest`; `verify_trust_manifest` (never raises). Self-describing signed authority declaration.
+- `api/cgin_trust.py` — FastAPI router; 4 routes: `GET /cgin/trust/algorithms`, `POST /cgin/trust/verify`, `GET /cgin/trust/verify` (stub for tooling), `GET /cgin/trust/manifest/{snapshot_id}` (freshly generated stub manifest). All routes require `governance:read` scope and are tenant-isolated. Pydantic response models. `tags=["cgin-trust"]`. No DB reads. No secrets. No auth logic changes.
+- `api/main.py` — `cgin_trust_router` import and `app.include_router(cgin_trust_router)` added to both `build_app` and `build_contract_app`.
+- `tools/ci/route_inventory.json` — regenerated to include 4 new CGIN trust routes.
+- `ROADMAP.md` — PR 17.7B row added.
+- `authority_manifest.yaml` — `cgin_trust` library service entry added with `trust_version`, `signing_algorithm`, `canonicalization_version`, `ci_gate`.
+- `tests/test_cgin_trust.py` — 168 deterministic tests across 10 classes (no mocks, no DB, pure-function).
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No DB schema changes. No migration files. No secrets stored or accessed. The trust module never reads private keys from disk — keys are always injected as objects by callers. `verify_snapshot` never raises (all exceptions caught, reported in `errors` list). Algorithm rotation requires only changing `ACTIVE_SIGNING_ALGORITHM` — no other call sites hardcode algorithm strings. The 4 new API routes follow the established `require_scopes` + `require_bound_tenant` pattern identical to all other CGIN routes. No new external dependencies (uses `cryptography` 46.0.7 already in `requirements-shared.txt`).
+
