@@ -12,12 +12,11 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Any
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-    Ed25519PublicKey,
+from services.cgin.key_management import as_provider
+from services.cgin.key_management.provider import (
+    SigningAlgorithm as _KMSigningAlgorithm,
 )
 from services.cgin.privacy import (
     ACTIVE_FINGERPRINT_ALGORITHM,
@@ -25,34 +24,20 @@ from services.cgin.privacy import (
 )
 
 # ---------------------------------------------------------------------------
+# Algorithm registry re-exports — callers continue to import from this module.
+# SigningAlgorithm is defined in key_management.provider (avoids circular
+# imports), but re-exported here so all existing callers are unaffected.
+# ---------------------------------------------------------------------------
+
+SigningAlgorithm = _KMSigningAlgorithm
+ACTIVE_SIGNING_ALGORITHM = SigningAlgorithm.ED25519_V1
+
+# ---------------------------------------------------------------------------
 # Version constants
 # ---------------------------------------------------------------------------
 
 CGIN_TRUST_VERSION = "1.0"
 CGIN_CANONICALIZATION_VERSION = "1.0"
-
-# ---------------------------------------------------------------------------
-# Algorithm registry — cryptographic agility
-# ---------------------------------------------------------------------------
-
-
-class SigningAlgorithm(str, Enum):
-    """Supported CGIN snapshot signing algorithms.
-
-    Add new values here when rotating algorithms; callers never reference
-    raw strings.
-    """
-
-    ED25519_V1 = "ed25519-v1"
-    # Future slots (not yet active):
-    # ED448_V1 = "ed448-v1"
-    # DILITHIUM_V1 = "dilithium-v1"
-    # SPHINCS_V1 = "sphincs-v1"
-
-
-# The active algorithm used by sign_payload(). Changing this value here
-# is the only action needed to rotate the algorithm platform-wide.
-ACTIVE_SIGNING_ALGORITHM = SigningAlgorithm.ED25519_V1
 
 
 # ---------------------------------------------------------------------------
@@ -118,17 +103,10 @@ def _b64url_decode(s: str) -> bytes:
 def sign_payload(canonical_bytes: bytes, private_key: Any) -> str:
     """Sign canonical_bytes with private_key. Returns base64url-encoded signature (no padding).
 
-    For ED25519_V1: private_key must be Ed25519PrivateKey.
+    Accepts a raw Ed25519PrivateKey or any KeyProvider. Raw keys are wrapped
+    automatically in MemoryKeyProvider via as_provider().
     """
-    if ACTIVE_SIGNING_ALGORITHM == SigningAlgorithm.ED25519_V1:
-        if not isinstance(private_key, Ed25519PrivateKey):
-            raise TypeError("Expected Ed25519PrivateKey for ED25519_V1")
-        sig_bytes = private_key.sign(canonical_bytes)
-        return _b64url_encode(sig_bytes)
-
-    raise NotImplementedError(
-        f"Unsupported signing algorithm: {ACTIVE_SIGNING_ALGORITHM}"
-    )
+    return as_provider(private_key).sign(canonical_bytes, ACTIVE_SIGNING_ALGORITHM)
 
 
 def verify_payload(
@@ -139,13 +117,7 @@ def verify_payload(
 ) -> bool:
     """Verify a signature. Returns True on valid, False on any failure. Never raises."""
     try:
-        sig_bytes = _b64url_decode(signature_b64)
-        if algorithm == SigningAlgorithm.ED25519_V1:
-            if not isinstance(public_key, Ed25519PublicKey):
-                return False
-            public_key.verify(sig_bytes, canonical_bytes)
-            return True
-        return False
+        return as_provider(public_key).verify(canonical_bytes, signature_b64, algorithm)
     except Exception:
         return False
 
@@ -211,6 +183,16 @@ def verify_snapshot(
     signing_algorithm_raw = trust.get("signing_algorithm")
     stored_digest = trust.get("digest")
     stored_signature = trust.get("signature")
+    if not isinstance(stored_signature, str):
+        errors.append("missing or invalid signature")
+        return VerificationResult(
+            valid=False,
+            digest_match=digest_match,
+            signature_valid=False,
+            algorithm_supported=algorithm_supported,
+            canonicalization_valid=canonicalization_valid,
+            errors=errors,
+        )
 
     if signing_algorithm_raw is None:
         errors.append("trust block missing signing_algorithm")

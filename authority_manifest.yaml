@@ -18,6 +18,7 @@ library_services:
 - notifications
 - remediation_portal
 - cgin_trust
+- cgin_key_management
 authorities:
   billing:
     engine: services/billing
@@ -416,3 +417,14 @@ cgin_trust:
   trust_module: "services/cgin/trust.py"
   manifest_module: "services/cgin/trust_manifest.py"
   tests: "tests/test_cgin_trust.py"
+cgin_key_management:
+  contract_version: "1.0"
+  provider_registry: "services/cgin/key_management/registry.py"
+  active_provider: "memory"
+  supported_algorithms:
+  - "ed25519-v1"
+  ci_gate: "tools/ci/check_cgin_key_management.py"
+  provider_module: "services/cgin/key_management/provider.py"
+  registry_module: "services/cgin/key_management/registry.py"
+  memory_provider: "services/cgin/key_management/providers/memory.py"
+  tests: "tests/test_cgin_key_management.py"

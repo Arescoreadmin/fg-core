@@ -27092,6 +27092,126 @@
         "title": "PromotionResponse",
         "type": "object"
       },
+      "ProviderCapabilityResponse": {
+        "properties": {
+          "contract_version": {
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "fips_compliant": {
+            "title": "Fips Compliant",
+            "type": "boolean"
+          },
+          "hsm_capable": {
+            "title": "Hsm Capable",
+            "type": "boolean"
+          },
+          "key_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Types",
+            "type": "array"
+          },
+          "offline_capable": {
+            "title": "Offline Capable",
+            "type": "boolean"
+          },
+          "pqc_ready": {
+            "title": "Pqc Ready",
+            "type": "boolean"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
+          },
+          "rotation_supported": {
+            "title": "Rotation Supported",
+            "type": "boolean"
+          },
+          "supported_algorithms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Algorithms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "provider_name",
+          "supported_algorithms",
+          "key_types",
+          "rotation_supported",
+          "fips_compliant",
+          "offline_capable",
+          "hsm_capable",
+          "pqc_ready",
+          "contract_version"
+        ],
+        "title": "ProviderCapabilityResponse",
+        "type": "object"
+      },
+      "ProviderInfoResponse": {
+        "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/ProviderCapabilityResponse"
+          },
+          "contract_version": {
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
+          },
+          "provider_version": {
+            "title": "Provider Version",
+            "type": "string"
+          },
+          "supported_algorithms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Algorithms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "provider_name",
+          "provider_version",
+          "contract_version",
+          "supported_algorithms",
+          "health",
+          "capabilities"
+        ],
+        "title": "ProviderInfoResponse",
+        "type": "object"
+      },
+      "ProvidersResponse": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "string"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderInfoResponse"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers",
+          "active"
+        ],
+        "title": "ProvidersResponse",
+        "type": "object"
+      },
       "QuestionnaireCoverageResponse": {
         "properties": {
           "assessed_count": {
@@ -44696,7 +44816,7 @@
     },
     "/cgin/trust/manifest/{snapshot_id}": {
       "get": {
-        "description": "Return a freshly generated trust manifest demonstrating the structure.\n\nReal storage integration is out of scope for PR 17.7B.",
+        "description": "Return a freshly generated trust manifest demonstrating the structure.",
         "operationId": "get_manifest_cgin_trust_manifest__snapshot_id__get",
         "parameters": [
           {
@@ -44754,6 +44874,186 @@
           }
         },
         "summary": "Get Manifest",
+        "tags": [
+          "cgin-trust"
+        ]
+      }
+    },
+    "/cgin/trust/providers": {
+      "get": {
+        "description": "List all registered key providers and the active provider name.",
+        "operationId": "list_providers_cgin_trust_providers_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvidersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Providers",
+        "tags": [
+          "cgin-trust"
+        ]
+      }
+    },
+    "/cgin/trust/providers/active": {
+      "get": {
+        "description": "Return info about the currently active key provider.",
+        "operationId": "get_active_provider_cgin_trust_providers_active_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderInfoResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Active Provider",
+        "tags": [
+          "cgin-trust"
+        ]
+      }
+    },
+    "/cgin/trust/providers/{provider_name}": {
+      "get": {
+        "description": "Return info about a specific key provider by name.",
+        "operationId": "get_provider_cgin_trust_providers__provider_name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_name",
+            "required": true,
+            "schema": {
+              "title": "Provider Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderInfoResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Provider not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Provider",
         "tags": [
           "cgin-trust"
         ]

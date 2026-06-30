@@ -16447,4 +16447,29 @@ Result:
 - `services/plane_registry/registry.py` (modified — `/cgin/trust` prefix added to control plane allowlist)
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — 17.7B SOC review entry)
 - `ROADMAP.md` (modified — PR 17.7B row added)
+
+### 2026-06-30 — PR 17.7C: CGIN Enterprise Key Management Authority
+
+**Summary:** Provider-based key management architecture layered on top of 17.7B. Introduces `KeyProvider` as a `@runtime_checkable Protocol`, `MemoryKeyProvider` (in-process Ed25519, exact 17.7B behaviour), `ProviderRegistry`/`ACTIVE_PROVIDER_REGISTRY` singleton, and 6 enterprise stub providers (AWS KMS, Azure Key Vault, Google KMS, Vault, PKCS#11, HSM Generic). `sign_payload`/`verify_payload` in trust.py delegate through `as_provider()` — zero changes to existing callers. 256 new deterministic tests. No DB schema changes. No migrations. No new external dependencies.
+
+**Files changed:**
+- `services/cgin/key_management/__init__.py` (new — exports + `as_provider()`)
+- `services/cgin/key_management/provider.py` (new — `SigningAlgorithm`, `ACTIVE_SIGNING_ALGORITHM`, `KeyProvider` protocol, `ProviderHealth`, `ProviderCapabilityManifest`, `ProviderMetadata`, `AuditEvent`, `CryptoPolicy`)
+- `services/cgin/key_management/registry.py` (new — `ProviderRegistry`, `ACTIVE_PROVIDER_REGISTRY`)
+- `services/cgin/key_management/providers/__init__.py` (new — empty)
+- `services/cgin/key_management/providers/memory.py` (new — `MemoryKeyProvider`)
+- `services/cgin/key_management/providers/aws_kms.py` (new — stub)
+- `services/cgin/key_management/providers/azure_key_vault.py` (new — stub)
+- `services/cgin/key_management/providers/google_kms.py` (new — stub)
+- `services/cgin/key_management/providers/vault.py` (new — stub)
+- `services/cgin/key_management/providers/pkcs11.py` (new — stub)
+- `services/cgin/key_management/providers/hsm.py` (new — stub)
+- `services/cgin/trust.py` (modified — removed Ed25519 imports; `SigningAlgorithm`/`ACTIVE_SIGNING_ALGORITHM` re-exported from `key_management.provider`; `sign_payload`/`verify_payload` delegate through `as_provider()`)
+- `services/cgin/trust_manifest.py` (modified — `private_key→signing_key`, `public_key→verification_key` parameter renames)
+- `api/cgin_trust.py` (modified — removed `Ed25519PrivateKey` import; `get_manifest` uses `ACTIVE_PROVIDER_REGISTRY.active()`; 3 new routes under `/cgin/trust/providers`)
+- `tools/ci/check_cgin_key_management.py` (new — AST + runtime CI gate)
+- `tests/test_cgin_key_management.py` (new — 256 deterministic tests across 14 classes)
+- `authority_manifest.yaml` (modified — `cgin_key_management` library service section added)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — 17.7C SOC review entry)
+- `ROADMAP.md` (modified — PR 17.7C row added)
 - CI artifacts regenerated: `contracts/core/openapi.json`, `schemas/api/openapi.json`, `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/contract_routes.json`, `tools/ci/topology.sha256`

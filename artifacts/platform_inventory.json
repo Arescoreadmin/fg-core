@@ -10,7 +10,7 @@
   "governance": {
     "contract_count": 778,
     "contract_only": [],
-    "runtime_count": 944,
+    "runtime_count": 947,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -68,6 +68,9 @@
       "GET /admin/tenants/{tenant_id}/subscriptions/items",
       "GET /admin/tenants/{tenant_id}/usage",
       "GET /admin/usage/all",
+      "GET /cgin/trust/providers",
+      "GET /cgin/trust/providers/active",
+      "GET /cgin/trust/providers/{provider_name}",
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
@@ -179,7 +182,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "f2ada52fc4693797ee0d082f5685416f91131345bb9195af5f5dde9058c1d369",
+  "governance_fingerprint": "4f7b47179c2c838a2fe6b169219f882d43dc488f9aaf6b45c7eac1126add94ba",
   "planes": [
     {
       "compat": {
@@ -477,6 +480,9 @@
       "GET /admin/usage/all",
       "GET /cgin/trust/algorithms",
       "GET /cgin/trust/manifest/{snapshot_id}",
+      "GET /cgin/trust/providers",
+      "GET /cgin/trust/providers/active",
+      "GET /cgin/trust/providers/{provider_name}",
       "GET /cgin/trust/verify",
       "GET /compliance-cp/controls",
       "GET /compliance-cp/portfolio",

@@ -1,3 +1,16 @@
+## 2026-06-30 — PR 17.7C: CGIN Enterprise Key Management Authority
+
+**Classification:** New provider-based key management architecture layered on 17.7B. No new DB tables, no migrations, no new planes, no auth logic changes. Additive — 3 new GET routes under existing `/cgin/trust/providers` prefix already registered in the `control` plane. No secrets stored. No external dependencies added.
+
+**Critical-path files changed:**
+- `tools/ci/check_cgin_key_management.py` (new — AST + runtime CI gate for key management module)
+- `api/cgin_trust.py` (modified — removed `Ed25519PrivateKey` import; 3 new provider info routes)
+- `services/cgin/trust.py` (modified — `sign_payload`/`verify_payload` delegate through `as_provider()`)
+
+**SOC review outcome:** approved. No new auth surface — all 3 new routes under `/cgin/trust/providers` require existing `governance:read` scope enforced by `require_scopes()` + `require_bound_tenant()`. No cross-tenant data access. `KeyProvider` is a `@runtime_checkable Protocol` — no runtime cost when not used. `ACTIVE_PROVIDER_REGISTRY` is a module-level singleton seeded with an ephemeral `Ed25519PrivateKey.generate()` key at import time — appropriate for dev/test; enterprise providers (AWS KMS, Azure Key Vault, Google KMS, Vault, PKCS#11, HSM) are stub stubs with `health()=NOT_IMPLEMENTED` and `sign`/`verify` raising `NotImplementedError` — they cannot be activated without explicit code changes. `as_provider()` wraps raw `Ed25519PrivateKey`/`Ed25519PublicKey` in `MemoryKeyProvider` transparently — backward-compatible, zero breaking changes to callers. `MemoryKeyProvider` stores the raw key in a private instance variable (`_private_key`, `_public_key`); no serialization, no network calls, no persistence. `ProviderRegistry` validates on construction: duplicate provider names and missing active-name both raise `ValueError` — no silent misconfiguration. All 173 existing `test_cgin_trust.py` tests pass unchanged. 256 new `test_cgin_key_management.py` tests added. No Prometheus counters added (no state mutations in new routes). `tools/ci/check_cgin_key_management.py` runs both AST and lightweight import checks — safe to run in CI without credentials.
+
+---
+
 ## 2026-06-26 — PR 17.5: Remediation Effectiveness Analytics Authority
 
 **Classification:** New remediation analytics bounded context. 4 new DB tables, 11 new routes under new `/remediation-effectiveness` prefix registered in the `control` plane. No auth logic changes. DB schema change is additive-only. No secrets stored.
