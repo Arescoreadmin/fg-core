@@ -127,6 +127,7 @@ from api.entitlements import (
 from api.subscriptions import router as subscriptions_router
 from api.billing_v2 import router as billing_v2_router
 from api.reports_engine import router as reports_engine_router
+from api.report_authority import router as report_authority_router
 from api.signing import router as signing_router
 from api.stripe_webhooks import router as stripe_webhooks_router
 from api.tenant_rbac_router import router as tenant_rbac_router
@@ -711,6 +712,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
+    app.include_router(report_authority_router)
     app.include_router(signing_router)
     app.include_router(governance_report_router)
     app.include_router(governance_timeline_router)
@@ -1162,6 +1164,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
+    app.include_router(report_authority_router)
     app.include_router(signing_router)
     app.include_router(governance_report_router)
     app.include_router(governance_timeline_router)

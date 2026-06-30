@@ -287,6 +287,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_optimization"
     )  # PR 17.6D: Governance Optimization Engine
+    importlib.import_module(
+        "api.db_models_report_authority"
+    )  # PR 18.1: Enterprise Assessment Report Authority
 
 
 def _get_base():

@@ -409,6 +409,25 @@ authorities:
     consumers:
     - services/governance_chain/engine.py
     - services/evidence_freshness_authority/engine.py
+  report_authority:
+    engine: services/report_authority
+    api_file: api/report_authority.py
+    db_models: api/db_models_report_authority.py
+    route_prefixes:
+    - /reports
+    tables:
+    - fa_report
+    - fa_report_audit_events
+    - fa_report_bundles
+    tests:
+    - tests/test_report_authority.py
+    - tests/test_report_determinism.py
+    - tests/test_report_rendering.py
+    - tests/test_report_manifest.py
+    - tests/test_report_exports.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
 cgin_trust:
   trust_version: "1.0"
   signing_algorithm: "ed25519-v1"
