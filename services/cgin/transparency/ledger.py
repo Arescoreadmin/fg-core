@@ -128,13 +128,14 @@ class TransparencyLedger:
         if root is None:
             raise RuntimeError("No root built yet; call build_root() first")
 
-        entries = self._store.all_entries()
+        entries = self._store.all_entries()[: root.entry_count]
         entry_index = next(
             (i for i, e in enumerate(entries) if e.entry_id == entry_id), None
         )
         if entry_index is None:
-            raise KeyError(
-                f"entry_id {entry_id!r} not in ordered list (internal error)"
+            raise RuntimeError(
+                f"entry_id {entry_id!r} is not covered by the latest root "
+                f"(root covers {root.entry_count} entries); call build_root() to include it"
             )
 
         leaves = [e.artifact_digest.encode("utf-8") for e in entries]

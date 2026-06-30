@@ -102,13 +102,14 @@ def verify_entry_in_store(
     try:
         from services.cgin.transparency.merkle import MerkleTree
 
-        entries = store.all_entries()
+        entries = store.all_entries()[: root.entry_count]
         entry_index = next(
             (i for i, e in enumerate(entries) if e.entry_id == entry_id), None
         )
         if entry_index is None:
             errors.append(
-                "entry found in store but not in ordered list (internal error)"
+                f"entry is not covered by the selected root "
+                f"(root covers {root.entry_count} entries)"
             )
         else:
             leaves = [e.artifact_digest.encode("utf-8") for e in entries]
@@ -151,7 +152,11 @@ def verify_entry_in_store(
         }
         canonical_bytes = canonicalize_snapshot(root_body)
         # Use the injected provider if available, otherwise fall back to active registry
-        provider = key_provider if key_provider is not None else ACTIVE_PROVIDER_REGISTRY.active()
+        provider = (
+            key_provider
+            if key_provider is not None
+            else ACTIVE_PROVIDER_REGISTRY.active()
+        )
         root_signature_valid = provider.verify(
             canonical_bytes, root.signature, ACTIVE_SIGNING_ALGORITHM
         )

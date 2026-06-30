@@ -856,6 +856,49 @@ class TestTransparencyVerification:
         )
         assert result.valid is True
 
+    def test_entry_appended_after_root_proof_valid_false(self):
+        # An entry that exists in the store but is beyond the signed root prefix
+        # must not verify as proof_valid.
+        ledger, _ = _make_ledger()
+        _append_n(ledger, 2)
+        ledger.build_root()
+        late = ledger.append(
+            entry_type="t", artifact_digest="dd" * 32, tenant_fingerprint="f" * 32
+        )
+        result = ledger.verify_entry(late.entry_id, late.artifact_digest)
+        assert result.proof_valid is False
+        assert result.valid is False
+
+    def test_entry_appended_after_root_error_mentions_prefix(self):
+        # Error message should mention the root's entry count boundary.
+        ledger, _ = _make_ledger()
+        _append_n(ledger, 3)
+        ledger.build_root()
+        late = ledger.append(
+            entry_type="t", artifact_digest="ee" * 32, tenant_fingerprint="f" * 32
+        )
+        result = ledger.verify_entry(late.entry_id, late.artifact_digest)
+        assert any("not covered" in e or "root covers" in e for e in result.errors)
+
+    def test_verify_covered_entry_valid_after_further_appends(self):
+        # Entries within the signed prefix must still verify after more are appended.
+        ledger, _ = _make_ledger()
+        entries = _append_n(ledger, 3)
+        ledger.build_root()
+        _append_n(ledger, 4)
+        result = ledger.verify_entry(entries[2].entry_id, entries[2].artifact_digest)
+        assert result.valid is True
+
+    def test_verify_uses_root_prefix_tree_not_full_store(self):
+        # Recomputed tree must match root_digest when built from prefix only.
+        ledger, _ = _make_ledger()
+        entries = _append_n(ledger, 2)
+        ledger.build_root()
+        _append_n(ledger, 10)  # extend store well beyond root
+        result = ledger.verify_entry(entries[0].entry_id, entries[0].artifact_digest)
+        assert result.proof_valid is True
+        assert result.valid is True
+
 
 # ===========================================================================
 # 7. TestMerkleProof
@@ -1707,6 +1750,37 @@ class TestLedgerEdgeCases:
         ledger.build_root()
         proof = ledger.membership_proof(entries[0].entry_id)
         assert proof.transparency_version == TRANSPARENCY_VERSION
+
+    def test_membership_proof_entry_not_in_root_raises_runtime_error(self):
+        # Build root over 2 entries, then append a 3rd without rebuilding.
+        # The 3rd entry exists in the store but is not covered by the root.
+        ledger, _ = _make_ledger()
+        _append_n(ledger, 2)
+        ledger.build_root()
+        late = ledger.append(
+            entry_type="t", artifact_digest="cc" * 32, tenant_fingerprint="f" * 32
+        )
+        with pytest.raises(RuntimeError, match="not covered by the latest root"):
+            ledger.membership_proof(late.entry_id)
+
+    def test_membership_proof_covered_entries_still_valid_after_append(self):
+        # Entries inside the root prefix remain provable even after more entries arrive.
+        ledger, _ = _make_ledger()
+        entries = _append_n(ledger, 3)
+        ledger.build_root()
+        _append_n(ledger, 2)  # appended but not yet rooted
+        proof = ledger.membership_proof(entries[1].entry_id)
+        assert proof.entry_index == 1
+
+    def test_membership_proof_uses_root_prefix_not_full_store(self):
+        # Proof tree must be built from root.entry_count leaves, so
+        # proof.root_digest matches the signed root even after further appends.
+        ledger, _ = _make_ledger()
+        entries = _append_n(ledger, 2)
+        root = ledger.build_root()
+        _append_n(ledger, 5)  # extend store beyond root
+        proof = ledger.membership_proof(entries[0].entry_id)
+        assert proof.root_digest == root.root_digest
 
 
 # ---------------------------------------------------------------------------
