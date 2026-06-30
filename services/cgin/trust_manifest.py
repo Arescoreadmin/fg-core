@@ -43,7 +43,7 @@ class TrustManifest:
 
 def generate_trust_manifest(
     authority_name: str,
-    private_key: Any,
+    signing_key: Any,
     *,
     authority_version: str = "1.0",
     algorithm: SigningAlgorithm = ACTIVE_SIGNING_ALGORITHM,
@@ -66,7 +66,7 @@ def generate_trust_manifest(
 
     canonical_bytes = canonicalize_snapshot(body)
     digest = generate_digest(canonical_bytes)
-    signature = sign_payload(canonical_bytes, private_key)
+    signature = sign_payload(canonical_bytes, signing_key)
 
     return TrustManifest(
         authority_name=authority_name,
@@ -85,7 +85,7 @@ def generate_trust_manifest(
 
 
 def verify_trust_manifest(
-    manifest: TrustManifest, public_key: Any
+    manifest: TrustManifest, verification_key: Any
 ) -> VerificationResult:
     """Verify a TrustManifest. Reconstructs the body, re-canonicalizes, verifies. Never raises."""
     errors: list[str] = []
@@ -132,7 +132,7 @@ def verify_trust_manifest(
         errors.append("digest mismatch")
 
     signature_valid = verify_payload(
-        canonical_bytes, manifest.signature, public_key, algorithm
+        canonical_bytes, manifest.signature, verification_key, algorithm
     )
     if not signature_valid:
         errors.append("signature verification failed")
