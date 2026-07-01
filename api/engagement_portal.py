@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
-from api.db import get_engine
+from api.db import get_engine, set_tenant_context
 from services.engagement_portal.engine import EngagementPortalEngine
 from services.engagement_portal.schemas import (
     ActivityFeedResponse,
@@ -79,6 +79,7 @@ def portal_engagement_dashboard(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_dashboard(assessment_id=assessment_id)
         db.commit()
@@ -103,6 +104,7 @@ def portal_engagement_timeline(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_timeline(limit=limit, offset=offset)
         db.commit()
@@ -127,6 +129,7 @@ def portal_engagement_evidence(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_evidence_workspace(limit=limit, offset=offset)
         db.commit()
@@ -151,6 +154,7 @@ def portal_engagement_reports(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_report_workspace(limit=limit, offset=offset)
         db.commit()
@@ -175,6 +179,7 @@ def portal_engagement_remediation(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_remediation_workspace(limit=limit, offset=offset)
         db.commit()
@@ -195,6 +200,7 @@ def portal_engagement_trust(request: Request) -> TrustWorkspaceResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_trust_workspace()
         db.commit()
@@ -217,6 +223,7 @@ def portal_engagement_transparency(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_transparency_workspace()
         db.commit()
@@ -242,6 +249,7 @@ def portal_engagement_activity_feed(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_activity_feed(limit=limit, offset=offset, workspace=workspace)
         db.commit()
@@ -262,6 +270,7 @@ def portal_engagement_statistics(request: Request) -> PortalStatisticsResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_statistics()
         db.commit()
@@ -287,6 +296,7 @@ def portal_engagement_search(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.search(query=q, limit=limit, offset=offset)
         db.commit()
@@ -311,6 +321,7 @@ def portal_engagement_notifications(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_notifications(limit=limit, offset=offset)
         db.commit()
@@ -331,6 +342,7 @@ def portal_engagement_preferences_get(request: Request) -> PreferencesResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.get_preferences()
         db.commit()
@@ -354,6 +366,7 @@ def portal_engagement_preferences_put(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         result = svc.update_preferences(body)
         db.commit()
@@ -376,12 +389,14 @@ def portal_engagement_activity_record(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as db:
+        set_tenant_context(db, tenant_id)
         svc = EngagementPortalEngine(db, tenant_id=tenant_id)
         svc.record_activity(
             event_type=body.event_type,
             workspace=body.workspace,
             entity_id=body.entity_id,
             actor_id=_actor(request),
+            metadata=body.metadata,
         )
         db.commit()
     return None

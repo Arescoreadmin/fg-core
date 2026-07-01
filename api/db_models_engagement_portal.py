@@ -36,9 +36,7 @@ class PortalEngagementPreferences(Base):
         String(255), nullable=False, unique=True, index=True
     )
     theme: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    notification_email: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1
-    )
+    notification_email: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     language: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)

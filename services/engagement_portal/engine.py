@@ -15,6 +15,7 @@ Caller (API layer) owns db.commit().
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -548,6 +549,7 @@ class EngagementPortalEngine:
         entity_id: str | None = None,
         actor_id: str | None = None,
         summary: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         if not isinstance(event_type, str) or not event_type.strip():
             raise PortalAccessDenied("event_type must be non-empty")
@@ -559,6 +561,7 @@ class EngagementPortalEngine:
             entity_id=entity_id,
             actor_id=actor_id,
             summary=summary,
+            metadata_json=json.dumps(metadata) if metadata is not None else None,
         )
 
 
