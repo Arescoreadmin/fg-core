@@ -449,6 +449,32 @@ authorities:
     cgin_snapshot: false
     cgin_anonymized: false
     consumers: []
+  remediation_authority:
+    engine: services/remediation_authority
+    api_file: api/remediation_authority.py
+    db_models: api/db_models_remediation_authority.py
+    route_prefixes:
+    - /remediation-authority
+    tables:
+    - fa_rem_plan
+    - fa_rem_task
+    - fa_rem_timeline
+    - fa_rem_assignment
+    - fa_rem_dependency
+    - fa_rem_verification
+    - fa_rem_evidence_link
+    tests:
+    - tests/test_remediation_authority.py
+    - tests/test_remediation_workflow.py
+    - tests/test_remediation_state_machine.py
+    - tests/test_remediation_assignments.py
+    - tests/test_remediation_dependencies.py
+    - tests/test_remediation_verification.py
+    - tests/test_remediation_effectiveness.py
+    - tests/test_remediation_dashboard.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
 cgin_trust:
   trust_version: "1.0"
   signing_algorithm: "ed25519-v1"

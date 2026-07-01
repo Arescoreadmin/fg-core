@@ -4381,6 +4381,80 @@
         "title": "AssigneeType",
         "type": "string"
       },
+      "AssignmentListResponse": {
+        "additionalProperties": false,
+        "description": "List of assignments (optionally filtered by task).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssignmentResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "AssignmentListResponse",
+        "type": "object"
+      },
+      "AssignmentResponse": {
+        "additionalProperties": false,
+        "description": "Assignment record.",
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "task_id",
+          "actor_id",
+          "role",
+          "created_at"
+        ],
+        "title": "AssignmentResponse",
+        "type": "object"
+      },
+      "AssignmentRole": {
+        "description": "Role of an actor assigned to a remediation task.",
+        "enum": [
+          "OWNER",
+          "REVIEWER",
+          "APPROVER",
+          "CONTRIBUTOR"
+        ],
+        "title": "AssignmentRole",
+        "type": "string"
+      },
       "AttachEvidenceBody": {
         "additionalProperties": false,
         "properties": {
@@ -9683,6 +9757,34 @@
         "title": "CreateAssetRequest",
         "type": "object"
       },
+      "CreateAssignmentRequest": {
+        "additionalProperties": false,
+        "description": "Create an assignment for a task.",
+        "properties": {
+          "actor_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/AssignmentRole"
+          },
+          "task_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "actor_id",
+          "role"
+        ],
+        "title": "CreateAssignmentRequest",
+        "type": "object"
+      },
       "CreateAttestationRequest": {
         "properties": {
           "actor_type": {
@@ -9956,6 +10058,34 @@
           "review_date"
         ],
         "title": "CreateControlReviewRequest",
+        "type": "object"
+      },
+      "CreateDependencyRequest": {
+        "additionalProperties": false,
+        "description": "Create a dependency edge between two tasks.",
+        "properties": {
+          "dependency_type": {
+            "$ref": "#/components/schemas/DependencyType",
+            "default": "BLOCKS"
+          },
+          "source_task_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Task Id",
+            "type": "string"
+          },
+          "target_task_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Target Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_task_id",
+          "target_task_id"
+        ],
+        "title": "CreateDependencyRequest",
         "type": "object"
       },
       "CreateDeploymentRequest": {
@@ -10969,6 +11099,59 @@
         "title": "CreateOrgRequest",
         "type": "object"
       },
+      "CreatePlanRequest": {
+        "additionalProperties": false,
+        "description": "Create a remediation plan.",
+        "properties": {
+          "assessment_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CreatePlanRequest",
+        "type": "object"
+      },
       "CreatePolicyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11482,80 +11665,6 @@
         "title": "CreateSubscriptionRequest",
         "type": "object"
       },
-      "CreateTaskRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "assessment_id": {
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Assessment Id",
-            "type": "string"
-          },
-          "assigned_to": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assigned To"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 10000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "finding_id": {
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Finding Id",
-            "type": "string"
-          },
-          "priority": {
-            "$ref": "#/components/schemas/RemediationPriority",
-            "default": "medium"
-          },
-          "recommended_action": {
-            "anyOf": [
-              {
-                "maxLength": 10000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recommended Action"
-          },
-          "task_metadata": {
-            "title": "Task Metadata",
-            "type": "object"
-          },
-          "title": {
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "finding_id",
-          "assessment_id",
-          "title"
-        ],
-        "title": "CreateTaskRequest",
-        "type": "object"
-      },
       "CreateUsageMeterRequest": {
         "properties": {
           "aggregation_mode": {
@@ -11591,77 +11700,6 @@
           "billing_category"
         ],
         "title": "CreateUsageMeterRequest",
-        "type": "object"
-      },
-      "CreateVerificationRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "verification_confidence": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verification Confidence"
-          },
-          "verification_method": {
-            "anyOf": [
-              {
-                "maxLength": 256,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verification Method"
-          },
-          "verification_notes": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verification Notes"
-          },
-          "verification_result": {
-            "$ref": "#/components/schemas/VerificationResult"
-          },
-          "verification_type": {
-            "$ref": "#/components/schemas/VerificationType"
-          },
-          "verified_actor_type": {
-            "$ref": "#/components/schemas/VerificationActorType",
-            "default": "HUMAN"
-          },
-          "verified_at": {
-            "description": "ISO 8601 UTC",
-            "title": "Verified At",
-            "type": "string"
-          },
-          "verified_by": {
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Verified By",
-            "type": "string"
-          }
-        },
-        "required": [
-          "verification_type",
-          "verification_result",
-          "verified_by",
-          "verified_at"
-        ],
-        "title": "CreateVerificationRequest",
         "type": "object"
       },
       "CreateVerificationRequestRequest": {
@@ -11851,177 +11889,6 @@
           }
         },
         "title": "CycleRunRequest",
-        "type": "object"
-      },
-      "DashboardResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "assessment_progress": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assessment Progress"
-          },
-          "engagement_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Engagement Id"
-          },
-          "evidence_collected": {
-            "title": "Evidence Collected",
-            "type": "integer"
-          },
-          "evidence_freshness_pct": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Evidence Freshness Pct"
-          },
-          "evidence_verified": {
-            "title": "Evidence Verified",
-            "type": "integer"
-          },
-          "generated_at": {
-            "title": "Generated At",
-            "type": "string"
-          },
-          "governance_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Governance Score"
-          },
-          "latest_report_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Report Id"
-          },
-          "latest_report_state": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Report State"
-          },
-          "open_findings": {
-            "title": "Open Findings",
-            "type": "integer"
-          },
-          "overall_readiness": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Overall Readiness"
-          },
-          "pending_approvals": {
-            "title": "Pending Approvals",
-            "type": "integer"
-          },
-          "remediation_progress": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Remediation Progress"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          },
-          "transparency_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transparency Status"
-          },
-          "trust_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trust Status"
-          },
-          "verification_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verification Status"
-          }
-        },
-        "required": [
-          "tenant_id",
-          "engagement_id",
-          "overall_readiness",
-          "governance_score",
-          "assessment_progress",
-          "evidence_collected",
-          "evidence_verified",
-          "evidence_freshness_pct",
-          "open_findings",
-          "remediation_progress",
-          "pending_approvals",
-          "latest_report_id",
-          "latest_report_state",
-          "verification_status",
-          "trust_status",
-          "transparency_status",
-          "generated_at"
-        ],
-        "title": "DashboardResponse",
         "type": "object"
       },
       "DecisionExplain": {
@@ -12438,6 +12305,79 @@
         ],
         "title": "DependencyChainResponse",
         "type": "object"
+      },
+      "DependencyListResponse": {
+        "additionalProperties": false,
+        "description": "List of dependency edges.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DependencyResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "DependencyListResponse",
+        "type": "object"
+      },
+      "DependencyResponse": {
+        "additionalProperties": false,
+        "description": "Dependency edge record.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "dependency_type": {
+            "title": "Dependency Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source_task_id": {
+            "title": "Source Task Id",
+            "type": "string"
+          },
+          "target_task_id": {
+            "title": "Target Task Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "source_task_id",
+          "target_task_id",
+          "dependency_type",
+          "created_at"
+        ],
+        "title": "DependencyResponse",
+        "type": "object"
+      },
+      "DependencyType": {
+        "description": "Kind of dependency edge between tasks.",
+        "enum": [
+          "BLOCKS",
+          "REQUIRES",
+          "RELATED"
+        ],
+        "title": "DependencyType",
+        "type": "string"
       },
       "DeploymentSpecRequest": {
         "additionalProperties": false,
@@ -17699,6 +17639,51 @@
         "title": "FindingStatusPatchResponse",
         "type": "object"
       },
+      "ForecastResponse": {
+        "additionalProperties": false,
+        "description": "Deterministic forecast summary.",
+        "properties": {
+          "average_velocity_per_day": {
+            "title": "Average Velocity Per Day",
+            "type": "number"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "horizon_days": {
+            "title": "Horizon Days",
+            "type": "integer"
+          },
+          "open_task_count": {
+            "title": "Open Task Count",
+            "type": "integer"
+          },
+          "predicted_breaches": {
+            "title": "Predicted Breaches",
+            "type": "integer"
+          },
+          "predicted_completions": {
+            "title": "Predicted Completions",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "horizon_days",
+          "predicted_completions",
+          "predicted_breaches",
+          "open_task_count",
+          "average_velocity_per_day",
+          "computed_at"
+        ],
+        "title": "ForecastResponse",
+        "type": "object"
+      },
       "FrameworkControlCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -21114,6 +21099,107 @@
           "entity_id"
         ],
         "title": "HeartbeatRequest",
+        "type": "object"
+      },
+      "HistoryEntryResponse": {
+        "additionalProperties": false,
+        "description": "Alias structure for state-history entries.",
+        "properties": {
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "from_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From State"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "to_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To State"
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "from_state",
+          "to_state",
+          "actor_id",
+          "reason",
+          "created_at"
+        ],
+        "title": "HistoryEntryResponse",
+        "type": "object"
+      },
+      "HistoryResponse": {
+        "additionalProperties": false,
+        "description": "Task state history.",
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntryResponse"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task_id",
+          "entries",
+          "total"
+        ],
+        "title": "HistoryResponse",
         "type": "object"
       },
       "IngestOutcomeRequest": {
@@ -25356,6 +25442,127 @@
           "pinned_at"
         ],
         "title": "PinBaselineResponse",
+        "type": "object"
+      },
+      "PlanListResponse": {
+        "additionalProperties": false,
+        "description": "Paginated list of plans.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlanResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "PlanListResponse",
+        "type": "object"
+      },
+      "PlanResponse": {
+        "additionalProperties": false,
+        "description": "Full representation of a remediation plan.",
+        "properties": {
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "plan_state": {
+            "title": "Plan State",
+            "type": "string"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "title",
+          "description",
+          "plan_state",
+          "assessment_id",
+          "target_date",
+          "created_at",
+          "updated_at",
+          "completed_at"
+        ],
+        "title": "PlanResponse",
         "type": "object"
       },
       "PlaybookNextActionResponse": {
@@ -30791,15 +30998,17 @@
         "title": "RemediationPhaseFinding",
         "type": "object"
       },
-      "RemediationPriority": {
+      "RemediationPlanState": {
+        "description": "Lifecycle of a remediation plan.",
         "enum": [
-          "critical",
-          "high",
-          "medium",
-          "low",
-          "informational"
+          "DRAFT",
+          "ACTIVE",
+          "ON_HOLD",
+          "COMPLETED",
+          "CANCELLED",
+          "ARCHIVED"
         ],
-        "title": "RemediationPriority",
+        "title": "RemediationPlanState",
         "type": "string"
       },
       "RemediationRecommendationResponse": {
@@ -30948,6 +31157,35 @@
           "accepted_risk"
         ],
         "title": "RemediationStatus",
+        "type": "string"
+      },
+      "RemediationTaskState": {
+        "description": "Lifecycle of a remediation task.",
+        "enum": [
+          "OPEN",
+          "ASSIGNED",
+          "IN_PROGRESS",
+          "BLOCKED",
+          "READY_FOR_REVIEW",
+          "VERIFYING",
+          "APPROVED",
+          "COMPLETED",
+          "CANCELLED",
+          "REOPENED"
+        ],
+        "title": "RemediationTaskState",
+        "type": "string"
+      },
+      "RemediationVerificationState": {
+        "description": "Verification lifecycle of a remediation task closure.",
+        "enum": [
+          "PENDING",
+          "IN_REVIEW",
+          "APPROVED",
+          "REJECTED",
+          "EXPIRED"
+        ],
+        "title": "RemediationVerificationState",
         "type": "string"
       },
       "RemediationWorkspaceItem": {
@@ -33474,6 +33712,54 @@
         "title": "RiskLinkResponse",
         "type": "object"
       },
+      "RiskResponse": {
+        "additionalProperties": false,
+        "description": "Risk reduction summary.",
+        "properties": {
+          "by_priority": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "By Priority",
+            "type": "object"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "mitigated_risk_score": {
+            "title": "Mitigated Risk Score",
+            "type": "number"
+          },
+          "open_risk_score": {
+            "title": "Open Risk Score",
+            "type": "number"
+          },
+          "risk_reduction_pct": {
+            "title": "Risk Reduction Pct",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_risk_score": {
+            "title": "Total Risk Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_risk_score",
+          "open_risk_score",
+          "mitigated_risk_score",
+          "risk_reduction_pct",
+          "by_priority",
+          "computed_at"
+        ],
+        "title": "RiskResponse",
+        "type": "object"
+      },
       "RiskScoreResponse": {
         "properties": {
           "asset_id": {
@@ -34488,45 +34774,6 @@
         "title": "ScoringContractResponse",
         "type": "object"
       },
-      "SearchResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/SearchResultItem"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "query": {
-            "title": "Query",
-            "type": "string"
-          },
-          "took_ms": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Took Ms"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "query",
-          "items",
-          "total",
-          "took_ms"
-        ],
-        "title": "SearchResponse",
-        "type": "object"
-      },
       "SearchResultItem": {
         "additionalProperties": false,
         "properties": {
@@ -35344,6 +35591,82 @@
         "title": "StartProvisioningRequest",
         "type": "object"
       },
+      "StatisticsResponse": {
+        "additionalProperties": false,
+        "description": "Aggregated tenant statistics.",
+        "properties": {
+          "average_completion_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Completion Days"
+          },
+          "by_priority": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Priority",
+            "type": "object"
+          },
+          "by_sla_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Sla Status",
+            "type": "object"
+          },
+          "by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By State",
+            "type": "object"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_plans": {
+            "title": "Total Plans",
+            "type": "integer"
+          },
+          "total_tasks": {
+            "title": "Total Tasks",
+            "type": "integer"
+          },
+          "verifications_approved": {
+            "title": "Verifications Approved",
+            "type": "integer"
+          },
+          "verifications_pending": {
+            "title": "Verifications Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_plans",
+          "total_tasks",
+          "by_state",
+          "by_priority",
+          "by_sla_status",
+          "verifications_pending",
+          "verifications_approved",
+          "average_completion_days",
+          "computed_at"
+        ],
+        "title": "StatisticsResponse",
+        "type": "object"
+      },
       "StatsResponse": {
         "properties": {
           "avg_latency_ms_24h": {
@@ -35696,248 +36019,6 @@
           }
         },
         "title": "SuspendOrgRequest",
-        "type": "object"
-      },
-      "TaskListResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "tasks": {
-            "items": {
-              "$ref": "#/components/schemas/TaskResponse"
-            },
-            "title": "Tasks",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "tasks",
-          "total"
-        ],
-        "title": "TaskListResponse",
-        "type": "object"
-      },
-      "TaskResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "assessment_id": {
-            "title": "Assessment Id",
-            "type": "string"
-          },
-          "assigned_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assigned At"
-          },
-          "assigned_display_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assigned Display Name"
-          },
-          "assigned_to": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assigned To"
-          },
-          "assigned_user_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assigned User Email"
-          },
-          "assigned_user_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assigned User Id"
-          },
-          "closed_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Closed At"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "created_by": {
-            "title": "Created By",
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "due_date": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Due Date"
-          },
-          "finding_id": {
-            "title": "Finding Id",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "last_assignment_change_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Assignment Change At"
-          },
-          "ownership_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ownership Reason"
-          },
-          "priority": {
-            "title": "Priority",
-            "type": "string"
-          },
-          "recommended_action": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recommended Action"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "sla_breach_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sla Breach At"
-          },
-          "sla_target_days": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sla Target Days"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "task_metadata": {
-            "title": "Task Metadata",
-            "type": "object"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "tenant_id",
-          "finding_id",
-          "assessment_id",
-          "title",
-          "description",
-          "recommended_action",
-          "priority",
-          "status",
-          "created_by",
-          "assigned_to",
-          "created_at",
-          "updated_at",
-          "closed_at",
-          "task_metadata",
-          "schema_version"
-        ],
-        "title": "TaskResponse",
         "type": "object"
       },
       "TelemetryInput": {
@@ -36864,38 +36945,6 @@
         "title": "TimelineReplayResponse",
         "type": "object"
       },
-      "TimelineResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/TimelineEvent"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "offset",
-          "limit"
-        ],
-        "title": "TimelineResponse",
-        "type": "object"
-      },
       "TimelineSeverity": {
         "enum": [
           "DEBUG",
@@ -37425,33 +37474,6 @@
           "to_state"
         ],
         "title": "TransitionStateRequest",
-        "type": "object"
-      },
-      "TransitionTaskRequest": {
-        "additionalProperties": false,
-        "description": "Request body for POST /remediation/tasks/{task_id}/transition.",
-        "properties": {
-          "new_status": {
-            "$ref": "#/components/schemas/RemediationStatus"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Transition rationale. Required for ACCEPTED_RISK.",
-            "title": "Reason"
-          }
-        },
-        "required": [
-          "new_status"
-        ],
-        "title": "TransitionTaskRequest",
         "type": "object"
       },
       "TransitionWorkflowRequest": {
@@ -38623,6 +38645,61 @@
         "title": "UpdateOutcomeRequest",
         "type": "object"
       },
+      "UpdatePlanRequest": {
+        "additionalProperties": false,
+        "description": "Partial update to a remediation plan.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "plan_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RemediationPlanState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdatePlanRequest",
+        "type": "object"
+      },
       "UpdatePreferencesRequest": {
         "additionalProperties": false,
         "properties": {
@@ -38977,82 +39054,6 @@
           }
         },
         "title": "UpdateRiskAcceptanceRequest",
-        "type": "object"
-      },
-      "UpdateTaskRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "assigned_to": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assigned To"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 10000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "priority": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RemediationPriority"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "recommended_action": {
-            "anyOf": [
-              {
-                "maxLength": 10000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recommended Action"
-          },
-          "task_metadata": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Task Metadata"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "maxLength": 512,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          }
-        },
-        "title": "UpdateTaskRequest",
         "type": "object"
       },
       "UpdateUsageMeterRequest": {
@@ -39663,28 +39664,6 @@
           "component_summary"
         ],
         "title": "VerificationBundleResponse",
-        "type": "object"
-      },
-      "VerificationListResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/services__evidence_authority__schemas__VerificationResponse"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "VerificationListResponse",
         "type": "object"
       },
       "VerificationRequestListResponse": {
@@ -42126,6 +42105,177 @@
         "title": "EnvironmentType",
         "type": "string"
       },
+      "services__engagement_portal__schemas__DashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_progress": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Progress"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "evidence_collected": {
+            "title": "Evidence Collected",
+            "type": "integer"
+          },
+          "evidence_freshness_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Freshness Pct"
+          },
+          "evidence_verified": {
+            "title": "Evidence Verified",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "governance_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Score"
+          },
+          "latest_report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Report Id"
+          },
+          "latest_report_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Report State"
+          },
+          "open_findings": {
+            "title": "Open Findings",
+            "type": "integer"
+          },
+          "overall_readiness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Readiness"
+          },
+          "pending_approvals": {
+            "title": "Pending Approvals",
+            "type": "integer"
+          },
+          "remediation_progress": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Progress"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "transparency_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transparency Status"
+          },
+          "trust_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Status"
+          },
+          "verification_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Status"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "engagement_id",
+          "overall_readiness",
+          "governance_score",
+          "assessment_progress",
+          "evidence_collected",
+          "evidence_verified",
+          "evidence_freshness_pct",
+          "open_findings",
+          "remediation_progress",
+          "pending_approvals",
+          "latest_report_id",
+          "latest_report_state",
+          "verification_status",
+          "trust_status",
+          "transparency_status",
+          "generated_at"
+        ],
+        "title": "DashboardResponse",
+        "type": "object"
+      },
       "services__engagement_portal__schemas__HealthResponse": {
         "additionalProperties": false,
         "properties": {
@@ -42150,6 +42300,77 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "services__engagement_portal__schemas__SearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "took_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Took Ms"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "items",
+          "total",
+          "took_ms"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "services__engagement_portal__schemas__TimelineResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEvent"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "TimelineResponse",
+        "type": "object"
+      },
       "services__evidence_authority__models__ActorType": {
         "description": "Actor type classification \u2014 supports autonomous systems.",
         "enum": [
@@ -42160,6 +42381,77 @@
         ],
         "title": "ActorType",
         "type": "string"
+      },
+      "services__evidence_authority__schemas__CreateVerificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "verification_confidence": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Confidence"
+          },
+          "verification_method": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Method"
+          },
+          "verification_notes": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Notes"
+          },
+          "verification_result": {
+            "$ref": "#/components/schemas/VerificationResult"
+          },
+          "verification_type": {
+            "$ref": "#/components/schemas/VerificationType"
+          },
+          "verified_actor_type": {
+            "$ref": "#/components/schemas/VerificationActorType",
+            "default": "HUMAN"
+          },
+          "verified_at": {
+            "description": "ISO 8601 UTC",
+            "title": "Verified At",
+            "type": "string"
+          },
+          "verified_by": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Verified By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verification_type",
+          "verification_result",
+          "verified_by",
+          "verified_at"
+        ],
+        "title": "CreateVerificationRequest",
+        "type": "object"
       },
       "services__evidence_authority__schemas__EvidenceResponse": {
         "additionalProperties": false,
@@ -42541,6 +42833,28 @@
           "link_type"
         ],
         "title": "LinkRiskRequest",
+        "type": "object"
+      },
+      "services__evidence_authority__schemas__VerificationListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__evidence_authority__schemas__VerificationResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "VerificationListResponse",
         "type": "object"
       },
       "services__evidence_authority__schemas__VerificationResponse": {
@@ -43388,6 +43702,333 @@
         "title": "AuditEventResponse",
         "type": "object"
       },
+      "services__remediation__schemas__CreateTaskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "assigned_to": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "finding_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/services__remediation__schemas__RemediationPriority",
+            "default": "medium"
+          },
+          "recommended_action": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Action"
+          },
+          "task_metadata": {
+            "title": "Task Metadata",
+            "type": "object"
+          },
+          "title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "assessment_id",
+          "title"
+        ],
+        "title": "CreateTaskRequest",
+        "type": "object"
+      },
+      "services__remediation__schemas__RemediationPriority": {
+        "enum": [
+          "critical",
+          "high",
+          "medium",
+          "low",
+          "informational"
+        ],
+        "title": "RemediationPriority",
+        "type": "string"
+      },
+      "services__remediation__schemas__TaskListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/services__remediation__schemas__TaskResponse"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tasks",
+          "total"
+        ],
+        "title": "TaskListResponse",
+        "type": "object"
+      },
+      "services__remediation__schemas__TaskResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "assigned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned At"
+          },
+          "assigned_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Display Name"
+          },
+          "assigned_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To"
+          },
+          "assigned_user_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Email"
+          },
+          "assigned_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Id"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_assignment_change_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Assignment Change At"
+          },
+          "ownership_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownership Reason"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "recommended_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Action"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "sla_breach_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Breach At"
+          },
+          "sla_target_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Target Days"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task_metadata": {
+            "title": "Task Metadata",
+            "type": "object"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "finding_id",
+          "assessment_id",
+          "title",
+          "description",
+          "recommended_action",
+          "priority",
+          "status",
+          "created_by",
+          "assigned_to",
+          "created_at",
+          "updated_at",
+          "closed_at",
+          "task_metadata",
+          "schema_version"
+        ],
+        "title": "TaskResponse",
+        "type": "object"
+      },
       "services__remediation__schemas__TimelineEventResponse": {
         "additionalProperties": false,
         "properties": {
@@ -43430,6 +44071,995 @@
           "metadata"
         ],
         "title": "TimelineEventResponse",
+        "type": "object"
+      },
+      "services__remediation__schemas__TransitionTaskRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /remediation/tasks/{task_id}/transition.",
+        "properties": {
+          "new_status": {
+            "$ref": "#/components/schemas/RemediationStatus"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Transition rationale. Required for ACCEPTED_RISK.",
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "new_status"
+        ],
+        "title": "TransitionTaskRequest",
+        "type": "object"
+      },
+      "services__remediation__schemas__UpdateTaskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/services__remediation__schemas__RemediationPriority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommended_action": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Action"
+          },
+          "task_metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Metadata"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdateTaskRequest",
+        "type": "object"
+      },
+      "services__remediation_authority__models__RemediationPriority": {
+        "description": "Priority classification for remediation tasks.",
+        "enum": [
+          "CRITICAL",
+          "HIGH",
+          "MEDIUM",
+          "LOW",
+          "INFORMATIONAL"
+        ],
+        "title": "RemediationPriority",
+        "type": "string"
+      },
+      "services__remediation_authority__schemas__CreateTaskRequest": {
+        "additionalProperties": false,
+        "description": "Create a remediation task.",
+        "properties": {
+          "approver_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Id"
+          },
+          "control_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "finding_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Id"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/services__remediation_authority__models__RemediationPriority",
+            "default": "MEDIUM"
+          },
+          "reviewer_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Id"
+          },
+          "risk_score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Score"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CreateTaskRequest",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__CreateVerificationRequest": {
+        "additionalProperties": false,
+        "description": "Record a verification event against a task.",
+        "properties": {
+          "evidence_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "task_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Task Id",
+            "type": "string"
+          },
+          "verification_state": {
+            "$ref": "#/components/schemas/RemediationVerificationState",
+            "default": "IN_REVIEW"
+          },
+          "verifier_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Verifier Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "verifier_id"
+        ],
+        "title": "CreateVerificationRequest",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__DashboardResponse": {
+        "additionalProperties": false,
+        "description": "Portfolio-wide remediation dashboard.",
+        "properties": {
+          "at_risk_sla": {
+            "title": "At Risk Sla",
+            "type": "integer"
+          },
+          "blocked_tasks": {
+            "title": "Blocked Tasks",
+            "type": "integer"
+          },
+          "breached_sla": {
+            "title": "Breached Sla",
+            "type": "integer"
+          },
+          "completed_tasks": {
+            "title": "Completed Tasks",
+            "type": "integer"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "in_progress_tasks": {
+            "title": "In Progress Tasks",
+            "type": "integer"
+          },
+          "open_tasks": {
+            "title": "Open Tasks",
+            "type": "integer"
+          },
+          "priority_breakdown": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Priority Breakdown",
+            "type": "object"
+          },
+          "ready_for_review": {
+            "title": "Ready For Review",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "upcoming_deadlines": {
+            "items": {
+              "$ref": "#/components/schemas/services__remediation_authority__schemas__TaskResponse"
+            },
+            "title": "Upcoming Deadlines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "open_tasks",
+          "in_progress_tasks",
+          "blocked_tasks",
+          "ready_for_review",
+          "completed_tasks",
+          "breached_sla",
+          "at_risk_sla",
+          "upcoming_deadlines",
+          "priority_breakdown",
+          "computed_at"
+        ],
+        "title": "DashboardResponse",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__HealthResponse": {
+        "additionalProperties": false,
+        "description": "Health response for the Remediation Authority.",
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "authority",
+          "version",
+          "schema_version",
+          "checks"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__SearchResponse": {
+        "additionalProperties": false,
+        "description": "Search result items.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__remediation_authority__schemas__TaskResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "items",
+          "total"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__TaskListResponse": {
+        "additionalProperties": false,
+        "description": "Paginated list of tasks.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__remediation_authority__schemas__TaskResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "TaskListResponse",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__TaskResponse": {
+        "additionalProperties": false,
+        "description": "Full representation of a remediation task.",
+        "properties": {
+          "approver_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "control_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "finding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "reviewer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Id"
+          },
+          "risk_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Score"
+          },
+          "sla_status": {
+            "title": "Sla Status",
+            "type": "string"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "task_state": {
+            "title": "Task State",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "plan_id",
+          "title",
+          "description",
+          "task_state",
+          "priority",
+          "owner_id",
+          "reviewer_id",
+          "approver_id",
+          "finding_id",
+          "control_id",
+          "evidence_id",
+          "target_date",
+          "risk_score",
+          "sla_status",
+          "created_at",
+          "updated_at",
+          "completed_at"
+        ],
+        "title": "TaskResponse",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__TimelineEventResponse": {
+        "additionalProperties": false,
+        "description": "Single timeline event.",
+        "properties": {
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_metadata": {
+            "title": "Event Metadata",
+            "type": "object"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "from_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From State"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "to_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To State"
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "event_type",
+          "from_state",
+          "to_state",
+          "actor_id",
+          "reason",
+          "event_metadata",
+          "created_at"
+        ],
+        "title": "TimelineEventResponse",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__TimelineResponse": {
+        "additionalProperties": false,
+        "description": "Task timeline events.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/services__remediation_authority__schemas__TimelineEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task_id",
+          "events",
+          "total"
+        ],
+        "title": "TimelineResponse",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__TransitionTaskRequest": {
+        "additionalProperties": false,
+        "description": "Request to transition a task to a new state.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/RemediationTaskState"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "TransitionTaskRequest",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__UpdateTaskRequest": {
+        "additionalProperties": false,
+        "description": "Partial update to a remediation task.",
+        "properties": {
+          "approver_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Id"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/services__remediation_authority__models__RemediationPriority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reviewer_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Id"
+          },
+          "risk_score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Score"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdateTaskRequest",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__VerificationListResponse": {
+        "additionalProperties": false,
+        "description": "List of verifications.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__remediation_authority__schemas__VerificationResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "VerificationListResponse",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__VerificationResponse": {
+        "additionalProperties": false,
+        "description": "Verification record.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "verification_state": {
+            "title": "Verification State",
+            "type": "string"
+          },
+          "verifier_id": {
+            "title": "Verifier Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "task_id",
+          "verifier_id",
+          "verification_state",
+          "evidence_id",
+          "notes",
+          "created_at"
+        ],
+        "title": "VerificationResponse",
         "type": "object"
       },
       "services__remediation_effectiveness__schemas__RecalculateResponse": {
@@ -65168,7 +66798,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VerificationListResponse"
+                  "$ref": "#/components/schemas/services__evidence_authority__schemas__VerificationListResponse"
                 }
               }
             },
@@ -65230,7 +66860,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateVerificationRequest"
+                "$ref": "#/components/schemas/services__evidence_authority__schemas__CreateVerificationRequest"
               }
             }
           },
@@ -89160,7 +90790,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DashboardResponse"
+                  "$ref": "#/components/schemas/services__engagement_portal__schemas__DashboardResponse"
                 }
               }
             },
@@ -89658,7 +91288,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SearchResponse"
+                  "$ref": "#/components/schemas/services__engagement_portal__schemas__SearchResponse"
                 }
               }
             },
@@ -89779,7 +91409,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TimelineResponse"
+                  "$ref": "#/components/schemas/services__engagement_portal__schemas__TimelineResponse"
                 }
               }
             },
@@ -92776,6 +94406,1513 @@
         ]
       }
     },
+    "/remediation-authority/assignments": {
+      "get": {
+        "description": "List assignments (optionally filtered by task).",
+        "operationId": "list_assignments_remediation_authority_assignments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignmentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Assignments",
+        "tags": [
+          "remediation-authority"
+        ]
+      },
+      "post": {
+        "description": "Create an assignment for a task.",
+        "operationId": "create_assignment_remediation_authority_assignments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Assignment",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/dashboard": {
+      "get": {
+        "description": "Return the portfolio-wide dashboard for the tenant.",
+        "operationId": "get_dashboard_remediation_authority_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__DashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/dependencies": {
+      "get": {
+        "description": "List dependency edges for the tenant.",
+        "operationId": "list_dependencies_remediation_authority_dependencies_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DependencyListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Dependencies",
+        "tags": [
+          "remediation-authority"
+        ]
+      },
+      "post": {
+        "description": "Create a dependency edge between two tasks.",
+        "operationId": "create_dependency_remediation_authority_dependencies_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDependencyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DependencyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Dependency",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/dependencies/{dep_id}": {
+      "delete": {
+        "description": "Delete a dependency edge.",
+        "operationId": "delete_dependency_remediation_authority_dependencies__dep_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dep_id",
+            "required": true,
+            "schema": {
+              "title": "Dep Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Dependency",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/forecast": {
+      "get": {
+        "description": "Return a deterministic forecast for the tenant.",
+        "operationId": "get_forecast_remediation_authority_forecast_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "horizon_days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Horizon Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Forecast",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/health": {
+      "get": {
+        "description": "Public liveness probe for the Remediation Authority.",
+        "operationId": "remediation_authority_health_remediation_authority_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Remediation Authority Health",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/plans": {
+      "get": {
+        "description": "List remediation plans for the tenant.",
+        "operationId": "list_plans_remediation_authority_plans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "plan_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plan State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Plans",
+        "tags": [
+          "remediation-authority"
+        ]
+      },
+      "post": {
+        "description": "Create a new remediation plan.",
+        "operationId": "create_plan_remediation_authority_plans_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Plan",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/plans/{plan_id}": {
+      "get": {
+        "description": "Return a single remediation plan.",
+        "operationId": "get_plan_remediation_authority_plans__plan_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Plan",
+        "tags": [
+          "remediation-authority"
+        ]
+      },
+      "patch": {
+        "description": "Partially update a remediation plan.",
+        "operationId": "update_plan_remediation_authority_plans__plan_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Plan",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/risk": {
+      "get": {
+        "description": "Return the risk reduction summary for the tenant.",
+        "operationId": "get_risk_remediation_authority_risk_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Risk",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/search": {
+      "get": {
+        "description": "Search remediation tasks by title/description.",
+        "operationId": "search_tasks_remediation_authority_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Tasks",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/statistics": {
+      "get": {
+        "description": "Return aggregate statistics for the tenant.",
+        "operationId": "get_statistics_remediation_authority_statistics_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatisticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Statistics",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/tasks": {
+      "get": {
+        "description": "List remediation tasks with optional filters.",
+        "operationId": "list_tasks_remediation_authority_tasks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "plan_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plan Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "priority",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Priority"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__TaskListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tasks",
+        "tags": [
+          "remediation-authority"
+        ]
+      },
+      "post": {
+        "description": "Create a new remediation task.",
+        "operationId": "create_task_remediation_authority_tasks_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__remediation_authority__schemas__CreateTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__TaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Task",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/tasks/{task_id}": {
+      "get": {
+        "description": "Return a single remediation task.",
+        "operationId": "get_task_remediation_authority_tasks__task_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__TaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task",
+        "tags": [
+          "remediation-authority"
+        ]
+      },
+      "patch": {
+        "description": "Partially update a remediation task.",
+        "operationId": "update_task_remediation_authority_tasks__task_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__remediation_authority__schemas__UpdateTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__TaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Task",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/tasks/{task_id}/history": {
+      "get": {
+        "description": "Return the state history for a task.",
+        "operationId": "get_task_history_remediation_authority_tasks__task_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task History",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/tasks/{task_id}/timeline": {
+      "get": {
+        "description": "Return the append-only timeline events for a task.",
+        "operationId": "get_task_timeline_remediation_authority_tasks__task_id__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__TimelineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task Timeline",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/tasks/{task_id}/transition": {
+      "post": {
+        "description": "Transition a remediation task to a new state.",
+        "operationId": "transition_task_remediation_authority_tasks__task_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__remediation_authority__schemas__TransitionTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__TaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Task",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
+    "/remediation-authority/verification": {
+      "get": {
+        "description": "List verification records (optionally filtered by task).",
+        "operationId": "list_verifications_remediation_authority_verification_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__VerificationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Verifications",
+        "tags": [
+          "remediation-authority"
+        ]
+      },
+      "post": {
+        "description": "Record a verification event against a task.",
+        "operationId": "create_verification_remediation_authority_verification_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__remediation_authority__schemas__CreateVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__VerificationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Verification",
+        "tags": [
+          "remediation-authority"
+        ]
+      }
+    },
     "/remediation-effectiveness": {
       "get": {
         "operationId": "list_outcomes_remediation_effectiveness_get",
@@ -93549,7 +96686,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskListResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskListResponse"
                 }
               }
             },
@@ -93595,7 +96732,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateTaskRequest"
+                "$ref": "#/components/schemas/services__remediation__schemas__CreateTaskRequest"
               }
             }
           },
@@ -93606,7 +96743,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskResponse"
                 }
               }
             },
@@ -93678,7 +96815,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskListResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskListResponse"
                 }
               }
             },
@@ -93750,7 +96887,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskListResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskListResponse"
                 }
               }
             },
@@ -93857,7 +96994,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskResponse"
                 }
               }
             },
@@ -93912,7 +97049,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateTaskRequest"
+                "$ref": "#/components/schemas/services__remediation__schemas__UpdateTaskRequest"
               }
             }
           },
@@ -93923,7 +97060,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskResponse"
                 }
               }
             },
@@ -94049,7 +97186,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskResponse"
                 }
               }
             },
@@ -94165,7 +97302,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskResponse"
                 }
               }
             },
@@ -94233,7 +97370,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskResponse"
                 }
               }
             },
@@ -94571,7 +97708,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TransitionTaskRequest"
+                "$ref": "#/components/schemas/services__remediation__schemas__TransitionTaskRequest"
               }
             }
           },
@@ -94650,7 +97787,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskResponse"
+                  "$ref": "#/components/schemas/services__remediation__schemas__TaskResponse"
                 }
               }
             },

@@ -822,7 +822,8 @@
           "attestation:",
           "forensics:",
           "admin:",
-          "compliance:"
+          "compliance:",
+          "remediation:"
         ],
         "tenant_binding_required": true
       },
@@ -889,6 +890,14 @@
           "method": "GET",
           "path": "/reports/health",
           "permanent": true
+        },
+        {
+          "class_name": "public",
+          "expires_at": "",
+          "justification": "PR 18.3 Remediation Authority health probe — no auth, no tenant data.",
+          "method": "GET",
+          "path": "/remediation-authority/health",
+          "permanent": true
         }
       ],
       "required_ci_gates": [
@@ -915,7 +924,8 @@
         "/freshness/snapshots",
         "/freshness/history",
         "/freshness/trends",
-        "/reports"
+        "/reports",
+        "/remediation-authority"
       ]
     },
     {
@@ -1195,7 +1205,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-30T23:54:43.633432+00:00",
+  "generated_at": "2026-07-01T10:09:35.460309+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
