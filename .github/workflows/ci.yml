@@ -714,6 +714,7 @@ jobs:
       ITEST_PORT: 8001
       ITEST_WIPE_DB: "1"
       SCENARIO: spike
+      FG_START_TIMEOUT_SEC: "30"
 
     steps:
       - name: Checkout

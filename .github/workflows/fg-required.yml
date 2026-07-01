@@ -33,7 +33,7 @@ jobs:
   fg-required:
     name: fg-required
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     env:
       PYTHONUNBUFFERED: "1"
