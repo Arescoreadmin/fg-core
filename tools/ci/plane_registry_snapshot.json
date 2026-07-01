@@ -355,7 +355,8 @@
           "compliance:",
           "audit:",
           "keys:",
-          "dev:"
+          "dev:",
+          "portal:"
         ],
         "tenant_binding_required": true
       },
@@ -582,6 +583,14 @@
           "method": "GET",
           "path": "/signing/public-key",
           "permanent": true
+        },
+        {
+          "class_name": "public",
+          "expires_at": "",
+          "justification": "PR 18.2 Engagement Portal health probe — no auth, no tenant data.",
+          "method": "GET",
+          "path": "/portal/engagement/health",
+          "permanent": true
         }
       ],
       "required_ci_gates": [
@@ -617,6 +626,7 @@
         "/field-assessment",
         "/portal",
         "/portal/governance",
+        "/portal/engagement",
         "/config",
         "/planes",
         "/health",
@@ -1185,7 +1195,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-30T18:25:02.090550+00:00",
+  "generated_at": "2026-06-30T23:54:43.633432+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -36,6 +36,8 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/signing/public-key",
     # Report Authority health probe — unauthenticated liveness check.
     "/reports/health",
+    # Engagement Portal health probe (PR 18.2) — unauthenticated liveness check.
+    "/portal/engagement/health",
 )
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (

@@ -428,6 +428,27 @@ authorities:
     cgin_snapshot: false
     cgin_anonymized: false
     consumers: []
+  engagement_portal:
+    engine: services/engagement_portal
+    api_file: api/engagement_portal.py
+    db_models: api/db_models_engagement_portal.py
+    route_prefixes:
+    - /portal/engagement
+    tables:
+    - portal_engagement_preferences
+    - portal_engagement_activity
+    - portal_engagement_notifications
+    tests:
+    - tests/test_engagement_portal.py
+    - tests/test_engagement_dashboard.py
+    - tests/test_engagement_timeline.py
+    - tests/test_engagement_reports.py
+    - tests/test_engagement_notifications.py
+    - tests/test_engagement_search.py
+    - tests/test_engagement_activity.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
 cgin_trust:
   trust_version: "1.0"
   signing_algorithm: "ed25519-v1"

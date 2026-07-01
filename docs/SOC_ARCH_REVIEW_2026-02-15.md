@@ -1,3 +1,32 @@
+## 2026-06-30 — PR 18.2: Enterprise Engagement Portal Authority
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (new orchestration bounded context at `services/engagement_portal/`; 15 new routes under `/portal/engagement` registered in the `control` plane; 3 new DB tables in migration 0143 with RLS and append-only enforcement on activity log; new public health endpoint `/portal/engagement/health` added to `api/security/public_paths.py`; new scopes `portal:read`/`portal:write`; new CI gate `tools/ci/check_engagement_portal.py`; no duplicated business logic — all crypto delegates to Trust Authority; no new signing/crypto implementation)
+
+**Changes:**
+- `migrations/postgres/0143_engagement_portal.sql` — creates `portal_engagement_preferences` (mutable, per-tenant, RLS), `portal_engagement_activity` (append-only; PG `CREATE RULE DO INSTEAD NOTHING` guards UPDATE + DELETE; ORM `before_update`/`before_delete` guards), `portal_engagement_notifications` (mutable, RLS). 3 tables, 7 indexes. All 3 tables have `ENABLE ROW LEVEL SECURITY` + tenant isolation policies using `current_setting('app.tenant_id', true)`. Migration is replay-safe: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, policies wrapped in `DO $ IF NOT EXISTS (SELECT 1 FROM pg_policies ...)` blocks, rules wrapped in `DO $ IF NOT EXISTS (SELECT 1 FROM pg_rules ...)` blocks. No `BEGIN;`/`COMMIT;`.
+- `api/db_models_engagement_portal.py` — `PortalEngagementPreferences`, `PortalEngagementActivity` (ORM `before_update`/`before_delete` event guards raise `RuntimeError`), `PortalEngagementNotification`. `PortalEngagementActivity` is protected at both ORM and PG-rule layers.
+- `services/engagement_portal/` — new bounded context: `models.py`, `schemas.py`, `engine.py` (`EngagementPortalEngine` — 14 methods, orchestration-only facade; all cross-authority reads wrapped in `try/except` for graceful degradation; no duplicated business logic), `repository.py` (all queries tenant-scoped), `validators.py`, `statistics.py`, `health.py`.
+- `api/engagement_portal.py` — 15 routes under `/portal/engagement`. `/portal/engagement/health` requires no auth (public health probe). All other routes gated on `require_scopes("portal:read")` or `require_scopes("portal:write")`; all also require `require_bound_tenant()` — `tenant_id` resolved from `request.state` only. `/portal/engagement/preferences` PUT requires `portal:write`. `/portal/engagement/activity` POST requires `portal:write`.
+- `api/security/public_paths.py` — `/portal/engagement/health` added to `PUBLIC_PATHS_EXACT`. Health probe only; returns liveness state and no tenant data.
+- `tools/ci/check_engagement_portal.py` — new CI gate: 12 checks (file existence, class declarations, route presence, manifest registration, append-only enforcement patterns, no duplicated authority logic).
+- `services/plane_registry/registry.py` — `/portal/engagement` added to `control` plane `route_prefixes`; `public_routes` exception added for `GET /portal/engagement/health`.
+- `api/db.py` — `db_models_engagement_portal` added to `_ensure_models_imported()`.
+- `api/main.py` — `engagement_portal_router` imported and registered in both app builders.
+- `authority_manifest.yaml` — `engagement_portal` entry added.
+- Route inventory, contract, and topology snapshots regenerated. `Contract-Authority-SHA256` updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+- `ROADMAP.md` — PR 18.2 row added.
+
+**Security posture:**
+- **Orchestration-only:** `EngagementPortalEngine` is a read-through facade. It reads from Evidence, Reports, Remediation, Trust, Transparency, Timeline, and Notifications authorities using tenant-scoped DB queries. All cross-authority reads are in `try/except` blocks that return empty defaults on failure — no partial state is propagated. No duplicated business logic; no duplicated crypto/signing.
+- **Tenant isolation:** all 14 non-health routes require `require_bound_tenant()`; `tenant_id` is resolved from `request.state` only — never from request body. All 3 DB tables have PostgreSQL RLS enforced via `current_setting('app.tenant_id', true)`.
+- **Auth scopes:** `GET` portal routes require `portal:read`; `PUT /preferences` and `POST /activity` require `portal:write`. `/portal/engagement/health` is unauthenticated (health probe only; returns no data).
+- **Append-only activity log:** `portal_engagement_activity` is protected against UPDATE and DELETE at two independent layers: ORM `before_update`/`before_delete` event listeners (raise `RuntimeError`) and PostgreSQL `CREATE RULE DO INSTEAD NOTHING` guards.
+- **No new crypto:** engagement portal has no signing implementation. All trust and signing operations are delegated to Trust Authority and Report Authority respectively. No signing key touches this bounded context.
+- **Public path change scope:** `api/security/public_paths.py` change is minimal — a single health-check URL added to `PUBLIC_PATHS_EXACT`. No auth middleware logic changed.
+- **New CI gate:** `tools/ci/check_engagement_portal.py` enforces structural invariants (file existence, class names, route presence, manifest registration, append-only enforcement) to prevent silent regression of the above guarantees.
+
+---
+
 ## 2026-06-30 — PR 18.1: Enterprise Assessment Report Authority
 
 **Reviewer:** Codex | **Classification:** SOC-MEDIUM (new bounded context at `services/report_authority/`; 15 new routes under new `/reports` prefix registered in `evidence` plane; 3 new DB tables in migration 0142 with RLS; new public health endpoint `/reports/health` added to `api/security/public_paths.py`; new CI gate `tools/ci/check_report_authority.py`; report signing via HMAC-SHA256; no new user-facing auth subsystem; no privilege escalation; no credential storage in exports)

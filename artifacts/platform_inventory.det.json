@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 803,
+    "contract_count": 818,
     "contract_only": [],
-    "runtime_count": 969,
+    "runtime_count": 984,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "0ae46b93e85ba62cab099d386e3dddbe82e28fdf1f597847896fd0537c67677b",
+  "governance_fingerprint": "8ddceeb1f42851613420ea0e01ead46c611837131b7cb48be89c5b19b0e0f17a",
   "planes": [
     {
       "compat": {
@@ -263,6 +263,7 @@
         "/metrics",
         "/planes",
         "/portal",
+        "/portal/engagement",
         "/portal/governance",
         "/rag",
         "/remediation",
@@ -780,6 +781,19 @@
       "GET /health/ready",
       "GET /metrics",
       "GET /planes",
+      "GET /portal/engagement/activity",
+      "GET /portal/engagement/dashboard",
+      "GET /portal/engagement/evidence",
+      "GET /portal/engagement/health",
+      "GET /portal/engagement/notifications",
+      "GET /portal/engagement/preferences",
+      "GET /portal/engagement/remediation",
+      "GET /portal/engagement/reports",
+      "GET /portal/engagement/search",
+      "GET /portal/engagement/statistics",
+      "GET /portal/engagement/timeline",
+      "GET /portal/engagement/transparency",
+      "GET /portal/engagement/trust",
       "GET /portal/governance/acknowledgements",
       "GET /portal/governance/acknowledgements/{ack_id}",
       "GET /portal/governance/audit",
@@ -1080,6 +1094,7 @@
       "POST /governance/workflows/{workflow_id}/evidence",
       "POST /internal/connectors/{connector_id}/ingest",
       "POST /portal/authenticate",
+      "POST /portal/engagement/activity",
       "POST /portal/governance/acknowledgements",
       "POST /portal/grants",
       "POST /portal/identity/login",
@@ -1112,6 +1127,7 @@
       "PUT /admin/identity/tenants/{tenant_id}/config",
       "PUT /admin/tenants/{tenant_id}/quota",
       "PUT /admin/tenants/{tenant_id}/tier",
+      "PUT /portal/engagement/preferences",
       "PUT /rag/retrieval-policy"
     ],
     "data": [

@@ -459,6 +459,110 @@
         "title": "AcknowledgementResponse",
         "type": "object"
       },
+      "ActivityFeedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_id": {
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "activity_id",
+          "event_type",
+          "workspace",
+          "entity_id",
+          "actor_id",
+          "occurred_at",
+          "summary"
+        ],
+        "title": "ActivityFeedItem",
+        "type": "object"
+      },
+      "ActivityFeedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityFeedItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "ActivityFeedResponse",
+        "type": "object"
+      },
       "AdaptiveAccuracyResponse": {
         "additionalProperties": false,
         "properties": {
@@ -11749,6 +11853,177 @@
         "title": "CycleRunRequest",
         "type": "object"
       },
+      "DashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_progress": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Progress"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "evidence_collected": {
+            "title": "Evidence Collected",
+            "type": "integer"
+          },
+          "evidence_freshness_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Freshness Pct"
+          },
+          "evidence_verified": {
+            "title": "Evidence Verified",
+            "type": "integer"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "governance_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Score"
+          },
+          "latest_report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Report Id"
+          },
+          "latest_report_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Report State"
+          },
+          "open_findings": {
+            "title": "Open Findings",
+            "type": "integer"
+          },
+          "overall_readiness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Readiness"
+          },
+          "pending_approvals": {
+            "title": "Pending Approvals",
+            "type": "integer"
+          },
+          "remediation_progress": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Progress"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "transparency_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transparency Status"
+          },
+          "trust_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Status"
+          },
+          "verification_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Status"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "engagement_id",
+          "overall_readiness",
+          "governance_score",
+          "assessment_progress",
+          "evidence_collected",
+          "evidence_verified",
+          "evidence_freshness_pct",
+          "open_findings",
+          "remediation_progress",
+          "pending_approvals",
+          "latest_report_id",
+          "latest_report_state",
+          "verification_status",
+          "trust_status",
+          "transparency_status",
+          "generated_at"
+        ],
+        "title": "DashboardResponse",
+        "type": "object"
+      },
       "DecisionExplain": {
         "properties": {
           "anomaly_score": {
@@ -15697,6 +15972,148 @@
           "verified"
         ],
         "title": "EvidenceVerifyResponse",
+        "type": "object"
+      },
+      "EvidenceWorkspaceItem": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "collected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collected At"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "freshness_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Status"
+          },
+          "reviewer_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Notes"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "transparency_entry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transparency Entry"
+          },
+          "trust_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Digest"
+          },
+          "verification_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Status"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "title",
+          "classification",
+          "freshness_status",
+          "verification_status",
+          "trust_digest",
+          "transparency_entry",
+          "collected_at",
+          "reviewer_notes"
+        ],
+        "title": "EvidenceWorkspaceItem",
+        "type": "object"
+      },
+      "EvidenceWorkspaceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceWorkspaceItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "EvidenceWorkspaceResponse",
         "type": "object"
       },
       "ExamRunRequest": {
@@ -20485,44 +20902,6 @@
       "Health": {
         "$ref": "schemas/api/health.schema.json"
       },
-      "HealthResponse": {
-        "additionalProperties": false,
-        "description": "Health check response for the Report Authority service.",
-        "properties": {
-          "authority": {
-            "title": "Authority",
-            "type": "string"
-          },
-          "checks": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "title": "Checks",
-            "type": "object"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "authority",
-          "version",
-          "schema_version",
-          "checks"
-        ],
-        "title": "HealthResponse",
-        "type": "object"
-      },
       "HealthResult": {
         "enum": [
           "pass",
@@ -23988,6 +24367,103 @@
         "title": "NodeResponse",
         "type": "object"
       },
+      "NotificationItem": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "notification_id": {
+            "title": "Notification Id",
+            "type": "string"
+          },
+          "notification_type": {
+            "title": "Notification Type",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "required": [
+          "notification_id",
+          "notification_type",
+          "status",
+          "subject",
+          "body",
+          "created_at",
+          "delivered_at"
+        ],
+        "title": "NotificationItem",
+        "type": "object"
+      },
+      "NotificationListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "NotificationListResponse",
+        "type": "object"
+      },
       "ObservationDomain": {
         "enum": [
           "ai_governance",
@@ -26949,6 +27425,55 @@
         "title": "PortalRiskSummary",
         "type": "object"
       },
+      "PortalStatisticsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_notifications": {
+            "title": "Active Notifications",
+            "type": "integer"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "preferences_set": {
+            "title": "Preferences Set",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_activities": {
+            "title": "Total Activities",
+            "type": "integer"
+          },
+          "total_evidence_viewed": {
+            "title": "Total Evidence Viewed",
+            "type": "integer"
+          },
+          "total_reports_viewed": {
+            "title": "Total Reports Viewed",
+            "type": "integer"
+          },
+          "total_searches": {
+            "title": "Total Searches",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_activities",
+          "total_reports_viewed",
+          "total_evidence_viewed",
+          "total_searches",
+          "active_notifications",
+          "preferences_set",
+          "computed_at"
+        ],
+        "title": "PortalStatisticsResponse",
+        "type": "object"
+      },
       "PortalTaskSummary": {
         "additionalProperties": false,
         "properties": {
@@ -27182,6 +27707,73 @@
           "closed_at"
         ],
         "title": "PortalTaskView",
+        "type": "object"
+      },
+      "PreferencesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "notification_email": {
+            "title": "Notification Email",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "theme",
+          "notification_email",
+          "timezone",
+          "language",
+          "updated_at"
+        ],
+        "title": "PreferencesResponse",
         "type": "object"
       },
       "PrioritiesResponse": {
@@ -29039,6 +29631,57 @@
         "title": "RecommendationOutcomeResponse",
         "type": "object"
       },
+      "RecordActivityRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "entity_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "event_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Event Type",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "event_type"
+        ],
+        "title": "RecordActivityRequest",
+        "type": "object"
+      },
       "RecordAssessmentResultRequest": {
         "additionalProperties": false,
         "properties": {
@@ -30307,6 +30950,134 @@
         "title": "RemediationStatus",
         "type": "string"
       },
+      "RemediationWorkspaceItem": {
+        "additionalProperties": false,
+        "properties": {
+          "completion_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completion Pct"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "evidence_required": {
+            "title": "Evidence Required",
+            "type": "boolean"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "verification_required": {
+            "title": "Verification Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "task_id",
+          "title",
+          "priority",
+          "status",
+          "owner_id",
+          "due_date",
+          "verification_required",
+          "evidence_required",
+          "completion_pct"
+        ],
+        "title": "RemediationWorkspaceItem",
+        "type": "object"
+      },
+      "RemediationWorkspaceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RemediationWorkspaceItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "RemediationWorkspaceResponse",
+        "type": "object"
+      },
       "ReplayContractResponse": {
         "properties": {
           "canonical_inputs_hash": {
@@ -31194,6 +31965,128 @@
         ],
         "title": "ReportType",
         "type": "string"
+      },
+      "ReportWorkspaceItem": {
+        "additionalProperties": false,
+        "properties": {
+          "has_html": {
+            "title": "Has Html",
+            "type": "boolean"
+          },
+          "has_json": {
+            "title": "Has Json",
+            "type": "boolean"
+          },
+          "has_pdf": {
+            "title": "Has Pdf",
+            "type": "boolean"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Hash"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "quality_grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Grade"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "report_ref": {
+            "title": "Report Ref",
+            "type": "string"
+          },
+          "report_type": {
+            "title": "Report Type",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trust_verified": {
+            "title": "Trust Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "report_id",
+          "report_ref",
+          "report_type",
+          "lifecycle_state",
+          "title",
+          "quality_grade",
+          "published_at",
+          "has_pdf",
+          "has_html",
+          "has_json",
+          "manifest_hash",
+          "trust_verified"
+        ],
+        "title": "ReportWorkspaceItem",
+        "type": "object"
+      },
+      "ReportWorkspaceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportWorkspaceItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "ReportWorkspaceResponse",
+        "type": "object"
       },
       "ReproduceRequest": {
         "properties": {
@@ -33595,6 +34488,112 @@
         "title": "ScoringContractResponse",
         "type": "object"
       },
+      "SearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "took_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Took Ms"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "items",
+          "total",
+          "took_ms"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "SearchResultItem": {
+        "additionalProperties": false,
+        "properties": {
+          "matched_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Field"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "result_id": {
+            "title": "Result Id",
+            "type": "string"
+          },
+          "result_type": {
+            "title": "Result Type",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "result_id",
+          "result_type",
+          "title",
+          "ref",
+          "matched_field",
+          "score"
+        ],
+        "title": "SearchResultItem",
+        "type": "object"
+      },
       "SecretClassification": {
         "enum": [
           "standard",
@@ -35382,6 +36381,88 @@
         "title": "TimelineEntityType",
         "type": "string"
       },
+      "TimelineEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "authoritative_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authoritative Ref"
+          },
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "source_system": {
+            "title": "Source System",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_type",
+          "source_system",
+          "entity_id",
+          "entity_type",
+          "actor_id",
+          "summary",
+          "occurred_at",
+          "authoritative_ref"
+        ],
+        "title": "TimelineEvent",
+        "type": "object"
+      },
       "TimelineEventRecordRequest": {
         "additionalProperties": false,
         "properties": {
@@ -35781,6 +36862,38 @@
           "event_count"
         ],
         "title": "TimelineReplayResponse",
+        "type": "object"
+      },
+      "TimelineResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEvent"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "TimelineResponse",
         "type": "object"
       },
       "TimelineSeverity": {
@@ -36616,6 +37729,66 @@
         "title": "TransparencyVerifyRequest",
         "type": "object"
       },
+      "TransparencyWorkspaceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "append_only_confirmed": {
+            "title": "Append Only Confirmed",
+            "type": "boolean"
+          },
+          "last_entry_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Entry At"
+          },
+          "merkle_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merkle Root"
+          },
+          "proof_available": {
+            "title": "Proof Available",
+            "type": "boolean"
+          },
+          "sequence_count": {
+            "title": "Sequence Count",
+            "type": "integer"
+          },
+          "transparency_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transparency Root"
+          }
+        },
+        "required": [
+          "transparency_root",
+          "merkle_root",
+          "append_only_confirmed",
+          "sequence_count",
+          "last_entry_at",
+          "proof_available"
+        ],
+        "title": "TransparencyWorkspaceResponse",
+        "type": "object"
+      },
       "TraversalResponse": {
         "properties": {
           "edges": {
@@ -36721,6 +37894,97 @@
           "canonicalization_version"
         ],
         "title": "TrustManifestResponse",
+        "type": "object"
+      },
+      "TrustWorkspaceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "history_count": {
+            "title": "History Count",
+            "type": "integer"
+          },
+          "key_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Provider"
+          },
+          "last_signed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Signed At"
+          },
+          "provider_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Version"
+          },
+          "signing_algorithm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signing Algorithm"
+          },
+          "trust_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Digest"
+          },
+          "trust_manifest": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Manifest"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "trust_manifest",
+          "signing_algorithm",
+          "key_provider",
+          "provider_version",
+          "trust_digest",
+          "verified",
+          "last_signed_at",
+          "history_count"
+        ],
+        "title": "TrustWorkspaceResponse",
         "type": "object"
       },
       "UnassignRequest": {
@@ -37357,6 +38621,54 @@
           }
         },
         "title": "UpdateOutcomeRequest",
+        "type": "object"
+      },
+      "UpdatePreferencesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "notification_email": {
+            "default": true,
+            "title": "Notification Email",
+            "type": "boolean"
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "title": "UpdatePreferencesRequest",
         "type": "object"
       },
       "UpdateReportRequest": {
@@ -40814,6 +42126,30 @@
         "title": "EnvironmentType",
         "type": "string"
       },
+      "services__engagement_portal__schemas__HealthResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "schema_version",
+          "timestamp"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
       "services__evidence_authority__models__ActorType": {
         "description": "Actor type classification \u2014 supports autonomous systems.",
         "enum": [
@@ -42494,6 +43830,44 @@
           "reviewer_id"
         ],
         "title": "GenerateReportRequest",
+        "type": "object"
+      },
+      "services__report_authority__schemas__HealthResponse": {
+        "additionalProperties": false,
+        "description": "Health check response for the Report Authority service.",
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "authority",
+          "version",
+          "schema_version",
+          "checks"
+        ],
+        "title": "HealthResponse",
         "type": "object"
       },
       "services__risk_acceptance__schemas__AllowedTransitionsResponse": {
@@ -87606,6 +88980,926 @@
         ]
       }
     },
+    "/portal/engagement/activity": {
+      "get": {
+        "operationId": "portal_engagement_activity_feed_portal_engagement_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityFeedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Activity Feed",
+        "tags": [
+          "engagement-portal"
+        ]
+      },
+      "post": {
+        "operationId": "portal_engagement_activity_record_portal_engagement_activity_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordActivityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Activity Record",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/dashboard": {
+      "get": {
+        "operationId": "portal_engagement_dashboard_portal_engagement_dashboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "assessment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assessment Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Dashboard",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/evidence": {
+      "get": {
+        "operationId": "portal_engagement_evidence_portal_engagement_evidence_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceWorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Evidence",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/health": {
+      "get": {
+        "operationId": "portal_engagement_health_portal_engagement_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__engagement_portal__schemas__HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Portal Engagement Health",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/notifications": {
+      "get": {
+        "operationId": "portal_engagement_notifications_portal_engagement_notifications_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Notifications",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/preferences": {
+      "get": {
+        "operationId": "portal_engagement_preferences_get_portal_engagement_preferences_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Preferences Get",
+        "tags": [
+          "engagement-portal"
+        ]
+      },
+      "put": {
+        "operationId": "portal_engagement_preferences_put_portal_engagement_preferences_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Preferences Put",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/remediation": {
+      "get": {
+        "operationId": "portal_engagement_remediation_portal_engagement_remediation_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemediationWorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Remediation",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/reports": {
+      "get": {
+        "operationId": "portal_engagement_reports_portal_engagement_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportWorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Reports",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/search": {
+      "get": {
+        "operationId": "portal_engagement_search_portal_engagement_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Search",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/statistics": {
+      "get": {
+        "operationId": "portal_engagement_statistics_portal_engagement_statistics_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalStatisticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Statistics",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/timeline": {
+      "get": {
+        "operationId": "portal_engagement_timeline_portal_engagement_timeline_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Timeline",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/transparency": {
+      "get": {
+        "operationId": "portal_engagement_transparency_portal_engagement_transparency_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransparencyWorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Transparency",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
+    "/portal/engagement/trust": {
+      "get": {
+        "operationId": "portal_engagement_trust_portal_engagement_trust_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustWorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Engagement Trust",
+        "tags": [
+          "engagement-portal"
+        ]
+      }
+    },
     "/portal/governance/acknowledgements": {
       "get": {
         "operationId": "list_acknowledgements_portal_governance_acknowledgements_get",
@@ -92631,7 +94925,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
+                  "$ref": "#/components/schemas/services__report_authority__schemas__HealthResponse"
                 }
               }
             },
