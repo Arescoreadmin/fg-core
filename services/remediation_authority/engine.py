@@ -275,9 +275,17 @@ class RemediationAuthorityEngine:
             )
         current_state = RemediationPlanState(row.plan_state)
         if is_immutable_plan_state(current_state):
-            raise RemediationImmutableState(
-                f"Plan {plan_id!r} in state {current_state.value!r} is immutable"
+            # COMPLETED→ARCHIVED and CANCELLED→ARCHIVED are the only valid exits
+            # from immutable states; let the transition validator decide legality.
+            is_archiving = (
+                req.plan_state is not None
+                and req.plan_state == RemediationPlanState.ARCHIVED
+                and current_state != RemediationPlanState.ARCHIVED
             )
+            if not is_archiving:
+                raise RemediationImmutableState(
+                    f"Plan {plan_id!r} in state {current_state.value!r} is immutable"
+                )
         if req.plan_state is not None and req.plan_state != current_state:
             try:
                 validate_plan_transition(current_state, req.plan_state)
@@ -401,20 +409,25 @@ class RemediationAuthorityEngine:
             changed["title"] = req.title
         if req.description is not None:
             row.description = req.description
+            changed["description"] = req.description
         if req.priority is not None:
             row.priority = req.priority.value
             changed["priority"] = req.priority.value
         if req.owner_id is not None:
             row.owner_id = req.owner_id
+            changed["owner_id"] = req.owner_id
         if req.reviewer_id is not None:
             row.reviewer_id = req.reviewer_id
+            changed["reviewer_id"] = req.reviewer_id
         if req.approver_id is not None:
             row.approver_id = req.approver_id
+            changed["approver_id"] = req.approver_id
         if req.target_date is not None:
             row.target_date = req.target_date
             changed["target_date"] = req.target_date
         if req.risk_score is not None:
             row.risk_score = req.risk_score
+            changed["risk_score"] = req.risk_score
         # Recompute SLA based on new target_date
         row.sla_status = compute_sla_status(
             target_date=row.target_date,
@@ -476,7 +489,9 @@ class RemediationAuthorityEngine:
 
     def _ensure_no_open_blockers(self, task_id: str) -> None:
         edges = [
-            (d.source_task_id, d.target_task_id) for d in self._repo.list_dependencies()
+            (d.source_task_id, d.target_task_id)
+            for d in self._repo.list_dependencies()
+            if d.dependency_type == DependencyType.BLOCKS.value
         ]
         blockers = [src for src, dst in edges if dst == task_id]
         for blocker_id in blockers:
