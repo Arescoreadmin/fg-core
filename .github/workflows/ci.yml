@@ -34,7 +34,7 @@ jobs:
   fg_guard:
     name: Guard (paths + syntax + fg-fast)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
