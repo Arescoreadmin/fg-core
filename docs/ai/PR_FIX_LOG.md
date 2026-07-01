@@ -6,6 +6,28 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-01 — pr/18.3-remediation-authority: initial implementation
+
+**Branch:** `pr/18.3-remediation-authority`
+
+**What was done:** Full implementation of Enterprise Remediation Authority (PR 18.3).
+
+**Files created/modified:**
+- `services/remediation_authority/` — new bounded context (20 modules: engine, models, schemas, workflow, state_machine, assignment, verification, dependencies, effectiveness, risk, sla, forecast, history, timeline, notifications, statistics, validators, health, repository, __init__)
+- `api/remediation_authority.py` — 24 routes under `/remediation-authority/`
+- `api/db_models_remediation_authority.py` — 7 ORM models (fa_rem_plan, fa_rem_task, fa_rem_timeline, fa_rem_assignment, fa_rem_dependency, fa_rem_verification, fa_rem_evidence_link)
+- `migrations/postgres/0144_remediation_authority.sql` — replay-safe migration (DO $$ IF NOT EXISTS pattern, no BEGIN/COMMIT wrapper)
+- `tools/ci/check_remediation_authority.py` — 12+ check CI gate
+- `tests/test_remediation_authority.py` + 7 additional test files — 1,640 tests total
+- `api/db.py`, `api/main.py`, `api/security/public_paths.py`, `authority_manifest.yaml`, `services/plane_registry/registry.py`, `ROADMAP.md` — registrations and wiring
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` — contract refresh (SHA256: `08eddb3c974890b118b7d0db4ac3acbb37fbd89e6cc47f60b9765956962b1ba1`)
+- Route inventory and topology snapshots regenerated
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — PR 18.3 SOC review entry added
+
+**Verification:** 1,640 tests pass; `make fg-smart` PASS; `make fg-contract` PASS; ruff clean.
+
+---
+
 ### 2026-06-30 — pr/18.2-engagement-portal: initial implementation
 
 **Branch:** `pr/18.2-engagement-portal`

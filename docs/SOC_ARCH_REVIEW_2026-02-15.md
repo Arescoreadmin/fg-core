@@ -1,3 +1,32 @@
+## 2026-07-01 — PR 18.3: Enterprise Remediation Authority
+
+**Reviewer:** Codex | **Classification:** SOC-MEDIUM (new bounded context at `services/remediation_authority/`; 24 new routes under `/remediation-authority/` prefix registered in the `evidence` plane; 7 new DB tables in migration 0144 with RLS; append-only timeline enforced at ORM + PG rule layers; new public health endpoint `/remediation-authority/health`; new scopes `remediation:read`/`remediation:write`; new CI gate `tools/ci/check_remediation_authority.py`; no duplicated business logic; no new crypto — all Trust/signing delegates to Trust Authority; does not touch existing `services/remediation/` bounded context)
+
+**Changes:**
+- `migrations/postgres/0144_remediation_authority.sql` — creates 7 tables: `fa_rem_plan` (mutable, RLS), `fa_rem_task` (mutable, RLS), `fa_rem_timeline` (append-only; PG `CREATE RULE DO INSTEAD NOTHING` guards UPDATE + DELETE; ORM `before_update`/`before_delete` guards), `fa_rem_assignment` (mutable, RLS), `fa_rem_dependency` (mutable, RLS), `fa_rem_verification` (mutable, RLS), `fa_rem_evidence_link` (mutable, RLS). 7 tables, 14+ indexes. All tables have `ENABLE ROW LEVEL SECURITY` + tenant isolation policies using `current_setting('app.tenant_id', true)`. Migration replay-safe: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, policies and rules wrapped in `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies/pg_rules ...)` blocks. No `BEGIN;`/`COMMIT;`.
+- `api/db_models_remediation_authority.py` — 7 ORM models. `RemAuthTimeline` has ORM `before_update`/`before_delete` event guards (raise `RuntimeError`), protected at both ORM and PG-rule layers.
+- `services/remediation_authority/` — new bounded context: 20 modules (`engine.py` with `RemediationAuthorityEngine`, `models.py`, `schemas.py`, `workflow.py`, `state_machine.py`, `assignment.py`, `verification.py`, `dependencies.py`, `effectiveness.py`, `risk.py`, `sla.py`, `forecast.py`, `history.py`, `timeline.py`, `notifications.py`, `statistics.py`, `validators.py`, `health.py`, `repository.py`, `__init__.py`). Full lifecycle state machine: 13 states (DRAFT → PLANNED → ASSIGNED → IN_PROGRESS → BLOCKED → AWAITING_EVIDENCE → UNDER_REVIEW → VERIFIED → COMPLETED → FAILED → REOPENED → CANCELLED → ARCHIVED). Circular dependency detection. Critical path calculation. Evidence sufficiency engine. SLA breach detection. Deterministic forecasting via Governance Learning reads.
+- `api/remediation_authority.py` — 24 routes under `/remediation-authority/`. `/remediation-authority/health` requires no auth. All other routes gated on `remediation:read` or `remediation:write`; all require `require_bound_tenant()` — `tenant_id` resolved from `request.state` only. All session blocks call `set_tenant_context(db, tenant_id)` before any engine call.
+- `api/security/public_paths.py` — `/remediation-authority/health` added to `PUBLIC_PATHS_EXACT`. Health probe only; returns liveness state and no tenant data.
+- `tools/ci/check_remediation_authority.py` — new CI gate: 12+ checks (file existence, class declarations, route presence, manifest registration, state machine definition, append-only enforcement, `set_tenant_context` usage, no duplicated business logic).
+- `services/plane_registry/registry.py` — `/remediation-authority` added to `evidence` plane `route_prefixes`; `public_routes` exception added for `GET /remediation-authority/health`.
+- `api/db.py`, `api/main.py` — registration wiring.
+- `authority_manifest.yaml` — `remediation_authority` entry added.
+- Route inventory, contract, topology snapshots regenerated. `Contract-Authority-SHA256` updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md` (SHA256: `08eddb3c974890b118b7d0db4ac3acbb37fbd89e6cc47f60b9765956962b1ba1`).
+- `ROADMAP.md` — PR 18.3 row added.
+
+**Security posture:**
+- **Tenant isolation:** all 23 non-health routes require `require_bound_tenant()`; `tenant_id` resolved from `request.state` only — never from request body. All 7 DB tables have PostgreSQL RLS enforced via `current_setting('app.tenant_id', true)`. `set_tenant_context(db, tenant_id)` called in every route handler before any DB operation.
+- **Auth scopes:** `GET` routes require `remediation:read`; mutation routes require `remediation:write`. `/remediation-authority/health` is unauthenticated.
+- **Append-only timeline:** `fa_rem_timeline` is protected against UPDATE and DELETE at two independent layers: ORM `before_update`/`before_delete` event listeners and PostgreSQL `CREATE RULE DO INSTEAD NOTHING` guards.
+- **No new crypto:** zero signing implementation in this bounded context. All trust/verification operations delegate to Trust Authority and Verification Authority respectively.
+- **Existing `services/remediation/` unchanged:** the new authority is an independent bounded context under a distinct route prefix. Pre-existing remediation engine, ORM, routes, and tests are not modified.
+- **State machine integrity:** `state_machine.py` enforces strict `VALID_TRANSITIONS` — no invalid transitions are possible via the API. All transitions are audited in `fa_rem_timeline`.
+- **Dependency safety:** circular dependency detection in `dependencies.py` prevents infinite graph traversals.
+- **New CI gate:** `tools/ci/check_remediation_authority.py` enforces structural invariants to prevent silent regression.
+
+---
+
 ## 2026-06-30 — PR 18.2: Enterprise Engagement Portal Authority
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (new orchestration bounded context at `services/engagement_portal/`; 15 new routes under `/portal/engagement` registered in the `control` plane; 3 new DB tables in migration 0143 with RLS and append-only enforcement on activity log; new public health endpoint `/portal/engagement/health` added to `api/security/public_paths.py`; new scopes `portal:read`/`portal:write`; new CI gate `tools/ci/check_engagement_portal.py`; no duplicated business logic — all crypto delegates to Trust Authority; no new signing/crypto implementation)

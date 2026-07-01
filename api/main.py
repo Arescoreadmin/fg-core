@@ -99,6 +99,7 @@ from api.portal_remediation import portal_remediation_router
 from api.control_registry import router as control_registry_router
 from api.governance_portal import router as governance_portal_router
 from api.engagement_portal import router as engagement_portal_router
+from api.remediation_authority import router as remediation_authority_router
 from api.governance_reporting import router as governance_reporting_router
 from api.evidence_authority import router as evidence_authority_router
 from api.verification_authority import router as verification_workflow_router
@@ -737,6 +738,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(control_registry_router)
     app.include_router(governance_portal_router)
     app.include_router(engagement_portal_router)
+    app.include_router(remediation_authority_router)
     app.include_router(governance_reporting_router)
     app.include_router(evidence_authority_router)
     app.include_router(verification_workflow_router)
@@ -1190,6 +1192,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(control_registry_router)
     app.include_router(governance_portal_router)
     app.include_router(engagement_portal_router)
+    app.include_router(remediation_authority_router)
     app.include_router(governance_reporting_router)
     app.include_router(evidence_authority_router)
     app.include_router(verification_workflow_router)

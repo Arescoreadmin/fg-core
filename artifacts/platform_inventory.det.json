@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 818,
+    "contract_count": 842,
     "contract_only": [],
-    "runtime_count": 984,
+    "runtime_count": 1008,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "8ddceeb1f42851613420ea0e01ead46c611837131b7cb48be89c5b19b0e0f17a",
+  "governance_fingerprint": "0e005c17b3d275186c7d7f2e7509207b7b0b4eaf390d28f3fcbe31ef15f84d15",
   "planes": [
     {
       "compat": {
@@ -312,6 +312,7 @@
         "/freshness/history",
         "/freshness/snapshots",
         "/freshness/trends",
+        "/remediation-authority",
         "/reports",
         "/verification-requests"
       ]
@@ -1187,6 +1188,7 @@
     ],
     "evidence": [
       "DELETE /evidence/{ev_id}/ownership/{ownership_id}",
+      "DELETE /remediation-authority/dependencies/{dep_id}",
       "GET /approvals/{subject_type}/{subject_id}",
       "GET /audit/exam-snapshot",
       "GET /audit/exams",
@@ -1230,6 +1232,21 @@
       "GET /freshness/trends/dashboard",
       "GET /freshness/trends/history",
       "GET /freshness/{evidence_id}",
+      "GET /remediation-authority/assignments",
+      "GET /remediation-authority/dashboard",
+      "GET /remediation-authority/dependencies",
+      "GET /remediation-authority/forecast",
+      "GET /remediation-authority/health",
+      "GET /remediation-authority/plans",
+      "GET /remediation-authority/plans/{plan_id}",
+      "GET /remediation-authority/risk",
+      "GET /remediation-authority/search",
+      "GET /remediation-authority/statistics",
+      "GET /remediation-authority/tasks",
+      "GET /remediation-authority/tasks/{task_id}",
+      "GET /remediation-authority/tasks/{task_id}/history",
+      "GET /remediation-authority/tasks/{task_id}/timeline",
+      "GET /remediation-authority/verification",
       "GET /reports",
       "GET /reports/health",
       "GET /reports/statistics",
@@ -1249,6 +1266,8 @@
       "GET /verification-requests/{req_id}/audit",
       "GET /verification-requests/{req_id}/sla",
       "PATCH /evidence/{ev_id}",
+      "PATCH /remediation-authority/plans/{plan_id}",
+      "PATCH /remediation-authority/tasks/{task_id}",
       "POST /approvals",
       "POST /approvals/verify",
       "POST /audit/cycle/run",
@@ -1274,6 +1293,12 @@
       "POST /freshness/exceptions/{exception_id}/revoke",
       "POST /freshness/snapshots/run",
       "POST /freshness/{evidence_id}/recompute",
+      "POST /remediation-authority/assignments",
+      "POST /remediation-authority/dependencies",
+      "POST /remediation-authority/plans",
+      "POST /remediation-authority/tasks",
+      "POST /remediation-authority/tasks/{task_id}/transition",
+      "POST /remediation-authority/verification",
       "POST /reports/compare",
       "POST /reports/generate",
       "POST /reports/{report_id}/publish",
