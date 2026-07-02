@@ -47,9 +47,7 @@ def compute_moving_average(values: list[float], window: int) -> list[float]:
     return result
 
 
-def aggregate_stats(
-    records: list[dict[str, Any]], metric_key: str
-) -> dict[str, Any]:
+def aggregate_stats(records: list[dict[str, Any]], metric_key: str) -> dict[str, Any]:
     """Return aggregated statistics for a metric across a list of records."""
     values = [
         float(r[metric_key])

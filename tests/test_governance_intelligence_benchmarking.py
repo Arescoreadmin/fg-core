@@ -268,7 +268,14 @@ class TestAnonymizeBenchmark:
     def test_gib_93_only_expected_keys(self):
         """GIB-93: output contains only the expected keys."""
         result = anonymize_benchmark(self._sample_record())
-        expected_keys = {"framework", "category", "metric_key", "value", "percentile", "tier"}
+        expected_keys = {
+            "framework",
+            "category",
+            "metric_key",
+            "value",
+            "percentile",
+            "tier",
+        }
         assert set(result.keys()) == expected_keys
 
     def test_gib_94_empty_input_ok(self):

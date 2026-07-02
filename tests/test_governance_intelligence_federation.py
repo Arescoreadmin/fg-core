@@ -14,7 +14,9 @@ from services.governance_intelligence.federation import (
     validate_federation_request,
 )
 from services.governance_intelligence.models import FederationRole
-from services.governance_intelligence.schemas import GovernanceIntelligenceValidationError
+from services.governance_intelligence.schemas import (
+    GovernanceIntelligenceValidationError,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +73,9 @@ class TestValidateFederationRequest:
 
     def test_gif2_31_invalid_role_raises(self):
         """GIF2-31: invalid role raises GovernanceIntelligenceValidationError."""
-        with pytest.raises(GovernanceIntelligenceValidationError, match="Invalid federation role"):
+        with pytest.raises(
+            GovernanceIntelligenceValidationError, match="Invalid federation role"
+        ):
             validate_federation_request("instance-001", "INVALID_ROLE")
 
     def test_gif2_32_empty_role_raises(self):
@@ -86,7 +90,9 @@ class TestValidateFederationRequest:
 
     def test_gif2_34_empty_instance_id_raises(self):
         """GIF2-34: empty instance_id raises."""
-        with pytest.raises(GovernanceIntelligenceValidationError, match="non-empty string"):
+        with pytest.raises(
+            GovernanceIntelligenceValidationError, match="non-empty string"
+        ):
             validate_federation_request("", FederationRole.COORDINATOR.value)
 
     def test_gif2_35_whitespace_only_instance_id_raises(self):
@@ -157,14 +163,19 @@ class TestBuildGovernanceSummary:
     def test_gif2_83_tenant_id_value_not_in_output(self):
         """GIF2-83: tenant_id value 'tenant-secret-xyz' not in any output value."""
         result = build_governance_summary(self._sample_tenant_data())
+
         def check_no_tenant(obj, secret: str) -> bool:
             if isinstance(obj, str):
                 return secret not in obj
             if isinstance(obj, dict):
-                return all(check_no_tenant(v, secret) for v in obj.values()) and secret not in obj.keys()
+                return (
+                    all(check_no_tenant(v, secret) for v in obj.values())
+                    and secret not in obj.keys()
+                )
             if isinstance(obj, (list, tuple)):
                 return all(check_no_tenant(v, secret) for v in obj)
             return True
+
         assert check_no_tenant(result, "tenant-secret-xyz")
 
     def test_gif2_84_governance_score_preserved(self):
@@ -279,4 +290,6 @@ class TestBuildGovernanceSummary:
             assert "tenant_id" not in result
             # Ensure the secret value is not present anywhere in the result
             result_str = str(result)
-            assert tenant not in result_str or "tenant_id" in result_str.replace(f'"{tenant}"', "")
+            assert tenant not in result_str or "tenant_id" in result_str.replace(
+                f'"{tenant}"', ""
+            )

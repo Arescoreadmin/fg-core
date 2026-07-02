@@ -60,7 +60,9 @@ class GovernanceIntelligenceRepository:
             scenario_type=fields["scenario_type"],
             parameters=_dumps(fields.get("parameters") or {}),
             state=fields.get("state", "DRAFT"),
-            result=_dumps(fields["result"]) if fields.get("result") is not None else None,
+            result=_dumps(fields["result"])
+            if fields.get("result") is not None
+            else None,
             created_at=now,
             updated_at=now,
         )

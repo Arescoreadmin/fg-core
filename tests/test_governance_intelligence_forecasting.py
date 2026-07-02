@@ -14,7 +14,7 @@ from services.governance_intelligence.forecasting import (
     compute_confidence_for_forecast,
     forecast_metric,
 )
-from services.governance_intelligence.models import ConfidenceLevel, ForecastHorizon
+from services.governance_intelligence.models import ConfidenceLevel
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ class TestComputeConfidenceForForecast:
 
     def test_gif_69_valid_confidence_level_value(self):
         """GIF-69: result is always a valid ConfidenceLevel value."""
-        valid_levels = {l.value for l in ConfidenceLevel}
+        valid_levels = {lv.value for lv in ConfidenceLevel}
         for n in [0, 5, 10, 20, 30, 100]:
             result = compute_confidence_for_forecast([1.0] * n)
             assert result in valid_levels
@@ -274,7 +274,7 @@ class TestBuildForecastResponse:
 
     def test_gif_136_confidence_level_is_valid(self):
         """GIF-136: confidence_level is a valid ConfidenceLevel value."""
-        valid = {l.value for l in ConfidenceLevel}
+        valid = {lv.value for lv in ConfidenceLevel}
         result = build_forecast_response("some_metric", [1.0] * 10, "DAYS_7")
         assert result["confidence_level"] in valid
 

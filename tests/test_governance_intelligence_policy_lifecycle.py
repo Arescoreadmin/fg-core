@@ -13,7 +13,10 @@ from services.governance_intelligence.policy_lifecycle import (
     is_mutable,
     validate_transition,
 )
-from services.governance_intelligence.models import PolicyLifecycleState, MUTABLE_POLICY_STATES
+from services.governance_intelligence.models import (
+    PolicyLifecycleState,
+    MUTABLE_POLICY_STATES,
+)
 from services.governance_intelligence.schemas import GovernanceIntelligencePolicyError
 
 
@@ -41,59 +44,101 @@ class TestValidTransitionsStructure:
 
     def test_gipl_4_draft_can_go_to_review(self):
         """GIPL-4: DRAFT → REVIEW is valid."""
-        assert PolicyLifecycleState.REVIEW.value in VALID_TRANSITIONS[PolicyLifecycleState.DRAFT.value]
+        assert (
+            PolicyLifecycleState.REVIEW.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.DRAFT.value]
+        )
 
     def test_gipl_5_draft_can_go_to_archived(self):
         """GIPL-5: DRAFT → ARCHIVED is valid."""
-        assert PolicyLifecycleState.ARCHIVED.value in VALID_TRANSITIONS[PolicyLifecycleState.DRAFT.value]
+        assert (
+            PolicyLifecycleState.ARCHIVED.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.DRAFT.value]
+        )
 
     def test_gipl_6_draft_cannot_go_to_active(self):
         """GIPL-6: DRAFT → ACTIVE is invalid."""
-        assert PolicyLifecycleState.ACTIVE.value not in VALID_TRANSITIONS[PolicyLifecycleState.DRAFT.value]
+        assert (
+            PolicyLifecycleState.ACTIVE.value
+            not in VALID_TRANSITIONS[PolicyLifecycleState.DRAFT.value]
+        )
 
     def test_gipl_7_review_can_go_to_approved(self):
         """GIPL-7: REVIEW → APPROVED is valid."""
-        assert PolicyLifecycleState.APPROVED.value in VALID_TRANSITIONS[PolicyLifecycleState.REVIEW.value]
+        assert (
+            PolicyLifecycleState.APPROVED.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.REVIEW.value]
+        )
 
     def test_gipl_8_review_can_go_to_draft(self):
         """GIPL-8: REVIEW → DRAFT is valid (rollback)."""
-        assert PolicyLifecycleState.DRAFT.value in VALID_TRANSITIONS[PolicyLifecycleState.REVIEW.value]
+        assert (
+            PolicyLifecycleState.DRAFT.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.REVIEW.value]
+        )
 
     def test_gipl_9_review_can_go_to_archived(self):
         """GIPL-9: REVIEW → ARCHIVED is valid."""
-        assert PolicyLifecycleState.ARCHIVED.value in VALID_TRANSITIONS[PolicyLifecycleState.REVIEW.value]
+        assert (
+            PolicyLifecycleState.ARCHIVED.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.REVIEW.value]
+        )
 
     def test_gipl_10_approved_can_go_to_active(self):
         """GIPL-10: APPROVED → ACTIVE is valid."""
-        assert PolicyLifecycleState.ACTIVE.value in VALID_TRANSITIONS[PolicyLifecycleState.APPROVED.value]
+        assert (
+            PolicyLifecycleState.ACTIVE.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.APPROVED.value]
+        )
 
     def test_gipl_11_approved_can_go_to_archived(self):
         """GIPL-11: APPROVED → ARCHIVED is valid."""
-        assert PolicyLifecycleState.ARCHIVED.value in VALID_TRANSITIONS[PolicyLifecycleState.APPROVED.value]
+        assert (
+            PolicyLifecycleState.ARCHIVED.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.APPROVED.value]
+        )
 
     def test_gipl_12_active_can_go_to_deprecated(self):
         """GIPL-12: ACTIVE → DEPRECATED is valid."""
-        assert PolicyLifecycleState.DEPRECATED.value in VALID_TRANSITIONS[PolicyLifecycleState.ACTIVE.value]
+        assert (
+            PolicyLifecycleState.DEPRECATED.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.ACTIVE.value]
+        )
 
     def test_gipl_13_active_can_go_to_superseded(self):
         """GIPL-13: ACTIVE → SUPERSEDED is valid."""
-        assert PolicyLifecycleState.SUPERSEDED.value in VALID_TRANSITIONS[PolicyLifecycleState.ACTIVE.value]
+        assert (
+            PolicyLifecycleState.SUPERSEDED.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.ACTIVE.value]
+        )
 
     def test_gipl_14_active_cannot_go_to_draft(self):
         """GIPL-14: ACTIVE → DRAFT is invalid."""
-        assert PolicyLifecycleState.DRAFT.value not in VALID_TRANSITIONS[PolicyLifecycleState.ACTIVE.value]
+        assert (
+            PolicyLifecycleState.DRAFT.value
+            not in VALID_TRANSITIONS[PolicyLifecycleState.ACTIVE.value]
+        )
 
     def test_gipl_15_deprecated_can_go_to_archived(self):
         """GIPL-15: DEPRECATED → ARCHIVED is valid."""
-        assert PolicyLifecycleState.ARCHIVED.value in VALID_TRANSITIONS[PolicyLifecycleState.DEPRECATED.value]
+        assert (
+            PolicyLifecycleState.ARCHIVED.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.DEPRECATED.value]
+        )
 
     def test_gipl_16_deprecated_cannot_go_to_active(self):
         """GIPL-16: DEPRECATED → ACTIVE is invalid."""
-        assert PolicyLifecycleState.ACTIVE.value not in VALID_TRANSITIONS[PolicyLifecycleState.DEPRECATED.value]
+        assert (
+            PolicyLifecycleState.ACTIVE.value
+            not in VALID_TRANSITIONS[PolicyLifecycleState.DEPRECATED.value]
+        )
 
     def test_gipl_17_superseded_can_go_to_archived(self):
         """GIPL-17: SUPERSEDED → ARCHIVED is valid."""
-        assert PolicyLifecycleState.ARCHIVED.value in VALID_TRANSITIONS[PolicyLifecycleState.SUPERSEDED.value]
+        assert (
+            PolicyLifecycleState.ARCHIVED.value
+            in VALID_TRANSITIONS[PolicyLifecycleState.SUPERSEDED.value]
+        )
 
     def test_gipl_18_archived_is_terminal_empty_frozenset(self):
         """GIPL-18: ARCHIVED → (none) — empty frozenset."""
@@ -101,11 +146,17 @@ class TestValidTransitionsStructure:
 
     def test_gipl_19_review_cannot_go_to_active(self):
         """GIPL-19: REVIEW → ACTIVE is invalid (must go through APPROVED)."""
-        assert PolicyLifecycleState.ACTIVE.value not in VALID_TRANSITIONS[PolicyLifecycleState.REVIEW.value]
+        assert (
+            PolicyLifecycleState.ACTIVE.value
+            not in VALID_TRANSITIONS[PolicyLifecycleState.REVIEW.value]
+        )
 
     def test_gipl_20_approved_cannot_go_to_deprecated(self):
         """GIPL-20: APPROVED → DEPRECATED is invalid."""
-        assert PolicyLifecycleState.DEPRECATED.value not in VALID_TRANSITIONS[PolicyLifecycleState.APPROVED.value]
+        assert (
+            PolicyLifecycleState.DEPRECATED.value
+            not in VALID_TRANSITIONS[PolicyLifecycleState.APPROVED.value]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +229,9 @@ class TestValidateTransition:
 
     def test_gipl_71_unknown_current_state_raises(self):
         """GIPL-71: unknown current state raises GovernanceIntelligencePolicyError."""
-        with pytest.raises(GovernanceIntelligencePolicyError, match="Unknown policy lifecycle state"):
+        with pytest.raises(
+            GovernanceIntelligencePolicyError, match="Unknown policy lifecycle state"
+        ):
             validate_transition("UNKNOWN_STATE", "REVIEW")
 
     def test_gipl_72_empty_current_state_raises(self):
@@ -279,6 +332,7 @@ class TestIsMutable:
     def test_gipl_142_mutable_policy_states_frozenset(self):
         """GIPL-142: MUTABLE_POLICY_STATES contains exactly DRAFT and REVIEW."""
         from services.governance_intelligence.models import PolicyLifecycleState
+
         assert PolicyLifecycleState.DRAFT in MUTABLE_POLICY_STATES
         assert PolicyLifecycleState.REVIEW in MUTABLE_POLICY_STATES
         # Non-mutable states must not be in there

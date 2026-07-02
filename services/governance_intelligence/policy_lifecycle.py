@@ -5,7 +5,10 @@ Pure functions. No I/O. No SQLAlchemy. No Pydantic.
 
 from __future__ import annotations
 
-from services.governance_intelligence.models import PolicyLifecycleState, MUTABLE_POLICY_STATES
+from services.governance_intelligence.models import (
+    PolicyLifecycleState,
+    MUTABLE_POLICY_STATES,
+)
 from services.governance_intelligence.schemas import GovernanceIntelligencePolicyError
 
 

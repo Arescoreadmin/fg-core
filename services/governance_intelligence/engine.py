@@ -11,18 +11,15 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from services.governance_intelligence.benchmarking import (
-    anonymize_benchmark,
     assign_tier,
     compute_percentile,
 )
 from services.governance_intelligence.confidence import (
     build_confidence_response,
-    compute_overall_confidence,
 )
 from services.governance_intelligence.forecasting import build_forecast_response
 from services.governance_intelligence.health import build_health
 from services.governance_intelligence.models import (
-    GOVERNANCE_INTELLIGENCE_SCHEMA_VERSION,
     SimulationState,
     TERMINAL_SIMULATION_STATES,
 )
@@ -54,11 +51,9 @@ from services.governance_intelligence.schemas import (
     FederationSyncRequest,
     ForecastListResponse,
     ForecastResponse,
-    GovernanceIntelligenceConflict,
     GovernanceIntelligenceNotFound,
     GovernanceIntelligencePolicyError,
     GovernanceIntelligenceSimulationError,
-    GovernanceIntelligenceValidationError,
     HealthResponse,
     IntelligencePolicyListResponse,
     IntelligencePolicyResponse,
@@ -78,7 +73,6 @@ from services.governance_intelligence.schemas import (
     UpdateSimulationRequest,
 )
 from services.governance_intelligence.simulation import run_simulation as _run_sim
-from services.governance_intelligence.timeline import build_timeline_event
 from services.governance_intelligence.trend_analysis import build_trend_response
 from services.canonical import utc_iso8601_z_now
 
@@ -121,8 +115,9 @@ class GovernanceIntelligenceEngine:
     # ------------------------------------------------------------------
 
     def get_dashboard(self) -> DashboardResponse:
-        total_sims = self._repo.count_simulations()
-        active_sims = self._repo.count_simulations_by_state(SimulationState.RUNNING.value)
+        active_sims = self._repo.count_simulations_by_state(
+            SimulationState.RUNNING.value
+        )
         total_policies = self._repo.count_policies()
         total_benchmarks = self._repo.count_benchmarks()
 
@@ -130,7 +125,13 @@ class GovernanceIntelligenceEngine:
         governance_score = round(
             min(1.0, (total_policies * 0.1 + total_benchmarks * 0.05)), 3
         )
-        risk_level = "LOW" if governance_score >= 0.7 else "MEDIUM" if governance_score >= 0.4 else "HIGH"
+        risk_level = (
+            "LOW"
+            if governance_score >= 0.7
+            else "MEDIUM"
+            if governance_score >= 0.4
+            else "HIGH"
+        )
 
         confidence = build_confidence_response(
             "dashboard",
@@ -297,7 +298,9 @@ class GovernanceIntelligenceEngine:
         )
         self._repo.delete_simulation(row)
 
-    def archive_simulation(self, simulation_id: str, actor_id: str) -> SimulationResponse:
+    def archive_simulation(
+        self, simulation_id: str, actor_id: str
+    ) -> SimulationResponse:
         row = self._repo.get_simulation(simulation_id)
         if row is None:
             raise GovernanceIntelligenceNotFound(
@@ -332,7 +335,9 @@ class GovernanceIntelligenceEngine:
             decision=row.decision,
             authorities_invoked=_loads_list(row.authorities_invoked),
             expected_impact=_loads(row.expected_impact),
-            observed_impact=_loads(row.observed_impact) if row.observed_impact else None,
+            observed_impact=_loads(row.observed_impact)
+            if row.observed_impact
+            else None,
             created_at=row.created_at,
         )
 
@@ -431,9 +436,7 @@ class GovernanceIntelligenceEngine:
     def get_intelligence_policy(self, policy_id: str) -> IntelligencePolicyResponse:
         row = self._repo.get_policy(policy_id)
         if row is None:
-            raise GovernanceIntelligenceNotFound(
-                f"Policy '{policy_id}' not found"
-            )
+            raise GovernanceIntelligenceNotFound(f"Policy '{policy_id}' not found")
         return self._row_to_policy(row)
 
     def list_intelligence_policies(
@@ -453,9 +456,7 @@ class GovernanceIntelligenceEngine:
     ) -> IntelligencePolicyResponse:
         row = self._repo.get_policy(policy_id)
         if row is None:
-            raise GovernanceIntelligenceNotFound(
-                f"Policy '{policy_id}' not found"
-            )
+            raise GovernanceIntelligenceNotFound(f"Policy '{policy_id}' not found")
         if not is_mutable(row.lifecycle_state):
             raise GovernanceIntelligencePolicyError(
                 f"Policy in state '{row.lifecycle_state}' is not editable"
@@ -471,7 +472,9 @@ class GovernanceIntelligenceEngine:
                 minor = int(parts[-1]) + 1
             except (ValueError, IndexError):
                 minor = 1
-            new_version = ".".join(parts[:-1] + [str(minor)]) if len(parts) > 1 else f"1.{minor}"
+            new_version = (
+                ".".join(parts[:-1] + [str(minor)]) if len(parts) > 1 else f"1.{minor}"
+            )
             row.version = new_version
             row.policy_data = json.dumps(req.policy_data, sort_keys=True)
             self._repo.append_policy_version(
@@ -488,9 +491,7 @@ class GovernanceIntelligenceEngine:
     ) -> IntelligencePolicyResponse:
         row = self._repo.get_policy(policy_id)
         if row is None:
-            raise GovernanceIntelligenceNotFound(
-                f"Policy '{policy_id}' not found"
-            )
+            raise GovernanceIntelligenceNotFound(f"Policy '{policy_id}' not found")
         validate_transition(row.lifecycle_state, req.target_state)
         row.lifecycle_state = req.target_state
         self._repo.update_policy(row)
@@ -510,9 +511,7 @@ class GovernanceIntelligenceEngine:
     def get_policy_versions(self, policy_id: str) -> PolicyVersionListResponse:
         row = self._repo.get_policy(policy_id)
         if row is None:
-            raise GovernanceIntelligenceNotFound(
-                f"Policy '{policy_id}' not found"
-            )
+            raise GovernanceIntelligenceNotFound(f"Policy '{policy_id}' not found")
         versions = self._repo.list_policy_versions(policy_id)
         return PolicyVersionListResponse(
             items=[
@@ -534,9 +533,7 @@ class GovernanceIntelligenceEngine:
     ) -> PolicyDiffResponse:
         row = self._repo.get_policy(policy_id)
         if row is None:
-            raise GovernanceIntelligenceNotFound(
-                f"Policy '{policy_id}' not found"
-            )
+            raise GovernanceIntelligenceNotFound(f"Policy '{policy_id}' not found")
         versions = self._repo.list_policy_versions(policy_id)
         version_map = {v.version: _loads(v.policy_data) for v in versions}
 
@@ -589,7 +586,9 @@ class GovernanceIntelligenceEngine:
         # Compute percentile and tier from existing benchmarks for this metric
         existing, _ = self._repo.list_benchmarks(limit=500, offset=0)
         existing_values = [r.value for r in existing if r.metric_key == req.metric_key]
-        pct = compute_percentile(existing_values, req.value) if existing_values else None
+        pct = (
+            compute_percentile(existing_values, req.value) if existing_values else None
+        )
         tier = assign_tier(pct) if pct is not None else None
 
         row = self._repo.create_benchmark(
@@ -706,8 +705,7 @@ class GovernanceIntelligenceEngine:
             by_metric[key].append(row.value)
 
         all_forecasts = [
-            self.get_forecast(k, "DAYS_30")
-            for k in sorted(by_metric.keys())
+            self.get_forecast(k, "DAYS_30") for k in sorted(by_metric.keys())
         ]
         total = len(all_forecasts)
         sliced = all_forecasts[offset : offset + limit]
@@ -872,7 +870,9 @@ class GovernanceIntelligenceEngine:
         # Search simulations
         sims, _ = self._repo.list_simulations(limit=200, offset=0)
         for row in sims:
-            if q in row.name.lower() or (row.description and q in row.description.lower()):
+            if q in row.name.lower() or (
+                row.description and q in row.description.lower()
+            ):
                 results.append(
                     {
                         "type": "simulation",
@@ -886,7 +886,9 @@ class GovernanceIntelligenceEngine:
         # Search policies
         policies, _ = self._repo.list_policies(limit=200, offset=0)
         for policy_row in policies:
-            if q in policy_row.name.lower() or (policy_row.description and q in policy_row.description.lower()):
+            if q in policy_row.name.lower() or (
+                policy_row.description and q in policy_row.description.lower()
+            ):
                 results.append(
                     {
                         "type": "policy",

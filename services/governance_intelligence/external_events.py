@@ -8,12 +8,12 @@ from __future__ import annotations
 from typing import Any
 
 from services.governance_intelligence.models import ExternalEventType
-from services.governance_intelligence.schemas import GovernanceIntelligenceValidationError
-
-
-SUPPORTED_EVENT_TYPES: frozenset[str] = frozenset(
-    {e.value for e in ExternalEventType}
+from services.governance_intelligence.schemas import (
+    GovernanceIntelligenceValidationError,
 )
+
+
+SUPPORTED_EVENT_TYPES: frozenset[str] = frozenset({e.value for e in ExternalEventType})
 
 
 def validate_external_event(
@@ -26,13 +26,9 @@ def validate_external_event(
             f"Supported: {sorted(SUPPORTED_EVENT_TYPES)}"
         )
     if not isinstance(source, str) or not source.strip():
-        raise GovernanceIntelligenceValidationError(
-            "source must be a non-empty string"
-        )
+        raise GovernanceIntelligenceValidationError("source must be a non-empty string")
     if not isinstance(payload, dict):
-        raise GovernanceIntelligenceValidationError(
-            "payload must be a dict"
-        )
+        raise GovernanceIntelligenceValidationError("payload must be a dict")
 
 
 def normalize_event(
@@ -43,9 +39,7 @@ def normalize_event(
     return {
         "event_type": event_type,
         "source": source,
-        "normalized_payload": {
-            k: v for k, v in payload.items()
-        },
+        "normalized_payload": {k: v for k, v in payload.items()},
         "schema_version": "1.0",
     }
 

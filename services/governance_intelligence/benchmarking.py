@@ -77,8 +77,14 @@ def compute_benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         "min": min(values),
         "max": max(values),
         "percentiles": {
-            "p25": compute_percentile(values, sorted(values)[max(0, len(values) // 4 - 1)]),
-            "p50": compute_percentile(values, sorted(values)[max(0, len(values) // 2 - 1)]),
-            "p75": compute_percentile(values, sorted(values)[max(0, 3 * len(values) // 4 - 1)]),
+            "p25": compute_percentile(
+                values, sorted(values)[max(0, len(values) // 4 - 1)]
+            ),
+            "p50": compute_percentile(
+                values, sorted(values)[max(0, len(values) // 2 - 1)]
+            ),
+            "p75": compute_percentile(
+                values, sorted(values)[max(0, 3 * len(values) // 4 - 1)]
+            ),
         },
     }

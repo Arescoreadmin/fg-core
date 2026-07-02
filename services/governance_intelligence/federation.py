@@ -8,7 +8,9 @@ from __future__ import annotations
 from typing import Any
 
 from services.governance_intelligence.models import FederationRole
-from services.governance_intelligence.schemas import GovernanceIntelligenceValidationError
+from services.governance_intelligence.schemas import (
+    GovernanceIntelligenceValidationError,
+)
 
 
 VALID_ROLES: frozenset[str] = frozenset({r.value for r in FederationRole})

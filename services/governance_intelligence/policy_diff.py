@@ -27,9 +27,7 @@ def diff_policy_data(
         old_val = old_thresholds.get(key)
         new_val = new_thresholds.get(key)
         if old_val != new_val:
-            threshold_changes.append(
-                {"key": key, "from": old_val, "to": new_val}
-            )
+            threshold_changes.append({"key": key, "from": old_val, "to": new_val})
 
     # Approval changes
     approval_changes: list[dict[str, Any]] = []
@@ -40,9 +38,7 @@ def diff_policy_data(
         old_val = old_approvals.get(key)
         new_val = new_approvals.get(key)
         if old_val != new_val:
-            approval_changes.append(
-                {"key": key, "from": old_val, "to": new_val}
-            )
+            approval_changes.append({"key": key, "from": old_val, "to": new_val})
 
     # General key changes (top-level keys excluding rules/thresholds/approvals)
     skip_keys = {"rules", "thresholds", "approvals"}

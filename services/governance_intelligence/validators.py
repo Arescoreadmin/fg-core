@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from services.governance_intelligence.models import ForecastHorizon, SimulationState
+from services.governance_intelligence.models import ForecastHorizon
 from services.governance_intelligence.schemas import (
     GovernanceIntelligenceTenantViolation,
     GovernanceIntelligenceValidationError,
@@ -20,22 +20,16 @@ def validate_tenant_id(tenant_id: str) -> None:
 
 def validate_limit_offset(limit: int, offset: int) -> None:
     if not isinstance(limit, int) or limit < 1 or limit > 500:
-        raise GovernanceIntelligenceValidationError(
-            "limit must be between 1 and 500"
-        )
+        raise GovernanceIntelligenceValidationError("limit must be between 1 and 500")
     if not isinstance(offset, int) or offset < 0:
         raise GovernanceIntelligenceValidationError("offset must be >= 0")
 
 
 def validate_search_query(query: str) -> None:
     if not isinstance(query, str) or not query.strip():
-        raise GovernanceIntelligenceValidationError(
-            "query must be a non-empty string"
-        )
+        raise GovernanceIntelligenceValidationError("query must be a non-empty string")
     if len(query) > 512:
-        raise GovernanceIntelligenceValidationError(
-            "query must be <= 512 characters"
-        )
+        raise GovernanceIntelligenceValidationError("query must be <= 512 characters")
 
 
 def validate_scenario_type(scenario_type: str) -> None:

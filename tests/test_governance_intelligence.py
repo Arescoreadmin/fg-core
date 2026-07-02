@@ -119,7 +119,13 @@ def test_GI_4_policy_lifecycle_state_count():
 
 @pytest.mark.parametrize(
     "value",
-    ["PERCENTILE_25", "PERCENTILE_50", "PERCENTILE_75", "PERCENTILE_90", "PERCENTILE_95"],
+    [
+        "PERCENTILE_25",
+        "PERCENTILE_50",
+        "PERCENTILE_75",
+        "PERCENTILE_90",
+        "PERCENTILE_95",
+    ],
 )
 def test_GI_5_benchmark_tier_values(value):
     assert any(m.value == value for m in BenchmarkTier)
@@ -251,9 +257,15 @@ def test_GI_25_policy_lifecycle_state_is_str_enum():
 
 def test_GI_51_exception_hierarchy():
     assert issubclass(GovernanceIntelligenceNotFound, GovernanceIntelligenceError)
-    assert issubclass(GovernanceIntelligenceTenantViolation, GovernanceIntelligenceError)
-    assert issubclass(GovernanceIntelligenceSimulationError, GovernanceIntelligenceError)
-    assert issubclass(GovernanceIntelligenceValidationError, GovernanceIntelligenceError)
+    assert issubclass(
+        GovernanceIntelligenceTenantViolation, GovernanceIntelligenceError
+    )
+    assert issubclass(
+        GovernanceIntelligenceSimulationError, GovernanceIntelligenceError
+    )
+    assert issubclass(
+        GovernanceIntelligenceValidationError, GovernanceIntelligenceError
+    )
     assert issubclass(GovernanceIntelligencePolicyError, GovernanceIntelligenceError)
     assert issubclass(GovernanceIntelligenceConflict, GovernanceIntelligenceError)
 
@@ -730,9 +742,13 @@ def test_GI_150_update_policy_in_immutable_state(svc, db):
     db.commit()
 
     # Move to REVIEW -> APPROVED
-    svc.transition_policy(created.id, PolicyTransitionRequest(target_state="REVIEW", actor_id="u"))
+    svc.transition_policy(
+        created.id, PolicyTransitionRequest(target_state="REVIEW", actor_id="u")
+    )
     db.commit()
-    svc.transition_policy(created.id, PolicyTransitionRequest(target_state="APPROVED", actor_id="u"))
+    svc.transition_policy(
+        created.id, PolicyTransitionRequest(target_state="APPROVED", actor_id="u")
+    )
     db.commit()
 
     with pytest.raises(GovernanceIntelligencePolicyError):

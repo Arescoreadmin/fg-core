@@ -16,8 +16,16 @@ def compare_periods(
     metric_key: str,
 ) -> dict[str, Any]:
     """Statistical comparison between two time windows for a given metric."""
-    vals_a = [float(r[metric_key]) for r in period_a if metric_key in r and r[metric_key] is not None]
-    vals_b = [float(r[metric_key]) for r in period_b if metric_key in r and r[metric_key] is not None]
+    vals_a = [
+        float(r[metric_key])
+        for r in period_a
+        if metric_key in r and r[metric_key] is not None
+    ]
+    vals_b = [
+        float(r[metric_key])
+        for r in period_b
+        if metric_key in r and r[metric_key] is not None
+    ]
 
     mean_a = compute_mean(vals_a)
     mean_b = compute_mean(vals_b)

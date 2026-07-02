@@ -14,7 +14,9 @@ from services.governance_intelligence.simulation import (
     run_simulation,
     validate_simulation_parameters,
 )
-from services.governance_intelligence.schemas import GovernanceIntelligenceSimulationError
+from services.governance_intelligence.schemas import (
+    GovernanceIntelligenceSimulationError,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +84,9 @@ class TestValidateSimulationParameters:
 
     def test_gis_12_invalid_scenario_raises(self):
         """GIS-12: unsupported scenario type raises GovernanceIntelligenceSimulationError."""
-        with pytest.raises(GovernanceIntelligenceSimulationError, match="Unsupported scenario_type"):
+        with pytest.raises(
+            GovernanceIntelligenceSimulationError, match="Unsupported scenario_type"
+        ):
             validate_simulation_parameters("unknown_type", {})
 
     def test_gis_13_empty_string_scenario_raises(self):
@@ -92,7 +96,9 @@ class TestValidateSimulationParameters:
 
     def test_gis_14_none_parameters_raises(self):
         """GIS-14: None parameters raises GovernanceIntelligenceSimulationError."""
-        with pytest.raises(GovernanceIntelligenceSimulationError, match="parameters must be a dict"):
+        with pytest.raises(
+            GovernanceIntelligenceSimulationError, match="parameters must be a dict"
+        ):
             validate_simulation_parameters("policy_change", None)  # type: ignore[arg-type]
 
     def test_gis_15_list_parameters_raises(self):
@@ -664,7 +670,9 @@ class TestComputeSimulationDiff:
         sim = run_simulation("policy_change", {"severity": "HIGH"})  # -0.08
         diff = compute_simulation_diff(baseline, sim)
         # sim (-0.08) - baseline (-0.01) = -0.07
-        assert diff["projected_governance_delta_delta"] == pytest.approx(-0.07, abs=1e-5)
+        assert diff["projected_governance_delta_delta"] == pytest.approx(
+            -0.07, abs=1e-5
+        )
 
     def test_gis_277_identical_simulations_zero_diff(self):
         """GIS-277: identical simulations yield zero delta for all numeric fields."""

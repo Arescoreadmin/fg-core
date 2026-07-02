@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.governance_intelligence.schemas import GovernanceIntelligenceSimulationError
+from services.governance_intelligence.schemas import (
+    GovernanceIntelligenceSimulationError,
+)
 
 
 SUPPORTED_SCENARIO_TYPES: frozenset[str] = frozenset(
@@ -35,14 +37,10 @@ def validate_simulation_parameters(
             f"Supported: {sorted(SUPPORTED_SCENARIO_TYPES)}"
         )
     if not isinstance(parameters, dict):
-        raise GovernanceIntelligenceSimulationError(
-            "parameters must be a dict"
-        )
+        raise GovernanceIntelligenceSimulationError("parameters must be a dict")
 
 
-def run_simulation(
-    scenario_type: str, parameters: dict[str, Any]
-) -> dict[str, Any]:
+def run_simulation(scenario_type: str, parameters: dict[str, Any]) -> dict[str, Any]:
     """Run a deterministic simulation and return projected results.
 
     All outputs are labeled PROJECTED and is_production=false.
@@ -65,10 +63,18 @@ def run_simulation(
             {
                 "projected_governance_delta": delta_map.get(severity, -0.03),
                 "projected_workload_change": workload_map.get(severity, 0.10),
-                "projected_reassessments": max(1, len(parameters.get("controls_affected", [])) * 2),
-                "projected_evidence_volume": max(0, len(parameters.get("controls_affected", [])) * 5),
-                "projected_verification_demand": max(1, len(parameters.get("controls_affected", [])) * 3),
-                "projected_remediation_demand": max(0, len(parameters.get("controls_affected", [])) * 1),
+                "projected_reassessments": max(
+                    1, len(parameters.get("controls_affected", [])) * 2
+                ),
+                "projected_evidence_volume": max(
+                    0, len(parameters.get("controls_affected", [])) * 5
+                ),
+                "projected_verification_demand": max(
+                    1, len(parameters.get("controls_affected", [])) * 3
+                ),
+                "projected_remediation_demand": max(
+                    0, len(parameters.get("controls_affected", [])) * 1
+                ),
             }
         )
 
@@ -89,7 +95,9 @@ def run_simulation(
         days_reduction = int(parameters.get("days_reduction", 0))
         base.update(
             {
-                "projected_governance_delta": round(min(0.10, days_reduction * 0.005), 3),
+                "projected_governance_delta": round(
+                    min(0.10, days_reduction * 0.005), 3
+                ),
                 "projected_workload_change": round(days_reduction * 0.02, 3),
                 "projected_reassessments": max(1, days_reduction // 7),
                 "projected_evidence_volume": max(0, days_reduction * 2),
@@ -116,7 +124,9 @@ def run_simulation(
         direction = 1 if threshold_change >= 0 else -1
         base.update(
             {
-                "projected_governance_delta": round(direction * abs(threshold_change) * 0.1, 4),
+                "projected_governance_delta": round(
+                    direction * abs(threshold_change) * 0.1, 4
+                ),
                 "projected_workload_change": round(abs(threshold_change) * 0.15, 4),
                 "projected_reassessments": max(1, int(abs(threshold_change) * 5)),
                 "projected_evidence_volume": max(0, int(abs(threshold_change) * 10)),

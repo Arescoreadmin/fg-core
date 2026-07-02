@@ -31,10 +31,14 @@ class TestComputeDataFreshnessScore:
 
     def _now_iso(self) -> str:
         """Return current UTC ISO 8601 string."""
-        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
 
     def _past_iso(self, days_ago: int) -> str:
-        dt = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days_ago)
+        dt = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=days_ago
+        )
         return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def test_gic_1_returns_float(self):
@@ -207,11 +211,22 @@ class TestComputeSampleConfidence:
         """GIC-87: 100 samples → 1.0 (HIGH)."""
         assert compute_sample_confidence(100) == pytest.approx(1.0)
 
-    @pytest.mark.parametrize("n,expected", [
-        (0, 0.33), (1, 0.33), (5, 0.33), (9, 0.33),
-        (10, 0.66), (15, 0.66), (20, 0.66), (29, 0.66),
-        (30, 1.0), (50, 1.0), (1000, 1.0),
-    ])
+    @pytest.mark.parametrize(
+        "n,expected",
+        [
+            (0, 0.33),
+            (1, 0.33),
+            (5, 0.33),
+            (9, 0.33),
+            (10, 0.66),
+            (15, 0.66),
+            (20, 0.66),
+            (29, 0.66),
+            (30, 1.0),
+            (50, 1.0),
+            (1000, 1.0),
+        ],
+    )
     def test_gic_88_parametrize_sample_confidence(self, n, expected):
         """GIC-88: parametrized sample confidence values."""
         assert compute_sample_confidence(n) == pytest.approx(expected)
@@ -283,7 +298,7 @@ class TestComputeOverallConfidence:
 
     def test_gic_132_valid_level_value(self):
         """GIC-132: returned level is always a valid ConfidenceLevel value."""
-        valid = {l.value for l in ConfidenceLevel}
+        valid = {lv.value for lv in ConfidenceLevel}
         for scores in [[], [0.0], [0.3], [0.5], [0.8], [1.0]]:
             _, level = compute_overall_confidence(scores)
             assert level in valid
@@ -351,7 +366,7 @@ class TestBuildConfidenceResponse:
 
     def test_gic_171_level_is_valid_confidence_level(self):
         """GIC-171: level is always a valid ConfidenceLevel value."""
-        valid = {l.value for l in ConfidenceLevel}
+        valid = {lv.value for lv in ConfidenceLevel}
         for scores in [{}, {"a": 0.0}, {"a": 0.4}, {"a": 0.6}, {"a": 0.9}]:
             result = build_confidence_response("dim", scores)
             assert result["level"] in valid

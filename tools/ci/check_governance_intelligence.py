@@ -24,7 +24,6 @@ Exits 0 on success, 1 on failure.
 from __future__ import annotations
 
 import argparse
-import ast
 import re
 import sys
 from pathlib import Path
@@ -56,9 +55,7 @@ HEALTH_ROUTE = "/intelligence/health"
 MINIMUM_ROUTE_COUNT = 30
 
 _CLASS_RE = re.compile(r"^\s*class\s+(\w+)", re.MULTILINE)
-_FUNC_OR_CLASS_RE = re.compile(
-    r"^\s*(?:class|def|async\s+def)\s+(\w+)", re.MULTILINE
-)
+_FUNC_OR_CLASS_RE = re.compile(r"^\s*(?:class|def|async\s+def)\s+(\w+)", re.MULTILINE)
 _ROUTE_STR_RE = re.compile(r'@router\.\w+\(\s*["\']([^"\']+)["\']', re.MULTILINE)
 
 
@@ -150,7 +147,11 @@ def main() -> int:
     else:
         text = _read(diff_path) or ""
         names = _declared_names(text)
-        for fn in ("diff_policy_data", "compute_governance_impact", "format_diff_summary"):
+        for fn in (
+            "diff_policy_data",
+            "compute_governance_impact",
+            "format_diff_summary",
+        ):
             if fn not in names:
                 fail(f"policy_diff.py: missing function '{fn}'")
 
@@ -162,7 +163,12 @@ def main() -> int:
     else:
         text = _read(bench_path) or ""
         names = _declared_names(text)
-        for fn in ("compute_percentile", "assign_tier", "anonymize_benchmark", "compute_benchmark_summary"):
+        for fn in (
+            "compute_percentile",
+            "assign_tier",
+            "anonymize_benchmark",
+            "compute_benchmark_summary",
+        ):
             if fn not in names:
                 fail(f"benchmarking.py: missing function '{fn}'")
         # anonymize_benchmark must NOT return tenant_id
@@ -259,7 +265,6 @@ def main() -> int:
     # 10. No duplicated business logic — governance_intelligence must not import from governance_orchestration engine
     vprint("Check 10: no cross-authority engine imports")
     forbidden_import = "from services.governance_orchestration.engine"
-    forbidden_import2 = "from services.governance_orchestration import"
     for py_file in (SERVICE_DIR).glob("*.py"):
         text = _read(py_file) or ""
         if forbidden_import in text:
@@ -293,9 +298,7 @@ def main() -> int:
         text = _read(API_ROUTER) or ""
         routes = _extract_routes(text)
         if HEALTH_ROUTE not in routes:
-            fail(
-                f"{API_ROUTER.relative_to(ROOT)}: missing route '{HEALTH_ROUTE}'"
-            )
+            fail(f"{API_ROUTER.relative_to(ROOT)}: missing route '{HEALTH_ROUTE}'")
         matching = [
             r
             for r in routes
@@ -309,9 +312,7 @@ def main() -> int:
             )
 
     if failures:
-        print(
-            f"\nGovernance Intelligence Gate: FAILED ({len(failures)} violation(s))"
-        )
+        print(f"\nGovernance Intelligence Gate: FAILED ({len(failures)} violation(s))")
         for f in failures:
             print(f"  x  {f}")
         return 1

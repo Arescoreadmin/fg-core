@@ -38,42 +38,40 @@ def build_explanation(
 def format_explanation_text(explanation: dict[str, Any]) -> str:
     """Produce a formatted text version of an explanation."""
     lines = [
-        f"Governance Decision Explanation",
-        f"================================",
+        "Governance Decision Explanation",
+        "================================",
         f"Trigger:         {explanation.get('trigger', 'unknown')}",
         f"Policy Version:  {explanation.get('policy_version', 'unknown')}",
         f"Decision:        {explanation.get('decision', 'unknown')}",
-        f"",
-        f"Authorities Invoked:",
+        "",
+        "Authorities Invoked:",
     ]
     for auth in explanation.get("authorities_invoked", []):
         lines.append(f"  - {auth}")
 
     lines += [
-        f"",
-        f"Expected Impact:",
+        "",
+        "Expected Impact:",
     ]
     for k, v in explanation.get("expected_impact", {}).items():
         lines.append(f"  {k}: {v}")
 
     observed = explanation.get("observed_impact")
     if observed:
-        lines += [f"", f"Observed Impact:"]
+        lines += ["", "Observed Impact:"]
         for k, v in observed.items():
             lines.append(f"  {k}: {v}")
 
     delta = explanation.get("impact_delta", {})
     if delta:
-        lines += [f"", f"Impact Delta:"]
+        lines += ["", "Impact Delta:"]
         for k, v in delta.items():
             lines.append(f"  {k}: {v}")
 
     return "\n".join(lines)
 
 
-def diff_impacts(
-    expected: dict[str, Any], observed: dict[str, Any]
-) -> dict[str, Any]:
+def diff_impacts(expected: dict[str, Any], observed: dict[str, Any]) -> dict[str, Any]:
     """Compute delta between expected and observed impact dictionaries."""
     delta: dict[str, Any] = {}
     all_keys = set(expected.keys()) | set(observed.keys())

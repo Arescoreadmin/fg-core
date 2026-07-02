@@ -6,7 +6,9 @@ from typing import Any
 
 from sqlalchemy import text as sa_text
 
-from services.governance_intelligence.models import GOVERNANCE_INTELLIGENCE_SCHEMA_VERSION
+from services.governance_intelligence.models import (
+    GOVERNANCE_INTELLIGENCE_SCHEMA_VERSION,
+)
 
 
 AUTHORITY_NAME = "governance_intelligence"
