@@ -103,7 +103,9 @@ class ApprovalChain:
         for a in approvals:
             by_stage.setdefault(a.stage, []).append(a)
         for stage_config in sorted(self._stages, key=lambda s: s.get("stage", 0)):
-            stage_num = stage_config.get("stage")
+            stage_num = stage_config["stage"]
+            if not isinstance(stage_num, int):
+                continue
             approvals_for_stage = by_stage.get(stage_num, [])
             if not self.check_quorum(
                 [self._approval_to_dict(a) for a in approvals_for_stage],
