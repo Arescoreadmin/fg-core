@@ -1,4 +1,4 @@
 # Admin Gateway dependencies
 -r ../requirements-shared.txt
 pydantic-core==2.23.2
-typing-extensions==4.15.0
+typing-extensions==4.16.0

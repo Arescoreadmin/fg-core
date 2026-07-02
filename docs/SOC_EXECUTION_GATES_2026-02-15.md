@@ -1,3 +1,25 @@
+## 2026-07-02 — PR 18.5: Governance Intelligence Authority
+
+**Classification:** New Governance Intelligence bounded context. 10 new DB tables, 47 new routes under new `/intelligence` prefix registered in the `control` plane. No auth logic changes. DB schema change is additive-only. No secrets stored.
+
+**Critical-path files changed:**
+- `migrations/postgres/0146_governance_intelligence.sql` — 10 new tables with RLS policies and append-only rules.
+- `api/db_models_governance_intelligence.py` — 10 ORM models; 5 append-only tables (simulation_history, policy_version, external_event, confidence_history, timeline) with `before_update`/`before_delete` ORM guards.
+- `services/plane_registry/registry.py` — `/intelligence` added to `control` plane `route_prefixes`; `/intelligence/health` added to `public_routes`.
+- `api/main.py` — `governance_intelligence_router` registered in both app builders.
+- `api/db.py` — `db_models_governance_intelligence` added to `_ensure_models_imported()`.
+- `api/security/public_paths.py` — `/intelligence/health` added to `PUBLIC_PATHS_EXACT`.
+- `authority_manifest.yaml` — `governance_intelligence:` entry added with all 10 tables, 9 test files, route prefix `/intelligence`.
+
+**Non-critical-path additions:**
+- `services/governance_intelligence/` — 20 modules: engine, repository, models, schemas, health, validators, explainability, simulation, benchmarking, statistics, trend_analysis, forecasting, comparison, policy_lifecycle, policy_diff, external_events, federation, confidence, timeline, `__init__`.
+- `tools/ci/check_governance_intelligence.py` — 12-check CI gate.
+- `tests/test_governance_intelligence*.py` — 9 test files, 768 tests total.
+
+**SOC review outcome:** approved. All 47 routes require `governance:read` or `governance:write` enforced by `require_scopes()` + `require_bound_tenant()`; `/intelligence/health` is public (no tenant data). Simulation outputs are always labeled `PROJECTED` with `is_production: false` — never confusable with measured values. `anonymize_benchmark()` strips `tenant_id` and all PII before exposing benchmark comparisons. `build_governance_summary()` in federation module explicitly excludes `tenant_id`, `instance_id`, and `source` fields. Policy lifecycle state machine enforces DRAFT→REVIEW→APPROVED→ACTIVE→DEPRECATED/SUPERSEDED→ARCHIVED with terminal ARCHIVED state (no exits). 5 append-only tables protected by ORM guards at two layers: SQLAlchemy `before_update`/`before_delete` events and SQL `DO INSTEAD NOTHING` rules. Governance intelligence engine never imports from governance orchestration engine — no cross-authority coupling. No external network calls in any pure-function module. No new external dependencies.
+
+---
+
 ## 2026-06-29 — PR 17.7D: CGIN Transparency Authority
 
 **Classification:** New cryptographic transparency layer for CGIN governance operations. New library service package (`services/cgin/transparency/`), new API router (`api/cgin_transparency.py`), new CI gate (`tools/ci/check_cgin_transparency.py`), route inventory update, ROADMAP update, authority manifest update. No auth logic changes. No DB schema changes. No migrations.

@@ -299,6 +299,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_orchestration"
     )  # PR 18.4: Continuous Governance Orchestration Authority
+    importlib.import_module(
+        "api.db_models_governance_intelligence"
+    )  # PR 18.5: Governance Intelligence Authority
 
 
 def _get_base():

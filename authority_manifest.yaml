@@ -507,6 +507,36 @@ authorities:
     cgin_snapshot: false
     cgin_anonymized: false
     consumers: []
+  governance_intelligence:
+    engine: services/governance_intelligence
+    api_file: api/governance_intelligence.py
+    db_models: api/db_models_governance_intelligence.py
+    route_prefixes:
+    - /intelligence
+    tables:
+    - fa_gov_intel_simulation
+    - fa_gov_intel_simulation_history
+    - fa_gov_intel_policy
+    - fa_gov_intel_policy_version
+    - fa_gov_intel_benchmark
+    - fa_gov_intel_external_event
+    - fa_gov_intel_federation
+    - fa_gov_intel_explainability
+    - fa_gov_intel_confidence_history
+    - fa_gov_intel_timeline
+    tests:
+    - tests/test_governance_intelligence.py
+    - tests/test_governance_intelligence_explainability.py
+    - tests/test_governance_intelligence_simulation.py
+    - tests/test_governance_intelligence_benchmarking.py
+    - tests/test_governance_intelligence_forecasting.py
+    - tests/test_governance_intelligence_policy_lifecycle.py
+    - tests/test_governance_intelligence_confidence.py
+    - tests/test_governance_intelligence_federation.py
+    - tests/test_governance_intelligence_trend.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
 cgin_trust:
   trust_version: "1.0"
   signing_algorithm: "ed25519-v1"
