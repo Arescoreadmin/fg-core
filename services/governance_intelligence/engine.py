@@ -487,21 +487,22 @@ class GovernanceIntelligenceEngine:
         return self._row_to_policy(row)
 
     def transition_policy(
-        self, policy_id: str, req: PolicyTransitionRequest
+        self, policy_id: str, req: PolicyTransitionRequest, actor_id: str
     ) -> IntelligencePolicyResponse:
         row = self._repo.get_policy(policy_id)
         if row is None:
             raise GovernanceIntelligenceNotFound(f"Policy '{policy_id}' not found")
-        validate_transition(row.lifecycle_state, req.target_state)
+        old_state = row.lifecycle_state
+        validate_transition(old_state, req.target_state)
         row.lifecycle_state = req.target_state
         self._repo.update_policy(row)
         self._repo.append_timeline(
             event_type="policy.transitioned",
             entity_id=row.id,
             entity_type="policy",
-            actor_id=req.actor_id,
+            actor_id=actor_id,
             data={
-                "from_state": row.lifecycle_state,
+                "from_state": old_state,
                 "to_state": req.target_state,
                 "reason": req.reason,
             },
@@ -576,7 +577,7 @@ class GovernanceIntelligenceEngine:
             value=row.value,
             percentile=row.percentile,
             tier=row.tier,
-            metadata=_loads(row.metadata),
+            metadata=_loads(row.extra_metadata),
             created_at=row.created_at,
         )
 
@@ -807,7 +808,7 @@ class GovernanceIntelligenceEngine:
             tenant_id=row.tenant_id,
             instance_id=row.instance_id,
             role=row.role,
-            metadata=_loads(row.metadata),
+            metadata=_loads(row.extra_metadata),
             last_sync_at=row.last_sync_at,
             created_at=row.created_at,
         )

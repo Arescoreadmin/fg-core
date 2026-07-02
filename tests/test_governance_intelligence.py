@@ -553,7 +553,7 @@ def test_GI_136_transition_policy(svc, db):
     db.commit()
 
     trans = PolicyTransitionRequest(target_state="REVIEW", actor_id="user-1")
-    updated = svc.transition_policy(created.id, trans)
+    updated = svc.transition_policy(created.id, trans, actor_id="user-1")
     db.commit()
     assert updated.lifecycle_state == "REVIEW"
 
@@ -569,7 +569,7 @@ def test_GI_137_transition_policy_invalid(svc, db):
 
     with pytest.raises(GovernanceIntelligencePolicyError):
         trans = PolicyTransitionRequest(target_state="ACTIVE", actor_id="user-1")
-        svc.transition_policy(created.id, trans)
+        svc.transition_policy(created.id, trans, actor_id="user-1")
 
 
 def test_GI_138_get_policy_versions(svc, db):
@@ -743,11 +743,11 @@ def test_GI_150_update_policy_in_immutable_state(svc, db):
 
     # Move to REVIEW -> APPROVED
     svc.transition_policy(
-        created.id, PolicyTransitionRequest(target_state="REVIEW", actor_id="u")
+        created.id, PolicyTransitionRequest(target_state="REVIEW", actor_id="u"), actor_id="u"
     )
     db.commit()
     svc.transition_policy(
-        created.id, PolicyTransitionRequest(target_state="APPROVED", actor_id="u")
+        created.id, PolicyTransitionRequest(target_state="APPROVED", actor_id="u"), actor_id="u"
     )
     db.commit()
 

@@ -555,12 +555,13 @@ def transition_policy(
     request: Request,
 ) -> IntelligencePolicyResponse:
     tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
         set_tenant_context(db, tenant_id)
         svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
         try:
-            result = svc.transition_policy(policy_id, req)
+            result = svc.transition_policy(policy_id, req, actor_id=actor)
             db.commit()
             return result
         except Exception as exc:

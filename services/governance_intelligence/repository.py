@@ -245,7 +245,7 @@ class GovernanceIntelligenceRepository:
             value=float(fields["value"]),
             percentile=fields.get("percentile"),
             tier=fields.get("tier"),
-            metadata=_dumps(fields.get("metadata") or {}),
+            extra_metadata=_dumps(fields.get("metadata") or {}),
             created_at=_now(),
         )
         self._db.add(row)
@@ -346,7 +346,7 @@ class GovernanceIntelligenceRepository:
             tenant_id=self._tenant_id,
             instance_id=fields["instance_id"],
             role=fields["role"],
-            metadata=_dumps(fields.get("metadata") or {}),
+            extra_metadata=_dumps(fields.get("metadata") or {}),
             last_sync_at=fields.get("last_sync_at"),
             created_at=_now(),
         )
