@@ -108,7 +108,7 @@ def evaluate_control_health(db: Any, tenant_id: str) -> dict[str, Any]:
         verified = _count(
             db,
             "SELECT COUNT(1) FROM control_registry WHERE tenant_id = :t "
-            "AND verification_status = 'VERIFIED'",
+            "AND verification_status = 'verified'",
             {"t": tenant_id},
         )
     except Exception:
@@ -135,8 +135,8 @@ def evaluate_governance_posture(db: Any, tenant_id: str) -> dict[str, Any]:
     try:
         row = db.execute(
             sa_text(
-                "SELECT overall_score FROM fa_governance_health_snapshots "
-                "WHERE tenant_id = :t ORDER BY created_at DESC LIMIT 1"
+                "SELECT governance_health_score FROM fa_governance_health_snapshots "
+                "WHERE tenant_id = :t ORDER BY snapshot_at DESC LIMIT 1"
             ),
             {"t": tenant_id},
         ).first()

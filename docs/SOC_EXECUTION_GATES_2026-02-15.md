@@ -5228,3 +5228,35 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No DB schema changes. No migration files. No secrets stored or accessed. The trust module never reads private keys from disk — keys are always injected as objects by callers. `verify_snapshot` never raises (all exceptions caught, reported in `errors` list). Algorithm rotation requires only changing `ACTIVE_SIGNING_ALGORITHM` — no other call sites hardcode algorithm strings. The 4 new API routes follow the established `require_scopes` + `require_bound_tenant` pattern identical to all other CGIN routes. No new external dependencies (uses `cryptography` 46.0.7 already in `requirements-shared.txt`).
 
+## 2026-07-02 — PR 18.4: Continuous Governance Orchestration Authority
+
+**Classification:** New bounded-context authority. New service package (`services/governance_orchestration/`, 22 modules), new API router (`api/governance_orchestration.py`, 43 routes), new ORM models (`api/db_models_governance_orchestration.py`, 12 tables), new migration (`migrations/postgres/0145_governance_orchestration.sql`), new CI gate (`tools/ci/check_governance_orchestration.py`). Route inventory regenerated. Authority manifest updated. Contract SHA256 updated in BLUEPRINT_STAGED.md and CONTRACT.md. Public paths updated (health probe). No auth logic changes.
+
+**Critical-path files changed:**
+- `tools/ci/check_governance_orchestration.py` — new 12-check AST + runtime CI gate. Verifies: all 22 service module files present; `GovernanceOrchestrationEngine` class declared; all 11 enums declared; all 10 exception classes declared; API router file exists with `/governance-orchestration/` routes; ORM models file exists with all 12 table classes; migration 0145 exists; no forbidden crypto helpers (`hmac.new`, `sign_payload`, `ed25519` — all signing must delegate to Trust Authority); `governance_orchestration` registered in `authority_manifest.yaml`; `policy_engine.py` is pure (no DB calls); timeline tables have append-only guards at both ORM and PG rule layers; `set_tenant_context` called in every non-health route handler. Exits 0/1.
+- `api/security/public_paths.py` — `/governance-orchestration/health` added to `PUBLIC_PATHS_EXACT` as an unauthenticated liveness probe, consistent with the pattern for `/reports/health`, `/portal/engagement/health`, and `/remediation-authority/health`.
+- `api/governance_orchestration.py` — FastAPI router; 43 routes under `/governance-orchestration/`. Every non-health handler follows the invariant: `require_bound_tenant(request)` → `Session(get_engine())` → `set_tenant_context(db, tenant_id)` → engine call → `db.commit()`. Read routes use `governance:read` scope; write routes use `governance:write` scope. No direct ORM access; all DB operations route through `GovernanceOrchestrationEngine`. No secrets. No auth logic changes.
+- `api/main.py` — `governance_orchestration_router` import and `app.include_router(governance_orchestration_router)` added to both `build_app` and `create_app`.
+- `tools/ci/route_inventory.json` — regenerated to include all 43 new governance orchestration routes.
+
+**Non-critical-path additions:**
+- `services/governance_orchestration/models.py` — 11 enums, terminal-state frozensets, domain error hierarchy. Pure Python; no I/O.
+- `services/governance_orchestration/schemas.py` — 10-exception hierarchy, 11 request + 36 response Pydantic schemas, all `extra="forbid"`.
+- `services/governance_orchestration/repository.py` — tenant-scoped CRUD for all 12 `fa_gov_orch_*` tables; only module that touches ORM directly.
+- `services/governance_orchestration/engine.py` — `GovernanceOrchestrationEngine`; 46 public methods; never commits; caller owns `db.commit()`.
+- `services/governance_orchestration/policy_engine.py` — pure policy-as-code evaluation (`evaluate_policy`, `compute_reassessment_schedule`, `validate_policy_schema`); verified pure by CI gate check 10.
+- `services/governance_orchestration/trigger_engine.py` — 13 deterministic trigger types; `evaluate_triggers`, `record_trigger`, `is_trigger_active_for_tenant`.
+- `services/governance_orchestration/workflow.py` — `WorkflowCoordinator` + 7-state FSM.
+- `services/governance_orchestration/playbooks.py` — 7 built-in templates (PCI DSS 4.0, HIPAA, NIST CSF 2.0, ISO 27001:2022, SOC 2, Microsoft Secure Score, CIS Controls v8).
+- `services/governance_orchestration/approvals.py` — `ApprovalChain`; quorum, delegation, expiration, audit history; active-state guard prevents overwriting settled decisions.
+- `services/governance_orchestration/governance_loop.py` — continuous evaluation; reads `fa_governance_health_snapshots.governance_health_score` / `snapshot_at` and `control_registry.verification_status = 'verified'` (lowercase); all cross-authority reads wrapped in try/except.
+- `services/governance_orchestration/rollback.py`, `reassessment.py`, `scheduler.py`, `change_detection.py`, `impact_analysis.py`, `maintenance_windows.py`, `statistics.py`, `timeline.py`, `notifications.py` (no-op stubs), `health.py`, `validators.py`.
+- `api/db_models_governance_orchestration.py` — 12 ORM tables; `fa_gov_orch_policy_version`, `fa_gov_orch_trigger_timeline`, and `fa_gov_orch_timeline` have both SQLAlchemy `before_update`/`before_delete` guards and PG `DO INSTEAD NOTHING` rules.
+- `migrations/postgres/0145_governance_orchestration.sql` — all 12 tables; RLS via `current_setting('app.tenant_id', true)`; PG rules on 3 append-only tables.
+- `authority_manifest.yaml` — `governance_orchestration` entry: 12 tables, 9 test files.
+- `BLUEPRINT_STAGED.md` / `CONTRACT.md` — `Contract-Authority-SHA256` updated for 43 new routes.
+- `ROADMAP.md` — Phase 2 P2 row added.
+- Tests: 9 files, 821 deterministic tests, all passing.
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed (except adding `/governance-orchestration/health` to the public path list, which is an additive safe-by-default change following an established pattern). No secrets stored or accessed. No cryptographic operations — all signing delegates to CGIN Trust Authority; all anchoring delegates to CGIN Transparency Authority (no-op stubs in notifications.py never raise). Every DB write goes through the engine; the engine never commits. Tenant isolation enforced at three layers: `require_bound_tenant`, `set_tenant_context` (RLS), and explicit `tenant_id` predicate in every repository query. Three append-only tables protected at both ORM and PostgreSQL rule layers. No new external dependencies.
+

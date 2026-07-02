@@ -357,7 +357,20 @@ class GovernanceOrchestrationEngine:
             if errors:
                 raise GovernanceOrchestrationValidationError("; ".join(errors))
             row.policy_data = json.dumps(req.policy_data, sort_keys=True)
+            # Bump version and record in append-only policy_version table.
+            try:
+                major, minor = row.version.split(".", 1)
+                row.version = f"{major}.{int(minor) + 1}"
+            except Exception:
+                row.version = row.version + ".1"
+            self._repo.append_policy_version(
+                policy_id=row.id,
+                version=row.version,
+                policy_data=req.policy_data,
+                actor_id=actor_id,
+            )
             changed["policy_data"] = True
+            changed["version"] = row.version
         if req.active is not None:
             row.active = 1 if req.active else 0
             changed["active"] = req.active
@@ -736,6 +749,12 @@ class GovernanceOrchestrationEngine:
         if row is None:
             raise GovernanceOrchestrationNotFound(
                 f"Approval {approval_id!r} not found"
+            )
+        from services.governance_orchestration.models import ACTIVE_APPROVAL_STATES
+        if row.approval_state not in {s.value for s in ACTIVE_APPROVAL_STATES}:
+            raise GovernanceOrchestrationApprovalError(
+                f"Approval {approval_id!r} is not in an active state "
+                f"(current: {row.approval_state!r})"
             )
         decision = req.decision.upper()
         if decision not in {"APPROVE", "REJECT", "DELEGATE"}:

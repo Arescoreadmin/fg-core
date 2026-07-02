@@ -40,6 +40,8 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/portal/engagement/health",
     # Remediation Authority health probe (PR 18.3) — unauthenticated liveness check.
     "/remediation-authority/health",
+    # Governance Orchestration Authority health probe (PR 18.4) — unauthenticated liveness check.
+    "/governance-orchestration/health",
 )
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (
