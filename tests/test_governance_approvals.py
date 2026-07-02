@@ -262,9 +262,7 @@ def test_AP_24_engine_list_approvals_by_workflow(svc):
 def test_AP_25_engine_list_approvals_by_state(svc):
     wf = _wf(svc)
     ap = _ap(svc, wf.id)
-    svc.approve_approval(
-        ap.id, ApproveRequest(decision="APPROVE"), actor_id="a"
-    )
+    svc.approve_approval(ap.id, ApproveRequest(decision="APPROVE"), actor_id="a")
     resp = svc.list_approvals(approval_state="APPROVED")
     for a in resp.items:
         assert a.approval_state == "APPROVED"
@@ -304,8 +302,6 @@ def test_AP_29_engine_approve_reason_persisted(svc):
 def test_AP_30_engine_approve_timeline_recorded(svc):
     wf = _wf(svc)
     ap = _ap(svc, wf.id)
-    svc.approve_approval(
-        ap.id, ApproveRequest(decision="APPROVE"), actor_id="alice"
-    )
+    svc.approve_approval(ap.id, ApproveRequest(decision="APPROVE"), actor_id="alice")
     tl = svc.get_timeline(entity_type="approval", entity_id=ap.id)
     assert any(e.event_type == "approval_approve" for e in tl.events)

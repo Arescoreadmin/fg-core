@@ -286,9 +286,7 @@ def test_WF_29_workflow_advance_appends_timeline(svc):
     wf = _make_wf(svc)
     svc.advance_workflow(wf.id, "start", actor_id="a")
     tl = svc.get_timeline(entity_type="workflow", entity_id=wf.id)
-    assert any(
-        e.event_type == "workflow_event_start" for e in tl.events
-    )
+    assert any(e.event_type == "workflow_event_start" for e in tl.events)
 
 
 def test_WF_30_workflow_cancel_appends_timeline(svc):

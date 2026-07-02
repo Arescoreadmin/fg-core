@@ -88,17 +88,13 @@ def test_PB_10_template_shape(playbook_type):
         assert key in tpl
 
 
-@pytest.mark.parametrize(
-    "playbook_type", list(PLAYBOOK_TEMPLATES.keys())
-)
+@pytest.mark.parametrize("playbook_type", list(PLAYBOOK_TEMPLATES.keys()))
 def test_PB_11_template_controls_nonempty(playbook_type):
     tpl = get_playbook_template(playbook_type)
     assert len(tpl["controls"]) > 0
 
 
-@pytest.mark.parametrize(
-    "playbook_type", list(PLAYBOOK_TEMPLATES.keys())
-)
+@pytest.mark.parametrize("playbook_type", list(PLAYBOOK_TEMPLATES.keys()))
 def test_PB_12_template_interval_positive(playbook_type):
     tpl = get_playbook_template(playbook_type)
     assert tpl["reassessment_interval_days"] > 0

@@ -31,7 +31,6 @@ from services.governance_orchestration.schemas import (
     ApproveRequest,
     ChangeDetectionListResponse,
     ChangeDetectionResponse,
-    CreateApprovalRequest,
     CreateChangeDetectionRequest,
     CreateMaintenanceWindowRequest,
     CreatePlaybookRequest,
@@ -81,8 +80,7 @@ _ACTOR_UNKNOWN = "unknown"
 
 def _actor(request: Request) -> str:
     return str(
-        getattr(getattr(request, "state", None), "key_prefix", None)
-        or _ACTOR_UNKNOWN
+        getattr(getattr(request, "state", None), "key_prefix", None) or _ACTOR_UNKNOWN
     )
 
 
@@ -288,9 +286,7 @@ def list_triggers(
     response_model=TriggerResponse,
     status_code=201,
 )
-def create_trigger(
-    req: CreateTriggerRequest, request: Request
-) -> TriggerResponse:
+def create_trigger(req: CreateTriggerRequest, request: Request) -> TriggerResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -444,9 +440,7 @@ def list_playbooks(
     response_model=PlaybookResponse,
     status_code=201,
 )
-def create_playbook(
-    req: CreatePlaybookRequest, request: Request
-) -> PlaybookResponse:
+def create_playbook(req: CreatePlaybookRequest, request: Request) -> PlaybookResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -465,9 +459,7 @@ def create_playbook(
     "/governance-orchestration/playbooks/templates/{playbook_type}",
     dependencies=[Depends(require_scopes("governance:read"))],
 )
-def get_playbook_template_route(
-    playbook_type: str, request: Request
-) -> dict[str, Any]:
+def get_playbook_template_route(playbook_type: str, request: Request) -> dict[str, Any]:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -533,9 +525,7 @@ def list_workflows(
     response_model=WorkflowResponse,
     status_code=201,
 )
-def create_workflow(
-    req: CreateWorkflowRequest, request: Request
-) -> WorkflowResponse:
+def create_workflow(req: CreateWorkflowRequest, request: Request) -> WorkflowResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -690,9 +680,7 @@ def create_reassessment(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=ReassessmentResponse,
 )
-def get_reassessment(
-    reassessment_id: str, request: Request
-) -> ReassessmentResponse:
+def get_reassessment(reassessment_id: str, request: Request) -> ReassessmentResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -747,9 +735,7 @@ def complete_reassessment(
         set_tenant_context(db, tenant_id)
         svc = GovernanceOrchestrationEngine(db, tenant_id=tenant_id)
         try:
-            result = svc.complete_reassessment(
-                reassessment_id, outcome, actor_id=actor
-            )
+            result = svc.complete_reassessment(reassessment_id, outcome, actor_id=actor)
             db.commit()
             return result
         except Exception as exc:
@@ -1083,18 +1069,14 @@ def delegate_approval(
         set_tenant_context(db, tenant_id)
         svc = GovernanceOrchestrationEngine(db, tenant_id=tenant_id)
         if not req.delegated_to:
-            raise HTTPException(
-                status_code=400, detail="delegated_to is required"
-            )
+            raise HTTPException(status_code=400, detail="delegated_to is required")
         delegate_req = ApproveRequest(
             decision="DELEGATE",
             reason=req.reason,
             delegated_to=req.delegated_to,
         )
         try:
-            result = svc.approve_approval(
-                approval_id, delegate_req, actor_id=actor
-            )
+            result = svc.approve_approval(approval_id, delegate_req, actor_id=actor)
             db.commit()
             return result
         except Exception as exc:

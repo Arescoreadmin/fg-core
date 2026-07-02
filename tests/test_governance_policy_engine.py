@@ -65,7 +65,11 @@ def test_PE_9_high_risk_requires_approval():
 def test_PE_10_medium_risk_allow_when_healthy():
     result = evaluate_policy(
         {"risk_level": "MEDIUM"},
-        {"governance_score": 90, "control_health_pct": 90, "evidence_sufficiency_pct": 90},
+        {
+            "governance_score": 90,
+            "control_health_pct": 90,
+            "evidence_sufficiency_pct": 90,
+        },
     )
     assert result["decision"] == "ALLOW"
 
@@ -93,7 +97,11 @@ def test_PE_14_triggers_present_forces_reassess():
 def test_PE_15_no_action_when_healthy_low_risk():
     result = evaluate_policy(
         {"risk_level": "LOW"},
-        {"governance_score": 100, "control_health_pct": 100, "evidence_sufficiency_pct": 100},
+        {
+            "governance_score": 100,
+            "control_health_pct": 100,
+            "evidence_sufficiency_pct": 100,
+        },
     )
     assert "NO_ACTION" in result["actions"]
 
@@ -351,10 +359,15 @@ def test_PE_55_context_typed_correctly():
 
 
 def test_PE_56_actions_are_allowed():
-    ALLOWED = {"REASSESS", "APPROVE_REQUIRED", "ESCALATE", "NO_ACTION", "SUSPEND", "REMEDIATE"}
-    result = evaluate_policy(
-        {"risk_level": "CRITICAL"}, {"triggers": [1, 2]}
-    )
+    ALLOWED = {
+        "REASSESS",
+        "APPROVE_REQUIRED",
+        "ESCALATE",
+        "NO_ACTION",
+        "SUSPEND",
+        "REMEDIATE",
+    }
+    result = evaluate_policy({"risk_level": "CRITICAL"}, {"triggers": [1, 2]})
     for a in result["actions"]:
         assert a in ALLOWED
 
@@ -373,7 +386,11 @@ def test_PE_58_policy_data_not_dict_safe():
 def test_PE_59_low_risk_not_approve_required():
     result = evaluate_policy(
         {"risk_level": "LOW"},
-        {"governance_score": 100, "control_health_pct": 100, "evidence_sufficiency_pct": 100},
+        {
+            "governance_score": 100,
+            "control_health_pct": 100,
+            "evidence_sufficiency_pct": 100,
+        },
     )
     assert result["decision"] != "APPROVE_REQUIRED"
 
@@ -381,7 +398,11 @@ def test_PE_59_low_risk_not_approve_required():
 def test_PE_60_medium_no_approve_required():
     result = evaluate_policy(
         {"risk_level": "MEDIUM"},
-        {"governance_score": 100, "control_health_pct": 100, "evidence_sufficiency_pct": 100},
+        {
+            "governance_score": 100,
+            "control_health_pct": 100,
+            "evidence_sufficiency_pct": 100,
+        },
     )
     assert result["decision"] != "APPROVE_REQUIRED"
 

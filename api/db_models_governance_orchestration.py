@@ -47,7 +47,9 @@ class GovOrchPolicy(Base):
     tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    risk_level: Mapped[str] = mapped_column(String(32), nullable=False, default="MEDIUM")
+    risk_level: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="MEDIUM"
+    )
     policy_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     active: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     version: Mapped[str] = mapped_column(String(32), nullable=False, default="1.0")

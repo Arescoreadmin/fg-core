@@ -15,20 +15,6 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from api.db import get_engine
-from api.db_models_governance_orchestration import (
-    GovOrchApproval,
-    GovOrchChangeDetection,
-    GovOrchMaintenanceWindow,
-    GovOrchPlaybook,
-    GovOrchPolicy,
-    GovOrchPolicyVersion,
-    GovOrchReassessment,
-    GovOrchSimulation,
-    GovOrchTimeline,
-    GovOrchTrigger,
-    GovOrchTriggerTimeline,
-    GovOrchWorkflow,
-)
 from services.governance_orchestration.engine import (
     GovernanceOrchestrationEngine,
 )
@@ -214,9 +200,7 @@ def test_GO_12_approval_state_count():
     assert len(ApprovalState) == 5
 
 
-@pytest.mark.parametrize(
-    "value", ["SCHEDULED", "ACTIVE", "COMPLETED", "CANCELLED"]
-)
+@pytest.mark.parametrize("value", ["SCHEDULED", "ACTIVE", "COMPLETED", "CANCELLED"])
 def test_GO_13_maintenance_window_state_values(value):
     assert any(m.value == value for m in MaintenanceWindowState)
 
@@ -225,9 +209,7 @@ def test_GO_14_maintenance_window_state_count():
     assert len(MaintenanceWindowState) == 4
 
 
-@pytest.mark.parametrize(
-    "value", ["PENDING", "RUNNING", "COMPLETED", "FAILED"]
-)
+@pytest.mark.parametrize("value", ["PENDING", "RUNNING", "COMPLETED", "FAILED"])
 def test_GO_15_simulation_state_values(value):
     assert any(m.value == value for m in SimulationState)
 
@@ -256,9 +238,7 @@ def test_GO_18_playbook_type_count():
     assert len(PlaybookType) == 7
 
 
-@pytest.mark.parametrize(
-    "value", ["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"]
-)
+@pytest.mark.parametrize("value", ["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"])
 def test_GO_19_impact_level_values(value):
     assert any(m.value == value for m in ImpactLevel)
 
@@ -501,9 +481,7 @@ def test_GO_61_maintenance_window_request_ok():
 
 def test_GO_62_maintenance_window_extra_forbidden():
     with pytest.raises(ValidationError):
-        CreateMaintenanceWindowRequest(
-            name="mw", starts_at="a", ends_at="b", bogus=1
-        )
+        CreateMaintenanceWindowRequest(name="mw", starts_at="a", ends_at="b", bogus=1)
 
 
 def test_GO_63_change_detection_request_ok():
@@ -517,9 +495,7 @@ def test_GO_64_change_detection_extra_forbidden():
 
 
 def test_GO_65_exception_hierarchy_root():
-    assert issubclass(
-        GovernanceOrchestrationNotFound, GovernanceOrchestrationError
-    )
+    assert issubclass(GovernanceOrchestrationNotFound, GovernanceOrchestrationError)
 
 
 def test_GO_66_exception_hierarchy_tenant():
@@ -529,9 +505,7 @@ def test_GO_66_exception_hierarchy_tenant():
 
 
 def test_GO_67_exception_hierarchy_conflict():
-    assert issubclass(
-        GovernanceOrchestrationConflict, GovernanceOrchestrationError
-    )
+    assert issubclass(GovernanceOrchestrationConflict, GovernanceOrchestrationError)
 
 
 def test_GO_68_exception_hierarchy_transition():
@@ -656,9 +630,7 @@ def test_GO_90_create_policy_policy_data_default_empty():
 
 
 def test_GO_91_maintenance_window_reason_optional():
-    req = CreateMaintenanceWindowRequest(
-        name="mw", starts_at="a", ends_at="b"
-    )
+    req = CreateMaintenanceWindowRequest(name="mw", starts_at="a", ends_at="b")
     assert req.reason is None
 
 
@@ -793,9 +765,7 @@ def test_GO_110_repo_append_trigger_timeline(repo, db):
 
 def test_GO_111_trigger_timeline_is_append_only(repo, db):
     trig = repo.create_trigger(trigger_type="MANUAL_REQUEST")
-    row = repo.append_trigger_timeline(
-        trigger_id=trig.id, event_type="a", actor_id="a"
-    )
+    row = repo.append_trigger_timeline(trigger_id=trig.id, event_type="a", actor_id="a")
     db.commit()
     with pytest.raises(RuntimeError):
         row.event_type = "modified"
@@ -1270,9 +1240,7 @@ def test_GO_165_engine_update_policy(svc):
 def test_GO_166_engine_update_policy_invalid_risk_level(svc):
     p = svc.create_policy(CreatePolicyRequest(name="p"), actor_id="x")
     with pytest.raises(GovernanceOrchestrationValidationError):
-        svc.update_policy(
-            p.id, UpdatePolicyRequest(risk_level="INVALID"), actor_id="x"
-        )
+        svc.update_policy(p.id, UpdatePolicyRequest(risk_level="INVALID"), actor_id="x")
 
 
 def test_GO_167_engine_create_playbook(svc):
@@ -1337,9 +1305,7 @@ def test_GO_176_engine_schedule_reassessment(svc):
     r = svc.create_reassessment(
         CreateReassessmentRequest(assessment_id="a-1"), actor_id="x"
     )
-    scheduled = svc.schedule_reassessment(
-        r.id, "2026-01-01T00:00:00Z", actor_id="x"
-    )
+    scheduled = svc.schedule_reassessment(r.id, "2026-01-01T00:00:00Z", actor_id="x")
     assert scheduled.reassessment_state == "SCHEDULED"
 
 
@@ -1413,9 +1379,7 @@ def test_GO_185_engine_reject_approval(svc):
     ap = svc.create_approval(
         CreateApprovalRequest(workflow_id=wf.id, actor_id="a"), actor_id="x"
     )
-    resp = svc.approve_approval(
-        ap.id, ApproveRequest(decision="REJECT"), actor_id="a"
-    )
+    resp = svc.approve_approval(ap.id, ApproveRequest(decision="REJECT"), actor_id="a")
     assert resp.approval_state == "REJECTED"
 
 
@@ -1425,9 +1389,7 @@ def test_GO_186_engine_approval_invalid_decision(svc):
         CreateApprovalRequest(workflow_id=wf.id, actor_id="a"), actor_id="x"
     )
     with pytest.raises(GovernanceOrchestrationApprovalError):
-        svc.approve_approval(
-            ap.id, ApproveRequest(decision="BOGUS"), actor_id="a"
-        )
+        svc.approve_approval(ap.id, ApproveRequest(decision="BOGUS"), actor_id="a")
 
 
 def test_GO_187_engine_create_maintenance_window(svc):
@@ -1548,9 +1510,7 @@ def test_GO_202_engine_list_workflows_filter_state(svc):
 
 
 def test_GO_203_engine_list_reassessments_filter(svc):
-    svc.create_reassessment(
-        CreateReassessmentRequest(assessment_id="a"), actor_id="x"
-    )
+    svc.create_reassessment(CreateReassessmentRequest(assessment_id="a"), actor_id="x")
     resp = svc.list_reassessments(reassessment_state="REQUESTED")
     for item in resp.items:
         assert item.reassessment_state == "REQUESTED"
@@ -1901,9 +1861,7 @@ def test_GO_260_validate_all_validators_run():
 # ===========================================================================
 
 
-@pytest.mark.parametrize(
-    "risk", ["HIGH", "MEDIUM", "LOW", "CRITICAL"]
-)
+@pytest.mark.parametrize("risk", ["HIGH", "MEDIUM", "LOW", "CRITICAL"])
 def test_GO_261_create_policy_all_risk_levels(svc, risk):
     p = svc.create_policy(
         CreatePolicyRequest(name=f"p-{risk}", risk_level=risk), actor_id="x"
@@ -1950,9 +1908,7 @@ def test_GO_262_create_playbook_all_types(svc, pb_type):
     ],
 )
 def test_GO_263_create_trigger_all_types(svc, tt):
-    t = svc.create_trigger(
-        CreateTriggerRequest(trigger_type=tt), actor_id="x"
-    )
+    t = svc.create_trigger(CreateTriggerRequest(trigger_type=tt), actor_id="x")
     assert t.trigger_type == tt
 
 
@@ -1974,9 +1930,7 @@ def test_GO_264_create_change_all_types(svc, ct):
     assert c.change_type == ct
 
 
-@pytest.mark.parametrize(
-    "il", ["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"]
-)
+@pytest.mark.parametrize("il", ["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"])
 def test_GO_265_create_change_impact_levels(svc, il):
     c = svc.create_change_detection(
         CreateChangeDetectionRequest(change_type="EVIDENCE_CHANGE", impact_level=il),
@@ -1985,9 +1939,7 @@ def test_GO_265_create_change_impact_levels(svc, il):
     assert c.impact_level == il
 
 
-@pytest.mark.parametrize(
-    "conf", [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0]
-)
+@pytest.mark.parametrize("conf", [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0])
 def test_GO_266_trigger_confidence_range(svc, conf):
     t = svc.create_trigger(
         CreateTriggerRequest(trigger_type="MANUAL_REQUEST", confidence=conf),
@@ -2028,9 +1980,7 @@ def test_GO_270_create_many_triggers(svc, i):
     assert t.id is not None
 
 
-@pytest.mark.parametrize(
-    "stage,quorum", [(1, 1), (1, 2), (2, 1), (3, 2), (5, 3)]
-)
+@pytest.mark.parametrize("stage,quorum", [(1, 1), (1, 2), (2, 1), (3, 2), (5, 3)])
 def test_GO_271_approval_stage_quorum_combinations(svc, stage, quorum):
     wf = svc.create_workflow(CreateWorkflowRequest(name="wf"), actor_id="x")
     ap = svc.create_approval(

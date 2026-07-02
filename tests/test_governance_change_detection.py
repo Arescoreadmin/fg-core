@@ -21,7 +21,7 @@ from services.governance_orchestration.impact_analysis import (
     estimate_control_effectiveness_delta,
     estimate_risk_reduction,
 )
-from services.governance_orchestration.models import ChangeType, ImpactLevel
+from services.governance_orchestration.models import ChangeType
 from services.governance_orchestration.schemas import (
     CreateChangeDetectionRequest,
 )
@@ -92,9 +92,7 @@ def test_CH_8_detect_multi(db):
 
 
 def test_CH_9_detect_returns_impact_level(db):
-    changes = detect_changes(
-        db, _TENANT, {"evidence_delta": {"severity_delta": 50}}
-    )
+    changes = detect_changes(db, _TENANT, {"evidence_delta": {"severity_delta": 50}})
     assert "impact_level" in changes[0]
 
 
@@ -148,9 +146,7 @@ def test_CH_15_significance_ranges(delta, expected):
 
 
 def test_CH_16_significance_severity_delta_key():
-    result = assess_change_significance(
-        {"change_data": {"severity_delta": 60}}
-    )
+    result = assess_change_significance({"change_data": {"severity_delta": 60}})
     assert result == "CRITICAL"
 
 
@@ -163,9 +159,7 @@ def test_CH_18_significance_non_dict():
 
 
 def test_CH_19_significance_non_numeric():
-    result = assess_change_significance(
-        {"change_data": {"delta": "not a number"}}
-    )
+    result = assess_change_significance({"change_data": {"delta": "not a number"}})
     assert result == "NONE"
 
 
@@ -184,9 +178,7 @@ def test_CH_20_record_change(db):
 
 
 def test_CH_21_record_change_persists_id(db):
-    result = record_change_event(
-        db, _TENANT, {"change_type": "CONTROL_CHANGE"}
-    )
+    result = record_change_event(db, _TENANT, {"change_type": "CONTROL_CHANGE"})
     db.commit()
     assert len(result["id"]) >= 32
 
@@ -263,18 +255,11 @@ def test_CH_27_analyze_impact_recommendations_list(db):
 
 
 def test_CH_28_score_delta_zero_by_default():
-    assert (
-        compute_governance_score_delta(
-            {"score": 80}, {"score": 80}
-        )
-        == 0.0
-    )
+    assert compute_governance_score_delta({"score": 80}, {"score": 80}) == 0.0
 
 
 def test_CH_29_score_delta_positive():
-    result = compute_governance_score_delta(
-        {"score": 70}, {"score": 90}
-    )
+    result = compute_governance_score_delta({"score": 70}, {"score": 90})
     assert result == 20.0
 
 

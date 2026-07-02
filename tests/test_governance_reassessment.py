@@ -67,9 +67,7 @@ def test_RE_3_request_none_assessment_id_raises(db):
 
 def test_RE_4_schedule_ok(db):
     r = request_reassessment(db, _TENANT, "a-1", None, None)
-    scheduled = schedule_reassessment(
-        db, _TENANT, r["id"], "2026-01-01T00:00:00Z"
-    )
+    scheduled = schedule_reassessment(db, _TENANT, r["id"], "2026-01-01T00:00:00Z")
     assert scheduled["reassessment_state"] == "SCHEDULED"
 
 
@@ -156,9 +154,7 @@ def test_RE_15_engine_schedule(svc):
     r = svc.create_reassessment(
         CreateReassessmentRequest(assessment_id="a-1"), actor_id="x"
     )
-    scheduled = svc.schedule_reassessment(
-        r.id, "2026-01-01T00:00:00Z", actor_id="x"
-    )
+    scheduled = svc.schedule_reassessment(r.id, "2026-01-01T00:00:00Z", actor_id="x")
     assert scheduled.reassessment_state == "SCHEDULED"
 
 

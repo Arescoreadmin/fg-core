@@ -58,23 +58,17 @@ def test_LOOP_2_idle_state_default(db):
 
 
 def test_LOOP_3_evaluating_when_triggers(db):
-    r = evaluate_governance_state(
-        db, _TENANT, {"evidence_expired": True}
-    )
+    r = evaluate_governance_state(db, _TENANT, {"evidence_expired": True})
     assert r["state"] == "EVALUATING"
 
 
 def test_LOOP_4_actions_when_triggers(db):
-    r = evaluate_governance_state(
-        db, _TENANT, {"evidence_expired": True}
-    )
+    r = evaluate_governance_state(db, _TENANT, {"evidence_expired": True})
     assert "PROCESS_TRIGGERS" in r["actions_required"]
 
 
 def test_LOOP_5_next_hint_short_when_active(db):
-    r = evaluate_governance_state(
-        db, _TENANT, {"evidence_expired": True}
-    )
+    r = evaluate_governance_state(db, _TENANT, {"evidence_expired": True})
     assert r["next_evaluation_hint"] == "1h"
 
 
@@ -94,38 +88,28 @@ def test_LOOP_8_no_triggers_no_actions_processed(db):
 
 
 def test_LOOP_9_verification_failure_triggers(db):
-    r = evaluate_governance_state(
-        db, _TENANT, {"verification_failures": 2}
-    )
+    r = evaluate_governance_state(db, _TENANT, {"verification_failures": 2})
     assert any(
         t["trigger_type"] == "VERIFICATION_FAILED" for t in r["triggers_detected"]
     )
 
 
 def test_LOOP_10_control_degradation(db):
-    r = evaluate_governance_state(
-        db, _TENANT, {"control_health_pct": 30}
-    )
-    assert any(
-        t["trigger_type"] == "CONTROL_DEGRADED" for t in r["triggers_detected"]
-    )
+    r = evaluate_governance_state(db, _TENANT, {"control_health_pct": 30})
+    assert any(t["trigger_type"] == "CONTROL_DEGRADED" for t in r["triggers_detected"])
 
 
 def test_LOOP_11_risk_threshold(db):
     r = evaluate_governance_state(db, _TENANT, {"risk_score": 0.9})
     assert any(
-        t["trigger_type"] == "RISK_THRESHOLD_EXCEEDED"
-        for t in r["triggers_detected"]
+        t["trigger_type"] == "RISK_THRESHOLD_EXCEEDED" for t in r["triggers_detected"]
     )
 
 
 def test_LOOP_12_remediation_completed(db):
-    r = evaluate_governance_state(
-        db, _TENANT, {"remediation_completed": True}
-    )
+    r = evaluate_governance_state(db, _TENANT, {"remediation_completed": True})
     assert any(
-        t["trigger_type"] == "REMEDIATION_COMPLETED"
-        for t in r["triggers_detected"]
+        t["trigger_type"] == "REMEDIATION_COMPLETED" for t in r["triggers_detected"]
     )
 
 
@@ -140,7 +124,11 @@ def test_LOOP_14_multiple_triggers(db):
     r = evaluate_governance_state(
         db,
         _TENANT,
-        {"evidence_expired": True, "framework_revised": True, "remediation_completed": True},
+        {
+            "evidence_expired": True,
+            "framework_revised": True,
+            "remediation_completed": True,
+        },
     )
     assert len(r["triggers_detected"]) >= 3
 
@@ -251,9 +239,7 @@ def test_LOOP_27_loop_never_raises_on_context(db):
 
 def test_LOOP_28_loop_never_raises_on_bad_types(db):
     # Non-numeric fields should be swallowed
-    r = evaluate_governance_state(
-        db, _TENANT, {"control_health_pct": "high"}
-    )
+    r = evaluate_governance_state(db, _TENANT, {"control_health_pct": "high"})
     assert isinstance(r, dict)
 
 

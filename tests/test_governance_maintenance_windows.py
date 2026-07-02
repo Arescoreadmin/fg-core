@@ -45,9 +45,7 @@ def svc(db):
 
 def _win(svc, name="mw", starts="2020-01-01T00:00:00Z", ends="2099-01-01T00:00:00Z"):
     return svc.create_maintenance_window(
-        CreateMaintenanceWindowRequest(
-            name=name, starts_at=starts, ends_at=ends
-        ),
+        CreateMaintenanceWindowRequest(name=name, starts_at=starts, ends_at=ends),
         actor_id="x",
     )
 
