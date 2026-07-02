@@ -11299,6 +11299,732 @@
         "auth",
         "tenant"
       ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/approvals",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/approvals/{approval_id}/approve",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/approvals/{approval_id}/delegate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/approvals/{approval_id}/reject",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/change-detection",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/change-detection",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/dashboard",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/health",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/history",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/impact-analysis",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/maintenance-windows",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/maintenance-windows",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/maintenance-windows/{window_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/maintenance-windows/{window_id}/close",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/maintenance-windows/{window_id}/open",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/playbooks",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/playbooks",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/playbooks/templates/{playbook_type}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/playbooks/{playbook_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/policies",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/policies",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/policies/{policy_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "PATCH",
+      "path": "/governance-orchestration/policies/{policy_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/reassessments",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/reassessments",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/reassessments/{reassessment_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/reassessments/{reassessment_id}/complete",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/reassessments/{reassessment_id}/schedule",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/search",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/simulations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/simulations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/simulations/{simulation_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/statistics",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/timeline",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/triggers",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/triggers",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/triggers/{trigger_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/workflows",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/workflows",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "GET",
+      "path": "/governance-orchestration/workflows/{workflow_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/workflows/{workflow_id}/advance",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/workflows/{workflow_id}/cancel",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_orchestration.py",
+      "method": "POST",
+      "path": "/governance-orchestration/workflows/{workflow_id}/pause",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/governance_reporting.py",
       "method": "GET",
       "path": "/governance-reports",
@@ -17265,7 +17991,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-01T10:09:35.448043+00:00",
+  "generated_at": "2026-07-02T01:24:13.646495+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

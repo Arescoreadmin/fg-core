@@ -591,6 +591,14 @@
           "method": "GET",
           "path": "/portal/engagement/health",
           "permanent": true
+        },
+        {
+          "class_name": "public",
+          "expires_at": "",
+          "justification": "PR 18.4 Governance Orchestration health probe — no auth, no tenant data.",
+          "method": "GET",
+          "path": "/governance-orchestration/health",
+          "permanent": true
         }
       ],
       "required_ci_gates": [
@@ -649,7 +657,8 @@
         "/governance-adaptive-intelligence",
         "/governance-optimization",
         "/cgin/trust",
-        "/cgin/transparency"
+        "/cgin/transparency",
+        "/governance-orchestration"
       ]
     },
     {
@@ -1205,7 +1214,7 @@
       ]
     }
   ],
-  "generated_at": "2026-07-01T10:09:35.460309+00:00",
+  "generated_at": "2026-07-02T01:24:13.659902+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

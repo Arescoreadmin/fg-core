@@ -3248,6 +3248,264 @@
     },
     {
       "method": "GET",
+      "path": "/governance-orchestration/approvals",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/approvals/{approval_id}/approve",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/approvals/{approval_id}/delegate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/approvals/{approval_id}/reject",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/change-detection",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/change-detection",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/dashboard",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/history",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/impact-analysis",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/maintenance-windows",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/maintenance-windows",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/maintenance-windows/{window_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/maintenance-windows/{window_id}/close",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/maintenance-windows/{window_id}/open",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/playbooks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/playbooks",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/playbooks/templates/{playbook_type}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/playbooks/{playbook_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/policies/{policy_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/governance-orchestration/policies/{policy_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/reassessments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/reassessments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/reassessments/{reassessment_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/reassessments/{reassessment_id}/complete",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/reassessments/{reassessment_id}/schedule",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/search",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/simulations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/simulations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/simulations/{simulation_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/statistics",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/timeline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/triggers",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/triggers",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/triggers/{trigger_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/workflows",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/workflows",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance-orchestration/workflows/{workflow_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/workflows/{workflow_id}/advance",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/workflows/{workflow_id}/cancel",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance-orchestration/workflows/{workflow_id}/pause",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/governance-reports",
       "scopes": [],
       "source": "contract"
@@ -5053,7 +5311,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-07-01T10:09:35.467346+00:00",
+  "generated_at": "2026-07-02T00:33:33.894362+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -475,6 +475,38 @@ authorities:
     cgin_snapshot: false
     cgin_anonymized: false
     consumers: []
+  governance_orchestration:
+    engine: services/governance_orchestration
+    api_file: api/governance_orchestration.py
+    db_models: api/db_models_governance_orchestration.py
+    route_prefixes:
+    - /governance-orchestration
+    tables:
+    - fa_gov_orch_policy
+    - fa_gov_orch_policy_version
+    - fa_gov_orch_playbook
+    - fa_gov_orch_workflow
+    - fa_gov_orch_reassessment
+    - fa_gov_orch_trigger
+    - fa_gov_orch_trigger_timeline
+    - fa_gov_orch_simulation
+    - fa_gov_orch_approval
+    - fa_gov_orch_maintenance_window
+    - fa_gov_orch_change_detection
+    - fa_gov_orch_timeline
+    tests:
+    - tests/test_governance_orchestration.py
+    - tests/test_governance_policy_engine.py
+    - tests/test_governance_workflow.py
+    - tests/test_governance_playbooks.py
+    - tests/test_governance_loop.py
+    - tests/test_governance_approvals.py
+    - tests/test_governance_reassessment.py
+    - tests/test_governance_maintenance_windows.py
+    - tests/test_governance_change_detection.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
 cgin_trust:
   trust_version: "1.0"
   signing_algorithm: "ed25519-v1"

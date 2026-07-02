@@ -3243,28 +3243,6 @@
         "title": "ApprovalEntry",
         "type": "object"
       },
-      "ApprovalListResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ApprovalResponse"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "ApprovalListResponse",
-        "type": "object"
-      },
       "ApprovalRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3301,161 +3279,6 @@
           "approved"
         ],
         "title": "ApprovalRequest",
-        "type": "object"
-      },
-      "ApprovalResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "approval_authority": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Approval Authority"
-          },
-          "approval_type": {
-            "title": "Approval Type",
-            "type": "string"
-          },
-          "approved_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Approved At"
-          },
-          "approver_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Approver Email"
-          },
-          "approver_name": {
-            "title": "Approver Name",
-            "type": "string"
-          },
-          "approver_role": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Approver Role"
-          },
-          "comments": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Comments"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "expires_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires At"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "is_required": {
-            "title": "Is Required",
-            "type": "boolean"
-          },
-          "quorum_position": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quorum Position"
-          },
-          "quorum_required": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quorum Required"
-          },
-          "risk_acceptance_id": {
-            "title": "Risk Acceptance Id",
-            "type": "string"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "tenant_id",
-          "risk_acceptance_id",
-          "approver_name",
-          "approver_email",
-          "approver_role",
-          "approval_authority",
-          "approval_type",
-          "status",
-          "comments",
-          "approved_at",
-          "expires_at",
-          "quorum_required",
-          "quorum_position",
-          "is_required",
-          "created_at",
-          "updated_at",
-          "schema_version"
-        ],
-        "title": "ApprovalResponse",
         "type": "object"
       },
       "ApprovalStatus": {
@@ -3517,6 +3340,45 @@
           "subject_id"
         ],
         "title": "ApprovalVerifyRequest",
+        "type": "object"
+      },
+      "ApproveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "maxLength": 32,
+            "title": "Decision",
+            "type": "string"
+          },
+          "delegated_to": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delegated To"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "ApproveRequest",
         "type": "object"
       },
       "ArtifactInternalResponse": {
@@ -6547,6 +6409,89 @@
           "tenant_id"
         ],
         "title": "ChainValidationResponse",
+        "type": "object"
+      },
+      "ChangeDetectionListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeDetectionResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "ChangeDetectionListResponse",
+        "type": "object"
+      },
+      "ChangeDetectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "change_data": {
+            "title": "Change Data",
+            "type": "object"
+          },
+          "change_type": {
+            "title": "Change Type",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "impact_level": {
+            "title": "Impact Level",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "change_type",
+          "source_id",
+          "impact_level",
+          "change_data",
+          "created_at"
+        ],
+        "title": "ChangeDetectionResponse",
         "type": "object"
       },
       "ChangeDetectionSummary": {
@@ -9936,6 +9881,43 @@
         "title": "CreateBillingSubscriptionLinkRequest",
         "type": "object"
       },
+      "CreateChangeDetectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change_data": {
+            "title": "Change Data",
+            "type": "object"
+          },
+          "change_type": {
+            "maxLength": 64,
+            "title": "Change Type",
+            "type": "string"
+          },
+          "impact_level": {
+            "default": "LOW",
+            "maxLength": 32,
+            "title": "Impact Level",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          }
+        },
+        "required": [
+          "change_type"
+        ],
+        "title": "CreateChangeDetectionRequest",
+        "type": "object"
+      },
       "CreateContractRequest": {
         "properties": {
           "contract_ref": {
@@ -10985,6 +10967,46 @@
         "title": "CreateKeyResponse",
         "type": "object"
       },
+      "CreateMaintenanceWindowRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ends_at": {
+            "maxLength": 64,
+            "title": "Ends At",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "starts_at": {
+            "maxLength": 64,
+            "title": "Starts At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "starts_at",
+          "ends_at"
+        ],
+        "title": "CreateMaintenanceWindowRequest",
+        "type": "object"
+      },
       "CreateMaturityTierRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11152,28 +11174,13 @@
         "title": "CreatePlanRequest",
         "type": "object"
       },
-      "CreatePolicyRequest": {
+      "CreatePlaybookRequest": {
         "additionalProperties": false,
         "properties": {
-          "approval_threshold": {
-            "$ref": "#/components/schemas/ApprovalThreshold",
-            "default": "single"
-          },
-          "auto_expire_days": {
-            "anyOf": [
-              {
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Auto Expire Days"
-          },
           "description": {
             "anyOf": [
               {
+                "maxLength": 4096,
                 "type": "string"
               },
               {
@@ -11182,61 +11189,27 @@
             ],
             "title": "Description"
           },
-          "policy_name": {
+          "name": {
             "maxLength": 255,
             "minLength": 1,
-            "title": "Policy Name",
+            "title": "Name",
             "type": "string"
           },
-          "quorum_percentage": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quorum Percentage"
+          "playbook_data": {
+            "title": "Playbook Data",
+            "type": "object"
           },
-          "required_count": {
-            "default": 1,
-            "minimum": 1.0,
-            "title": "Required Count",
-            "type": "integer"
-          },
-          "required_roles": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Required Roles"
-          },
-          "review_frequency_days": {
-            "default": 90,
-            "minimum": 1.0,
-            "title": "Review Frequency Days",
-            "type": "integer"
-          },
-          "sequential": {
-            "default": false,
-            "title": "Sequential",
-            "type": "boolean"
+          "playbook_type": {
+            "maxLength": 64,
+            "title": "Playbook Type",
+            "type": "string"
           }
         },
         "required": [
-          "policy_name"
+          "name",
+          "playbook_type"
         ],
-        "title": "CreatePolicyRequest",
+        "title": "CreatePlaybookRequest",
         "type": "object"
       },
       "CreatePortalGrantRequest": {
@@ -11266,6 +11239,46 @@
           "raw_secret"
         ],
         "title": "CreatePortalGrantResponse",
+        "type": "object"
+      },
+      "CreateReassessmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "trigger_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Id"
+          }
+        },
+        "required": [
+          "assessment_id"
+        ],
+        "title": "CreateReassessmentRequest",
         "type": "object"
       },
       "CreateRelationshipRequest": {
@@ -11635,6 +11648,32 @@
         "title": "CreateScoringContractRequest",
         "type": "object"
       },
+      "CreateSimulationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change_data": {
+            "title": "Change Data",
+            "type": "object"
+          },
+          "change_type": {
+            "maxLength": 64,
+            "title": "Change Type",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "change_type"
+        ],
+        "title": "CreateSimulationRequest",
+        "type": "object"
+      },
       "CreateSubscriptionRequest": {
         "properties": {
           "expires_at": {
@@ -11663,6 +11702,58 @@
           "subscription_type"
         ],
         "title": "CreateSubscriptionRequest",
+        "type": "object"
+      },
+      "CreateTriggerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "policy_version": {
+            "default": "1.0",
+            "maxLength": 32,
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "trigger_type": {
+            "maxLength": 64,
+            "title": "Trigger Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trigger_type"
+        ],
+        "title": "CreateTriggerRequest",
         "type": "object"
       },
       "CreateUsageMeterRequest": {
@@ -11824,6 +11915,50 @@
           "context_ref_id"
         ],
         "title": "CreateWorkflowBody",
+        "type": "object"
+      },
+      "CreateWorkflowRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "title": "Context",
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "playbook_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playbook Id"
+          },
+          "trigger_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Id"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateWorkflowRequest",
         "type": "object"
       },
       "CreditNoteCreateRequest": {
@@ -21174,32 +21309,66 @@
         "title": "HistoryEntryResponse",
         "type": "object"
       },
-      "HistoryResponse": {
+      "ImpactAnalysisResponse": {
         "additionalProperties": false,
-        "description": "Task state history.",
         "properties": {
-          "entries": {
-            "items": {
-              "$ref": "#/components/schemas/HistoryEntryResponse"
-            },
-            "title": "Entries",
-            "type": "array"
+          "affected_controls": {
+            "title": "Affected Controls",
+            "type": "integer"
           },
-          "task_id": {
-            "title": "Task Id",
+          "affected_evidence": {
+            "title": "Affected Evidence",
+            "type": "integer"
+          },
+          "change_type": {
+            "title": "Change Type",
             "type": "string"
           },
-          "total": {
-            "title": "Total",
-            "type": "integer"
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "control_effectiveness_delta": {
+            "title": "Control Effectiveness Delta",
+            "type": "number"
+          },
+          "governance_score_delta": {
+            "title": "Governance Score Delta",
+            "type": "number"
+          },
+          "impact_level": {
+            "title": "Impact Level",
+            "type": "string"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "risk_reduction": {
+            "title": "Risk Reduction",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
           }
         },
         "required": [
-          "task_id",
-          "entries",
-          "total"
+          "tenant_id",
+          "change_type",
+          "impact_level",
+          "governance_score_delta",
+          "control_effectiveness_delta",
+          "risk_reduction",
+          "affected_controls",
+          "affected_evidence",
+          "recommendations",
+          "computed_at"
         ],
-        "title": "HistoryResponse",
+        "title": "ImpactAnalysisResponse",
         "type": "object"
       },
       "IngestOutcomeRequest": {
@@ -23100,6 +23269,89 @@
           "hash"
         ],
         "title": "LogAnchorRequest",
+        "type": "object"
+      },
+      "MaintenanceWindowListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MaintenanceWindowResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "MaintenanceWindowListResponse",
+        "type": "object"
+      },
+      "MaintenanceWindowResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "ends_at": {
+            "title": "Ends At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "starts_at": {
+            "title": "Starts At",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "window_state": {
+            "title": "Window State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "window_state",
+          "starts_at",
+          "ends_at",
+          "reason",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MaintenanceWindowResponse",
         "type": "object"
       },
       "ManifestResponse": {
@@ -25565,6 +25817,38 @@
         "title": "PlanResponse",
         "type": "object"
       },
+      "PlaybookListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_orchestration__schemas__PlaybookResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "PlaybookListResponse",
+        "type": "object"
+      },
       "PlaybookNextActionResponse": {
         "properties": {
           "action_id": {
@@ -25695,75 +25979,6 @@
           "generated_at"
         ],
         "title": "PlaybookProgressResponse",
-        "type": "object"
-      },
-      "PlaybookResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "avg_health_improvement": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Avg Health Improvement"
-          },
-          "confidence": {
-            "title": "Confidence",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "last_updated_at": {
-            "title": "Last Updated At",
-            "type": "string"
-          },
-          "playbook_type": {
-            "title": "Playbook Type",
-            "type": "string"
-          },
-          "recommended_path": {
-            "title": "Recommended Path",
-            "type": "string"
-          },
-          "recommended_steps": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Recommended Steps",
-            "type": "array"
-          },
-          "sample_size": {
-            "title": "Sample Size",
-            "type": "integer"
-          },
-          "success_rate": {
-            "title": "Success Rate",
-            "type": "number"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "tenant_id",
-          "playbook_type",
-          "recommended_path",
-          "recommended_steps",
-          "success_rate",
-          "avg_health_improvement",
-          "confidence",
-          "sample_size",
-          "last_updated_at"
-        ],
-        "title": "PlaybookResponse",
         "type": "object"
       },
       "PlaybookTriggerRequest": {
@@ -26148,28 +26363,6 @@
         "title": "PolicyExceptionResponse",
         "type": "object"
       },
-      "PolicyListResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PolicyResponse"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "PolicyListResponse",
-        "type": "object"
-      },
       "PolicyPinRequest": {
         "additionalProperties": false,
         "properties": {
@@ -26198,121 +26391,6 @@
           "version_hash"
         ],
         "title": "PolicyPinRequest",
-        "type": "object"
-      },
-      "PolicyResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "active": {
-            "title": "Active",
-            "type": "boolean"
-          },
-          "approval_threshold": {
-            "title": "Approval Threshold",
-            "type": "string"
-          },
-          "auto_expire_days": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Auto Expire Days"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "policy_name": {
-            "title": "Policy Name",
-            "type": "string"
-          },
-          "quorum_percentage": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quorum Percentage"
-          },
-          "required_count": {
-            "title": "Required Count",
-            "type": "integer"
-          },
-          "required_roles": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Required Roles"
-          },
-          "review_frequency_days": {
-            "title": "Review Frequency Days",
-            "type": "integer"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "sequential": {
-            "title": "Sequential",
-            "type": "boolean"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "tenant_id",
-          "policy_name",
-          "description",
-          "active",
-          "approval_threshold",
-          "required_roles",
-          "required_count",
-          "quorum_percentage",
-          "auto_expire_days",
-          "review_frequency_days",
-          "sequential",
-          "created_at",
-          "updated_at",
-          "schema_version"
-        ],
-        "title": "PolicyResponse",
         "type": "object"
       },
       "PolicyRollbackRequest": {
@@ -29287,6 +29365,137 @@
           "estimation_rationale"
         ],
         "title": "ReadinessImpactEstimateResponse",
+        "type": "object"
+      },
+      "ReassessmentListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReassessmentResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "ReassessmentListResponse",
+        "type": "object"
+      },
+      "ReassessmentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reassessment_state": {
+            "title": "Reassessment State",
+            "type": "string"
+          },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "trigger_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Id"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "assessment_id",
+          "trigger_id",
+          "reassessment_state",
+          "reason",
+          "scheduled_at",
+          "completed_at",
+          "outcome",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReassessmentResponse",
         "type": "object"
       },
       "RebuildRequest": {
@@ -35086,6 +35295,38 @@
         "title": "SimulationEventResponse",
         "type": "object"
       },
+      "SimulationListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SimulationResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "SimulationListResponse",
+        "type": "object"
+      },
       "SimulationReplayResponse": {
         "properties": {
           "canonical_scenario_inputs": {
@@ -35157,6 +35398,60 @@
           "reconstruction_basis"
         ],
         "title": "SimulationReplayResponse",
+        "type": "object"
+      },
+      "SimulationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "change_data": {
+            "title": "Change Data",
+            "type": "object"
+          },
+          "change_type": {
+            "title": "Change Type",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "result": {
+            "title": "Result",
+            "type": "object"
+          },
+          "simulation_state": {
+            "title": "Simulation State",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "change_type",
+          "change_data",
+          "simulation_state",
+          "result",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SimulationResponse",
         "type": "object"
       },
       "SimulationRunRequest": {
@@ -35589,82 +35884,6 @@
           }
         },
         "title": "StartProvisioningRequest",
-        "type": "object"
-      },
-      "StatisticsResponse": {
-        "additionalProperties": false,
-        "description": "Aggregated tenant statistics.",
-        "properties": {
-          "average_completion_days": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Average Completion Days"
-          },
-          "by_priority": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "title": "By Priority",
-            "type": "object"
-          },
-          "by_sla_status": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "title": "By Sla Status",
-            "type": "object"
-          },
-          "by_state": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "title": "By State",
-            "type": "object"
-          },
-          "computed_at": {
-            "title": "Computed At",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          },
-          "total_plans": {
-            "title": "Total Plans",
-            "type": "integer"
-          },
-          "total_tasks": {
-            "title": "Total Tasks",
-            "type": "integer"
-          },
-          "verifications_approved": {
-            "title": "Verifications Approved",
-            "type": "integer"
-          },
-          "verifications_pending": {
-            "title": "Verifications Pending",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "tenant_id",
-          "total_plans",
-          "total_tasks",
-          "by_state",
-          "by_priority",
-          "by_sla_status",
-          "verifications_pending",
-          "verifications_approved",
-          "average_completion_days",
-          "computed_at"
-        ],
-        "title": "StatisticsResponse",
         "type": "object"
       },
       "StatsResponse": {
@@ -37850,6 +38069,101 @@
         "title": "TraversalResponse",
         "type": "object"
       },
+      "TriggerListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TriggerResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "TriggerListResponse",
+        "type": "object"
+      },
+      "TriggerResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "trigger_type": {
+            "title": "Trigger Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "trigger_type",
+          "source_id",
+          "reason",
+          "confidence",
+          "policy_version",
+          "created_at"
+        ],
+        "title": "TriggerResponse",
+        "type": "object"
+      },
       "TrustManifestResponse": {
         "properties": {
           "authority_name": {
@@ -38698,6 +39012,72 @@
           }
         },
         "title": "UpdatePlanRequest",
+        "type": "object"
+      },
+      "UpdatePolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "policy_data": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Data"
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level"
+          }
+        },
+        "title": "UpdatePolicyRequest",
         "type": "object"
       },
       "UpdatePreferencesRequest": {
@@ -40756,116 +41136,36 @@
         "title": "WorkflowDashboardResponse",
         "type": "object"
       },
-      "WorkflowResponse": {
+      "WorkflowListResponse": {
+        "additionalProperties": false,
         "properties": {
-          "archived_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Archived At"
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_orchestration__schemas__WorkflowResponse"
+            },
+            "title": "Items",
+            "type": "array"
           },
-          "assigned_to_role": {
-            "title": "Assigned To Role",
-            "type": "string"
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
           },
-          "context_ref_id": {
-            "title": "Context Ref Id",
-            "type": "string"
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
           },
-          "context_ref_type": {
-            "title": "Context Ref Type",
-            "type": "string"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "created_by": {
-            "title": "Created By",
-            "type": "string"
-          },
-          "description": {
-            "title": "Description",
-            "type": "string"
-          },
-          "due_at": {
-            "title": "Due At",
-            "type": "string"
-          },
-          "engagement_id": {
-            "title": "Engagement Id",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "priority": {
-            "title": "Priority",
-            "type": "string"
-          },
-          "resolved_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Resolved At"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "state": {
-            "title": "State",
-            "type": "string"
-          },
-          "template_name": {
-            "title": "Template Name",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
+          "total": {
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
-          "id",
-          "tenant_id",
-          "engagement_id",
-          "template_name",
-          "title",
-          "description",
-          "state",
-          "priority",
-          "assigned_to_role",
-          "context_ref_type",
-          "context_ref_id",
-          "due_at",
-          "created_by",
-          "created_at",
-          "updated_at",
-          "resolved_at",
-          "archived_at",
-          "schema_version"
+          "items",
+          "total",
+          "offset",
+          "limit"
         ],
-        "title": "WorkflowResponse",
+        "title": "WorkflowListResponse",
         "type": "object"
       },
       "WorkflowSlaStatus": {
@@ -41390,6 +41690,118 @@
           "created_at"
         ],
         "title": "EvidenceResponse",
+        "type": "object"
+      },
+      "api__governance_workflows__WorkflowResponse": {
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "assigned_to_role": {
+            "title": "Assigned To Role",
+            "type": "string"
+          },
+          "context_ref_id": {
+            "title": "Context Ref Id",
+            "type": "string"
+          },
+          "context_ref_type": {
+            "title": "Context Ref Type",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "title": "Due At",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "template_name",
+          "title",
+          "description",
+          "state",
+          "priority",
+          "assigned_to_role",
+          "context_ref_type",
+          "context_ref_id",
+          "due_at",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "resolved_at",
+          "archived_at",
+          "schema_version"
+        ],
+        "title": "WorkflowResponse",
         "type": "object"
       },
       "api__ops_governance_manager__CreateEnvironmentRequest": {
@@ -43080,6 +43492,75 @@
         "title": "FrameworkTransitionRequest",
         "type": "object"
       },
+      "services__governance_adaptive_intelligence__schemas__PlaybookResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "avg_health_improvement": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Health Improvement"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_updated_at": {
+            "title": "Last Updated At",
+            "type": "string"
+          },
+          "playbook_type": {
+            "title": "Playbook Type",
+            "type": "string"
+          },
+          "recommended_path": {
+            "title": "Recommended Path",
+            "type": "string"
+          },
+          "recommended_steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Steps",
+            "type": "array"
+          },
+          "sample_size": {
+            "title": "Sample Size",
+            "type": "integer"
+          },
+          "success_rate": {
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "playbook_type",
+          "recommended_path",
+          "recommended_steps",
+          "success_rate",
+          "avg_health_improvement",
+          "confidence",
+          "sample_size",
+          "last_updated_at"
+        ],
+        "title": "PlaybookResponse",
+        "type": "object"
+      },
       "services__governance_adaptive_intelligence__schemas__RecordOutcomeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -43207,6 +43688,735 @@
           "success"
         ],
         "title": "RecordOutcomeRequest",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__ApprovalListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_orchestration__schemas__ApprovalResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ApprovalListResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__ApprovalResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "approval_state": {
+            "title": "Approval State",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "delegated_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delegated To"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "quorum": {
+            "title": "Quorum",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "workflow_id",
+          "actor_id",
+          "stage",
+          "quorum",
+          "approval_state",
+          "decision",
+          "reason",
+          "delegated_to",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ApprovalResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__CreatePolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "policy_data": {
+            "title": "Policy Data",
+            "type": "object"
+          },
+          "risk_level": {
+            "default": "MEDIUM",
+            "maxLength": 32,
+            "title": "Risk Level",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreatePolicyRequest",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__DashboardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_maintenance_windows": {
+            "title": "Active Maintenance Windows",
+            "type": "integer"
+          },
+          "active_policies": {
+            "title": "Active Policies",
+            "type": "integer"
+          },
+          "active_workflows": {
+            "title": "Active Workflows",
+            "type": "integer"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "control_health_pct": {
+            "title": "Control Health Pct",
+            "type": "number"
+          },
+          "evidence_sufficiency_pct": {
+            "title": "Evidence Sufficiency Pct",
+            "type": "number"
+          },
+          "governance_score": {
+            "title": "Governance Score",
+            "type": "number"
+          },
+          "pending_approvals": {
+            "title": "Pending Approvals",
+            "type": "integer"
+          },
+          "pending_reassessments": {
+            "title": "Pending Reassessments",
+            "type": "integer"
+          },
+          "recent_triggers": {
+            "title": "Recent Triggers",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "active_policies",
+          "active_workflows",
+          "pending_reassessments",
+          "pending_approvals",
+          "active_maintenance_windows",
+          "recent_triggers",
+          "evidence_sufficiency_pct",
+          "control_health_pct",
+          "governance_score",
+          "computed_at"
+        ],
+        "title": "DashboardResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__HealthResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "authority",
+          "version",
+          "schema_version",
+          "checks"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__HistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_orchestration__schemas__TimelineEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id",
+          "events",
+          "total"
+        ],
+        "title": "HistoryResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__PlaybookResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "playbook_data": {
+            "title": "Playbook Data",
+            "type": "object"
+          },
+          "playbook_type": {
+            "title": "Playbook Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "playbook_type",
+          "description",
+          "playbook_data",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PlaybookResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__PolicyListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_orchestration__schemas__PolicyResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "PolicyListResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__PolicyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "policy_data": {
+            "title": "Policy Data",
+            "type": "object"
+          },
+          "risk_level": {
+            "title": "Risk Level",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "description",
+          "risk_level",
+          "policy_data",
+          "active",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PolicyResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__SearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "playbooks": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_orchestration__schemas__PlaybookResponse"
+            },
+            "title": "Playbooks",
+            "type": "array"
+          },
+          "policies": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_orchestration__schemas__PolicyResponse"
+            },
+            "title": "Policies",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_orchestration__schemas__WorkflowResponse"
+            },
+            "title": "Workflows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "policies",
+          "playbooks",
+          "workflows",
+          "total"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__StatisticsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Approval By State",
+            "type": "object"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "reassessment_by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Reassessment By State",
+            "type": "object"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_approvals": {
+            "title": "Total Approvals",
+            "type": "integer"
+          },
+          "total_playbooks": {
+            "title": "Total Playbooks",
+            "type": "integer"
+          },
+          "total_policies": {
+            "title": "Total Policies",
+            "type": "integer"
+          },
+          "total_reassessments": {
+            "title": "Total Reassessments",
+            "type": "integer"
+          },
+          "total_triggers": {
+            "title": "Total Triggers",
+            "type": "integer"
+          },
+          "total_workflows": {
+            "title": "Total Workflows",
+            "type": "integer"
+          },
+          "trigger_by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Trigger By Type",
+            "type": "object"
+          },
+          "workflow_by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Workflow By State",
+            "type": "object"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_policies",
+          "total_playbooks",
+          "total_workflows",
+          "total_reassessments",
+          "total_triggers",
+          "total_approvals",
+          "workflow_by_state",
+          "reassessment_by_state",
+          "trigger_by_type",
+          "approval_by_state",
+          "computed_at"
+        ],
+        "title": "StatisticsResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__TimelineEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "event_metadata": {
+            "title": "Event Metadata",
+            "type": "object"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "entity_type",
+          "entity_id",
+          "event_type",
+          "actor_id",
+          "event_metadata",
+          "created_at"
+        ],
+        "title": "TimelineEventResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__TimelineResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_orchestration__schemas__TimelineEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "TimelineResponse",
+        "type": "object"
+      },
+      "services__governance_orchestration__schemas__WorkflowResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "context": {
+            "title": "Context",
+            "type": "object"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "playbook_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playbook Id"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "trigger_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Id"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow_state": {
+            "title": "Workflow State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "workflow_state",
+          "playbook_id",
+          "trigger_id",
+          "context",
+          "created_at",
+          "updated_at",
+          "completed_at"
+        ],
+        "title": "WorkflowResponse",
         "type": "object"
       },
       "services__governance_portal__schemas__PortalAuditListResponse": {
@@ -44491,6 +45701,34 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "services__remediation_authority__schemas__HistoryResponse": {
+        "additionalProperties": false,
+        "description": "Task state history.",
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntryResponse"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task_id",
+          "entries",
+          "total"
+        ],
+        "title": "HistoryResponse",
+        "type": "object"
+      },
       "services__remediation_authority__schemas__SearchResponse": {
         "additionalProperties": false,
         "description": "Search result items.",
@@ -44517,6 +45755,82 @@
           "total"
         ],
         "title": "SearchResponse",
+        "type": "object"
+      },
+      "services__remediation_authority__schemas__StatisticsResponse": {
+        "additionalProperties": false,
+        "description": "Aggregated tenant statistics.",
+        "properties": {
+          "average_completion_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Completion Days"
+          },
+          "by_priority": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Priority",
+            "type": "object"
+          },
+          "by_sla_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Sla Status",
+            "type": "object"
+          },
+          "by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By State",
+            "type": "object"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_plans": {
+            "title": "Total Plans",
+            "type": "integer"
+          },
+          "total_tasks": {
+            "title": "Total Tasks",
+            "type": "integer"
+          },
+          "verifications_approved": {
+            "title": "Verifications Approved",
+            "type": "integer"
+          },
+          "verifications_pending": {
+            "title": "Verifications Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "total_plans",
+          "total_tasks",
+          "by_state",
+          "by_priority",
+          "by_sla_status",
+          "verifications_pending",
+          "verifications_approved",
+          "average_completion_days",
+          "computed_at"
+        ],
+        "title": "StatisticsResponse",
         "type": "object"
       },
       "services__remediation_authority__schemas__TaskListResponse": {
@@ -45519,6 +46833,407 @@
           "allowed"
         ],
         "title": "AllowedTransitionsResponse",
+        "type": "object"
+      },
+      "services__risk_governance__schemas__ApprovalListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__risk_governance__schemas__ApprovalResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ApprovalListResponse",
+        "type": "object"
+      },
+      "services__risk_governance__schemas__ApprovalResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_authority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Authority"
+          },
+          "approval_type": {
+            "title": "Approval Type",
+            "type": "string"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approver_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Email"
+          },
+          "approver_name": {
+            "title": "Approver Name",
+            "type": "string"
+          },
+          "approver_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approver Role"
+          },
+          "comments": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comments"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_required": {
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "quorum_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Position"
+          },
+          "quorum_required": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Required"
+          },
+          "risk_acceptance_id": {
+            "title": "Risk Acceptance Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "risk_acceptance_id",
+          "approver_name",
+          "approver_email",
+          "approver_role",
+          "approval_authority",
+          "approval_type",
+          "status",
+          "comments",
+          "approved_at",
+          "expires_at",
+          "quorum_required",
+          "quorum_position",
+          "is_required",
+          "created_at",
+          "updated_at",
+          "schema_version"
+        ],
+        "title": "ApprovalResponse",
+        "type": "object"
+      },
+      "services__risk_governance__schemas__CreatePolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_threshold": {
+            "$ref": "#/components/schemas/ApprovalThreshold",
+            "default": "single"
+          },
+          "auto_expire_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Expire Days"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "policy_name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Policy Name",
+            "type": "string"
+          },
+          "quorum_percentage": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Percentage"
+          },
+          "required_count": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Required Count",
+            "type": "integer"
+          },
+          "required_roles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Roles"
+          },
+          "review_frequency_days": {
+            "default": 90,
+            "minimum": 1.0,
+            "title": "Review Frequency Days",
+            "type": "integer"
+          },
+          "sequential": {
+            "default": false,
+            "title": "Sequential",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "policy_name"
+        ],
+        "title": "CreatePolicyRequest",
+        "type": "object"
+      },
+      "services__risk_governance__schemas__PolicyListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__risk_governance__schemas__PolicyResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PolicyListResponse",
+        "type": "object"
+      },
+      "services__risk_governance__schemas__PolicyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "approval_threshold": {
+            "title": "Approval Threshold",
+            "type": "string"
+          },
+          "auto_expire_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Expire Days"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "policy_name": {
+            "title": "Policy Name",
+            "type": "string"
+          },
+          "quorum_percentage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quorum Percentage"
+          },
+          "required_count": {
+            "title": "Required Count",
+            "type": "integer"
+          },
+          "required_roles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Roles"
+          },
+          "review_frequency_days": {
+            "title": "Review Frequency Days",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "sequential": {
+            "title": "Sequential",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "policy_name",
+          "description",
+          "active",
+          "approval_threshold",
+          "required_roles",
+          "required_count",
+          "quorum_percentage",
+          "auto_expire_days",
+          "review_frequency_days",
+          "sequential",
+          "created_at",
+          "updated_at",
+          "schema_version"
+        ],
+        "title": "PolicyResponse",
         "type": "object"
       },
       "services__timeline_authority__schemas__TimelineEventResponse": {
@@ -80913,7 +82628,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/PlaybookResponse"
+                    "$ref": "#/components/schemas/services__governance_adaptive_intelligence__schemas__PlaybookResponse"
                   },
                   "title": "Response List Playbooks Governance Adaptive Intelligence Playbooks Get",
                   "type": "array"
@@ -83506,6 +85221,2794 @@
         "summary": "Get Strategy Weights",
         "tags": [
           "governance-optimization"
+        ]
+      }
+    },
+    "/governance-orchestration/approvals": {
+      "get": {
+        "operationId": "list_approvals_governance_orchestration_approvals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workflow_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "approval_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Approval State"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__ApprovalListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Approvals",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/approvals/{approval_id}/approve": {
+      "post": {
+        "operationId": "approve_approval_governance_orchestration_approvals__approval_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__ApprovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Approval",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/approvals/{approval_id}/delegate": {
+      "post": {
+        "operationId": "delegate_approval_governance_orchestration_approvals__approval_id__delegate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__ApprovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delegate Approval",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/approvals/{approval_id}/reject": {
+      "post": {
+        "operationId": "reject_approval_governance_orchestration_approvals__approval_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__ApprovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Approval",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/change-detection": {
+      "get": {
+        "operationId": "list_change_detection_governance_orchestration_change_detection_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "change_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Change Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeDetectionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Change Detection",
+        "tags": [
+          "governance-orchestration"
+        ]
+      },
+      "post": {
+        "operationId": "create_change_detection_governance_orchestration_change_detection_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChangeDetectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeDetectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Change Detection",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/dashboard": {
+      "get": {
+        "operationId": "get_dashboard_governance_orchestration_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__DashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/health": {
+      "get": {
+        "operationId": "governance_orchestration_health_governance_orchestration_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Governance Orchestration Health",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/history": {
+      "get": {
+        "operationId": "get_history_governance_orchestration_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Entity Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__HistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get History",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/impact-analysis": {
+      "get": {
+        "operationId": "get_impact_analysis_governance_orchestration_impact_analysis_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "change_type",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Change Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImpactAnalysisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Impact Analysis",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/maintenance-windows": {
+      "get": {
+        "operationId": "list_maintenance_windows_governance_orchestration_maintenance_windows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Window State"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindowListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Maintenance Windows",
+        "tags": [
+          "governance-orchestration"
+        ]
+      },
+      "post": {
+        "operationId": "create_maintenance_window_governance_orchestration_maintenance_windows_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMaintenanceWindowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Maintenance Window",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/maintenance-windows/{window_id}": {
+      "get": {
+        "operationId": "get_maintenance_window_governance_orchestration_maintenance_windows__window_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "window_id",
+            "required": true,
+            "schema": {
+              "title": "Window Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Maintenance Window",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/maintenance-windows/{window_id}/close": {
+      "post": {
+        "operationId": "close_maintenance_window_governance_orchestration_maintenance_windows__window_id__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "window_id",
+            "required": true,
+            "schema": {
+              "title": "Window Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Close Maintenance Window",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/maintenance-windows/{window_id}/open": {
+      "post": {
+        "operationId": "open_maintenance_window_governance_orchestration_maintenance_windows__window_id__open_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "window_id",
+            "required": true,
+            "schema": {
+              "title": "Window Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Maintenance Window",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/playbooks": {
+      "get": {
+        "operationId": "list_playbooks_governance_orchestration_playbooks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "playbook_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Playbook Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybookListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Playbooks",
+        "tags": [
+          "governance-orchestration"
+        ]
+      },
+      "post": {
+        "operationId": "create_playbook_governance_orchestration_playbooks_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlaybookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__PlaybookResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Playbook",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/playbooks/templates/{playbook_type}": {
+      "get": {
+        "operationId": "get_playbook_template_route_governance_orchestration_playbooks_templates__playbook_type__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "playbook_type",
+            "required": true,
+            "schema": {
+              "title": "Playbook Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Playbook Template Route Governance Orchestration Playbooks Templates  Playbook Type  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Playbook Template Route",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/playbooks/{playbook_id}": {
+      "get": {
+        "operationId": "get_playbook_governance_orchestration_playbooks__playbook_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "playbook_id",
+            "required": true,
+            "schema": {
+              "title": "Playbook Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__PlaybookResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Playbook",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/policies": {
+      "get": {
+        "operationId": "list_policies_governance_orchestration_policies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__PolicyListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Policies",
+        "tags": [
+          "governance-orchestration"
+        ]
+      },
+      "post": {
+        "operationId": "create_policy_governance_orchestration_policies_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__governance_orchestration__schemas__CreatePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__PolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Policy",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/policies/{policy_id}": {
+      "get": {
+        "operationId": "get_policy_governance_orchestration_policies__policy_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__PolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "governance-orchestration"
+        ]
+      },
+      "patch": {
+        "operationId": "update_policy_governance_orchestration_policies__policy_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__PolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Policy",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/reassessments": {
+      "get": {
+        "operationId": "list_reassessments_governance_orchestration_reassessments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "reassessment_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reassessment State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReassessmentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Reassessments",
+        "tags": [
+          "governance-orchestration"
+        ]
+      },
+      "post": {
+        "operationId": "create_reassessment_governance_orchestration_reassessments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReassessmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReassessmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Reassessment",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/reassessments/{reassessment_id}": {
+      "get": {
+        "operationId": "get_reassessment_governance_orchestration_reassessments__reassessment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reassessment_id",
+            "required": true,
+            "schema": {
+              "title": "Reassessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReassessmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Reassessment",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/reassessments/{reassessment_id}/complete": {
+      "post": {
+        "operationId": "complete_reassessment_governance_orchestration_reassessments__reassessment_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reassessment_id",
+            "required": true,
+            "schema": {
+              "title": "Reassessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Outcome",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReassessmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Reassessment",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/reassessments/{reassessment_id}/schedule": {
+      "post": {
+        "operationId": "schedule_reassessment_governance_orchestration_reassessments__reassessment_id__schedule_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reassessment_id",
+            "required": true,
+            "schema": {
+              "title": "Reassessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scheduled_at",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Scheduled At",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReassessmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Schedule Reassessment",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/search": {
+      "get": {
+        "operationId": "search_governance_orchestration_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/simulations": {
+      "get": {
+        "operationId": "list_simulations_governance_orchestration_simulations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Simulations",
+        "tags": [
+          "governance-orchestration"
+        ]
+      },
+      "post": {
+        "operationId": "create_simulation_governance_orchestration_simulations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Simulation",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/simulations/{simulation_id}": {
+      "get": {
+        "operationId": "get_simulation_governance_orchestration_simulations__simulation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "simulation_id",
+            "required": true,
+            "schema": {
+              "title": "Simulation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Simulation",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/statistics": {
+      "get": {
+        "operationId": "get_statistics_governance_orchestration_statistics_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__StatisticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Statistics",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/timeline": {
+      "get": {
+        "operationId": "get_timeline_governance_orchestration_timeline_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "entity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__TimelineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Timeline",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/triggers": {
+      "get": {
+        "operationId": "list_triggers_governance_orchestration_triggers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "trigger_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Triggers",
+        "tags": [
+          "governance-orchestration"
+        ]
+      },
+      "post": {
+        "operationId": "create_trigger_governance_orchestration_triggers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Trigger",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/triggers/{trigger_id}": {
+      "get": {
+        "operationId": "get_trigger_governance_orchestration_triggers__trigger_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trigger_id",
+            "required": true,
+            "schema": {
+              "title": "Trigger Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Trigger",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/workflows": {
+      "get": {
+        "operationId": "list_workflows_governance_orchestration_workflows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workflow_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Workflows",
+        "tags": [
+          "governance-orchestration"
+        ]
+      },
+      "post": {
+        "operationId": "create_workflow_governance_orchestration_workflows_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__WorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Workflow",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/workflows/{workflow_id}": {
+      "get": {
+        "operationId": "get_workflow_governance_orchestration_workflows__workflow_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__WorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workflow",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/workflows/{workflow_id}/advance": {
+      "post": {
+        "operationId": "advance_workflow_governance_orchestration_workflows__workflow_id__advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Event",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__WorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advance Workflow",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/workflows/{workflow_id}/cancel": {
+      "post": {
+        "operationId": "cancel_workflow_governance_orchestration_workflows__workflow_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__WorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Workflow",
+        "tags": [
+          "governance-orchestration"
+        ]
+      }
+    },
+    "/governance-orchestration/workflows/{workflow_id}/pause": {
+      "post": {
+        "operationId": "pause_workflow_governance_orchestration_workflows__workflow_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_orchestration__schemas__WorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Workflow",
+        "tags": [
+          "governance-orchestration"
         ]
       }
     },
@@ -87690,7 +92193,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/WorkflowResponse"
+                    "$ref": "#/components/schemas/api__governance_workflows__WorkflowResponse"
                   },
                   "title": "Response List Workflows Governance Workflows Get",
                   "type": "array"
@@ -87751,7 +92254,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorkflowResponse"
+                  "$ref": "#/components/schemas/api__governance_workflows__WorkflowResponse"
                 }
               }
             },
@@ -88079,7 +92582,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorkflowResponse"
+                  "$ref": "#/components/schemas/api__governance_workflows__WorkflowResponse"
                 }
               }
             },
@@ -95258,7 +99761,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StatisticsResponse"
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__StatisticsResponse"
                 }
               }
             },
@@ -95638,7 +100141,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HistoryResponse"
+                  "$ref": "#/components/schemas/services__remediation_authority__schemas__HistoryResponse"
                 }
               }
             },
@@ -99319,7 +103822,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApprovalListResponse"
+                  "$ref": "#/components/schemas/services__risk_governance__schemas__ApprovalListResponse"
                 }
               }
             },
@@ -99401,7 +103904,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApprovalResponse"
+                  "$ref": "#/components/schemas/services__risk_governance__schemas__ApprovalResponse"
                 }
               }
             },
@@ -99468,7 +103971,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApprovalResponse"
+                  "$ref": "#/components/schemas/services__risk_governance__schemas__ApprovalResponse"
                 }
               }
             },
@@ -99651,7 +104154,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApprovalResponse"
+                  "$ref": "#/components/schemas/services__risk_governance__schemas__ApprovalResponse"
                 }
               }
             },
@@ -100627,7 +105130,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PolicyListResponse"
+                  "$ref": "#/components/schemas/services__risk_governance__schemas__PolicyListResponse"
                 }
               }
             },
@@ -100673,7 +105176,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreatePolicyRequest"
+                "$ref": "#/components/schemas/services__risk_governance__schemas__CreatePolicyRequest"
               }
             }
           },
@@ -100684,7 +105187,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PolicyResponse"
+                  "$ref": "#/components/schemas/services__risk_governance__schemas__PolicyResponse"
                 }
               }
             },
@@ -100742,7 +105245,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PolicyResponse"
+                  "$ref": "#/components/schemas/services__risk_governance__schemas__PolicyResponse"
                 }
               }
             },

@@ -16616,3 +16616,78 @@ Result:
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` (modified — 17.7C SOC review entry)
 - `ROADMAP.md` (modified — PR 17.7C row added)
 - CI artifacts regenerated: `contracts/core/openapi.json`, `schemas/api/openapi.json`, `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/contract_routes.json`, `tools/ci/topology.sha256`
+
+---
+
+### 2026-07-02 — pr/18.4-governance-orchestration: CI fixes (round 1)
+
+**Branch:** `pr/18.4-governance-orchestration`
+
+**What was done:** Fixed three CI failures on initial PR push plus four code correctness bugs caught by automated PR review.
+
+**CI failures fixed:**
+
+1. **Route scope lint** (`Enforce route scope lint` step in Guard job) — `/governance-orchestration/health` was not in `PUBLIC_PATHS_EXACT`, so the lint gate flagged it as a non-public route missing scope dependencies. Added `/governance-orchestration/health` to `api/security/public_paths.py` following the same pattern as `/reports/health`, `/portal/engagement/health`, and `/remediation-authority/health`.
+
+2. **Route inventory audit** (`route-inventory-audit` in fg-fast lane) — 43 new governance orchestration routes were not in the committed `tools/ci/route_inventory.json`. Ran `make route-inventory-generate` to regenerate.
+
+3. **SOC review sync** (`soc-review-sync` in fg-fast lane) — `tools/ci/check_governance_orchestration.py` is in `tools/ci/` which matches `CRITICAL_PREFIXES`. Added PR 18.4 SOC review entry to `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+
+4. **AI Ledger Guard** (`pr-fix-log-guard`) — PR_FIX_LOG.md not updated. Added this entry.
+
+**Code correctness fixes (from automated PR review):**
+
+5. **P1 — wrong column names in governance_loop.py** — `evaluate_governance_posture` queried `fa_governance_health_snapshots` using `overall_score` and `created_at`, but the ORM model (`api/db_models_governance_chain.py`) defines columns `governance_health_score` and `snapshot_at`. The exception was silently swallowed, causing posture evaluation to always fall back to 75.0. Fixed column names to match the schema.
+
+6. **P1 — wrong case for verification_status in governance_loop.py** — `evaluate_control_health` compared `verification_status = 'VERIFIED'` (uppercase) but `control_registry` stores lowercase values (`'verified'`). Changed to lowercase.
+
+7. **P2 — approval active-state guard missing in engine.py** — `approve_approval` in `GovernanceOrchestrationEngine` allowed overwriting `APPROVED`, `REJECTED`, or `EXPIRED` approvals because it never checked `ACTIVE_APPROVAL_STATES` before mutating. Added guard that raises `GovernanceOrchestrationApprovalError` if `row.approval_state` is not in `ACTIVE_APPROVAL_STATES`.
+
+8. **P2 — policy_data update didn't append policy version** — `update_policy` in the engine overwrote `row.policy_data` but never called `self._repo.append_policy_version()`, leaving `fa_gov_orch_policy_version` stale after any PATCH that updated policy_data. Fixed by bumping `row.version` (minor increment) and calling `append_policy_version` whenever `policy_data` changes.
+
+**Files modified:**
+- `api/security/public_paths.py` — added `/governance-orchestration/health` to `PUBLIC_PATHS_EXACT`
+- `tools/ci/route_inventory.json` — regenerated (43 new routes)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 18.4 SOC review entry added
+- `docs/ai/PR_FIX_LOG.md` — this entry
+- `services/governance_orchestration/governance_loop.py` — fixed `overall_score`→`governance_health_score`, `created_at`→`snapshot_at`, `'VERIFIED'`→`'verified'`
+- `services/governance_orchestration/engine.py` — approval active-state guard; policy version append on `policy_data` update
+
+---
+
+### 2026-07-02 — pr/18.4-governance-orchestration: CI fixes (round 2)
+
+**Branch:** `pr/18.4-governance-orchestration`
+
+**What was done:** Fixed ruff F401 unused-import errors and black formatting failures that caused `fg-fast` lane and `fmt-check` gate to fail.
+
+**CI failures fixed:**
+
+1. **Ruff F401 — 15 unused imports** (`ruff-lint` in fg-fast lane) — Auto-fixed with `ruff check --fix`. Affected files:
+   - `api/governance_orchestration.py` — removed `CreateApprovalRequest` (replaced by inline schema in router)
+   - `services/governance_orchestration/engine.py` — removed `GovernanceOrchestrationConflict`
+   - 13 test files — removed unused ORM model imports and response-class aliases that were renamed during code review fixes
+
+2. **Black formatting — 11 files** (`fmt-check` gate) — Auto-fixed with `make fmt`. Files affected by ruff's removal of trailing commas on single-item import tuples triggered reformatting of surrounding blocks.
+
+**Files modified:** `api/governance_orchestration.py`, `services/governance_orchestration/engine.py`, and 13 test files (ruff auto-fix); `api/governance_orchestration.py`, `services/governance_orchestration/engine.py`, and 9 other files (black reformat).
+
+---
+
+### 2026-07-02 — pr/18.4-governance-orchestration: CI fixes (round 3)
+
+**Branch:** `pr/18.4-governance-orchestration`
+
+**What was done:** Fixed `control-plane-check` failure — all 43 `/governance-orchestration/` routes showed as "unexpected-route gap" because the prefix was not registered in the plane registry.
+
+**CI failure fixed:**
+
+1. **control-plane-check** (`control-plane-check` in fg-fast-ci lane) — `services/plane_registry/registry.py` control plane `route_prefixes` tuple did not include `/governance-orchestration`, so `check_plane_registry.py` reported all 43 routes as unowned. Added `/governance-orchestration` to the control plane's `route_prefixes` and added a `public_routes` exception for `GET /governance-orchestration/health` (unauthenticated liveness probe, no tenant data). Regenerated all four derived CI artifacts via `make route-inventory-generate`.
+
+**Files modified:**
+- `services/plane_registry/registry.py` — added `/governance-orchestration` to control plane `route_prefixes`; added `GET /governance-orchestration/health` public route exception
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `docs/ai/PR_FIX_LOG.md` — this entry
