@@ -73,6 +73,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/cgin/trust",
             "/cgin/transparency",
             "/governance-orchestration",
+            "/intelligence",
         ),
         allowed_dependency_categories=("auth", "tenant", "db", "rate", "breakglass"),
         required_make_targets=("control-plane-check", "plane-registry-spot"),
@@ -138,6 +139,12 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "/governance-orchestration/health",
                 "public",
                 "PR 18.4 Governance Orchestration health probe — no auth, no tenant data.",
+            ),
+            ex(
+                "GET",
+                "/intelligence/health",
+                "public",
+                "PR 18.5 Governance Intelligence health probe — no auth, no tenant data.",
             ),
         ),
         global_routes=(

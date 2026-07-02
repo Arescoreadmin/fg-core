@@ -6,6 +6,27 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-02 — pr/18.5-governance-intelligence: initial implementation
+
+**Branch:** `pr/18.5-governance-intelligence`
+
+**What was done:** Full implementation of Governance Intelligence Authority (PR 18.5).
+
+**Files created/modified:**
+- `services/governance_intelligence/` — new bounded context (20 modules: engine, repository, models, schemas, health, validators, explainability, simulation, benchmarking, statistics, trend_analysis, forecasting, comparison, policy_lifecycle, policy_diff, external_events, federation, confidence, timeline, `__init__`)
+- `api/governance_intelligence.py` — 47 routes under `/intelligence`
+- `api/db_models_governance_intelligence.py` — 10 ORM models (10 tables; 5 append-only with ORM guards)
+- `migrations/postgres/0146_governance_intelligence.sql` — replay-safe migration (DO $$ IF NOT EXISTS pattern, no BEGIN/COMMIT wrapper)
+- `tools/ci/check_governance_intelligence.py` — 12-check CI gate
+- `tests/test_governance_intelligence.py` + 8 additional test files — 768 tests total
+- `api/db.py`, `api/main.py`, `api/security/public_paths.py`, `authority_manifest.yaml`, `services/plane_registry/registry.py`, `ROADMAP.md` — registrations and wiring
+- `contracts/core/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` — contract refresh (SHA256: `d4fafc3a8dd9fad3284993356055e7c5224e9469999a732b1ef6a1e507e8b332`)
+- Route inventory regenerated
+
+**Verification:** 768 tests pass; `make fg-smart` PASS; `make fg-contract` PASS; mypy clean.
+
+---
+
 ### 2026-07-01 — pr/18.3-remediation-authority: initial implementation
 
 **Branch:** `pr/18.3-remediation-authority`
