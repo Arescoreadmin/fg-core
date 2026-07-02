@@ -409,3 +409,325 @@ def _block_timeline_update(mapper, connection, target):  # type: ignore[no-untyp
 @sa_event.listens_for(GovIntelTimeline, "before_delete")
 def _block_timeline_delete(mapper, connection, target):  # type: ignore[no-untyped-def]
     raise RuntimeError("fa_gov_intel_timeline is append-only - deletes are forbidden")
+
+
+# ===========================================================================
+# PR 18.5A — Evidence Graph & Decision Provenance additions
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# fa_gov_intel_provenance_node
+# ---------------------------------------------------------------------------
+
+
+class GovIntelProvenanceNode(Base):
+    """Provenance graph node — deterministic, content-addressed."""
+
+    __tablename__ = "fa_gov_intel_provenance_node"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    node_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority: Mapped[str] = mapped_column(String(255), nullable=False)
+    authority_version: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="1.0"
+    )
+    source_object_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    sha256_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    timestamp: Mapped[str] = mapped_column(String(64), nullable=False)
+    parent_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    child_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trust_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    transparency_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    confidence_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    simulation_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    replay_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_gov_intel_provenance_node_tenant", "tenant_id"),
+        Index(
+            "ix_fa_gov_intel_provenance_node_tenant_type",
+            "tenant_id",
+            "node_type",
+        ),
+        {"extend_existing": True},
+    )
+
+
+# ---------------------------------------------------------------------------
+# fa_gov_intel_provenance_edge (append-only)
+# ---------------------------------------------------------------------------
+
+
+class GovIntelProvenanceEdge(Base):
+    """Append-only provenance graph edge."""
+
+    __tablename__ = "fa_gov_intel_provenance_edge"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    parent_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    child_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    edge_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="DERIVED_FROM"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_fa_gov_intel_provenance_edge_tenant_parent",
+            "tenant_id",
+            "parent_id",
+        ),
+        {"extend_existing": True},
+    )
+
+
+@sa_event.listens_for(GovIntelProvenanceEdge, "before_update")
+def _block_provenance_edge_update(mapper, connection, target):  # type: ignore[no-untyped-def]
+    raise RuntimeError(
+        "fa_gov_intel_provenance_edge is append-only - updates are forbidden"
+    )
+
+
+@sa_event.listens_for(GovIntelProvenanceEdge, "before_delete")
+def _block_provenance_edge_delete(mapper, connection, target):  # type: ignore[no-untyped-def]
+    raise RuntimeError(
+        "fa_gov_intel_provenance_edge is append-only - deletes are forbidden"
+    )
+
+
+# ---------------------------------------------------------------------------
+# fa_gov_intel_replay_snapshot
+# ---------------------------------------------------------------------------
+
+
+class GovIntelReplaySnapshot(Base):
+    """Historical governance replay snapshot and result."""
+
+    __tablename__ = "fa_gov_intel_replay_snapshot"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    policy_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    time_window: Mapped[str | None] = mapped_column(Text, nullable=True)
+    snapshot_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    replay_label: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="REPLAY"
+    )
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_gov_intel_replay_snapshot_tenant", "tenant_id"),
+        {"extend_existing": True},
+    )
+
+
+# ---------------------------------------------------------------------------
+# fa_gov_intel_evidence_matrix
+# ---------------------------------------------------------------------------
+
+
+class GovIntelEvidenceMatrix(Base):
+    """Recommendation evidence matrix record."""
+
+    __tablename__ = "fa_gov_intel_evidence_matrix"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    recommendation_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True
+    )
+    matrix_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    coverage: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_fa_gov_intel_evidence_matrix_tenant_rec",
+            "tenant_id",
+            "recommendation_id",
+        ),
+        {"extend_existing": True},
+    )
+
+
+# ---------------------------------------------------------------------------
+# fa_gov_intel_quality_score (append-only)
+# ---------------------------------------------------------------------------
+
+
+class GovIntelQualityScore(Base):
+    """Append-only intelligence quality score record."""
+
+    __tablename__ = "fa_gov_intel_quality_score"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    grade: Mapped[str] = mapped_column(String(32), nullable=False)
+    inputs: Mapped[str | None] = mapped_column(Text, nullable=True)
+    computed_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_fa_gov_intel_quality_score_tenant_entity",
+            "tenant_id",
+            "entity_id",
+            "created_at",
+        ),
+        {"extend_existing": True},
+    )
+
+
+@sa_event.listens_for(GovIntelQualityScore, "before_update")
+def _block_quality_score_update(mapper, connection, target):  # type: ignore[no-untyped-def]
+    raise RuntimeError(
+        "fa_gov_intel_quality_score is append-only - updates are forbidden"
+    )
+
+
+@sa_event.listens_for(GovIntelQualityScore, "before_delete")
+def _block_quality_score_delete(mapper, connection, target):  # type: ignore[no-untyped-def]
+    raise RuntimeError(
+        "fa_gov_intel_quality_score is append-only - deletes are forbidden"
+    )
+
+
+# ---------------------------------------------------------------------------
+# fa_gov_intel_simulation_comparison
+# ---------------------------------------------------------------------------
+
+
+class GovIntelSimulationComparison(Base):
+    """Side-by-side simulation comparison record."""
+
+    __tablename__ = "fa_gov_intel_simulation_comparison"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    baseline_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    proposed_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    comparison_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_gov_intel_sim_comparison_tenant", "tenant_id"),
+        {"extend_existing": True},
+    )
+
+
+# ---------------------------------------------------------------------------
+# fa_gov_intel_timeline_diff
+# ---------------------------------------------------------------------------
+
+
+class GovIntelTimelineDiff(Base):
+    """Governance timeline diff record."""
+
+    __tablename__ = "fa_gov_intel_timeline_diff"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    window: Mapped[str] = mapped_column("time_window", String(64), nullable=False)
+    diff_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_fa_gov_intel_timeline_diff_tenant_window",
+            "tenant_id",
+            "time_window",
+        ),
+        {"extend_existing": True},
+    )
+
+
+# ---------------------------------------------------------------------------
+# fa_gov_intel_counterfactual
+# ---------------------------------------------------------------------------
+
+
+class GovIntelCounterfactual(Base):
+    """Counterfactual scenario run record."""
+
+    __tablename__ = "fa_gov_intel_counterfactual"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    scenario: Mapped[str] = mapped_column(String(64), nullable=False)
+    baseline_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parameters: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_fa_gov_intel_counterfactual_tenant_scenario",
+            "tenant_id",
+            "scenario",
+        ),
+        {"extend_existing": True},
+    )
+
+
+# ---------------------------------------------------------------------------
+# fa_gov_intel_export_history (append-only)
+# ---------------------------------------------------------------------------
+
+
+class GovIntelExportHistory(Base):
+    """Append-only export history record."""
+
+    __tablename__ = "fa_gov_intel_export_history"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    package_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    export_format: Mapped[str] = mapped_column(String(32), nullable=False)
+    contents_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_fa_gov_intel_export_history_tenant", "tenant_id"),
+        {"extend_existing": True},
+    )
+
+
+@sa_event.listens_for(GovIntelExportHistory, "before_update")
+def _block_export_history_update(mapper, connection, target):  # type: ignore[no-untyped-def]
+    raise RuntimeError(
+        "fa_gov_intel_export_history is append-only - updates are forbidden"
+    )
+
+
+@sa_event.listens_for(GovIntelExportHistory, "before_delete")
+def _block_export_history_delete(mapper, connection, target):  # type: ignore[no-untyped-def]
+    raise RuntimeError(
+        "fa_gov_intel_export_history is append-only - deletes are forbidden"
+    )

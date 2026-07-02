@@ -33,16 +33,25 @@ from services.governance_intelligence.policy_lifecycle import (
 )
 from services.governance_intelligence.repository import GovernanceIntelligenceRepository
 from services.governance_intelligence.schemas import (
+    BenchmarkConfidenceResponse,
     BenchmarkListResponse,
     BenchmarkResponse,
+    BenchmarkConfidenceListResponse,
     ConfidenceListResponse,
     ConfidenceResponse,
+    CounterfactualListResponse,
+    CounterfactualResponse,
     CreateBenchmarkRequest,
     CreateIntelligencePolicyRequest,
     CreateSimulationRequest,
     DashboardResponse,
+    EvidenceImpactResponse,
+    EvidenceMatrixListResponse,
+    EvidenceMatrixResponse,
     ExplainabilityListResponse,
     ExplainabilityResponse,
+    ExportListResponse,
+    ExportPackageResponse,
     ExternalEventListResponse,
     ExternalEventResponse,
     ExternalEventRequest,
@@ -54,6 +63,7 @@ from services.governance_intelligence.schemas import (
     GovernanceIntelligenceNotFound,
     GovernanceIntelligencePolicyError,
     GovernanceIntelligenceSimulationError,
+    GovernanceIntelligenceValidationError,
     HealthResponse,
     IntelligencePolicyListResponse,
     IntelligencePolicyResponse,
@@ -61,11 +71,22 @@ from services.governance_intelligence.schemas import (
     PolicyTransitionRequest,
     PolicyVersionListResponse,
     PolicyVersionResponse,
+    ProvenanceGraphResponse,
+    ProvenanceNodeListResponse,
+    ProvenanceNodeResponse,
+    QualityScoreListResponse,
+    QualityScoreResponse,
+    ReplayListResponse,
+    ReplayResponse,
     RunSimulationRequest,
     SearchResponse,
+    SimulationComparisonListResponse,
+    SimulationComparisonResponse,
     SimulationListResponse,
     SimulationResponse,
     StatisticsResponse,
+    TimelineDiffListResponse,
+    TimelineDiffResponse,
     TimelineResponse,
     TrendListResponse,
     TrendResponse,
@@ -74,6 +95,42 @@ from services.governance_intelligence.schemas import (
 )
 from services.governance_intelligence.simulation import run_simulation as _run_sim
 from services.governance_intelligence.trend_analysis import build_trend_response
+from services.governance_intelligence.provenance import (
+    ProvenanceGraph,
+    build_node,
+)
+from services.governance_intelligence.counterfactual import (
+    run_counterfactual as _run_counterfactual,
+)
+from services.governance_intelligence.replay import (
+    build_replay_snapshot,
+    replay_governance as _replay_governance,
+)
+from services.governance_intelligence.evidence_matrix import (
+    build_evidence_matrix as _build_evidence_matrix,
+)
+from services.governance_intelligence.quality_score import (
+    build_quality_response,
+)
+from services.governance_intelligence.benchmark_confidence import (
+    compute_benchmark_confidence as _compute_benchmark_confidence,
+)
+from services.governance_intelligence.timeline_diff import (
+    compute_timeline_diff as _compute_timeline_diff,
+)
+from services.governance_intelligence.simulation_compare import (
+    compare_simulations as _compare_simulations,
+)
+from services.governance_intelligence.evidence_impact import (
+    compute_evidence_impact as _compute_evidence_impact,
+)
+from services.governance_intelligence.export_package import (
+    EXPORT_FORMATS,
+    build_json_export,
+    build_html_export,
+    build_export_manifest,
+    compute_package_hash,
+)
 from services.canonical import utc_iso8601_z_now
 
 
@@ -938,3 +995,675 @@ class GovernanceIntelligenceEngine:
             ],
             total=total,
         )
+
+    # =======================================================================
+    # PR 18.5A — Provenance
+    # =======================================================================
+
+    def _row_to_provenance_node(self, row: Any) -> ProvenanceNodeResponse:
+        return ProvenanceNodeResponse(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            node_type=row.node_type,
+            authority=row.authority,
+            authority_version=row.authority_version,
+            source_object_id=row.source_object_id,
+            sha256_digest=row.sha256_digest,
+            timestamp=row.timestamp,
+            parent_ids=_loads_list(row.parent_ids),
+            child_ids=_loads_list(row.child_ids),
+            trust_ref=row.trust_ref,
+            transparency_ref=row.transparency_ref,
+            confidence_ref=row.confidence_ref,
+            simulation_ref=row.simulation_ref,
+            replay_ref=row.replay_ref,
+            created_at=row.created_at,
+        )
+
+    def create_provenance_node(
+        self,
+        node_type: str,
+        authority: str,
+        source_object_id: str,
+        data: dict[str, Any],
+        parent_ids: list[str],
+        actor_id: str,
+    ) -> dict[str, Any]:
+        node = build_node(
+            node_type=node_type,
+            authority=authority,
+            source_object_id=source_object_id,
+            data=data,
+            parent_ids=parent_ids,
+        )
+        row = self._repo.create_provenance_node(
+            id=node.id,
+            node_type=node.node_type,
+            authority=node.authority,
+            authority_version=node.authority_version,
+            source_object_id=node.source_object_id,
+            sha256_digest=node.sha256_digest,
+            timestamp=node.timestamp,
+            parent_ids=node.parent_ids,
+            child_ids=node.child_ids,
+            trust_ref=node.trust_ref,
+            transparency_ref=node.transparency_ref,
+            confidence_ref=node.confidence_ref,
+            simulation_ref=node.simulation_ref,
+            replay_ref=node.replay_ref,
+        )
+        # Persist edges for each parent
+        for pid in parent_ids:
+            self._repo.append_provenance_edge(parent_id=pid, child_id=row.id)
+        self._repo.append_timeline(
+            event_type="provenance.node.created",
+            entity_id=row.id,
+            entity_type="provenance_node",
+            actor_id=actor_id,
+            data={"node_type": node_type, "authority": authority},
+        )
+        return self._row_to_provenance_node(row).model_dump()
+
+    def get_provenance_node(self, node_id: str) -> dict[str, Any]:
+        row = self._repo.get_provenance_node(node_id)
+        if row is None:
+            raise GovernanceIntelligenceNotFound(
+                f"Provenance node '{node_id}' not found"
+            )
+        return self._row_to_provenance_node(row).model_dump()
+
+    def list_provenance_nodes(self, limit: int, offset: int) -> dict[str, Any]:
+        items, total = self._repo.list_provenance_nodes(limit=limit, offset=offset)
+        return ProvenanceNodeListResponse(
+            items=[self._row_to_provenance_node(r) for r in items],
+            total=total,
+        ).model_dump()
+
+    def get_node_ancestors(self, node_id: str) -> list[dict[str, Any]]:
+        row = self._repo.get_provenance_node(node_id)
+        if row is None:
+            raise GovernanceIntelligenceNotFound(
+                f"Provenance node '{node_id}' not found"
+            )
+        # Build a graph from DB nodes to compute ancestors
+        graph = ProvenanceGraph()
+        from services.governance_intelligence.provenance import ProvenanceNode
+
+        all_rows, _ = self._repo.list_provenance_nodes(limit=1000, offset=0)
+        for r in all_rows:
+            graph.add_node(
+                ProvenanceNode(
+                    id=r.id,
+                    node_type=r.node_type,
+                    authority=r.authority,
+                    authority_version=r.authority_version,
+                    source_object_id=r.source_object_id,
+                    sha256_digest=r.sha256_digest,
+                    timestamp=r.timestamp,
+                    parent_ids=_loads_list(r.parent_ids),
+                    child_ids=_loads_list(r.child_ids),
+                )
+            )
+        return [n.to_dict() for n in graph.get_ancestors(node_id)]
+
+    def get_node_descendants(self, node_id: str) -> list[dict[str, Any]]:
+        row = self._repo.get_provenance_node(node_id)
+        if row is None:
+            raise GovernanceIntelligenceNotFound(
+                f"Provenance node '{node_id}' not found"
+            )
+        graph = ProvenanceGraph()
+        from services.governance_intelligence.provenance import ProvenanceNode
+
+        all_rows, _ = self._repo.list_provenance_nodes(limit=1000, offset=0)
+        for r in all_rows:
+            graph.add_node(
+                ProvenanceNode(
+                    id=r.id,
+                    node_type=r.node_type,
+                    authority=r.authority,
+                    authority_version=r.authority_version,
+                    source_object_id=r.source_object_id,
+                    sha256_digest=r.sha256_digest,
+                    timestamp=r.timestamp,
+                    parent_ids=_loads_list(r.parent_ids),
+                    child_ids=_loads_list(r.child_ids),
+                )
+            )
+        return [n.to_dict() for n in graph.get_descendants(node_id)]
+
+    def export_provenance_graph(self, node_ids: list[str]) -> dict[str, Any]:
+        from services.governance_intelligence.provenance import ProvenanceNode
+
+        if node_ids:
+            rows = self._repo.list_provenance_nodes_by_ids(node_ids)
+        else:
+            rows, _ = self._repo.list_provenance_nodes(limit=1000, offset=0)
+        graph = ProvenanceGraph()
+        for r in rows:
+            graph.add_node(
+                ProvenanceNode(
+                    id=r.id,
+                    node_type=r.node_type,
+                    authority=r.authority,
+                    authority_version=r.authority_version,
+                    source_object_id=r.source_object_id,
+                    sha256_digest=r.sha256_digest,
+                    timestamp=r.timestamp,
+                    parent_ids=_loads_list(r.parent_ids),
+                    child_ids=_loads_list(r.child_ids),
+                )
+            )
+        exported = graph.export_graph()
+        return ProvenanceGraphResponse(
+            nodes=exported["nodes"],
+            edges=exported["edges"],
+            node_count=exported["node_count"],
+            cycle_detected=exported["cycle_detected"],
+        ).model_dump()
+
+    # =======================================================================
+    # PR 18.5A — Evidence Matrix
+    # =======================================================================
+
+    def _row_to_evidence_matrix(self, row: Any) -> EvidenceMatrixResponse:
+        return EvidenceMatrixResponse(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            recommendation_id=row.recommendation_id,
+            matrix_data=_loads(row.matrix_data),
+            coverage=row.coverage,
+            created_at=row.created_at,
+        )
+
+    def create_evidence_matrix(
+        self,
+        recommendation_id: str,
+        evidence_ids: list[str],
+        control_ids: list[str],
+        framework_ids: list[str],
+        verification_ids: list[str],
+        trust_refs: list[str],
+        transparency_refs: list[str],
+        risk_factors: list[dict[str, Any]],
+        confidence: float,
+        expected_improvement: float,
+        simulation_ids: list[str],
+        actor_id: str,
+    ) -> dict[str, Any]:
+        matrix_data = _build_evidence_matrix(
+            recommendation_id=recommendation_id,
+            evidence_ids=evidence_ids,
+            control_ids=control_ids,
+            framework_ids=framework_ids,
+            verification_ids=verification_ids,
+            trust_refs=trust_refs,
+            transparency_refs=transparency_refs,
+            risk_factors=risk_factors,
+            confidence=confidence,
+            expected_improvement=expected_improvement,
+            simulation_ids=simulation_ids,
+        )
+        coverage = matrix_data.get("coverage", 0.0)
+        row = self._repo.create_evidence_matrix(
+            recommendation_id=recommendation_id,
+            matrix_data=matrix_data,
+            coverage=coverage,
+        )
+        self._repo.append_timeline(
+            event_type="evidence_matrix.created",
+            entity_id=row.id,
+            entity_type="evidence_matrix",
+            actor_id=actor_id,
+            data={"recommendation_id": recommendation_id},
+        )
+        return self._row_to_evidence_matrix(row).model_dump()
+
+    def get_evidence_matrix(self, matrix_id: str) -> dict[str, Any]:
+        row = self._repo.get_evidence_matrix(matrix_id)
+        if row is None:
+            raise GovernanceIntelligenceNotFound(
+                f"Evidence matrix '{matrix_id}' not found"
+            )
+        return self._row_to_evidence_matrix(row).model_dump()
+
+    def list_evidence_matrices(self, limit: int, offset: int) -> dict[str, Any]:
+        items, total = self._repo.list_evidence_matrices(limit=limit, offset=offset)
+        return EvidenceMatrixListResponse(
+            items=[self._row_to_evidence_matrix(r) for r in items],
+            total=total,
+        ).model_dump()
+
+    # =======================================================================
+    # PR 18.5A — Replay
+    # =======================================================================
+
+    def _row_to_replay(self, row: Any) -> ReplayResponse:
+        return ReplayResponse(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            policy_version=row.policy_version,
+            time_window=_loads(row.time_window),
+            snapshot_data=_loads(row.snapshot_data),
+            result=_loads(row.result) if row.result else None,
+            replay_label=row.replay_label,
+            created_at=row.created_at,
+        )
+
+    def create_replay(
+        self,
+        policy_version: str,
+        evidence_snapshot: dict[str, Any],
+        trust_version: str,
+        transparency_snapshot: dict[str, Any],
+        time_window: dict[str, Any],
+        actor_id: str,
+    ) -> dict[str, Any]:
+        snapshot = build_replay_snapshot(
+            policy_version=policy_version,
+            evidence_snapshot=evidence_snapshot,
+            trust_version=trust_version,
+            transparency_snapshot=transparency_snapshot,
+            time_window=time_window,
+        )
+        result = _replay_governance(snapshot)
+        row = self._repo.create_replay_snapshot(
+            policy_version=policy_version,
+            time_window=time_window,
+            snapshot_data=snapshot,
+            result=result,
+            replay_label=result.get("replay_label", "REPLAY"),
+        )
+        self._repo.append_timeline(
+            event_type="replay.created",
+            entity_id=row.id,
+            entity_type="replay_snapshot",
+            actor_id=actor_id,
+            data={"policy_version": policy_version},
+        )
+        return self._row_to_replay(row).model_dump()
+
+    def get_replay(self, replay_id: str) -> dict[str, Any]:
+        row = self._repo.get_replay_snapshot(replay_id)
+        if row is None:
+            raise GovernanceIntelligenceNotFound(
+                f"Replay snapshot '{replay_id}' not found"
+            )
+        return self._row_to_replay(row).model_dump()
+
+    def list_replays(self, limit: int, offset: int) -> dict[str, Any]:
+        items, total = self._repo.list_replay_snapshots(limit=limit, offset=offset)
+        return ReplayListResponse(
+            items=[self._row_to_replay(r) for r in items],
+            total=total,
+        ).model_dump()
+
+    # =======================================================================
+    # PR 18.5A — Counterfactual
+    # =======================================================================
+
+    def _row_to_counterfactual(self, row: Any) -> CounterfactualResponse:
+        return CounterfactualResponse(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            scenario=row.scenario,
+            baseline_data=_loads(row.baseline_data),
+            parameters=_loads(row.parameters),
+            result=_loads(row.result) if row.result else None,
+            created_at=row.created_at,
+        )
+
+    def create_counterfactual(
+        self,
+        scenario: str,
+        baseline: dict[str, Any],
+        parameters: dict[str, Any],
+        actor_id: str,
+    ) -> dict[str, Any]:
+        result = _run_counterfactual(scenario, baseline, parameters)
+        row = self._repo.create_counterfactual(
+            scenario=scenario,
+            baseline_data=baseline,
+            parameters=parameters,
+            result=result,
+        )
+        self._repo.append_timeline(
+            event_type="counterfactual.created",
+            entity_id=row.id,
+            entity_type="counterfactual",
+            actor_id=actor_id,
+            data={"scenario": scenario},
+        )
+        return self._row_to_counterfactual(row).model_dump()
+
+    def get_counterfactual(self, cf_id: str) -> dict[str, Any]:
+        row = self._repo.get_counterfactual(cf_id)
+        if row is None:
+            raise GovernanceIntelligenceNotFound(f"Counterfactual '{cf_id}' not found")
+        return self._row_to_counterfactual(row).model_dump()
+
+    def list_counterfactuals(self, limit: int, offset: int) -> dict[str, Any]:
+        items, total = self._repo.list_counterfactuals(limit=limit, offset=offset)
+        return CounterfactualListResponse(
+            items=[self._row_to_counterfactual(r) for r in items],
+            total=total,
+        ).model_dump()
+
+    # =======================================================================
+    # PR 18.5A — Quality Score
+    # =======================================================================
+
+    def _row_to_quality_score(self, row: Any) -> QualityScoreResponse:
+        return QualityScoreResponse(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            entity_id=row.entity_id,
+            entity_type=row.entity_type,
+            score=row.score,
+            grade=row.grade,
+            inputs=_loads(row.inputs),
+            computed_at=row.computed_at,
+        )
+
+    def compute_quality_score(
+        self,
+        entity_id: str,
+        entity_type: str,
+        inputs: dict[str, float],
+        actor_id: str,
+    ) -> dict[str, Any]:
+        now = utc_iso8601_z_now()
+        resp = build_quality_response(inputs)
+        row = self._repo.append_quality_score(
+            entity_id=entity_id,
+            entity_type=entity_type,
+            score=resp["score"],
+            grade=resp["grade"],
+            inputs=resp["inputs"],
+            computed_at=now,
+        )
+        self._repo.append_timeline(
+            event_type="quality_score.computed",
+            entity_id=entity_id,
+            entity_type="quality_score",
+            actor_id=actor_id,
+            data={"entity_type": entity_type, "grade": resp["grade"]},
+        )
+        return self._row_to_quality_score(row).model_dump()
+
+    def get_quality_score(self, entity_id: str) -> dict[str, Any]:
+        row = self._repo.get_latest_quality_score(entity_id)
+        if row is None:
+            raise GovernanceIntelligenceNotFound(
+                f"Quality score for entity '{entity_id}' not found"
+            )
+        return self._row_to_quality_score(row).model_dump()
+
+    def list_quality_scores(self, limit: int, offset: int) -> dict[str, Any]:
+        items, total = self._repo.list_quality_scores(limit=limit, offset=offset)
+        return QualityScoreListResponse(
+            items=[self._row_to_quality_score(r) for r in items],
+            total=total,
+        ).model_dump()
+
+    # =======================================================================
+    # PR 18.5A — Benchmark Confidence
+    # =======================================================================
+
+    def compute_benchmark_confidence_for_metric(
+        self,
+        metric_key: str,
+        values: list[float],
+        cohort_size: int,
+        data_recency_days: int,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        result = _compute_benchmark_confidence(
+            sample_size=len(values),
+            cohort_size=cohort_size,
+            data_recency_days=data_recency_days,
+            values=values,
+        )
+        result["metric_key"] = metric_key
+        self._repo.append_timeline(
+            event_type="benchmark_confidence.computed",
+            entity_id=metric_key,
+            entity_type="benchmark_confidence",
+            actor_id=actor_id,
+            data={"metric_key": metric_key, "grade": result.get("confidence_grade")},
+        )
+        return BenchmarkConfidenceResponse(**result).model_dump()
+
+    def list_benchmark_confidence(self, limit: int, offset: int) -> dict[str, Any]:
+        # Benchmark confidence is computed on demand; list from benchmarks
+        items, total = self._repo.list_benchmarks(limit=limit, offset=offset)
+        return BenchmarkConfidenceListResponse(
+            items=[],
+            total=0,
+        ).model_dump()
+
+    # =======================================================================
+    # PR 18.5A — Timeline Diff
+    # =======================================================================
+
+    def _row_to_timeline_diff(self, row: Any) -> TimelineDiffResponse:
+        return TimelineDiffResponse(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            window=row.window,
+            diff_data=_loads(row.diff_data),
+            created_at=row.created_at,
+        )
+
+    def compute_timeline_diff(
+        self,
+        period_a: dict[str, Any],
+        period_b: dict[str, Any],
+        window: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        diff = _compute_timeline_diff(period_a, period_b, window)
+        row = self._repo.create_timeline_diff(
+            window=window,
+            diff_data=diff,
+        )
+        self._repo.append_timeline(
+            event_type="timeline_diff.computed",
+            entity_id=row.id,
+            entity_type="timeline_diff",
+            actor_id=actor_id,
+            data={"window": window},
+        )
+        return self._row_to_timeline_diff(row).model_dump()
+
+    def list_timeline_diffs(self, limit: int, offset: int) -> dict[str, Any]:
+        items, total = self._repo.list_timeline_diffs(limit=limit, offset=offset)
+        return TimelineDiffListResponse(
+            items=[self._row_to_timeline_diff(r) for r in items],
+            total=total,
+        ).model_dump()
+
+    # =======================================================================
+    # PR 18.5A — Simulation Compare
+    # =======================================================================
+
+    def _row_to_simulation_comparison(self, row: Any) -> SimulationComparisonResponse:
+        return SimulationComparisonResponse(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            baseline_id=row.baseline_id,
+            proposed_id=row.proposed_id,
+            comparison_data=_loads(row.comparison_data),
+            created_at=row.created_at,
+        )
+
+    def compare_simulations_by_id(
+        self,
+        baseline_id: str,
+        proposed_id: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        # Load baseline and proposed simulation rows
+        baseline_row = self._repo.get_simulation(baseline_id)
+        proposed_row = self._repo.get_simulation(proposed_id)
+        baseline: dict[str, Any] = {"id": baseline_id}
+        proposed: dict[str, Any] = {"id": proposed_id}
+        if baseline_row:
+            baseline.update(
+                {"name": baseline_row.name, **_loads(baseline_row.result or "{}")}
+            )
+        if proposed_row:
+            proposed.update(
+                {"name": proposed_row.name, **_loads(proposed_row.result or "{}")}
+            )
+
+        comparison = _compare_simulations(baseline, proposed)
+        row = self._repo.create_simulation_comparison(
+            baseline_id=baseline_id,
+            proposed_id=proposed_id,
+            comparison_data=comparison,
+        )
+        self._repo.append_timeline(
+            event_type="simulation_comparison.created",
+            entity_id=row.id,
+            entity_type="simulation_comparison",
+            actor_id=actor_id,
+            data={"baseline_id": baseline_id, "proposed_id": proposed_id},
+        )
+        return self._row_to_simulation_comparison(row).model_dump()
+
+    def list_simulation_comparisons(self, limit: int, offset: int) -> dict[str, Any]:
+        items, total = self._repo.list_simulation_comparisons(
+            limit=limit, offset=offset
+        )
+        return SimulationComparisonListResponse(
+            items=[self._row_to_simulation_comparison(r) for r in items],
+            total=total,
+        ).model_dump()
+
+    # =======================================================================
+    # PR 18.5A — Evidence Impact
+    # =======================================================================
+
+    def compute_evidence_impact(
+        self,
+        evidence_id: str,
+        evidence_data: dict[str, Any],
+        downstream_data: dict[str, list[str]],
+        actor_id: str,
+    ) -> dict[str, Any]:
+        impact = _compute_evidence_impact(evidence_id, evidence_data, downstream_data)
+        self._repo.append_timeline(
+            event_type="evidence_impact.computed",
+            entity_id=evidence_id,
+            entity_type="evidence_impact",
+            actor_id=actor_id,
+            data={"blast_radius_label": impact.get("blast_radius_label")},
+        )
+        return EvidenceImpactResponse(**impact).model_dump()
+
+    # =======================================================================
+    # PR 18.5A — Export
+    # =======================================================================
+
+    def create_export_package(
+        self,
+        node_ids: list[str],
+        export_format: str,
+        actor_id: str,
+    ) -> dict[str, Any]:
+        if export_format not in EXPORT_FORMATS:
+            raise GovernanceIntelligenceValidationError(
+                f"Unsupported export format '{export_format}'. "
+                f"Supported: {sorted(EXPORT_FORMATS)}"
+            )
+        import uuid as _uuid
+
+        package_id = str(_uuid.uuid4())
+
+        # Build evidence graph from requested nodes
+        evidence_graph = self.export_provenance_graph(node_ids)
+
+        if export_format == "JSON":
+            package_data = build_json_export(
+                package_id=package_id,
+                tenant_id=self._tenant_id,
+                evidence_graph=evidence_graph,
+                recommendation_matrix={},
+                trust_refs=[],
+                transparency_refs=[],
+                confidence={},
+                replay=None,
+                simulation_comparison=None,
+            )
+        elif export_format == "HTML":
+            json_pkg = build_json_export(
+                package_id=package_id,
+                tenant_id=self._tenant_id,
+                evidence_graph=evidence_graph,
+                recommendation_matrix={},
+                trust_refs=[],
+                transparency_refs=[],
+                confidence={},
+                replay=None,
+                simulation_comparison=None,
+            )
+            html_str = build_html_export(json_pkg)
+            package_data = {
+                "package_id": package_id,
+                "export_format": "HTML",
+                "html": html_str,
+                "package_hash": compute_package_hash({"html": html_str}),
+            }
+        else:  # MANIFEST
+            contents = {"node_ids": node_ids, "evidence_graph": evidence_graph}
+            package_data = build_export_manifest(
+                package_id=package_id,
+                tenant_id=self._tenant_id,
+                contents=contents,
+            )
+
+        _ch: str | None = package_data.get("package_hash") or package_data.get(
+            "contents_hash"
+        )
+        contents_hash: str = (
+            _ch if _ch is not None else compute_package_hash(package_data)
+        )
+        row = self._repo.append_export_history(
+            package_id=package_id,
+            export_format=export_format,
+            contents_hash=contents_hash,
+        )
+        self._repo.append_timeline(
+            event_type="export.created",
+            entity_id=row.id,
+            entity_type="export_history",
+            actor_id=actor_id,
+            data={"package_id": package_id, "export_format": export_format},
+        )
+        return ExportPackageResponse(
+            id=row.id,
+            tenant_id=self._tenant_id,
+            package_id=package_id,
+            export_format=export_format,
+            contents_hash=contents_hash,
+            package_data=package_data,
+            created_at=row.created_at,
+        ).model_dump()
+
+    def list_exports(self, limit: int, offset: int) -> dict[str, Any]:
+        items, total = self._repo.list_export_history(limit=limit, offset=offset)
+        return ExportListResponse(
+            items=[
+                {
+                    "id": r.id,
+                    "tenant_id": r.tenant_id,
+                    "package_id": r.package_id,
+                    "export_format": r.export_format,
+                    "contents_hash": r.contents_hash,
+                    "created_at": r.created_at,
+                }
+                for r in items
+            ],
+            total=total,
+        ).model_dump()

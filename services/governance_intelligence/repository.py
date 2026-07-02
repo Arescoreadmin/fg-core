@@ -15,14 +15,23 @@ from sqlalchemy.orm import Session
 from api.db_models_governance_intelligence import (
     GovIntelBenchmark,
     GovIntelConfidenceHistory,
+    GovIntelCounterfactual,
+    GovIntelEvidenceMatrix,
     GovIntelExplainability,
+    GovIntelExportHistory,
     GovIntelExternalEvent,
     GovIntelFederation,
     GovIntelPolicy,
     GovIntelPolicyVersion,
+    GovIntelProvenanceEdge,
+    GovIntelProvenanceNode,
+    GovIntelQualityScore,
+    GovIntelReplaySnapshot,
     GovIntelSimulation,
+    GovIntelSimulationComparison,
     GovIntelSimulationHistory,
     GovIntelTimeline,
+    GovIntelTimelineDiff,
 )
 from services.canonical import utc_iso8601_z_now
 
@@ -572,3 +581,380 @@ class GovernanceIntelligenceRepository:
             .filter(GovIntelExternalEvent.tenant_id == self._tenant_id)
             .count()
         )
+
+    # =======================================================================
+    # PR 18.5A — Provenance nodes
+    # =======================================================================
+
+    def create_provenance_node(self, **fields: Any) -> GovIntelProvenanceNode:
+        row = GovIntelProvenanceNode(
+            id=fields.get("id") or _new_id(),
+            tenant_id=self._tenant_id,
+            node_type=fields["node_type"],
+            authority=fields["authority"],
+            authority_version=fields.get("authority_version", "1.0"),
+            source_object_id=fields["source_object_id"],
+            sha256_digest=fields["sha256_digest"],
+            timestamp=fields["timestamp"],
+            parent_ids=_dumps(fields.get("parent_ids") or []),
+            child_ids=_dumps(fields.get("child_ids") or []),
+            trust_ref=fields.get("trust_ref"),
+            transparency_ref=fields.get("transparency_ref"),
+            confidence_ref=fields.get("confidence_ref"),
+            simulation_ref=fields.get("simulation_ref"),
+            replay_ref=fields.get("replay_ref"),
+            created_at=_now(),
+        )
+        self._db.add(row)
+        self._db.flush()
+        return row
+
+    def get_provenance_node(self, node_id: str) -> Optional[GovIntelProvenanceNode]:
+        return (
+            self._db.query(GovIntelProvenanceNode)
+            .filter(
+                GovIntelProvenanceNode.id == node_id,
+                GovIntelProvenanceNode.tenant_id == self._tenant_id,
+            )
+            .first()
+        )
+
+    def list_provenance_nodes(
+        self, *, offset: int = 0, limit: int = 50
+    ) -> tuple[list[GovIntelProvenanceNode], int]:
+        q = self._db.query(GovIntelProvenanceNode).filter(
+            GovIntelProvenanceNode.tenant_id == self._tenant_id
+        )
+        total = q.count()
+        items = (
+            q.order_by(GovIntelProvenanceNode.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total
+
+    def list_provenance_nodes_by_ids(
+        self, node_ids: list[str]
+    ) -> list[GovIntelProvenanceNode]:
+        return (
+            self._db.query(GovIntelProvenanceNode)
+            .filter(
+                GovIntelProvenanceNode.tenant_id == self._tenant_id,
+                GovIntelProvenanceNode.id.in_(node_ids),
+            )
+            .all()
+        )
+
+    # ------------------------------------------------------------------
+    # Provenance edges (append-only)
+    # ------------------------------------------------------------------
+
+    def append_provenance_edge(
+        self, *, parent_id: str, child_id: str, edge_type: str = "DERIVED_FROM"
+    ) -> GovIntelProvenanceEdge:
+        row = GovIntelProvenanceEdge(
+            id=_new_id(),
+            tenant_id=self._tenant_id,
+            parent_id=parent_id,
+            child_id=child_id,
+            edge_type=edge_type,
+            created_at=_now(),
+        )
+        self._db.add(row)
+        self._db.flush()
+        return row
+
+    def list_provenance_edges_by_parent(
+        self, parent_id: str
+    ) -> list[GovIntelProvenanceEdge]:
+        return (
+            self._db.query(GovIntelProvenanceEdge)
+            .filter(
+                GovIntelProvenanceEdge.tenant_id == self._tenant_id,
+                GovIntelProvenanceEdge.parent_id == parent_id,
+            )
+            .all()
+        )
+
+    # =======================================================================
+    # PR 18.5A — Replay snapshots
+    # =======================================================================
+
+    def create_replay_snapshot(self, **fields: Any) -> GovIntelReplaySnapshot:
+        now = _now()
+        row = GovIntelReplaySnapshot(
+            id=fields.get("id") or _new_id(),
+            tenant_id=self._tenant_id,
+            policy_version=fields["policy_version"],
+            time_window=_dumps(fields.get("time_window") or {}),
+            snapshot_data=_dumps(fields.get("snapshot_data") or {}),
+            result=_dumps(fields["result"])
+            if fields.get("result") is not None
+            else None,
+            replay_label=fields.get("replay_label", "REPLAY"),
+            created_at=now,
+        )
+        self._db.add(row)
+        self._db.flush()
+        return row
+
+    def get_replay_snapshot(self, replay_id: str) -> Optional[GovIntelReplaySnapshot]:
+        return (
+            self._db.query(GovIntelReplaySnapshot)
+            .filter(
+                GovIntelReplaySnapshot.id == replay_id,
+                GovIntelReplaySnapshot.tenant_id == self._tenant_id,
+            )
+            .first()
+        )
+
+    def list_replay_snapshots(
+        self, *, offset: int = 0, limit: int = 50
+    ) -> tuple[list[GovIntelReplaySnapshot], int]:
+        q = self._db.query(GovIntelReplaySnapshot).filter(
+            GovIntelReplaySnapshot.tenant_id == self._tenant_id
+        )
+        total = q.count()
+        items = (
+            q.order_by(GovIntelReplaySnapshot.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total
+
+    # =======================================================================
+    # PR 18.5A — Evidence matrix
+    # =======================================================================
+
+    def create_evidence_matrix(self, **fields: Any) -> GovIntelEvidenceMatrix:
+        now = _now()
+        row = GovIntelEvidenceMatrix(
+            id=fields.get("id") or _new_id(),
+            tenant_id=self._tenant_id,
+            recommendation_id=fields["recommendation_id"],
+            matrix_data=_dumps(fields.get("matrix_data") or {}),
+            coverage=float(fields.get("coverage", 0.0)),
+            created_at=now,
+            updated_at=now,
+        )
+        self._db.add(row)
+        self._db.flush()
+        return row
+
+    def get_evidence_matrix(self, matrix_id: str) -> Optional[GovIntelEvidenceMatrix]:
+        return (
+            self._db.query(GovIntelEvidenceMatrix)
+            .filter(
+                GovIntelEvidenceMatrix.id == matrix_id,
+                GovIntelEvidenceMatrix.tenant_id == self._tenant_id,
+            )
+            .first()
+        )
+
+    def list_evidence_matrices(
+        self, *, offset: int = 0, limit: int = 50
+    ) -> tuple[list[GovIntelEvidenceMatrix], int]:
+        q = self._db.query(GovIntelEvidenceMatrix).filter(
+            GovIntelEvidenceMatrix.tenant_id == self._tenant_id
+        )
+        total = q.count()
+        items = (
+            q.order_by(GovIntelEvidenceMatrix.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total
+
+    # =======================================================================
+    # PR 18.5A — Quality scores (append-only)
+    # =======================================================================
+
+    def append_quality_score(self, **fields: Any) -> GovIntelQualityScore:
+        now = _now()
+        row = GovIntelQualityScore(
+            id=_new_id(),
+            tenant_id=self._tenant_id,
+            entity_id=fields["entity_id"],
+            entity_type=fields["entity_type"],
+            score=float(fields["score"]),
+            grade=fields["grade"],
+            inputs=_dumps(fields.get("inputs") or {}),
+            computed_at=fields.get("computed_at") or now,
+            created_at=now,
+        )
+        self._db.add(row)
+        self._db.flush()
+        return row
+
+    def get_latest_quality_score(
+        self, entity_id: str
+    ) -> Optional[GovIntelQualityScore]:
+        return (
+            self._db.query(GovIntelQualityScore)
+            .filter(
+                GovIntelQualityScore.tenant_id == self._tenant_id,
+                GovIntelQualityScore.entity_id == entity_id,
+            )
+            .order_by(GovIntelQualityScore.created_at.desc())
+            .first()
+        )
+
+    def list_quality_scores(
+        self, *, offset: int = 0, limit: int = 50
+    ) -> tuple[list[GovIntelQualityScore], int]:
+        q = self._db.query(GovIntelQualityScore).filter(
+            GovIntelQualityScore.tenant_id == self._tenant_id
+        )
+        total = q.count()
+        items = (
+            q.order_by(GovIntelQualityScore.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total
+
+    # =======================================================================
+    # PR 18.5A — Simulation comparisons
+    # =======================================================================
+
+    def create_simulation_comparison(
+        self, **fields: Any
+    ) -> GovIntelSimulationComparison:
+        row = GovIntelSimulationComparison(
+            id=fields.get("id") or _new_id(),
+            tenant_id=self._tenant_id,
+            baseline_id=fields["baseline_id"],
+            proposed_id=fields["proposed_id"],
+            comparison_data=_dumps(fields.get("comparison_data") or {}),
+            created_at=_now(),
+        )
+        self._db.add(row)
+        self._db.flush()
+        return row
+
+    def list_simulation_comparisons(
+        self, *, offset: int = 0, limit: int = 50
+    ) -> tuple[list[GovIntelSimulationComparison], int]:
+        q = self._db.query(GovIntelSimulationComparison).filter(
+            GovIntelSimulationComparison.tenant_id == self._tenant_id
+        )
+        total = q.count()
+        items = (
+            q.order_by(GovIntelSimulationComparison.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total
+
+    # =======================================================================
+    # PR 18.5A — Timeline diffs
+    # =======================================================================
+
+    def create_timeline_diff(self, **fields: Any) -> GovIntelTimelineDiff:
+        row = GovIntelTimelineDiff(
+            id=fields.get("id") or _new_id(),
+            tenant_id=self._tenant_id,
+            window=fields["window"],
+            diff_data=_dumps(fields.get("diff_data") or {}),
+            created_at=_now(),
+        )
+        self._db.add(row)
+        self._db.flush()
+        return row
+
+    def list_timeline_diffs(
+        self, *, offset: int = 0, limit: int = 50
+    ) -> tuple[list[GovIntelTimelineDiff], int]:
+        q = self._db.query(GovIntelTimelineDiff).filter(
+            GovIntelTimelineDiff.tenant_id == self._tenant_id
+        )
+        total = q.count()
+        items = (
+            q.order_by(GovIntelTimelineDiff.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total
+
+    # =======================================================================
+    # PR 18.5A — Counterfactuals
+    # =======================================================================
+
+    def create_counterfactual(self, **fields: Any) -> GovIntelCounterfactual:
+        row = GovIntelCounterfactual(
+            id=fields.get("id") or _new_id(),
+            tenant_id=self._tenant_id,
+            scenario=fields["scenario"],
+            baseline_data=_dumps(fields.get("baseline_data") or {}),
+            parameters=_dumps(fields.get("parameters") or {}),
+            result=_dumps(fields["result"])
+            if fields.get("result") is not None
+            else None,
+            created_at=_now(),
+        )
+        self._db.add(row)
+        self._db.flush()
+        return row
+
+    def get_counterfactual(self, cf_id: str) -> Optional[GovIntelCounterfactual]:
+        return (
+            self._db.query(GovIntelCounterfactual)
+            .filter(
+                GovIntelCounterfactual.id == cf_id,
+                GovIntelCounterfactual.tenant_id == self._tenant_id,
+            )
+            .first()
+        )
+
+    def list_counterfactuals(
+        self, *, offset: int = 0, limit: int = 50
+    ) -> tuple[list[GovIntelCounterfactual], int]:
+        q = self._db.query(GovIntelCounterfactual).filter(
+            GovIntelCounterfactual.tenant_id == self._tenant_id
+        )
+        total = q.count()
+        items = (
+            q.order_by(GovIntelCounterfactual.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total
+
+    # =======================================================================
+    # PR 18.5A — Export history (append-only)
+    # =======================================================================
+
+    def append_export_history(self, **fields: Any) -> GovIntelExportHistory:
+        row = GovIntelExportHistory(
+            id=_new_id(),
+            tenant_id=self._tenant_id,
+            package_id=fields["package_id"],
+            export_format=fields["export_format"],
+            contents_hash=fields["contents_hash"],
+            created_at=_now(),
+        )
+        self._db.add(row)
+        self._db.flush()
+        return row
+
+    def list_export_history(
+        self, *, offset: int = 0, limit: int = 50
+    ) -> tuple[list[GovIntelExportHistory], int]:
+        q = self._db.query(GovIntelExportHistory).filter(
+            GovIntelExportHistory.tenant_id == self._tenant_id
+        )
+        total = q.count()
+        items = (
+            q.order_by(GovIntelExportHistory.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total

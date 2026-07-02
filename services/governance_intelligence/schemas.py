@@ -399,6 +399,311 @@ class TimelineResponse(BaseModel):
     total: int
 
 
+# ---------------------------------------------------------------------------
+# PR 18.5A — Request schemas
+# ---------------------------------------------------------------------------
+
+
+class CreateProvenanceNodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    node_type: str
+    authority: str
+    source_object_id: str
+    data: dict[str, Any] = Field(default_factory=dict)
+    parent_ids: list[str] = Field(default_factory=list)
+
+
+class ExportProvenanceGraphRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    node_ids: list[str]
+
+
+class CreateEvidenceMatrixRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recommendation_id: str
+    evidence_ids: list[str]
+    control_ids: list[str] = Field(default_factory=list)
+    framework_ids: list[str] = Field(default_factory=list)
+    verification_ids: list[str] = Field(default_factory=list)
+    trust_refs: list[str] = Field(default_factory=list)
+    transparency_refs: list[str] = Field(default_factory=list)
+    risk_factors: list[dict[str, Any]] = Field(default_factory=list)
+    confidence: float = 0.0
+    expected_improvement: float = 0.0
+    simulation_ids: list[str] = Field(default_factory=list)
+
+
+class CreateReplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_version: str
+    evidence_snapshot: dict[str, Any] = Field(default_factory=dict)
+    trust_version: str
+    transparency_snapshot: dict[str, Any] = Field(default_factory=dict)
+    time_window: dict[str, Any] = Field(default_factory=dict)
+
+
+class CreateCounterfactualRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario: str
+    baseline: dict[str, Any] = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class ComputeQualityScoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entity_id: str
+    entity_type: str
+    inputs: dict[str, float] = Field(default_factory=dict)
+
+
+class ComputeBenchmarkConfidenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    metric_key: str
+    values: list[float]
+    cohort_size: int
+    data_recency_days: int
+
+
+class ComputeTimelineDiffRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    period_a: dict[str, Any]
+    period_b: dict[str, Any]
+    window: str
+
+
+class CompareSimulationsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    baseline_id: str
+    proposed_id: str
+
+
+class ComputeEvidenceImpactRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str
+    evidence_data: dict[str, Any] = Field(default_factory=dict)
+    downstream_data: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class CreateExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    node_ids: list[str] = Field(default_factory=list)
+    export_format: str
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Response schemas
+# ---------------------------------------------------------------------------
+
+
+class ProvenanceNodeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    node_type: str
+    authority: str
+    authority_version: str
+    source_object_id: str
+    sha256_digest: str
+    timestamp: str
+    parent_ids: list[str]
+    child_ids: list[str]
+    trust_ref: str | None
+    transparency_ref: str | None
+    confidence_ref: str | None
+    simulation_ref: str | None
+    replay_ref: str | None
+    created_at: str
+
+
+class ProvenanceNodeListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ProvenanceNodeResponse]
+    total: int
+
+
+class ProvenanceGraphResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nodes: list[dict[str, Any]]
+    edges: list[dict[str, Any]]
+    node_count: int
+    cycle_detected: bool
+
+
+class EvidenceMatrixResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    recommendation_id: str
+    matrix_data: dict[str, Any]
+    coverage: float
+    created_at: str
+
+
+class EvidenceMatrixListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[EvidenceMatrixResponse]
+    total: int
+
+
+class ReplayResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    policy_version: str
+    time_window: dict[str, Any]
+    snapshot_data: dict[str, Any]
+    result: dict[str, Any] | None
+    replay_label: str
+    created_at: str
+
+
+class ReplayListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ReplayResponse]
+    total: int
+
+
+class CounterfactualResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    scenario: str
+    baseline_data: dict[str, Any]
+    parameters: dict[str, Any]
+    result: dict[str, Any] | None
+    created_at: str
+
+
+class CounterfactualListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CounterfactualResponse]
+    total: int
+
+
+class QualityScoreResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    entity_id: str
+    entity_type: str
+    score: float
+    grade: str
+    inputs: dict[str, Any]
+    computed_at: str
+
+
+class QualityScoreListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[QualityScoreResponse]
+    total: int
+
+
+class BenchmarkConfidenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    metric_key: str
+    sample_size: int
+    cohort_size: int
+    data_recency_days: int
+    confidence_interval: list[float]
+    confidence_grade: str
+    meets_threshold: bool
+    min_sample_threshold: int
+    benchmark_freshness: str
+
+
+class BenchmarkConfidenceListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[BenchmarkConfidenceResponse]
+    total: int
+
+
+class TimelineDiffResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    window: str
+    diff_data: dict[str, Any]
+    created_at: str
+
+
+class TimelineDiffListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[TimelineDiffResponse]
+    total: int
+
+
+class SimulationComparisonResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    baseline_id: str
+    proposed_id: str
+    comparison_data: dict[str, Any]
+    created_at: str
+
+
+class SimulationComparisonListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[SimulationComparisonResponse]
+    total: int
+
+
+class EvidenceImpactResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str
+    impact_chain: list[dict[str, Any]]
+    total_affected: int
+    blast_radius_label: str
+
+
+class ExportPackageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    tenant_id: str
+    package_id: str
+    export_format: str
+    contents_hash: str
+    package_data: dict[str, Any]
+    created_at: str
+
+
+class ExportListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]]
+    total: int
+
+
 __all__ = [
     # Exceptions
     "GovernanceIntelligenceError",
@@ -418,6 +723,18 @@ __all__ = [
     "CreateBenchmarkRequest",
     "ExternalEventRequest",
     "FederationSyncRequest",
+    # PR 18.5A Requests
+    "CreateProvenanceNodeRequest",
+    "ExportProvenanceGraphRequest",
+    "CreateEvidenceMatrixRequest",
+    "CreateReplayRequest",
+    "CreateCounterfactualRequest",
+    "ComputeQualityScoreRequest",
+    "ComputeBenchmarkConfidenceRequest",
+    "ComputeTimelineDiffRequest",
+    "CompareSimulationsRequest",
+    "ComputeEvidenceImpactRequest",
+    "CreateExportRequest",
     # Responses
     "SimulationResponse",
     "SimulationListResponse",
@@ -445,4 +762,25 @@ __all__ = [
     "SearchResponse",
     "HealthResponse",
     "TimelineResponse",
+    # PR 18.5A Responses
+    "ProvenanceNodeResponse",
+    "ProvenanceNodeListResponse",
+    "ProvenanceGraphResponse",
+    "EvidenceMatrixResponse",
+    "EvidenceMatrixListResponse",
+    "ReplayResponse",
+    "ReplayListResponse",
+    "CounterfactualResponse",
+    "CounterfactualListResponse",
+    "QualityScoreResponse",
+    "QualityScoreListResponse",
+    "BenchmarkConfidenceResponse",
+    "BenchmarkConfidenceListResponse",
+    "TimelineDiffResponse",
+    "TimelineDiffListResponse",
+    "SimulationComparisonResponse",
+    "SimulationComparisonListResponse",
+    "EvidenceImpactResponse",
+    "ExportPackageResponse",
+    "ExportListResponse",
 ]
