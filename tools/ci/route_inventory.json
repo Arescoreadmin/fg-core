@@ -13563,6 +13563,40 @@
       ],
       "file": "api/governance_intelligence.py",
       "method": "GET",
+      "path": "/intelligence/benchmark-confidence",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/benchmark-confidence",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
       "path": "/intelligence/benchmarks",
       "plane": "control",
       "plane_id": "control",
@@ -13682,6 +13716,57 @@
       ],
       "file": "api/governance_intelligence.py",
       "method": "GET",
+      "path": "/intelligence/counterfactual",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/counterfactual",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/counterfactual/{cf_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
       "path": "/intelligence/dashboard",
       "plane": "control",
       "plane_id": "control",
@@ -13717,6 +13802,74 @@
       "file": "api/governance_intelligence.py",
       "method": "GET",
       "path": "/intelligence/dashboard/executive",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/evidence-impact",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/evidence-matrix",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/evidence-matrix",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/evidence-matrix/{matrix_id}",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -13790,6 +13943,40 @@
       "scoped": true,
       "scopes": [
         "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/export",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/export",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -14119,12 +14306,250 @@
       ],
       "file": "api/governance_intelligence.py",
       "method": "GET",
+      "path": "/intelligence/provenance",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/provenance",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/provenance/graph",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/provenance/{node_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/provenance/{node_id}/ancestors",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/provenance/{node_id}/descendants",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/quality-score",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/quality-score",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/quality-score/{entity_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/replay",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/replay",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/replay/{replay_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
       "path": "/intelligence/search",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/simulation-compare",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/simulation-compare",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -14295,6 +14720,40 @@
       "scoped": true,
       "scopes": [
         "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "GET",
+      "path": "/intelligence/timeline-diff",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_intelligence.py",
+      "method": "POST",
+      "path": "/intelligence/timeline-diff",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -18785,7 +19244,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-02T09:54:50.662152+00:00",
+  "generated_at": "2026-07-02T14:10:06.439280+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

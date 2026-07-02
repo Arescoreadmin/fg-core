@@ -24,16 +24,36 @@ from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine, set_tenant_context
 from services.governance_intelligence.engine import GovernanceIntelligenceEngine
 from services.governance_intelligence.schemas import (
+    BenchmarkConfidenceListResponse,
+    BenchmarkConfidenceResponse,
     BenchmarkListResponse,
     BenchmarkResponse,
+    CompareSimulationsRequest,
+    ComputeBenchmarkConfidenceRequest,
+    ComputeEvidenceImpactRequest,
+    ComputeQualityScoreRequest,
+    ComputeTimelineDiffRequest,
     ConfidenceListResponse,
     ConfidenceResponse,
+    CounterfactualListResponse,
+    CounterfactualResponse,
     CreateBenchmarkRequest,
+    CreateCounterfactualRequest,
+    CreateEvidenceMatrixRequest,
+    CreateExportRequest,
     CreateIntelligencePolicyRequest,
+    CreateProvenanceNodeRequest,
+    CreateReplayRequest,
     CreateSimulationRequest,
     DashboardResponse,
+    EvidenceImpactResponse,
+    EvidenceMatrixListResponse,
+    EvidenceMatrixResponse,
     ExplainabilityListResponse,
     ExplainabilityResponse,
+    ExportListResponse,
+    ExportPackageResponse,
+    ExportProvenanceGraphRequest,
     ExternalEventListResponse,
     ExternalEventRequest,
     ExternalEventResponse,
@@ -54,11 +74,22 @@ from services.governance_intelligence.schemas import (
     PolicyDiffResponse,
     PolicyTransitionRequest,
     PolicyVersionListResponse,
+    ProvenanceGraphResponse,
+    ProvenanceNodeListResponse,
+    ProvenanceNodeResponse,
+    QualityScoreListResponse,
+    QualityScoreResponse,
+    ReplayListResponse,
+    ReplayResponse,
     RunSimulationRequest,
     SearchResponse,
+    SimulationComparisonListResponse,
+    SimulationComparisonResponse,
     SimulationListResponse,
     SimulationResponse,
     StatisticsResponse,
+    TimelineDiffListResponse,
+    TimelineDiffResponse,
     TimelineResponse,
     TrendListResponse,
     TrendResponse,
@@ -1149,5 +1180,703 @@ def get_timeline(
         svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
         try:
             return svc.get_timeline(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Provenance (27 new routes total in this section)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/intelligence/provenance",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=ProvenanceNodeListResponse,
+)
+def list_provenance_nodes(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_provenance_nodes(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.post(
+    "/intelligence/provenance",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=ProvenanceNodeResponse,
+    status_code=201,
+)
+def create_provenance_node(
+    body: CreateProvenanceNodeRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.create_provenance_node(
+                node_type=body.node_type,
+                authority=body.authority,
+                source_object_id=body.source_object_id,
+                data=body.data,
+                parent_ids=body.parent_ids,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.get(
+    "/intelligence/provenance/{node_id}",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=ProvenanceNodeResponse,
+)
+def get_provenance_node(
+    node_id: str,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.get_provenance_node(node_id)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.get(
+    "/intelligence/provenance/{node_id}/ancestors",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_provenance_ancestors(
+    node_id: str,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return {"items": svc.get_node_ancestors(node_id)}
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.get(
+    "/intelligence/provenance/{node_id}/descendants",
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_provenance_descendants(
+    node_id: str,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return {"items": svc.get_node_descendants(node_id)}
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.post(
+    "/intelligence/provenance/graph",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=ProvenanceGraphResponse,
+)
+def export_provenance_graph(
+    body: ExportProvenanceGraphRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.export_provenance_graph(body.node_ids)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Evidence Matrix
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/intelligence/evidence-matrix",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=EvidenceMatrixListResponse,
+)
+def list_evidence_matrices(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_evidence_matrices(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.post(
+    "/intelligence/evidence-matrix",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=EvidenceMatrixResponse,
+    status_code=201,
+)
+def create_evidence_matrix(
+    body: CreateEvidenceMatrixRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.create_evidence_matrix(
+                recommendation_id=body.recommendation_id,
+                evidence_ids=body.evidence_ids,
+                control_ids=body.control_ids,
+                framework_ids=body.framework_ids,
+                verification_ids=body.verification_ids,
+                trust_refs=body.trust_refs,
+                transparency_refs=body.transparency_refs,
+                risk_factors=body.risk_factors,
+                confidence=body.confidence,
+                expected_improvement=body.expected_improvement,
+                simulation_ids=body.simulation_ids,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.get(
+    "/intelligence/evidence-matrix/{matrix_id}",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=EvidenceMatrixResponse,
+)
+def get_evidence_matrix(
+    matrix_id: str,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.get_evidence_matrix(matrix_id)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Replay
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/intelligence/replay",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=ReplayListResponse,
+)
+def list_replays(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_replays(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.post(
+    "/intelligence/replay",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=ReplayResponse,
+    status_code=201,
+)
+def create_replay(
+    body: CreateReplayRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.create_replay(
+                policy_version=body.policy_version,
+                evidence_snapshot=body.evidence_snapshot,
+                trust_version=body.trust_version,
+                transparency_snapshot=body.transparency_snapshot,
+                time_window=body.time_window,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.get(
+    "/intelligence/replay/{replay_id}",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=ReplayResponse,
+)
+def get_replay(
+    replay_id: str,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.get_replay(replay_id)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Counterfactual
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/intelligence/counterfactual",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=CounterfactualListResponse,
+)
+def list_counterfactuals(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_counterfactuals(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.post(
+    "/intelligence/counterfactual",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=CounterfactualResponse,
+    status_code=201,
+)
+def create_counterfactual(
+    body: CreateCounterfactualRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.create_counterfactual(
+                scenario=body.scenario,
+                baseline=body.baseline,
+                parameters=body.parameters,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.get(
+    "/intelligence/counterfactual/{cf_id}",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=CounterfactualResponse,
+)
+def get_counterfactual(
+    cf_id: str,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.get_counterfactual(cf_id)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Quality Score
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/intelligence/quality-score",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=QualityScoreListResponse,
+)
+def list_quality_scores(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_quality_scores(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.post(
+    "/intelligence/quality-score",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=QualityScoreResponse,
+    status_code=201,
+)
+def compute_quality_score(
+    body: ComputeQualityScoreRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.compute_quality_score(
+                entity_id=body.entity_id,
+                entity_type=body.entity_type,
+                inputs=body.inputs,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.get(
+    "/intelligence/quality-score/{entity_id}",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=QualityScoreResponse,
+)
+def get_quality_score(
+    entity_id: str,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.get_quality_score(entity_id)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Benchmark Confidence
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/intelligence/benchmark-confidence",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=BenchmarkConfidenceListResponse,
+)
+def list_benchmark_confidence(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_benchmark_confidence(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.post(
+    "/intelligence/benchmark-confidence",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=BenchmarkConfidenceResponse,
+    status_code=201,
+)
+def compute_benchmark_confidence(
+    body: ComputeBenchmarkConfidenceRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.compute_benchmark_confidence_for_metric(
+                metric_key=body.metric_key,
+                values=body.values,
+                cohort_size=body.cohort_size,
+                data_recency_days=body.data_recency_days,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Timeline Diff
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/intelligence/timeline-diff",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=TimelineDiffResponse,
+    status_code=201,
+)
+def compute_timeline_diff(
+    body: ComputeTimelineDiffRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.compute_timeline_diff(
+                period_a=body.period_a,
+                period_b=body.period_b,
+                window=body.window,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.get(
+    "/intelligence/timeline-diff",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=TimelineDiffListResponse,
+)
+def list_timeline_diffs(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_timeline_diffs(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Simulation Compare
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/intelligence/simulation-compare",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=SimulationComparisonResponse,
+    status_code=201,
+)
+def compare_simulations(
+    body: CompareSimulationsRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.compare_simulations_by_id(
+                baseline_id=body.baseline_id,
+                proposed_id=body.proposed_id,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.get(
+    "/intelligence/simulation-compare",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=SimulationComparisonListResponse,
+)
+def list_simulation_comparisons(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_simulation_comparisons(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Evidence Impact
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/intelligence/evidence-impact",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=EvidenceImpactResponse,
+    status_code=201,
+)
+def compute_evidence_impact(
+    body: ComputeEvidenceImpactRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.compute_evidence_impact(
+                evidence_id=body.evidence_id,
+                evidence_data=body.evidence_data,
+                downstream_data=body.downstream_data,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# PR 18.5A — Export
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/intelligence/export",
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=ExportListResponse,
+)
+def list_exports(
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            return svc.list_exports(limit=limit, offset=offset)
+        except Exception as exc:
+            raise _map_domain_error(exc)
+
+
+@router.post(
+    "/intelligence/export",
+    dependencies=[Depends(require_scopes("governance:write"))],
+    response_model=ExportPackageResponse,
+    status_code=201,
+)
+def create_export(
+    body: CreateExportRequest,
+    request: Request,
+) -> Any:
+    tenant_id = require_bound_tenant(request)
+    actor = _actor(request)
+    db_engine = get_engine()
+    with Session(db_engine) as db:
+        set_tenant_context(db, tenant_id)
+        svc = GovernanceIntelligenceEngine(db, tenant_id=tenant_id)
+        try:
+            result = svc.create_export_package(
+                node_ids=body.node_ids,
+                export_format=body.export_format,
+                actor_id=actor,
+            )
+            db.commit()
+            return result
         except Exception as exc:
             raise _map_domain_error(exc)

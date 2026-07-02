@@ -524,6 +524,15 @@ authorities:
     - fa_gov_intel_explainability
     - fa_gov_intel_confidence_history
     - fa_gov_intel_timeline
+    - fa_gov_intel_provenance_node
+    - fa_gov_intel_provenance_edge
+    - fa_gov_intel_replay_snapshot
+    - fa_gov_intel_evidence_matrix
+    - fa_gov_intel_quality_score
+    - fa_gov_intel_simulation_comparison
+    - fa_gov_intel_timeline_diff
+    - fa_gov_intel_counterfactual
+    - fa_gov_intel_export_history
     tests:
     - tests/test_governance_intelligence.py
     - tests/test_governance_intelligence_explainability.py
@@ -534,6 +543,14 @@ authorities:
     - tests/test_governance_intelligence_confidence.py
     - tests/test_governance_intelligence_federation.py
     - tests/test_governance_intelligence_trend.py
+    - tests/test_governance_intelligence_provenance.py
+    - tests/test_governance_intelligence_counterfactual.py
+    - tests/test_governance_intelligence_replay.py
+    - tests/test_governance_intelligence_evidence_matrix.py
+    - tests/test_governance_intelligence_quality_score.py
+    - tests/test_governance_intelligence_benchmark_confidence.py
+    - tests/test_governance_intelligence_simulation_compare.py
+    - tests/test_governance_intelligence_export_package.py
     cgin_snapshot: false
     cgin_anonymized: false
     consumers: []

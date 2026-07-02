@@ -4603,6 +4603,85 @@
         "title": "BatchPromoteResponse",
         "type": "object"
       },
+      "BenchmarkConfidenceListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BenchmarkConfidenceResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "BenchmarkConfidenceListResponse",
+        "type": "object"
+      },
+      "BenchmarkConfidenceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "benchmark_freshness": {
+            "title": "Benchmark Freshness",
+            "type": "string"
+          },
+          "cohort_size": {
+            "title": "Cohort Size",
+            "type": "integer"
+          },
+          "confidence_grade": {
+            "title": "Confidence Grade",
+            "type": "string"
+          },
+          "confidence_interval": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Confidence Interval",
+            "type": "array"
+          },
+          "data_recency_days": {
+            "title": "Data Recency Days",
+            "type": "integer"
+          },
+          "meets_threshold": {
+            "title": "Meets Threshold",
+            "type": "boolean"
+          },
+          "metric_key": {
+            "title": "Metric Key",
+            "type": "string"
+          },
+          "min_sample_threshold": {
+            "title": "Min Sample Threshold",
+            "type": "integer"
+          },
+          "sample_size": {
+            "title": "Sample Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "metric_key",
+          "sample_size",
+          "cohort_size",
+          "data_recency_days",
+          "confidence_interval",
+          "confidence_grade",
+          "meets_threshold",
+          "min_sample_threshold",
+          "benchmark_freshness"
+        ],
+        "title": "BenchmarkConfidenceResponse",
+        "type": "object"
+      },
       "BenchmarkListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -6838,6 +6917,25 @@
         "title": "CompareReportsRequest",
         "type": "object"
       },
+      "CompareSimulationsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline_id": {
+            "title": "Baseline Id",
+            "type": "string"
+          },
+          "proposed_id": {
+            "title": "Proposed Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseline_id",
+          "proposed_id"
+        ],
+        "title": "CompareSimulationsRequest",
+        "type": "object"
+      },
       "CompensatingControl": {
         "additionalProperties": false,
         "properties": {
@@ -7070,6 +7168,116 @@
         ],
         "title": "ComplianceClassification",
         "type": "string"
+      },
+      "ComputeBenchmarkConfidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cohort_size": {
+            "title": "Cohort Size",
+            "type": "integer"
+          },
+          "data_recency_days": {
+            "title": "Data Recency Days",
+            "type": "integer"
+          },
+          "metric_key": {
+            "title": "Metric Key",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "metric_key",
+          "values",
+          "cohort_size",
+          "data_recency_days"
+        ],
+        "title": "ComputeBenchmarkConfidenceRequest",
+        "type": "object"
+      },
+      "ComputeEvidenceImpactRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "downstream_data": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Downstream Data",
+            "type": "object"
+          },
+          "evidence_data": {
+            "title": "Evidence Data",
+            "type": "object"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id"
+        ],
+        "title": "ComputeEvidenceImpactRequest",
+        "type": "object"
+      },
+      "ComputeQualityScoreRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Inputs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "entity_id",
+          "entity_type"
+        ],
+        "title": "ComputeQualityScoreRequest",
+        "type": "object"
+      },
+      "ComputeTimelineDiffRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "period_a": {
+            "title": "Period A",
+            "type": "object"
+          },
+          "period_b": {
+            "title": "Period B",
+            "type": "object"
+          },
+          "window": {
+            "title": "Window",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period_a",
+          "period_b",
+          "window"
+        ],
+        "title": "ComputeTimelineDiffRequest",
+        "type": "object"
       },
       "ConfidenceImpactResponse": {
         "properties": {
@@ -9309,6 +9517,79 @@
         "title": "ControlType",
         "type": "string"
       },
+      "CounterfactualListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CounterfactualResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "CounterfactualListResponse",
+        "type": "object"
+      },
+      "CounterfactualResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline_data": {
+            "title": "Baseline Data",
+            "type": "object"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "parameters": {
+            "title": "Parameters",
+            "type": "object"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "scenario": {
+            "title": "Scenario",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "scenario",
+          "baseline_data",
+          "parameters",
+          "result",
+          "created_at"
+        ],
+        "title": "CounterfactualResponse",
+        "type": "object"
+      },
       "CoverageAnalyticsResponse": {
         "additionalProperties": false,
         "properties": {
@@ -10232,6 +10513,28 @@
         "title": "CreateControlReviewRequest",
         "type": "object"
       },
+      "CreateCounterfactualRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "title": "Baseline",
+            "type": "object"
+          },
+          "parameters": {
+            "title": "Parameters",
+            "type": "object"
+          },
+          "scenario": {
+            "title": "Scenario",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario"
+        ],
+        "title": "CreateCounterfactualRequest",
+        "type": "object"
+      },
       "CreateDependencyRequest": {
         "additionalProperties": false,
         "description": "Create a dependency edge between two tasks.",
@@ -10510,6 +10813,87 @@
         "title": "CreateEvidenceLinkRequest",
         "type": "object"
       },
+      "CreateEvidenceMatrixRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "default": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Control Ids",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "expected_improvement": {
+            "default": 0.0,
+            "title": "Expected Improvement",
+            "type": "number"
+          },
+          "framework_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Framework Ids",
+            "type": "array"
+          },
+          "recommendation_id": {
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "risk_factors": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Risk Factors",
+            "type": "array"
+          },
+          "simulation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Simulation Ids",
+            "type": "array"
+          },
+          "transparency_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transparency Refs",
+            "type": "array"
+          },
+          "trust_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Trust Refs",
+            "type": "array"
+          },
+          "verification_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Verification Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recommendation_id",
+          "evidence_ids"
+        ],
+        "title": "CreateEvidenceMatrixRequest",
+        "type": "object"
+      },
       "CreateEvidenceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -10608,55 +10992,6 @@
           "collected_at"
         ],
         "title": "CreateEvidenceRequest",
-        "type": "object"
-      },
-      "CreateExportRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "environment_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Environment Id"
-          },
-          "export_classification": {
-            "$ref": "#/components/schemas/ExportClassification",
-            "default": "standard"
-          },
-          "export_purpose": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Export Purpose"
-          },
-          "export_scope": {
-            "$ref": "#/components/schemas/ExportScope",
-            "default": "tenant"
-          },
-          "idempotency_key": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Idempotency Key"
-          }
-        },
-        "title": "CreateExportRequest",
         "type": "object"
       },
       "CreateFrameworkRequest": {
@@ -11481,6 +11816,41 @@
         "title": "CreatePortalGrantResponse",
         "type": "object"
       },
+      "CreateProvenanceNodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "data": {
+            "title": "Data",
+            "type": "object"
+          },
+          "node_type": {
+            "title": "Node Type",
+            "type": "string"
+          },
+          "parent_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parent Ids",
+            "type": "array"
+          },
+          "source_object_id": {
+            "title": "Source Object Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_type",
+          "authority",
+          "source_object_id"
+        ],
+        "title": "CreateProvenanceNodeRequest",
+        "type": "object"
+      },
       "CreateReassessmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11560,6 +11930,37 @@
           "relationship_type"
         ],
         "title": "CreateRelationshipRequest",
+        "type": "object"
+      },
+      "CreateReplayRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_snapshot": {
+            "title": "Evidence Snapshot",
+            "type": "object"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "time_window": {
+            "title": "Time Window",
+            "type": "object"
+          },
+          "transparency_snapshot": {
+            "title": "Transparency Snapshot",
+            "type": "object"
+          },
+          "trust_version": {
+            "title": "Trust Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_version",
+          "trust_version"
+        ],
+        "title": "CreateReplayRequest",
         "type": "object"
       },
       "CreateRetentionPolicyRequest": {
@@ -15012,6 +15413,38 @@
         "title": "EvidenceFreshnessState",
         "type": "string"
       },
+      "EvidenceImpactResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "blast_radius_label": {
+            "title": "Blast Radius Label",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "impact_chain": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Impact Chain",
+            "type": "array"
+          },
+          "total_affected": {
+            "title": "Total Affected",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "impact_chain",
+          "total_affected",
+          "blast_radius_label"
+        ],
+        "title": "EvidenceImpactResponse",
+        "type": "object"
+      },
       "EvidenceLifecycleState": {
         "description": "Ten-state enterprise evidence lifecycle.\n\nDRAFT:          Created but not yet submitted for review.\nCOLLECTED:      Raw evidence captured from source; not yet formally submitted.\nSUBMITTED:      Formally submitted for review; awaiting review assignment.\nUNDER_REVIEW:   Assigned to a reviewer; review in progress.\nVERIFIED:       Review completed positively; evidence is authoritative.\nREJECTED:       Review completed negatively; evidence is disqualified.\nSUPERSEDED:     Replaced by a newer evidence record; preserved for lineage.\nEXPIRED:        Past expires_at threshold; excluded from active use.\nREVOKED:        Administratively revoked (e.g., discovered tampered).\nARCHIVED:       Long-term preservation; excluded from active scoring.\n\nTerminal states: REVOKED (no forward transition allowed).\nSemi-terminal: ARCHIVED (break-glass reactivation not implemented here).",
         "enum": [
@@ -15136,6 +15569,67 @@
           "limit"
         ],
         "title": "EvidenceListResponse",
+        "type": "object"
+      },
+      "EvidenceMatrixListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceMatrixResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "EvidenceMatrixListResponse",
+        "type": "object"
+      },
+      "EvidenceMatrixResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "title": "Coverage",
+            "type": "number"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "matrix_data": {
+            "title": "Matrix Data",
+            "type": "object"
+          },
+          "recommendation_id": {
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "recommendation_id",
+          "matrix_data",
+          "coverage",
+          "created_at"
+        ],
+        "title": "EvidenceMatrixResponse",
         "type": "object"
       },
       "EvidenceOwnershipListResponse": {
@@ -17266,6 +17760,89 @@
         ],
         "title": "ExportClassification",
         "type": "string"
+      },
+      "ExportListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ExportListResponse",
+        "type": "object"
+      },
+      "ExportPackageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "contents_hash": {
+            "title": "Contents Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "export_format": {
+            "title": "Export Format",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "package_data": {
+            "title": "Package Data",
+            "type": "object"
+          },
+          "package_id": {
+            "title": "Package Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "package_id",
+          "export_format",
+          "contents_hash",
+          "package_data",
+          "created_at"
+        ],
+        "title": "ExportPackageResponse",
+        "type": "object"
+      },
+      "ExportProvenanceGraphRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Node Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "node_ids"
+        ],
+        "title": "ExportProvenanceGraphRequest",
+        "type": "object"
       },
       "ExportScope": {
         "enum": [
@@ -28992,6 +29569,193 @@
         "title": "PromotionResponse",
         "type": "object"
       },
+      "ProvenanceGraphResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cycle_detected": {
+            "title": "Cycle Detected",
+            "type": "boolean"
+          },
+          "edges": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges",
+          "node_count",
+          "cycle_detected"
+        ],
+        "title": "ProvenanceGraphResponse",
+        "type": "object"
+      },
+      "ProvenanceNodeListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProvenanceNodeResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ProvenanceNodeListResponse",
+        "type": "object"
+      },
+      "ProvenanceNodeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "authority_version": {
+            "title": "Authority Version",
+            "type": "string"
+          },
+          "child_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Child Ids",
+            "type": "array"
+          },
+          "confidence_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Ref"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "node_type": {
+            "title": "Node Type",
+            "type": "string"
+          },
+          "parent_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parent Ids",
+            "type": "array"
+          },
+          "replay_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Ref"
+          },
+          "sha256_digest": {
+            "title": "Sha256 Digest",
+            "type": "string"
+          },
+          "simulation_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Simulation Ref"
+          },
+          "source_object_id": {
+            "title": "Source Object Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "transparency_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transparency Ref"
+          },
+          "trust_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Ref"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "node_type",
+          "authority",
+          "authority_version",
+          "source_object_id",
+          "sha256_digest",
+          "timestamp",
+          "parent_ids",
+          "child_ids",
+          "trust_ref",
+          "transparency_ref",
+          "confidence_ref",
+          "simulation_ref",
+          "replay_ref",
+          "created_at"
+        ],
+        "title": "ProvenanceNodeResponse",
+        "type": "object"
+      },
       "ProviderCapabilityResponse": {
         "properties": {
           "contract_version": {
@@ -29127,6 +29891,77 @@
           "reason"
         ],
         "title": "PublishReportRequest",
+        "type": "object"
+      },
+      "QualityScoreListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QualityScoreResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "QualityScoreListResponse",
+        "type": "object"
+      },
+      "QualityScoreResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "grade": {
+            "title": "Grade",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "title": "Inputs",
+            "type": "object"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "entity_id",
+          "entity_type",
+          "score",
+          "grade",
+          "inputs",
+          "computed_at"
+        ],
+        "title": "QualityScoreResponse",
         "type": "object"
       },
       "QuestionnaireCoverageResponse": {
@@ -32312,36 +33147,26 @@
         "title": "ReplayContractResponse",
         "type": "object"
       },
-      "ReplayResponse": {
+      "ReplayListResponse": {
+        "additionalProperties": false,
         "properties": {
-          "hash_matches": {
-            "title": "Hash Matches",
-            "type": "boolean"
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/services__governance_intelligence__schemas__ReplayResponse"
+            },
+            "title": "Items",
+            "type": "array"
           },
-          "original_manifest_hash": {
-            "title": "Original Manifest Hash",
-            "type": "string"
-          },
-          "replay_contract": {
-            "$ref": "#/components/schemas/ReplayContractResponse"
-          },
-          "replayed_manifest_hash": {
-            "title": "Replayed Manifest Hash",
-            "type": "string"
-          },
-          "report_id": {
-            "title": "Report Id",
-            "type": "string"
+          "total": {
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
-          "report_id",
-          "hash_matches",
-          "original_manifest_hash",
-          "replayed_manifest_hash",
-          "replay_contract"
+          "items",
+          "total"
         ],
-        "title": "ReplayResponse",
+        "title": "ReplayListResponse",
         "type": "object"
       },
       "ReportListResponse": {
@@ -35996,6 +36821,67 @@
         "title": "SimulationClassification",
         "type": "string"
       },
+      "SimulationComparisonListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SimulationComparisonResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "SimulationComparisonListResponse",
+        "type": "object"
+      },
+      "SimulationComparisonResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline_id": {
+            "title": "Baseline Id",
+            "type": "string"
+          },
+          "comparison_data": {
+            "title": "Comparison Data",
+            "type": "object"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "proposed_id": {
+            "title": "Proposed Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "baseline_id",
+          "proposed_id",
+          "comparison_data",
+          "created_at"
+        ],
+        "title": "SimulationComparisonResponse",
+        "type": "object"
+      },
       "SimulationEventResponse": {
         "properties": {
           "actor_id": {
@@ -37336,6 +38222,62 @@
           "chain_valid"
         ],
         "title": "TimelineChainStatus",
+        "type": "object"
+      },
+      "TimelineDiffListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineDiffResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "TimelineDiffListResponse",
+        "type": "object"
+      },
+      "TimelineDiffResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "diff_data": {
+            "title": "Diff Data",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "window": {
+            "title": "Window",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "window",
+          "diff_data",
+          "created_at"
+        ],
+        "title": "TimelineDiffResponse",
         "type": "object"
       },
       "TimelineEntityType": {
@@ -42345,6 +43287,38 @@
         "title": "AttestationResponse",
         "type": "object"
       },
+      "api__governance_report_manager__ReplayResponse": {
+        "properties": {
+          "hash_matches": {
+            "title": "Hash Matches",
+            "type": "boolean"
+          },
+          "original_manifest_hash": {
+            "title": "Original Manifest Hash",
+            "type": "string"
+          },
+          "replay_contract": {
+            "$ref": "#/components/schemas/ReplayContractResponse"
+          },
+          "replayed_manifest_hash": {
+            "title": "Replayed Manifest Hash",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "hash_matches",
+          "original_manifest_hash",
+          "replayed_manifest_hash",
+          "replay_contract"
+        ],
+        "title": "ReplayResponse",
+        "type": "object"
+      },
       "api__governance_timeline_manager__TimelineEventResponse": {
         "properties": {
           "classification": {
@@ -42696,6 +43670,55 @@
           "slug"
         ],
         "title": "CreateEnvironmentRequest",
+        "type": "object"
+      },
+      "api__ops_governance_manager__CreateExportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "export_classification": {
+            "$ref": "#/components/schemas/ExportClassification",
+            "default": "standard"
+          },
+          "export_purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Purpose"
+          },
+          "export_scope": {
+            "$ref": "#/components/schemas/ExportScope",
+            "default": "tenant"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          }
+        },
+        "title": "CreateExportRequest",
         "type": "object"
       },
       "api__readiness_manager__ControlResponse": {
@@ -44510,6 +45533,27 @@
         "title": "RecordOutcomeRequest",
         "type": "object"
       },
+      "services__governance_intelligence__schemas__CreateExportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "export_format": {
+            "title": "Export Format",
+            "type": "string"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Node Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "export_format"
+        ],
+        "title": "CreateExportRequest",
+        "type": "object"
+      },
       "services__governance_intelligence__schemas__CreateSimulationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -44689,6 +45733,62 @@
           "checks"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "services__governance_intelligence__schemas__ReplayResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "replay_label": {
+            "title": "Replay Label",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "snapshot_data": {
+            "title": "Snapshot Data",
+            "type": "object"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "time_window": {
+            "title": "Time Window",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "policy_version",
+          "time_window",
+          "snapshot_data",
+          "result",
+          "replay_label",
+          "created_at"
+        ],
+        "title": "ReplayResponse",
         "type": "object"
       },
       "services__governance_intelligence__schemas__SearchResponse": {
@@ -57269,7 +58369,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateExportRequest"
+                "$ref": "#/components/schemas/api__ops_governance_manager__CreateExportRequest"
               }
             }
           },
@@ -95288,7 +96388,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReplayResponse"
+                  "$ref": "#/components/schemas/api__governance_report_manager__ReplayResponse"
                 }
               }
             },
@@ -95486,6 +96586,135 @@
         "summary": "Submit Assessment",
         "tags": [
           "assessment"
+        ]
+      }
+    },
+    "/intelligence/benchmark-confidence": {
+      "get": {
+        "operationId": "list_benchmark_confidence_intelligence_benchmark_confidence_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkConfidenceListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Benchmark Confidence",
+        "tags": [
+          "governance-intelligence"
+        ]
+      },
+      "post": {
+        "operationId": "compute_benchmark_confidence_intelligence_benchmark_confidence_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeBenchmarkConfidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkConfidenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compute Benchmark Confidence",
+        "tags": [
+          "governance-intelligence"
         ]
       }
     },
@@ -95921,6 +97150,193 @@
         ]
       }
     },
+    "/intelligence/counterfactual": {
+      "get": {
+        "operationId": "list_counterfactuals_intelligence_counterfactual_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CounterfactualListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Counterfactuals",
+        "tags": [
+          "governance-intelligence"
+        ]
+      },
+      "post": {
+        "operationId": "create_counterfactual_intelligence_counterfactual_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCounterfactualRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CounterfactualResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Counterfactual",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/counterfactual/{cf_id}": {
+      "get": {
+        "operationId": "get_counterfactual_intelligence_counterfactual__cf_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cf_id",
+            "required": true,
+            "schema": {
+              "title": "Cf Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CounterfactualResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Counterfactual",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
     "/intelligence/dashboard": {
       "get": {
         "operationId": "get_dashboard_intelligence_dashboard_get",
@@ -96065,6 +97481,252 @@
           }
         },
         "summary": "Get Dashboard Executive",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/evidence-impact": {
+      "post": {
+        "operationId": "compute_evidence_impact_intelligence_evidence_impact_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeEvidenceImpactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceImpactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compute Evidence Impact",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/evidence-matrix": {
+      "get": {
+        "operationId": "list_evidence_matrices_intelligence_evidence_matrix_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceMatrixListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evidence Matrices",
+        "tags": [
+          "governance-intelligence"
+        ]
+      },
+      "post": {
+        "operationId": "create_evidence_matrix_intelligence_evidence_matrix_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEvidenceMatrixRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceMatrixResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Evidence Matrix",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/evidence-matrix/{matrix_id}": {
+      "get": {
+        "operationId": "get_evidence_matrix_intelligence_evidence_matrix__matrix_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "matrix_id",
+            "required": true,
+            "schema": {
+              "title": "Matrix Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceMatrixResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Evidence Matrix",
         "tags": [
           "governance-intelligence"
         ]
@@ -96312,6 +97974,135 @@
           }
         },
         "summary": "Export Explainability",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/export": {
+      "get": {
+        "operationId": "list_exports_intelligence_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Exports",
+        "tags": [
+          "governance-intelligence"
+        ]
+      },
+      "post": {
+        "operationId": "create_export_intelligence_export_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__governance_intelligence__schemas__CreateExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportPackageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Export",
         "tags": [
           "governance-intelligence"
         ]
@@ -97507,6 +99298,742 @@
         ]
       }
     },
+    "/intelligence/provenance": {
+      "get": {
+        "operationId": "list_provenance_nodes_intelligence_provenance_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvenanceNodeListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Provenance Nodes",
+        "tags": [
+          "governance-intelligence"
+        ]
+      },
+      "post": {
+        "operationId": "create_provenance_node_intelligence_provenance_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProvenanceNodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvenanceNodeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Provenance Node",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/provenance/graph": {
+      "post": {
+        "operationId": "export_provenance_graph_intelligence_provenance_graph_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportProvenanceGraphRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvenanceGraphResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Provenance Graph",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/provenance/{node_id}": {
+      "get": {
+        "operationId": "get_provenance_node_intelligence_provenance__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvenanceNodeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Provenance Node",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/provenance/{node_id}/ancestors": {
+      "get": {
+        "operationId": "get_provenance_ancestors_intelligence_provenance__node_id__ancestors_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Provenance Ancestors Intelligence Provenance  Node Id  Ancestors Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Provenance Ancestors",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/provenance/{node_id}/descendants": {
+      "get": {
+        "operationId": "get_provenance_descendants_intelligence_provenance__node_id__descendants_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Provenance Descendants Intelligence Provenance  Node Id  Descendants Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Provenance Descendants",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/quality-score": {
+      "get": {
+        "operationId": "list_quality_scores_intelligence_quality_score_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityScoreListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Quality Scores",
+        "tags": [
+          "governance-intelligence"
+        ]
+      },
+      "post": {
+        "operationId": "compute_quality_score_intelligence_quality_score_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeQualityScoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityScoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compute Quality Score",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/quality-score/{entity_id}": {
+      "get": {
+        "operationId": "get_quality_score_intelligence_quality_score__entity_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityScoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Quality Score",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/replay": {
+      "get": {
+        "operationId": "list_replays_intelligence_replay_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Replays",
+        "tags": [
+          "governance-intelligence"
+        ]
+      },
+      "post": {
+        "operationId": "create_replay_intelligence_replay_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReplayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_intelligence__schemas__ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Replay",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/replay/{replay_id}": {
+      "get": {
+        "operationId": "get_replay_intelligence_replay__replay_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "replay_id",
+            "required": true,
+            "schema": {
+              "title": "Replay Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__governance_intelligence__schemas__ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Replay",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
     "/intelligence/search": {
       "get": {
         "operationId": "search_intelligence_search_get",
@@ -97574,6 +100101,135 @@
           }
         },
         "summary": "Search",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/simulation-compare": {
+      "get": {
+        "operationId": "list_simulation_comparisons_intelligence_simulation_compare_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationComparisonListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Simulation Comparisons",
+        "tags": [
+          "governance-intelligence"
+        ]
+      },
+      "post": {
+        "operationId": "compare_simulations_intelligence_simulation_compare_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompareSimulationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationComparisonResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare Simulations",
         "tags": [
           "governance-intelligence"
         ]
@@ -98182,6 +100838,135 @@
           }
         },
         "summary": "Get Timeline",
+        "tags": [
+          "governance-intelligence"
+        ]
+      }
+    },
+    "/intelligence/timeline-diff": {
+      "get": {
+        "operationId": "list_timeline_diffs_intelligence_timeline_diff_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineDiffListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Timeline Diffs",
+        "tags": [
+          "governance-intelligence"
+        ]
+      },
+      "post": {
+        "operationId": "compute_timeline_diff_intelligence_timeline_diff_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeTimelineDiffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineDiffResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compute Timeline Diff",
         "tags": [
           "governance-intelligence"
         ]

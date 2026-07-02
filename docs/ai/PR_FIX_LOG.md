@@ -6,6 +6,38 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-02 — pr/18.5a-governance-intelligence-provenance: Evidence Graph & Decision Provenance
+
+**Branch:** `pr/18.5a-governance-intelligence-provenance`
+
+**What was done:** PR 18.5A — Governance Intelligence Evidence Graph & Decision Provenance. 10 new pure service modules, 9 new ORM models, 27 new routes, 1 new migration, 1 CI gate, 8 test files.
+
+**Files created/modified:**
+- `services/governance_intelligence/provenance.py` — `ProvenanceGraph` DAG, `build_node`, `compute_node_digest` (SHA-256)
+- `services/governance_intelligence/counterfactual.py` — 9-scenario dispatch; all outputs `result_label="PROJECTED"`, `is_production=False`
+- `services/governance_intelligence/replay.py` — `build_replay_snapshot`, `replay_governance` (all outputs `replay_label="REPLAY"`, `is_production=False`), `diff_replays`
+- `services/governance_intelligence/evidence_matrix.py` — `build_evidence_matrix` (raises `GovernanceIntelligenceValidationError` when `evidence_ids` empty), `compute_coverage`, `validate_evidence_matrix`
+- `services/governance_intelligence/quality_score.py` — weighted quality score with 5 grades (A+/A/B/C/INSUFFICIENT_EVIDENCE); weights sum exactly to 1.0
+- `services/governance_intelligence/benchmark_confidence.py` — `MINIMUM_SAMPLE_SIZE=10`, `MINIMUM_COHORT_SIZE=5`, freshness (FRESH/STALE/EXPIRED), CI computation
+- `services/governance_intelligence/timeline_diff.py` — deterministic diff across 8 supported windows
+- `services/governance_intelligence/simulation_compare.py` — `compare_simulations` always `comparison_label="DETERMINISTIC_COMPARISON"`, `is_production=False`
+- `services/governance_intelligence/evidence_impact.py` — 10-stage `IMPACT_CHAIN` blast-radius
+- `services/governance_intelligence/export_package.py` — JSON/HTML/MANIFEST (no PDF); strips `tenant_id` recursively; SHA-256 package hash
+- `services/governance_intelligence/engine.py` — 10 new method groups (never commits)
+- `services/governance_intelligence/repository.py` — 9 new table accessor groups; all reads tenant-scoped
+- `services/governance_intelligence/schemas.py` — 11 new request + 12 new response Pydantic schemas
+- `api/governance_intelligence.py` — 27 new routes under `/intelligence/`
+- `api/db_models_governance_intelligence.py` — 9 new ORM models; 3 append-only with ORM guards
+- `migrations/postgres/0147_governance_intelligence_provenance.sql` — replay-safe
+- `tools/ci/check_governance_provenance.py` — 12-check CI gate (all pass)
+- 8 new test files — 420+ deterministic pure-function tests
+- `authority_manifest.yaml` — 9 new tables + 8 new test files
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`, `ROADMAP.md` — updated
+
+**Verification:** All 12 CI gate checks pass; ruff clean; mypy clean; all invariant checks pass.
+
+---
+
 ### 2026-07-02 — pr/18.5-governance-intelligence: initial implementation
 
 **Branch:** `pr/18.5-governance-intelligence`

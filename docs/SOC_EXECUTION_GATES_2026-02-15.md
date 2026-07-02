@@ -5282,3 +5282,32 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed (except adding `/governance-orchestration/health` to the public path list, which is an additive safe-by-default change following an established pattern). No secrets stored or accessed. No cryptographic operations — all signing delegates to CGIN Trust Authority; all anchoring delegates to CGIN Transparency Authority (no-op stubs in notifications.py never raise). Every DB write goes through the engine; the engine never commits. Tenant isolation enforced at three layers: `require_bound_tenant`, `set_tenant_context` (RLS), and explicit `tenant_id` predicate in every repository query. Three append-only tables protected at both ORM and PostgreSQL rule layers. No new external dependencies.
 
+## 2026-07-02 — PR 18.5A: Governance Intelligence Evidence Graph & Decision Provenance
+
+**Classification:** Extension of existing Governance Intelligence bounded context. 9 new DB tables, 27 new routes under existing `/intelligence` prefix. No auth logic changes. DB schema change is additive-only. No secrets stored.
+
+**Critical-path files changed:**
+- `tools/ci/check_governance_provenance.py` — new 12-check AST + runtime CI gate. Verifies: `provenance.py` has `ProvenanceGraph` with all required methods; `detect_cycles()` returns `[]` for acyclic graph; `counterfactual.py` outputs labeled `PROJECTED` and `is_production=False`; `replay.py` outputs labeled `REPLAY` and `is_production=False`; `evidence_matrix.py` raises when `evidence_ids` is empty; `quality_score.py` `QUALITY_GRADES` exactly correct; `benchmark_confidence.py` constants defined; `timeline_diff.py` `SUPPORTED_WINDOWS` non-empty; `simulation_compare.py` `comparison_label == "DETERMINISTIC_COMPARISON"`; `evidence_impact.py` `IMPACT_CHAIN` has 10 entries; `export_package.py` uses SHA-256; migration 0147 exists.
+- `services/governance_intelligence/engine.py` — 10 new engine method groups for provenance, evidence-matrix, replay, counterfactual, quality-score, benchmark-confidence, timeline-diff, simulation-compare, evidence-impact, and export. Engine never commits.
+- `services/governance_intelligence/repository.py` — new repo methods for all 9 new tables; all reads include `tenant_id` predicate.
+- `api/governance_intelligence.py` — 27 new routes under `/intelligence/` (provenance, evidence-matrix, replay, counterfactual, quality-score, benchmark-confidence, timeline-diff, simulation-compare, evidence-impact, export). All routes follow `require_bound_tenant` → `set_tenant_context` → engine → `db.commit()` pattern.
+- `api/db_models_governance_intelligence.py` — 9 new ORM models (`fa_gov_intel_provenance_node`, `fa_gov_intel_provenance_edge`, `fa_gov_intel_replay_snapshot`, `fa_gov_intel_evidence_matrix`, `fa_gov_intel_quality_score`, `fa_gov_intel_simulation_comparison`, `fa_gov_intel_timeline_diff`, `fa_gov_intel_counterfactual`, `fa_gov_intel_export_history`). Append-only tables (`provenance_edge`, `quality_score`, `export_history`) have ORM `before_update`/`before_delete` guards.
+- `migrations/postgres/0147_governance_intelligence_provenance.sql` — replay-safe migration for all 9 new tables; RLS via `current_setting('app.tenant_id', true)`; PG `DO INSTEAD NOTHING` rules on 3 append-only tables.
+
+**Non-critical-path additions:**
+- `services/governance_intelligence/provenance.py` — `ProvenanceGraph`, `ProvenanceNode`, `build_node`, `compute_node_digest`. Pure functions, no DB I/O. Content-addressed nodes via SHA-256.
+- `services/governance_intelligence/counterfactual.py` — 9 scenario dispatch functions. All outputs labeled `PROJECTED`, `is_production=False`.
+- `services/governance_intelligence/replay.py` — `build_replay_snapshot`, `replay_governance`, `diff_replays`. All outputs labeled `REPLAY`, `is_production=False`.
+- `services/governance_intelligence/evidence_matrix.py` — `build_evidence_matrix` (raises on empty evidence), `compute_coverage`, `validate_evidence_matrix`.
+- `services/governance_intelligence/quality_score.py` — weighted quality scoring with 5 grades (A+, A, B, C, INSUFFICIENT_EVIDENCE). Weights sum to 1.0.
+- `services/governance_intelligence/benchmark_confidence.py` — `MINIMUM_SAMPLE_SIZE=10`, `MINIMUM_COHORT_SIZE=5`, freshness buckets (FRESH/STALE/EXPIRED).
+- `services/governance_intelligence/timeline_diff.py` — deterministic diff across 8 supported windows.
+- `services/governance_intelligence/simulation_compare.py` — `compare_simulations` always labeled `DETERMINISTIC_COMPARISON`, `is_production=False`.
+- `services/governance_intelligence/evidence_impact.py` — 10-stage `IMPACT_CHAIN` blast-radius computation.
+- `services/governance_intelligence/export_package.py` — JSON/HTML/MANIFEST export (no PDF); `_strip_tenant_id` recursively removes all `tenant_id` keys; SHA-256 package hash.
+- `authority_manifest.yaml` — 9 new tables + 8 new test files added to `governance_intelligence` entry.
+- `ROADMAP.md` — PR 18.5A row added.
+- Tests: 8 new test files, 420+ deterministic pure-function tests.
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations beyond SHA-256 content-addressing (not signing — no key material). All outputs from counterfactual, replay, and simulation-compare are permanently labeled `is_production=False` preventing confusion with production values. Every DB write goes through the engine; the engine never commits. Tenant isolation enforced at three layers: `require_bound_tenant`, `set_tenant_context` (RLS), and explicit `tenant_id` predicate in every repository query. Three append-only tables protected at ORM layer. `build_json_export` recursively strips `tenant_id` from all nested structures before packaging. No new external dependencies.
+
