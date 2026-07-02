@@ -268,15 +268,15 @@ END $$;
 CREATE TABLE IF NOT EXISTS fa_gov_intel_timeline_diff (
     id         VARCHAR(64)  PRIMARY KEY,
     tenant_id  VARCHAR(255) NOT NULL,
-    window     VARCHAR(64)  NOT NULL,
-    diff_data  TEXT,
-    created_at VARCHAR(64)  NOT NULL
+    time_window VARCHAR(64)  NOT NULL,
+    diff_data   TEXT,
+    created_at  VARCHAR(64)  NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS ix_fa_gov_intel_timeline_diff_tenant
     ON fa_gov_intel_timeline_diff (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_fa_gov_intel_timeline_diff_tenant_window
-    ON fa_gov_intel_timeline_diff (tenant_id, window);
+    ON fa_gov_intel_timeline_diff (tenant_id, time_window);
 
 ALTER TABLE fa_gov_intel_timeline_diff ENABLE ROW LEVEL SECURITY;
 

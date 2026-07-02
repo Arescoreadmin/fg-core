@@ -650,7 +650,7 @@ class GovIntelTimelineDiff(Base):
         String(64), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    window: Mapped[str] = mapped_column(String(64), nullable=False)
+    window: Mapped[str] = mapped_column("time_window", String(64), nullable=False)
     diff_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
 
@@ -658,7 +658,7 @@ class GovIntelTimelineDiff(Base):
         Index(
             "ix_fa_gov_intel_timeline_diff_tenant_window",
             "tenant_id",
-            "window",
+            "time_window",
         ),
         {"extend_existing": True},
     )
