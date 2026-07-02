@@ -296,6 +296,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_remediation_authority"
     )  # PR 18.3: Enterprise Remediation Authority
+    importlib.import_module(
+        "api.db_models_governance_orchestration"
+    )  # PR 18.4: Continuous Governance Orchestration Authority
 
 
 def _get_base():
