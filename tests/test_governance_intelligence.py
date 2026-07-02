@@ -743,11 +743,15 @@ def test_GI_150_update_policy_in_immutable_state(svc, db):
 
     # Move to REVIEW -> APPROVED
     svc.transition_policy(
-        created.id, PolicyTransitionRequest(target_state="REVIEW", actor_id="u"), actor_id="u"
+        created.id,
+        PolicyTransitionRequest(target_state="REVIEW", actor_id="u"),
+        actor_id="u",
     )
     db.commit()
     svc.transition_policy(
-        created.id, PolicyTransitionRequest(target_state="APPROVED", actor_id="u"), actor_id="u"
+        created.id,
+        PolicyTransitionRequest(target_state="APPROVED", actor_id="u"),
+        actor_id="u",
     )
     db.commit()
 
