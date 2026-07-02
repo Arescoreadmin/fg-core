@@ -16652,3 +16652,42 @@ Result:
 - `docs/ai/PR_FIX_LOG.md` — this entry
 - `services/governance_orchestration/governance_loop.py` — fixed `overall_score`→`governance_health_score`, `created_at`→`snapshot_at`, `'VERIFIED'`→`'verified'`
 - `services/governance_orchestration/engine.py` — approval active-state guard; policy version append on `policy_data` update
+
+---
+
+### 2026-07-02 — pr/18.4-governance-orchestration: CI fixes (round 2)
+
+**Branch:** `pr/18.4-governance-orchestration`
+
+**What was done:** Fixed ruff F401 unused-import errors and black formatting failures that caused `fg-fast` lane and `fmt-check` gate to fail.
+
+**CI failures fixed:**
+
+1. **Ruff F401 — 15 unused imports** (`ruff-lint` in fg-fast lane) — Auto-fixed with `ruff check --fix`. Affected files:
+   - `api/governance_orchestration.py` — removed `CreateApprovalRequest` (replaced by inline schema in router)
+   - `services/governance_orchestration/engine.py` — removed `GovernanceOrchestrationConflict`
+   - 13 test files — removed unused ORM model imports and response-class aliases that were renamed during code review fixes
+
+2. **Black formatting — 11 files** (`fmt-check` gate) — Auto-fixed with `make fmt`. Files affected by ruff's removal of trailing commas on single-item import tuples triggered reformatting of surrounding blocks.
+
+**Files modified:** `api/governance_orchestration.py`, `services/governance_orchestration/engine.py`, and 13 test files (ruff auto-fix); `api/governance_orchestration.py`, `services/governance_orchestration/engine.py`, and 9 other files (black reformat).
+
+---
+
+### 2026-07-02 — pr/18.4-governance-orchestration: CI fixes (round 3)
+
+**Branch:** `pr/18.4-governance-orchestration`
+
+**What was done:** Fixed `control-plane-check` failure — all 43 `/governance-orchestration/` routes showed as "unexpected-route gap" because the prefix was not registered in the plane registry.
+
+**CI failure fixed:**
+
+1. **control-plane-check** (`control-plane-check` in fg-fast-ci lane) — `services/plane_registry/registry.py` control plane `route_prefixes` tuple did not include `/governance-orchestration`, so `check_plane_registry.py` reported all 43 routes as unowned. Added `/governance-orchestration` to the control plane's `route_prefixes` and added a `public_routes` exception for `GET /governance-orchestration/health` (unauthenticated liveness probe, no tenant data). Regenerated all four derived CI artifacts via `make route-inventory-generate`.
+
+**Files modified:**
+- `services/plane_registry/registry.py` — added `/governance-orchestration` to control plane `route_prefixes`; added `GET /governance-orchestration/health` public route exception
+- `tools/ci/route_inventory.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `docs/ai/PR_FIX_LOG.md` — this entry

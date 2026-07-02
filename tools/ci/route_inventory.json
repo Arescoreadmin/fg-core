@@ -11302,8 +11302,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/approvals",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11319,8 +11319,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/approvals/{approval_id}/approve",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11336,8 +11336,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/approvals/{approval_id}/delegate",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11353,8 +11353,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/approvals/{approval_id}/reject",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11370,8 +11370,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/change-detection",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11387,8 +11387,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/change-detection",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11404,8 +11404,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/dashboard",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11418,8 +11418,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/health",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": false,
       "scopes": [],
       "source": "runtime-ast",
@@ -11433,8 +11433,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/history",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11450,8 +11450,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/impact-analysis",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11467,8 +11467,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/maintenance-windows",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11484,8 +11484,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/maintenance-windows",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11501,8 +11501,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/maintenance-windows/{window_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11518,8 +11518,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/maintenance-windows/{window_id}/close",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11535,8 +11535,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/maintenance-windows/{window_id}/open",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11552,8 +11552,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/playbooks",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11569,8 +11569,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/playbooks",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11586,8 +11586,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/playbooks/templates/{playbook_type}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11603,8 +11603,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/playbooks/{playbook_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11620,8 +11620,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/policies",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11637,8 +11637,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/policies",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11654,8 +11654,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/policies/{policy_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11671,8 +11671,8 @@
       "file": "api/governance_orchestration.py",
       "method": "PATCH",
       "path": "/governance-orchestration/policies/{policy_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11688,8 +11688,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/reassessments",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11705,8 +11705,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/reassessments",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11722,8 +11722,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/reassessments/{reassessment_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11739,8 +11739,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/reassessments/{reassessment_id}/complete",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11756,8 +11756,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/reassessments/{reassessment_id}/schedule",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11773,8 +11773,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/search",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11790,8 +11790,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/simulations",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11807,8 +11807,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/simulations",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11824,8 +11824,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/simulations/{simulation_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11841,8 +11841,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/statistics",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11858,8 +11858,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/timeline",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11875,8 +11875,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/triggers",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11892,8 +11892,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/triggers",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11909,8 +11909,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/triggers/{trigger_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11926,8 +11926,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/workflows",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11943,8 +11943,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/workflows",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11960,8 +11960,8 @@
       "file": "api/governance_orchestration.py",
       "method": "GET",
       "path": "/governance-orchestration/workflows/{workflow_id}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:read"
@@ -11977,8 +11977,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/workflows/{workflow_id}/advance",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -11994,8 +11994,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/workflows/{workflow_id}/cancel",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -12011,8 +12011,8 @@
       "file": "api/governance_orchestration.py",
       "method": "POST",
       "path": "/governance-orchestration/workflows/{workflow_id}/pause",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "governance:write"
@@ -17991,7 +17991,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-02T00:33:33.873783+00:00",
+  "generated_at": "2026-07-02T01:24:13.646495+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
