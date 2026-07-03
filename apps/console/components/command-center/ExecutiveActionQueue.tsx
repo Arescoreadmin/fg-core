@@ -35,10 +35,10 @@ export interface ActionItem {
 
 function priorityToVariant(
   p: ActionItem['priority'],
-): 'destructive' | 'secondary' | 'outline' | 'default' {
-  if (p === 'critical') return 'destructive';
-  if (p === 'high') return 'secondary';
-  if (p === 'medium') return 'outline';
+): 'critical' | 'high' | 'warning' | 'default' {
+  if (p === 'critical') return 'critical';
+  if (p === 'high') return 'high';
+  if (p === 'medium') return 'warning';
   return 'default';
 }
 

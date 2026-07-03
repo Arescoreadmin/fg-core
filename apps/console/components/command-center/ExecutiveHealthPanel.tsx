@@ -96,7 +96,7 @@ const STATE_CONFIG: Record<
   {
     label: string;
     id: string;
-    badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline';
+    badgeVariant: 'default' | 'secondary' | 'danger' | 'outline';
     Icon: React.ComponentType<{ className?: string }>;
     textClass: string;
   }
@@ -125,14 +125,14 @@ const STATE_CONFIG: Record<
   critical: {
     label: 'Critical',
     id: 'health-critical',
-    badgeVariant: 'destructive',
+    badgeVariant: 'danger',
     Icon: XCircle,
     textClass: 'text-danger',
   },
   blocked: {
     label: 'Blocked',
     id: 'health-blocked',
-    badgeVariant: 'destructive',
+    badgeVariant: 'danger',
     Icon: HelpCircle,
     textClass: 'text-danger',
   },

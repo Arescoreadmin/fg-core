@@ -64,9 +64,9 @@ function buildNotifications(items: FeedItem[]): Notification[] {
 
 const CATEGORY_CONFIG: Record<
   NotifCategory,
-  { id: string; label: string; variant: 'destructive' | 'secondary' | 'outline' | 'default' }
+  { id: string; label: string; variant: 'critical' | 'secondary' | 'outline' | 'default' }
 > = {
-  critical: { id: 'notif-critical', label: 'Critical', variant: 'destructive' },
+  critical: { id: 'notif-critical', label: 'Critical', variant: 'critical' },
   approval: { id: 'notif-approval', label: 'Approval', variant: 'secondary' },
   risk: { id: 'notif-risk', label: 'Risk', variant: 'secondary' },
   compliance: { id: 'notif-compliance', label: 'Compliance', variant: 'outline' },

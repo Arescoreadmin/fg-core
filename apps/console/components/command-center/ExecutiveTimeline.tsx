@@ -70,11 +70,12 @@ function relativeTime(ts: string | null): string {
   }
 }
 
-function severityToVariant(s: string | null): 'destructive' | 'secondary' | 'outline' | 'default' {
+function severityToVariant(s: string | null): 'critical' | 'high' | 'warning' | 'outline' {
   if (!s) return 'outline';
   const lower = s.toLowerCase();
-  if (lower === 'critical' || lower === 'high') return 'destructive';
-  if (lower === 'medium') return 'secondary';
+  if (lower === 'critical') return 'critical';
+  if (lower === 'high') return 'high';
+  if (lower === 'medium') return 'warning';
   return 'outline';
 }
 
