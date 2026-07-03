@@ -16744,3 +16744,24 @@ Result:
 - `tools/ci/route_inventory_summary.json` — regenerated
 - `tools/ci/topology.sha256` — regenerated
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+### 2026-07-02 — pr-18-6-phase0-mcim: CI fixes
+
+**Branch:** `pr-18-6-phase0-mcim`
+
+**What was done:** Fixed two CI failures on PR #497 (MCIM phase 0 architecture spec).
+
+**CI failures fixed:**
+
+1. **soc-review-sync** (`Guard (paths + syntax + fg-fast)` job) — `tools/ci/check_mcim_docs.py` falls under the `tools/ci/` critical prefix. Added PR 18.6 Phase 0 SOC review entry to `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+
+2. **pr-fix-log-guard** (`AI Ledger Guard` workflow) — PR_FIX_LOG not updated. Added this entry.
+
+3. **P2 bot review fix** — `validate_changed_paths()` in `check_mcim_docs.py` used `git status --porcelain`, which is empty after commits, making the path-allowlist gate a no-op in CI. Replaced with a `_pr_diff_files()` helper that uses `git diff --name-only origin/<GITHUB_BASE_REF>...HEAD` (same pattern as `check_soc_review_sync.py`), with `HEAD~1..HEAD` as fallback and `git status --porcelain` as local fallback.
+
+**Files modified:**
+- `tools/ci/check_mcim_docs.py` — switch `validate_changed_paths()` to PR diff; add `import os`
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 18.6 Phase 0 SOC review entry
+- `docs/ai/PR_FIX_LOG.md` — this entry

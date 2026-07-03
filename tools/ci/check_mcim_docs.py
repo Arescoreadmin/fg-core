@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -48,6 +49,8 @@ ALLOWED_CHANGED_PATHS = {
     "docs/architecture/MCIM_18_6_VALIDATION_CHECKLIST.md",
     "tools/ci/check_mcim_docs.py",
     "tests/tools/test_mcim_docs.py",
+    "docs/SOC_EXECUTION_GATES_2026-02-15.md",
+    "docs/ai/PR_FIX_LOG.md",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.
@@ -101,7 +104,27 @@ def validate_json_blocks(text: str) -> list[str]:
     return errors
 
 
-def parse_git_status(root: Path) -> list[tuple[str, str]]:
+def _git(args: list[str], root: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], cwd=root, check=False, capture_output=True, text=True)
+
+
+def _pr_diff_files(root: Path) -> list[str] | None:
+    """Return files changed in the PR diff, or None if not in CI / fetch fails."""
+    base_ref = (os.environ.get("GITHUB_BASE_REF") or "").strip()
+    if not base_ref:
+        return None
+    if _git(["fetch", "origin", base_ref, "--depth=1"], root).returncode != 0:
+        return None
+    result = _git(["diff", "--name-only", f"origin/{base_ref}...HEAD"], root)
+    if result.returncode == 0:
+        return [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+    fallback = _git(["diff", "--name-only", "HEAD~1..HEAD"], root)
+    if fallback.returncode == 0:
+        return [ln.strip() for ln in fallback.stdout.splitlines() if ln.strip()]
+    return None
+
+
+def _status_files(root: Path) -> list[tuple[str, str]]:
     proc = subprocess.run(
         ["git", "status", "--porcelain"],
         cwd=root,
@@ -123,7 +146,12 @@ def parse_git_status(root: Path) -> list[tuple[str, str]]:
 
 def validate_changed_paths(root: Path) -> list[str]:
     errors: list[str] = []
-    for status, path in parse_git_status(root):
+    pr_files = _pr_diff_files(root)
+    if pr_files is not None:
+        entries: list[tuple[str, str]] = [("diff", p) for p in pr_files]
+    else:
+        entries = _status_files(root)
+    for status, path in entries:
         if any(path.startswith(prefix) for prefix in IGNORED_STATUS_PREFIXES):
             continue
         if path in ALLOWED_CHANGED_PATHS:
