@@ -21,12 +21,14 @@ interface DecisionProvenancePanelProps {
 function ProvenanceRow({ decision }: { decision: DecisionOut }) {
   const [expanded, setExpanded] = useState(false);
 
-  const threatLabel =
+  const threatLabel: 'critical' | 'high' | 'warning' | 'outline' =
     decision.threat_level === 'critical'
-      ? 'destructive'
+      ? 'critical'
       : decision.threat_level === 'high'
-        ? 'secondary'
-        : 'outline';
+        ? 'high'
+        : decision.threat_level === 'medium'
+          ? 'warning'
+          : 'outline';
 
   return (
     <li
@@ -42,7 +44,7 @@ function ProvenanceRow({ decision }: { decision: DecisionOut }) {
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <Badge variant={threatLabel as 'destructive' | 'secondary' | 'outline'} className="text-[9px] shrink-0">
+          <Badge variant={threatLabel} className="text-[9px] shrink-0">
             {decision.threat_level ?? 'unknown'}
           </Badge>
           <span className="text-xs font-medium text-foreground truncate">

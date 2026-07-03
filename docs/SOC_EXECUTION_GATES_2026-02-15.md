@@ -5345,3 +5345,20 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations. No new network I/O. No new external dependencies. The new CI gate is read-only Python only. The navigation package is pure TypeScript metadata — no DB queries, no API calls, no secrets. Frontend sidebar changes are visual reorganization only: same routes, different grouping labels. The `@fg/navigation` package adds no server-side code paths. Legacy routes (`/assessment`, `/onboarding`, `/products`) remain reachable via URL — they are only removed from the visible sidebar, not retired. No mutation paths changed.
 
+
+## 2026-07-03 — PR 18.6.2: Executive Command Center
+
+**Classification:** Frontend-only feature. No backend changes. No API changes. No DB schema changes. No auth logic changes. No schema migrations.
+
+**Critical-path files changed:**
+- `tools/ci/check_executive_dashboard.py` — new CI gate. Validates 17 widget component files for: MCIM reference, authority declaration, sourceOfTruth declaration, drillDown/href declaration, and absence of prohibited patterns (`Math.random`, bare hardcoded metric numbers). Also validates 5 required anchor strings in `apps/console/app/dashboard/page.tsx`. Read-only file inspection only. No subprocess calls, no secrets accessed, no network I/O.
+- `tools/ci/check_mcim_docs.py` — updated `ALLOWED_CHANGED_PATHS` allowlist to include 22 new paths for PR 18.6.2 (dashboard page, command-center components directory, new CI gate, new test file, architecture docs).
+
+**Non-critical-path additions and modifications:**
+- `apps/console/app/dashboard/page.tsx` — converted from client component to async server component. Fetches 7 data sources via `Promise.allSettled`. Passes results as typed props to 17 widget components. Preserves 5 test anchor strings: `billing-ready`, `billing-not-ready`, `billing-error`, `events-loading`, `Core unreachable`.
+- `apps/console/components/command-center/WidgetShell.tsx` — new shared Card wrapper with collapsible authority metadata footer (MCIM ID, authority, source of truth, confidence %, last updated, drill-down link). No backend I/O.
+- `apps/console/components/command-center/` (17 widget components) — `ExecutiveKPIBar`, `ExecutiveHealthPanel`, `GovernanceOverview`, `TrustCenterSummary`, `ExecutiveRiskMap`, `ExecutiveActionQueue`, `FieldAssessmentStatus`, `GovernanceIntelligence`, `DecisionProvenancePanel`, `ExecutiveTimeline`, `ExecutiveNotifications`, `ReadinessSummary`, `ComplianceSummary`, `CustomerImpact`, `WorkloadDashboard`, `ExecutiveBriefing`, `GlobalSearch`. All are read-only client components. No auth logic, no secrets, no direct DB access.
+- `tests/console/command-center.test.js` — 511 static-analysis tests.
+- `docs/architecture/MCIM_18_6_NAVIGATION_DECISION_LOG.md` — PR 18.6.2 decisions appended.
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations. No new network I/O beyond existing `coreApi` and `readinessApi` calls already established in the codebase. No new external dependencies. The new CI gate (`check_executive_dashboard.py`) is read-only Python: it reads local files, performs string inspection, and exits with a status code. No writes, no credentials, no network calls. All 17 widget components are pure presentational components that receive data as props from the server component — they introduce no new data access paths. The `Promise.allSettled` pattern ensures individual data source failures are isolated and never propagate to crash the dashboard. No mutations, no form handlers, no POST routes added.

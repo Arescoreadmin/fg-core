@@ -16811,3 +16811,23 @@ Result:
 - `docs/architecture/MCIM_18_6_VALIDATION_CHECKLIST.md`
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+---
+
+## PR 18.6.2 — Executive Command Center (fix)
+
+**Branch:** `pr/18.6.2-executive-command-center`
+
+**What was done:** Fixed three CI/build failures on PR 18.6.2 (Executive Command Center).
+
+**CI failures fixed:**
+
+1. **TypeScript build error** (Vercel / Docker Compose / fg-fast) — `DecisionProvenancePanel.tsx:45` cast Badge variant to `'destructive'` which is not in this project's Badge variant set (`default | secondary | success | warning | danger | critical | high | medium | low | outline`). Fixed by mapping `critical` → `'critical'`, `high` → `'high'`, `medium` → `'warning'`, fallback → `'outline'`. Removed unsafe `as` cast; replaced with explicit type annotation `'critical' | 'high' | 'warning' | 'outline'`.
+
+2. **soc-review-sync** (`Guard (paths + syntax + fg-fast)` job) — `tools/ci/check_executive_dashboard.py` (new) and `tools/ci/check_mcim_docs.py` (modified) fall under the `tools/ci/` critical prefix and require a SOC review entry. Added PR 18.6.2 entry to `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+
+3. **pr-fix-log-guard** (`AI Ledger Guard` workflow) — `docs/ai/PR_FIX_LOG.md` not updated when high-risk `tools/ci/` files were changed. Added this entry.
+
+**Files modified:**
+- `apps/console/components/command-center/DecisionProvenancePanel.tsx` — fix Badge variant mapping
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 18.6.2 SOC review entry
+- `docs/ai/PR_FIX_LOG.md` — this entry
