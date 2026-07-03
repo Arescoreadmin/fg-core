@@ -5326,3 +5326,22 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. The new CI gate (`check_mcim_docs.py`) is read-only: it reads local files and calls `git diff`/`git status`; it never writes, never accesses credentials, and never makes network calls. Path allowlist enforcement is restricted to the MCIM doc set — any production code change in the same PR would trigger a gate failure. No new external dependencies.
 
+## 2026-07-03 — PR 18.6.1: Unified Navigation Framework
+
+**Classification:** Navigation infrastructure only. No backend changes. No API changes. No authority changes. No DB schema changes. No auth logic changes. Frontend navigation metadata and sidebar reorganization only.
+
+**Critical-path files changed:**
+- `tools/ci/check_navigation_registry.py` — new 14-check Python CI gate. Validates `packages/navigation/navigation-registry.json` against MCIM rules: required groups, no duplicate IDs, no duplicate routes, all required console/portal routes present, valid tiers/lifecycles/platforms/roles, non-empty MCIM IDs and capabilities, portal group assignment, legacy classification, group coverage. Read-only subprocess-free script. No secrets accessed. No network I/O.
+
+**Non-critical-path additions and modifications:**
+- `packages/navigation/` — new `@fg/navigation` TypeScript package (0 backend I/O, 0 secrets, pure metadata). Contains: `types.ts` (15 types), `registry.ts` (NavigationRegistry), `resolver.ts` (NavigationResolver), `breadcrumbs.ts` (NavigationBreadcrumbResolver), `search.ts` (NavigationSearchIndex), `validator.ts` (NavigationValidator), `context.ts` (React context), `registrations/groups.ts` (8 MCIM groups), `registrations/console.ts` (31 console registrations), `registrations/portal.ts` (12 portal registrations), `navigation-registry.json` (JSON snapshot).
+- `apps/console/components/layout/Sidebar.tsx` — sidebar now generated from `CONSOLE_REGISTRY.getByGroup()`. Groups reorganized to MCIM taxonomy. No routes changed or removed. No backend calls.
+- `apps/portal/app/layout.tsx` — portal nav now generated from `PORTAL_REGISTRY.getAllItems()`. No routes changed or removed.
+- `apps/console/tsconfig.json`, `apps/portal/tsconfig.json` — added `@fg/navigation` path alias.
+- `apps/console/package.json`, `apps/portal/package.json` — added `@fg/navigation: file:../../packages/navigation`.
+- `tests/tools/test_navigation_registry.py` — 399 deterministic tests for `check_navigation_registry.py`.
+- `docs/architecture/MCIM_18_6_NAVIGATION_DECISION_LOG.md` — PR 18.6.1 decision entries added.
+- `docs/architecture/MCIM_18_6_VALIDATION_CHECKLIST.md` — PR 18.6.1 checklist + navigation validation commands added.
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations. No new network I/O. No new external dependencies. The new CI gate is read-only Python only. The navigation package is pure TypeScript metadata — no DB queries, no API calls, no secrets. Frontend sidebar changes are visual reorganization only: same routes, different grouping labels. The `@fg/navigation` package adds no server-side code paths. Legacy routes (`/assessment`, `/onboarding`, `/products`) remain reachable via URL — they are only removed from the visible sidebar, not retired. No mutation paths changed.
+

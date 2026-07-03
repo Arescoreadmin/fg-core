@@ -2,107 +2,81 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { LucideIcon } from 'lucide-react';
 import {
-  LayoutDashboard,
-  ShieldCheck,
-  ClipboardList,
-  ClipboardCheck,
-  Database,
-  GitBranch,
-  FlaskConical,
   Activity,
-  Package,
-  Layers,
-  Microscope,
-  Radio,
-  MessageSquare,
-  Settings,
-  Users,
   Building2,
+  ClipboardCheck,
+  ClipboardList,
+  Database,
+  FlaskConical,
+  GitBranch,
+  Layers,
+  LayoutDashboard,
   LogOut,
+  MessageSquare,
+  Microscope,
+  Package,
+  Radio,
+  Settings,
+  ShieldCheck,
+  Users,
   X,
 } from 'lucide-react';
+import { CONSOLE_REGISTRY } from '@fg/navigation';
+import type { NavigationGroup } from '@fg/navigation';
 import { cn } from '@/lib/cn';
 import { FrostGateShield } from '@/components/governance/FrostGateShield';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
-interface NavItem {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
+const ICON_MAP: Record<string, LucideIcon> = {
+  'command-center': LayoutDashboard,
+  'control-tower': Radio,
+  'readiness': Activity,
+  'field-assessments': ClipboardCheck,
+  'policies': ShieldCheck,
+  'providers': Package,
+  'ai-workspace': MessageSquare,
+  'corpus': Database,
+  'retrieval': Layers,
+  'workforce-intel': Users,
+  'provenance': GitBranch,
+  'decisions': ShieldCheck,
+  'audit-forensics': Microscope,
+  'evaluation-lab': FlaskConical,
+  'keys': Settings,
+  'clients': Building2,
+  'settings': Settings,
+  'assessments': ClipboardList,
+};
 
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
+const GROUP_ORDER: NavigationGroup[] = [
+  'Operations',
+  'Governance',
+  'Intelligence',
+  'Trust',
+  'Compliance',
+  'Administration',
+];
 
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
 }
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: 'Operations',
-    items: [
-      { label: 'Command Center',  href: '/dashboard',               icon: LayoutDashboard },
-      { label: 'Control Tower',   href: '/dashboard/control-tower', icon: Radio },
-    ],
-  },
-  {
-    label: 'AI & Knowledge',
-    items: [
-      { label: 'AI Workspace',    href: '/dashboard/assistant',     icon: MessageSquare },
-      { label: 'Corpus',          href: '/dashboard/corpus',        icon: Database },
-      { label: 'Retrieval',       href: '/dashboard/retrieval',     icon: Layers },
-      { label: 'Provenance',      href: '/dashboard/provenance',    icon: GitBranch },
-    ],
-  },
-  {
-    label: 'Governance',
-    items: [
-      { label: 'Policies',           href: '/dashboard/policies',    icon: ShieldCheck },
-      { label: 'Providers',          href: '/dashboard/providers',   icon: Package },
-      { label: 'Readiness',          href: '/dashboard/readiness',   icon: Activity },
-      { label: 'Field Assessments',  href: '/field-assessment',      icon: ClipboardCheck },
-    ],
-  },
-  {
-    label: 'Compliance',
-    items: [
-      { label: 'Audit & Forensics', href: '/dashboard/forensics',  icon: Microscope },
-      { label: 'Decisions',       href: '/dashboard/decisions',     icon: ShieldCheck },
-      { label: 'Evaluation Lab',  href: '/dashboard/evaluation',    icon: FlaskConical },
-    ],
-  },
-  {
-    label: 'Workforce',
-    items: [
-      { label: 'Workforce Intel', href: '/dashboard/workforce',     icon: Users },
-    ],
-  },
-  {
-    label: 'Admin',
-    items: [
-      { label: 'Clients',         href: '/admin/tenants',           icon: Building2 },
-    ],
-  },
-  {
-    label: 'System',
-    items: [
-      { label: 'Settings',        href: '/dashboard/settings',      icon: Settings },
-      { label: 'Assessments',     href: '/assessment',              icon: ClipboardList },
-    ],
-  },
-];
-
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
 
-  function isActive(href: string) {
-    if (href === '/dashboard') return pathname === '/dashboard';
-    return pathname.startsWith(href);
+  const navGroups = GROUP_ORDER.map((groupId) => {
+    const items = CONSOLE_REGISTRY.getByGroup(groupId).filter(
+      (item) => item.visibility === 'visible',
+    );
+    return { id: groupId, items };
+  }).filter((g) => g.items.length > 0);
+
+  function isActive(route: string) {
+    if (route === '/dashboard') return pathname === '/dashboard';
+    return pathname.startsWith(route);
   }
 
   return (
@@ -135,17 +109,18 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         aria-label="Main navigation"
         className="flex-1 overflow-y-auto px-2 py-3"
       >
-        {NAV_GROUPS.map((group, gi) => (
-          <div key={group.label} className={cn(gi > 0 && 'mt-4')}>
+        {navGroups.map(({ id: groupId, items }, gi) => (
+          <div key={groupId} className={cn(gi > 0 && 'mt-4')}>
             <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-muted/40">
-              {group.label}
+              {groupId}
             </p>
-            {group.items.map((item) => {
-              const active = isActive(item.href);
+            {items.map((item) => {
+              const active = isActive(item.route);
+              const Icon = ICON_MAP[item.id];
               return (
                 <Link
-                  key={item.href}
-                  href={item.href}
+                  key={item.route}
+                  href={item.route}
                   aria-current={active ? 'page' : undefined}
                   onClick={onClose}
                   className={cn(
@@ -155,8 +130,8 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                       : 'text-muted hover:bg-surface-2 hover:text-foreground',
                   )}
                 >
-                  <item.icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  {item.label}
+                  {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                  {item.title}
                 </Link>
               );
             })}

@@ -64,39 +64,51 @@ test('dashboard layout does not introduce random IDs or nondeterministic values'
 // ─── Navigation sections ──────────────────────────────────────────────────────
 
 test('sidebar contains all required navigation section labels', () => {
+  // Sidebar is registry-driven; titles come from CONSOLE_REGISTRY at runtime.
+  // Verify Sidebar imports the registry and ICON_MAP covers all required item IDs.
   const sidebar = read('components/layout/Sidebar.tsx');
-  assert.match(sidebar, /Command Center/);
-  assert.match(sidebar, /AI Workspace/);
-  assert.match(sidebar, /Corpus/);
-  assert.match(sidebar, /Retrieval/);
-  assert.match(sidebar, /Provenance/);
-  assert.match(sidebar, /Policies/);
-  assert.match(sidebar, /Audit/);
-  assert.match(sidebar, /Providers/);
-  assert.match(sidebar, /Readiness/);
-  assert.match(sidebar, /Evaluation/);
-  assert.match(sidebar, /Settings/);
+  assert.match(sidebar, /CONSOLE_REGISTRY/);
+  assert.match(sidebar, /'command-center'/);
+  assert.match(sidebar, /'ai-workspace'/);
+  assert.match(sidebar, /'corpus'/);
+  assert.match(sidebar, /'retrieval'/);
+  assert.match(sidebar, /'provenance'/);
+  assert.match(sidebar, /'policies'/);
+  assert.match(sidebar, /'audit-forensics'/);
+  assert.match(sidebar, /'providers'/);
+  assert.match(sidebar, /'readiness'/);
+  assert.match(sidebar, /'evaluation-lab'/);
+  assert.match(sidebar, /'settings'/);
 });
 
 test('sidebar contains all required route paths', () => {
-  const sidebar = read('components/layout/Sidebar.tsx');
-  assert.match(sidebar, /href: '\/dashboard'/);
-  assert.match(sidebar, /\/dashboard\/assistant/);
-  assert.match(sidebar, /\/dashboard\/corpus/);
-  assert.match(sidebar, /\/dashboard\/retrieval/);
-  assert.match(sidebar, /\/dashboard\/provenance/);
-  assert.match(sidebar, /\/dashboard\/policies/);
-  assert.match(sidebar, /\/dashboard\/forensics/);
-  assert.match(sidebar, /\/dashboard\/providers/);
-  assert.match(sidebar, /\/dashboard\/readiness/);
-  assert.match(sidebar, /\/dashboard\/evaluation/);
-  assert.match(sidebar, /\/dashboard\/settings/);
+  // Routes are served from CONSOLE_REGISTRY; validate via the checked-in JSON snapshot.
+  const reg = JSON.parse(read('../../packages/navigation/navigation-registry.json'));
+  const routes = reg.console.map((i) => i.route);
+  for (const route of [
+    '/dashboard',
+    '/dashboard/assistant',
+    '/dashboard/corpus',
+    '/dashboard/retrieval',
+    '/dashboard/provenance',
+    '/dashboard/policies',
+    '/dashboard/forensics',
+    '/dashboard/providers',
+    '/dashboard/readiness',
+    '/dashboard/evaluation',
+    '/dashboard/settings',
+  ]) {
+    assert.ok(routes.includes(route), `registry missing route: ${route}`);
+  }
+  assert.match(read('components/layout/Sidebar.tsx'), /CONSOLE_REGISTRY/);
 });
 
 test('sidebar preserves existing control-tower route and excludes legacy keys route', () => {
-  const sidebar = read('components/layout/Sidebar.tsx');
-  assert.match(sidebar, /\/dashboard\/control-tower/);
-  assert.doesNotMatch(sidebar, /\/dashboard\/keys/);
+  // Routes live in CONSOLE_REGISTRY; validate via the JSON snapshot.
+  const reg = JSON.parse(read('../../packages/navigation/navigation-registry.json'));
+  const routes = reg.console.map((i) => i.route);
+  assert.ok(routes.includes('/dashboard/control-tower'), 'control-tower must be in registry');
+  assert.ok(!routes.includes('/dashboard/keys'), '/dashboard/keys must not exist — keys lives at /keys');
 });
 
 test('sidebar nav links call onClose on click so mobile drawer closes after navigation', () => {

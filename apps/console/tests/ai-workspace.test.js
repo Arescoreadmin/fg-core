@@ -372,8 +372,10 @@ test('dashboard assistant route still exists at expected path', () => {
 });
 
 test('existing shell navigation tests still pass (smoke check)', () => {
-  // Verify that the sidebar still has the AI Workspace link (not removed/renamed)
-  const sidebar = read('components/layout/Sidebar.tsx');
-  assert.match(sidebar, /AI Workspace/);
-  assert.match(sidebar, /\/dashboard\/assistant/);
+  // Sidebar is registry-driven; verify ai-workspace is registered with correct route.
+  const reg = JSON.parse(read('../../packages/navigation/navigation-registry.json'));
+  const item = reg.console.find((i) => i.id === 'ai-workspace');
+  assert.ok(item, 'ai-workspace must be registered');
+  assert.equal(item.route, '/dashboard/assistant');
+  assert.match(read('components/layout/Sidebar.tsx'), /CONSOLE_REGISTRY/);
 });

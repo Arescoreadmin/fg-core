@@ -1,0 +1,1535 @@
+{
+  "version": "18.6.1",
+  "generated_at": "2026-07-03",
+  "platform": "both",
+  "groups": [
+    {
+      "id": "Operations",
+      "label": "Operations",
+      "description": "Real-time situational awareness \u2014 command center dashboards and control-plane monitoring for active AI deployments.",
+      "platform": "console",
+      "reserved": false
+    },
+    {
+      "id": "Governance",
+      "label": "Governance",
+      "description": "Policy authoring, provider configuration, readiness assessment, and field engagement management for AI governance programs.",
+      "platform": "console",
+      "reserved": false
+    },
+    {
+      "id": "Intelligence",
+      "label": "Intelligence",
+      "description": "AI workspace, knowledge corpus management, retrieval configuration, and workforce analytics for continuous intelligence.",
+      "platform": "console",
+      "reserved": false
+    },
+    {
+      "id": "Trust",
+      "label": "Trust",
+      "description": "Provenance tracing, decision lineage, and forensic audit capabilities that establish and sustain AI system trust.",
+      "platform": "console",
+      "reserved": false
+    },
+    {
+      "id": "Compliance",
+      "label": "Compliance",
+      "description": "Evaluation lab for model quality benchmarking and compliance evidence generation across regulated frameworks.",
+      "platform": "console",
+      "reserved": false
+    },
+    {
+      "id": "Enterprise",
+      "label": "Enterprise",
+      "description": "Reserved enterprise workspace \u2014 future multi-tenant federation, cross-org benchmarking, and executive intelligence hub.",
+      "platform": "console",
+      "reserved": true
+    },
+    {
+      "id": "Administration",
+      "label": "Administration",
+      "description": "Client tenant management, API key lifecycle, and platform-wide settings shared across console and portal.",
+      "platform": "both",
+      "reserved": false
+    },
+    {
+      "id": "Portal",
+      "label": "Portal",
+      "description": "Customer-facing portal providing engagement oversight, findings review, reporting, and remediation tracking.",
+      "platform": "portal",
+      "reserved": false
+    }
+  ],
+  "console": [
+    {
+      "id": "command-center",
+      "title": "Command Center",
+      "route": "/dashboard",
+      "group": "Operations",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Administrator",
+        "CISO",
+        "Executive"
+      ],
+      "aliases": [
+        "dashboard",
+        "home",
+        "overview",
+        "main",
+        "ops hub"
+      ],
+      "keywords": [
+        "real-time",
+        "status",
+        "metrics",
+        "kpi",
+        "summary",
+        "posture"
+      ],
+      "mcim_id": "MCIM-18.6-CMD-CENTER",
+      "capability": "Operational Command Center",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "control-tower",
+      "title": "Control Tower",
+      "route": "/dashboard/control-tower",
+      "group": "Operations",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Administrator",
+        "Support"
+      ],
+      "aliases": [
+        "control plane",
+        "gateway",
+        "traffic",
+        "requests",
+        "monitor"
+      ],
+      "keywords": [
+        "gateway",
+        "traffic",
+        "latency",
+        "request volume",
+        "policy enforcement",
+        "runtime"
+      ],
+      "mcim_id": "MCIM-18.6-CTRL-TOWER",
+      "capability": "Runtime Control Tower",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "readiness",
+      "title": "Readiness",
+      "route": "/dashboard/readiness",
+      "group": "Governance",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "CISO",
+        "Auditor",
+        "Executive"
+      ],
+      "aliases": [
+        "ai readiness",
+        "risk score",
+        "posture",
+        "compliance score",
+        "maturity"
+      ],
+      "keywords": [
+        "readiness",
+        "score",
+        "maturity",
+        "risk",
+        "gap",
+        "framework",
+        "assessment"
+      ],
+      "mcim_id": "MCIM-18.6-READINESS",
+      "capability": "AI Readiness Assessment",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "field-assessments",
+      "title": "Field Assessments",
+      "route": "/field-assessment",
+      "group": "Governance",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "AssessmentEngineer",
+        "FieldAssessor",
+        "Administrator"
+      ],
+      "aliases": [
+        "engagements",
+        "assessments list",
+        "field ops",
+        "site assessment",
+        "on-site",
+        "field work"
+      ],
+      "keywords": [
+        "field",
+        "engagement",
+        "assessment",
+        "on-site",
+        "client",
+        "survey"
+      ],
+      "mcim_id": "MCIM-18.6-FIELD-ASSESS",
+      "capability": "Field Assessment Management",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "policies",
+      "title": "Policies",
+      "route": "/dashboard/policies",
+      "group": "Governance",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Compliance",
+        "CISO"
+      ],
+      "aliases": [
+        "policy editor",
+        "rules",
+        "opa",
+        "guardrails",
+        "policy management"
+      ],
+      "keywords": [
+        "policy",
+        "rule",
+        "opa",
+        "guardrail",
+        "enforcement",
+        "allow",
+        "deny",
+        "condition"
+      ],
+      "mcim_id": "MCIM-18.6-POLICIES",
+      "capability": "AI Policy Authoring",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "providers",
+      "title": "Providers",
+      "route": "/dashboard/providers",
+      "group": "Governance",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Administrator",
+        "CISO"
+      ],
+      "aliases": [
+        "ai providers",
+        "models",
+        "llm config",
+        "anthropic",
+        "openai",
+        "model registry"
+      ],
+      "keywords": [
+        "provider",
+        "model",
+        "llm",
+        "api key",
+        "endpoint",
+        "configuration",
+        "vendor"
+      ],
+      "mcim_id": "MCIM-18.6-PROVIDERS",
+      "capability": "AI Provider Configuration",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "field-assessment-detail",
+      "title": "Field Assessment Detail",
+      "route": "/field-assessment/[engagementId]",
+      "group": "Governance",
+      "tier": "contextual",
+      "classification": "contextual",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "AssessmentEngineer",
+        "FieldAssessor",
+        "Administrator"
+      ],
+      "aliases": [
+        "engagement detail",
+        "field session",
+        "assessment view"
+      ],
+      "keywords": [
+        "engagement",
+        "field",
+        "detail",
+        "session",
+        "assessment",
+        "site"
+      ],
+      "breadcrumb_parent": "field-assessments",
+      "mcim_id": "MCIM-18.6-FIELD-DETAIL",
+      "capability": "Field Assessment Detail",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "governance-topology",
+      "title": "Governance Topology",
+      "route": "/governance/topology",
+      "group": "Governance",
+      "tier": "specialist",
+      "classification": "specialist",
+      "visibility": "conditional",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "CISO",
+        "Administrator"
+      ],
+      "aliases": [
+        "topology",
+        "graph",
+        "dependency map",
+        "governance map",
+        "policy graph"
+      ],
+      "keywords": [
+        "topology",
+        "graph",
+        "dependency",
+        "map",
+        "structure",
+        "hierarchy",
+        "governance"
+      ],
+      "mcim_id": "MCIM-18.6-GOV-TOPOLOGY",
+      "capability": "Governance Topology Visualisation",
+      "lifecycle": "growing",
+      "maturity": "partial"
+    },
+    {
+      "id": "ai-workspace",
+      "title": "AI Workspace",
+      "route": "/dashboard/assistant",
+      "group": "Intelligence",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Developer"
+      ],
+      "aliases": [
+        "assistant",
+        "ai chat",
+        "chat",
+        "llm",
+        "ask ai",
+        "operator chat"
+      ],
+      "keywords": [
+        "assistant",
+        "chat",
+        "ai",
+        "llm",
+        "prompt",
+        "query",
+        "conversation",
+        "rag"
+      ],
+      "mcim_id": "MCIM-18.6-AI-WORKSPACE",
+      "capability": "Operator AI Workspace",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "corpus",
+      "title": "Corpus",
+      "route": "/dashboard/corpus",
+      "group": "Intelligence",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Developer",
+        "Administrator"
+      ],
+      "aliases": [
+        "knowledge base",
+        "documents",
+        "embeddings",
+        "corpus management",
+        "knowledge corpus"
+      ],
+      "keywords": [
+        "corpus",
+        "document",
+        "embedding",
+        "knowledge",
+        "upload",
+        "index",
+        "vector",
+        "chunk"
+      ],
+      "mcim_id": "MCIM-18.6-CORPUS",
+      "capability": "Knowledge Corpus Management",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "retrieval",
+      "title": "Retrieval",
+      "route": "/dashboard/retrieval",
+      "group": "Intelligence",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Developer"
+      ],
+      "aliases": [
+        "rag",
+        "retrieval config",
+        "search config",
+        "vector search",
+        "retrieval tuning"
+      ],
+      "keywords": [
+        "retrieval",
+        "rag",
+        "search",
+        "vector",
+        "similarity",
+        "rerank",
+        "pipeline"
+      ],
+      "mcim_id": "MCIM-18.6-RETRIEVAL",
+      "capability": "Retrieval Pipeline Configuration",
+      "lifecycle": "stable",
+      "maturity": "functional"
+    },
+    {
+      "id": "workforce-intel",
+      "title": "Workforce Intel",
+      "route": "/dashboard/workforce",
+      "group": "Intelligence",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "CISO",
+        "Executive"
+      ],
+      "aliases": [
+        "workforce",
+        "staff analytics",
+        "user analytics",
+        "people analytics",
+        "hr insights"
+      ],
+      "keywords": [
+        "workforce",
+        "employees",
+        "usage",
+        "adoption",
+        "risk",
+        "behaviour",
+        "analytics"
+      ],
+      "mcim_id": "MCIM-18.6-WORKFORCE",
+      "capability": "Workforce Intelligence Analytics",
+      "lifecycle": "growing",
+      "maturity": "functional"
+    },
+    {
+      "id": "ingestion",
+      "title": "Ingestion",
+      "route": "/dashboard/ingestion",
+      "group": "Intelligence",
+      "tier": "specialist",
+      "classification": "specialist",
+      "visibility": "conditional",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Developer"
+      ],
+      "aliases": [
+        "data ingestion",
+        "pipeline",
+        "connectors",
+        "feed",
+        "ingest"
+      ],
+      "keywords": [
+        "ingestion",
+        "pipeline",
+        "connector",
+        "feed",
+        "import",
+        "data",
+        "source"
+      ],
+      "mcim_id": "MCIM-18.6-INGESTION",
+      "capability": "Data Ingestion Pipeline",
+      "lifecycle": "growing",
+      "maturity": "partial"
+    },
+    {
+      "id": "provenance",
+      "title": "Provenance",
+      "route": "/dashboard/provenance",
+      "group": "Trust",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Auditor",
+        "CISO",
+        "Operator"
+      ],
+      "aliases": [
+        "data lineage",
+        "lineage",
+        "source tracing",
+        "ai provenance",
+        "chain of custody"
+      ],
+      "keywords": [
+        "provenance",
+        "lineage",
+        "source",
+        "trace",
+        "origin",
+        "chain",
+        "custody"
+      ],
+      "mcim_id": "MCIM-18.6-PROVENANCE",
+      "capability": "AI Provenance Tracing",
+      "lifecycle": "stable",
+      "maturity": "functional"
+    },
+    {
+      "id": "decisions",
+      "title": "Decisions",
+      "route": "/dashboard/decisions",
+      "group": "Trust",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Auditor",
+        "CISO",
+        "Executive",
+        "Operator"
+      ],
+      "aliases": [
+        "decision log",
+        "decision history",
+        "ai decisions",
+        "policy decisions",
+        "rulings"
+      ],
+      "keywords": [
+        "decision",
+        "log",
+        "allow",
+        "deny",
+        "policy",
+        "outcome",
+        "ruling",
+        "history"
+      ],
+      "mcim_id": "MCIM-18.6-DECISIONS",
+      "capability": "AI Decision Ledger",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "forensics",
+      "title": "Audit & Forensics",
+      "route": "/dashboard/forensics",
+      "group": "Trust",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Auditor",
+        "Support"
+      ],
+      "aliases": [
+        "audit",
+        "forensics",
+        "audit log",
+        "hmac audit",
+        "tamper-evident",
+        "event log"
+      ],
+      "keywords": [
+        "audit",
+        "forensics",
+        "hmac",
+        "tamper",
+        "log",
+        "event",
+        "chain",
+        "integrity"
+      ],
+      "mcim_id": "MCIM-18.6-FORENSICS",
+      "capability": "Forensic Audit Chain",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "alignment",
+      "title": "Alignment",
+      "route": "/dashboard/alignment",
+      "group": "Trust",
+      "tier": "specialist",
+      "classification": "specialist",
+      "visibility": "conditional",
+      "platform": "console",
+      "roles": [
+        "CISO",
+        "Executive"
+      ],
+      "aliases": [
+        "ai alignment",
+        "framework alignment",
+        "control alignment",
+        "nist alignment"
+      ],
+      "keywords": [
+        "alignment",
+        "framework",
+        "nist",
+        "iso",
+        "control",
+        "mapping",
+        "coverage"
+      ],
+      "mcim_id": "MCIM-18.6-ALIGNMENT",
+      "capability": "Framework Alignment Mapping",
+      "lifecycle": "growing",
+      "maturity": "partial"
+    },
+    {
+      "id": "audit-specialist",
+      "title": "Audit",
+      "route": "/audit",
+      "group": "Compliance",
+      "tier": "specialist",
+      "classification": "specialist",
+      "visibility": "conditional",
+      "platform": "console",
+      "roles": [
+        "Auditor",
+        "Support"
+      ],
+      "aliases": [
+        "deep audit",
+        "full audit",
+        "audit workspace",
+        "auditor view"
+      ],
+      "keywords": [
+        "audit",
+        "review",
+        "specialist",
+        "deep",
+        "workspace",
+        "compliance"
+      ],
+      "mcim_id": "MCIM-18.6-AUDIT-SPEC",
+      "capability": "Specialist Audit Workspace",
+      "lifecycle": "stable",
+      "maturity": "functional"
+    },
+    {
+      "id": "evaluation-lab",
+      "title": "Evaluation Lab",
+      "route": "/dashboard/evaluation",
+      "group": "Compliance",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Developer",
+        "Administrator",
+        "Operator"
+      ],
+      "aliases": [
+        "eval",
+        "evaluation",
+        "model eval",
+        "benchmarks",
+        "testing",
+        "quality"
+      ],
+      "keywords": [
+        "evaluation",
+        "benchmark",
+        "quality",
+        "test",
+        "model",
+        "metric",
+        "accuracy"
+      ],
+      "mcim_id": "MCIM-18.6-EVAL-LAB",
+      "capability": "AI Evaluation Laboratory",
+      "lifecycle": "stable",
+      "maturity": "functional"
+    },
+    {
+      "id": "clients",
+      "title": "Clients",
+      "route": "/admin/tenants",
+      "group": "Administration",
+      "tier": "administrative",
+      "classification": "administrative",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Administrator",
+        "Support"
+      ],
+      "aliases": [
+        "tenants",
+        "tenant management",
+        "clients",
+        "organizations",
+        "orgs",
+        "accounts"
+      ],
+      "keywords": [
+        "tenant",
+        "client",
+        "organisation",
+        "account",
+        "multi-tenant",
+        "manage"
+      ],
+      "mcim_id": "MCIM-18.6-CLIENTS",
+      "capability": "Client Tenant Management",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "client-detail",
+      "title": "Client Detail",
+      "route": "/admin/tenants/[tenantId]",
+      "group": "Administration",
+      "tier": "contextual",
+      "classification": "contextual",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Administrator",
+        "Support"
+      ],
+      "aliases": [
+        "tenant detail",
+        "tenant view",
+        "client view",
+        "client profile"
+      ],
+      "keywords": [
+        "tenant",
+        "client",
+        "detail",
+        "profile",
+        "configuration",
+        "settings"
+      ],
+      "breadcrumb_parent": "clients",
+      "mcim_id": "MCIM-18.6-CLIENT-DETAIL",
+      "capability": "Client Tenant Detail",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "keys",
+      "title": "Keys",
+      "route": "/keys",
+      "group": "Administration",
+      "tier": "administrative",
+      "classification": "administrative",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Administrator",
+        "Operator"
+      ],
+      "aliases": [
+        "api keys",
+        "key management",
+        "tokens",
+        "credentials",
+        "access keys"
+      ],
+      "keywords": [
+        "key",
+        "api",
+        "token",
+        "credential",
+        "secret",
+        "access",
+        "rotate"
+      ],
+      "mcim_id": "MCIM-18.6-KEYS",
+      "capability": "API Key Lifecycle Management",
+      "lifecycle": "stable",
+      "maturity": "functional"
+    },
+    {
+      "id": "settings",
+      "title": "Settings",
+      "route": "/dashboard/settings",
+      "group": "Administration",
+      "tier": "administrative",
+      "classification": "administrative",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Administrator"
+      ],
+      "aliases": [
+        "platform settings",
+        "config",
+        "preferences",
+        "system settings"
+      ],
+      "keywords": [
+        "settings",
+        "configuration",
+        "preferences",
+        "system",
+        "platform",
+        "setup"
+      ],
+      "mcim_id": "MCIM-18.6-SETTINGS",
+      "capability": "Platform Settings",
+      "lifecycle": "stable",
+      "maturity": "functional"
+    },
+    {
+      "id": "console-landing",
+      "title": "Landing",
+      "route": "/",
+      "group": "Operations",
+      "tier": "hidden",
+      "classification": "hidden",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Administrator",
+        "CISO",
+        "Executive",
+        "Auditor",
+        "Developer",
+        "Support"
+      ],
+      "aliases": [
+        "root",
+        "home",
+        "index"
+      ],
+      "keywords": [
+        "landing",
+        "root",
+        "home"
+      ],
+      "mcim_id": "MCIM-18.6-LANDING",
+      "capability": "Console Entry Point",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "console-login",
+      "title": "Login",
+      "route": "/login",
+      "group": "Administration",
+      "tier": "hidden",
+      "classification": "hidden",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Administrator",
+        "CISO",
+        "Executive",
+        "Auditor",
+        "Developer",
+        "Support"
+      ],
+      "aliases": [
+        "sign in",
+        "auth",
+        "authenticate"
+      ],
+      "keywords": [
+        "login",
+        "sign in",
+        "auth",
+        "authentication"
+      ],
+      "mcim_id": "MCIM-18.6-CON-LOGIN",
+      "capability": "Console Authentication",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "onboarding",
+      "title": "Onboarding",
+      "route": "/onboarding",
+      "group": "Operations",
+      "tier": "legacy",
+      "classification": "legacy",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Consultant",
+        "AssessmentEngineer"
+      ],
+      "aliases": [
+        "setup wizard",
+        "getting started",
+        "onboard"
+      ],
+      "keywords": [
+        "onboarding",
+        "setup",
+        "wizard",
+        "getting started",
+        "new tenant"
+      ],
+      "mcim_id": "MCIM-18.6-ONBOARDING",
+      "capability": "Tenant Onboarding Wizard",
+      "lifecycle": "legacy",
+      "maturity": "functional"
+    },
+    {
+      "id": "products",
+      "title": "Products",
+      "route": "/products",
+      "group": "Operations",
+      "tier": "legacy",
+      "classification": "legacy",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Consultant",
+        "AssessmentEngineer"
+      ],
+      "aliases": [
+        "product list",
+        "catalog"
+      ],
+      "keywords": [
+        "products",
+        "catalog",
+        "legacy",
+        "list"
+      ],
+      "mcim_id": "MCIM-18.6-PRODUCTS",
+      "capability": "Legacy Product Catalog",
+      "lifecycle": "legacy",
+      "maturity": "latent"
+    },
+    {
+      "id": "product-detail",
+      "title": "Product Detail",
+      "route": "/products/[productId]",
+      "group": "Operations",
+      "tier": "contextual",
+      "classification": "contextual",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Consultant",
+        "AssessmentEngineer"
+      ],
+      "aliases": [
+        "product view",
+        "product page"
+      ],
+      "keywords": [
+        "product",
+        "detail",
+        "view",
+        "legacy"
+      ],
+      "breadcrumb_parent": "products",
+      "mcim_id": "MCIM-18.6-PRODUCT-DETAIL",
+      "capability": "Legacy Product Detail",
+      "lifecycle": "legacy",
+      "maturity": "latent"
+    },
+    {
+      "id": "product-new",
+      "title": "New Product",
+      "route": "/products/new",
+      "group": "Operations",
+      "tier": "hidden",
+      "classification": "hidden",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Consultant",
+        "AssessmentEngineer"
+      ],
+      "aliases": [
+        "create product",
+        "add product"
+      ],
+      "keywords": [
+        "product",
+        "new",
+        "create",
+        "add",
+        "legacy"
+      ],
+      "mcim_id": "MCIM-18.6-PRODUCT-NEW",
+      "capability": "Legacy Product Creation",
+      "lifecycle": "legacy",
+      "maturity": "latent"
+    },
+    {
+      "id": "assessment-legacy",
+      "title": "Assessments",
+      "route": "/assessment",
+      "group": "Governance",
+      "tier": "legacy",
+      "classification": "legacy",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Consultant",
+        "AssessmentEngineer"
+      ],
+      "aliases": [
+        "assessment wizard",
+        "legacy assessment",
+        "snapshot assessment"
+      ],
+      "keywords": [
+        "assessment",
+        "wizard",
+        "legacy",
+        "snapshot",
+        "questionnaire"
+      ],
+      "mcim_id": "MCIM-18.6-ASSESS-LEGACY",
+      "capability": "Legacy Assessment Wizard",
+      "lifecycle": "legacy",
+      "maturity": "functional"
+    },
+    {
+      "id": "report-viewer",
+      "title": "Report Viewer",
+      "route": "/reports/[reportId]",
+      "group": "Trust",
+      "tier": "contextual",
+      "classification": "contextual",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": [
+        "Operator",
+        "Consultant",
+        "AssessmentEngineer",
+        "CISO",
+        "Executive"
+      ],
+      "aliases": [
+        "report",
+        "assessment report",
+        "advisory report"
+      ],
+      "keywords": [
+        "report",
+        "pdf",
+        "advisory",
+        "assessment",
+        "output",
+        "findings"
+      ],
+      "breadcrumb_parent": "field-assessments",
+      "mcim_id": "MCIM-18.6-REPORT-VIEW",
+      "capability": "Assessment Report Viewer",
+      "lifecycle": "stable",
+      "maturity": "strong"
+    }
+  ],
+  "portal": [
+    {
+      "id": "portal-overview",
+      "title": "Overview",
+      "route": "/",
+      "group": "Portal",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "home",
+        "dashboard",
+        "portal home",
+        "summary"
+      ],
+      "keywords": [
+        "overview",
+        "home",
+        "summary",
+        "status",
+        "dashboard"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-OVERVIEW",
+      "capability": "Portal Overview",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "portal-login",
+      "title": "Login",
+      "route": "/login",
+      "group": "Portal",
+      "tier": "hidden",
+      "classification": "hidden",
+      "visibility": "hidden",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "sign in",
+        "auth",
+        "authenticate"
+      ],
+      "keywords": [
+        "login",
+        "sign in",
+        "auth",
+        "authentication"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-LOGIN",
+      "capability": "Portal Authentication",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "portal-accept-invite",
+      "title": "Accept Invite",
+      "route": "/accept-invite",
+      "group": "Portal",
+      "tier": "hidden",
+      "classification": "hidden",
+      "visibility": "hidden",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "invite",
+        "invitation",
+        "accept",
+        "join"
+      ],
+      "keywords": [
+        "invite",
+        "invitation",
+        "accept",
+        "join",
+        "onboard"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-INVITE",
+      "capability": "Portal Invitation Acceptance",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "portal-engagement",
+      "title": "Assessment",
+      "route": "/engagement",
+      "group": "Portal",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "engagement",
+        "assessment",
+        "engagement list",
+        "my assessments"
+      ],
+      "keywords": [
+        "engagement",
+        "assessment",
+        "questionnaire",
+        "survey",
+        "active"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-ENGAGE",
+      "capability": "Portal Assessment Engagement",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "portal-engagement-detail",
+      "title": "Engagement Detail",
+      "route": "/engagement/[engagementId]",
+      "group": "Portal",
+      "tier": "contextual",
+      "classification": "contextual",
+      "visibility": "hidden",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "engagement view",
+        "assessment detail",
+        "single engagement"
+      ],
+      "keywords": [
+        "engagement",
+        "assessment",
+        "detail",
+        "questionnaire",
+        "answer"
+      ],
+      "breadcrumb_parent": "portal-engagement",
+      "mcim_id": "MCIM-18.6-PRT-ENGAGE-DTL",
+      "capability": "Portal Engagement Detail",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "portal-findings",
+      "title": "Findings",
+      "route": "/findings",
+      "group": "Portal",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "issues",
+        "risks",
+        "gaps",
+        "findings list",
+        "open findings"
+      ],
+      "keywords": [
+        "findings",
+        "issues",
+        "risks",
+        "gaps",
+        "vulnerabilities",
+        "recommendations"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-FINDINGS",
+      "capability": "Portal Findings Review",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "portal-reports",
+      "title": "Reports",
+      "route": "/reports",
+      "group": "Portal",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "advisory reports",
+        "pdf reports",
+        "assessment reports",
+        "report list"
+      ],
+      "keywords": [
+        "report",
+        "advisory",
+        "pdf",
+        "executive",
+        "summary",
+        "output",
+        "document"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-REPORTS",
+      "capability": "Portal Report Library",
+      "lifecycle": "core",
+      "maturity": "strong"
+    },
+    {
+      "id": "portal-coverage",
+      "title": "Coverage",
+      "route": "/coverage",
+      "group": "Portal",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "control coverage",
+        "framework coverage",
+        "compliance coverage",
+        "coverage map"
+      ],
+      "keywords": [
+        "coverage",
+        "control",
+        "framework",
+        "compliance",
+        "mapping",
+        "scope"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-COVERAGE",
+      "capability": "Portal Compliance Coverage",
+      "lifecycle": "stable",
+      "maturity": "functional"
+    },
+    {
+      "id": "portal-attestation",
+      "title": "Attestation",
+      "route": "/attestation",
+      "group": "Portal",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "sign-off",
+        "certify",
+        "attest",
+        "acknowledgement",
+        "sign off"
+      ],
+      "keywords": [
+        "attestation",
+        "sign-off",
+        "certify",
+        "acknowledge",
+        "confirm",
+        "evidence"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-ATTEST",
+      "capability": "Portal Attestation",
+      "lifecycle": "stable",
+      "maturity": "functional"
+    },
+    {
+      "id": "portal-remediation",
+      "title": "Remediation",
+      "route": "/remediation",
+      "group": "Portal",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "fixes",
+        "action items",
+        "remediation plan",
+        "remediate",
+        "action plan"
+      ],
+      "keywords": [
+        "remediation",
+        "fix",
+        "action",
+        "plan",
+        "resolve",
+        "mitigation",
+        "task"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-REMEDIATE",
+      "capability": "Portal Remediation Tracker",
+      "lifecycle": "growing",
+      "maturity": "functional"
+    },
+    {
+      "id": "portal-continuity",
+      "title": "Continuity",
+      "route": "/continuity",
+      "group": "Portal",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "business continuity",
+        "bcp",
+        "dr",
+        "disaster recovery",
+        "continuity plan"
+      ],
+      "keywords": [
+        "continuity",
+        "business continuity",
+        "dr",
+        "recovery",
+        "resilience",
+        "plan"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-CONTINUITY",
+      "capability": "Portal Business Continuity",
+      "lifecycle": "growing",
+      "maturity": "partial"
+    },
+    {
+      "id": "portal-assistant",
+      "title": "AI Assistant",
+      "route": "/assistant",
+      "group": "Portal",
+      "tier": "secondary",
+      "classification": "secondary",
+      "visibility": "visible",
+      "platform": "portal",
+      "roles": [
+        "Customer",
+        "MSP",
+        "Auditor",
+        "Consultant"
+      ],
+      "aliases": [
+        "chat",
+        "ai chat",
+        "ask ai",
+        "portal chat",
+        "help assistant"
+      ],
+      "keywords": [
+        "assistant",
+        "chat",
+        "ai",
+        "help",
+        "question",
+        "guidance",
+        "advisory"
+      ],
+      "mcim_id": "MCIM-18.6-PRT-ASSISTANT",
+      "capability": "Portal AI Assistant",
+      "lifecycle": "growing",
+      "maturity": "functional"
+    }
+  ],
+  "stats": {
+    "console_total": 31,
+    "portal_total": 12,
+    "groups_total": 8,
+    "primary_count": 8,
+    "legacy_count": 3
+  }
+}

@@ -499,9 +499,17 @@ test('List page has error state', () => {
 // ─── Sidebar nav link ─────────────────────────────────────────────────────────
 
 test('Sidebar includes Field Assessments nav link', () => {
+  // Sidebar is registry-driven; route and label come from CONSOLE_REGISTRY at runtime.
+  const reg = JSON.parse(read('../../packages/navigation/navigation-registry.json'));
+  const item = reg.console.find((i) => i.id === 'field-assessments');
+  assert.ok(item, 'field-assessments must be registered');
+  assert.ok(item.route === '/field-assessment', 'field-assessments route must be /field-assessment');
+  assert.ok(
+    item.title === 'Field Assessments' || item.title === 'Field Assessment',
+    'field-assessments must have correct title',
+  );
+  // Sidebar ICON_MAP must still cover field-assessments with ClipboardCheck.
   const src = read('components/layout/Sidebar.tsx');
-  assert.ok(src.includes('/field-assessment'), 'Sidebar must link to /field-assessment');
-  assert.ok(src.includes('Field Assessments') || src.includes('Field Assessment'), 'Sidebar must label the nav item');
   assert.ok(src.includes('ClipboardCheck'), 'Sidebar must use ClipboardCheck icon for field assessment');
 });
 

@@ -44,22 +44,54 @@ REQUIRED_JSON_BLOCKS = (
 )
 
 ALLOWED_CHANGED_PATHS = {
+    # MCIM phase 0 — architecture spec
     "docs/architecture/MCIM_18_6_MASTER_COMMAND_INFORMATION_MODEL.md",
     "docs/architecture/MCIM_18_6_NAVIGATION_DECISION_LOG.md",
     "docs/architecture/MCIM_18_6_VALIDATION_CHECKLIST.md",
     "tools/ci/check_mcim_docs.py",
     "tests/tools/test_mcim_docs.py",
-    "docs/SOC_EXECUTION_GATES_2026-02-15.md",
-    "docs/ai/PR_FIX_LOG.md",
     "audits/2026-07-02_frostgate_console_portal_architecture_audit_phase1.md",
     "audits/2026-07-02_pr18-6_unified_governance_command_center_portal_ia_blueprint.md",
+    # PR 18.6.1 — Unified Navigation Framework
+    "packages/navigation/",
+    "packages/navigation/package.json",
+    "packages/navigation/tsconfig.json",
+    "packages/navigation/navigation-registry.json",
+    "packages/navigation/src/types.ts",
+    "packages/navigation/src/registry.ts",
+    "packages/navigation/src/resolver.ts",
+    "packages/navigation/src/breadcrumbs.ts",
+    "packages/navigation/src/search.ts",
+    "packages/navigation/src/validator.ts",
+    "packages/navigation/src/context.ts",
+    "packages/navigation/src/index.ts",
+    "packages/navigation/src/registrations/groups.ts",
+    "packages/navigation/src/registrations/console.ts",
+    "packages/navigation/src/registrations/portal.ts",
+    "apps/console/components/layout/Sidebar.tsx",
+    "apps/portal/app/layout.tsx",
+    "apps/console/tsconfig.json",
+    "apps/portal/tsconfig.json",
+    "apps/console/package.json",
+    "apps/portal/package.json",
+    "apps/console/next.config.js",
+    "apps/portal/next.config.js",
+    "tools/ci/check_navigation_registry.py",
+    "tests/tools/test_navigation_registry.py",
+    "apps/console/tests/console-shell.test.js",
+    "apps/console/tests/dashboard-mvp2.test.js",
+    "apps/console/tests/field-assessment-workspace.test.js",
+    "apps/console/tests/ai-workspace.test.js",
+    "apps/console/tests/source-evidence-panel.test.js",
+    "apps/console/tests/provenance-validation-panel.test.js",
+    # Cross-PR shared artifacts (present on any 18.6.x branch)
+    "docs/SOC_EXECUTION_GATES_2026-02-15.md",
+    "docs/ai/PR_FIX_LOG.md",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.
 # They are explicitly read-only evidence inputs, not part of the deliverable set.
-IGNORED_STATUS_PREFIXES = (
-    "audits/",
-)
+IGNORED_STATUS_PREFIXES = ("audits/",)
 
 
 def repo_root() -> Path:
@@ -79,7 +111,11 @@ def validate_docs_exist(root: Path) -> list[str]:
 
 
 def validate_required_sections(text: str) -> list[str]:
-    return [f"missing required heading: {heading}" for heading in REQUIRED_SECTIONS if heading not in text]
+    return [
+        f"missing required heading: {heading}"
+        for heading in REQUIRED_SECTIONS
+        if heading not in text
+    ]
 
 
 def extract_named_json_blocks(text: str) -> dict[str, str]:
@@ -107,7 +143,9 @@ def validate_json_blocks(text: str) -> list[str]:
 
 
 def _git(args: list[str], root: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=root, check=False, capture_output=True, text=True)
+    return subprocess.run(
+        ["git", *args], cwd=root, check=False, capture_output=True, text=True
+    )
 
 
 def _pr_diff_files(root: Path) -> list[str] | None:
@@ -154,7 +192,9 @@ def validate_changed_paths(root: Path) -> list[str]:
     else:
         entries = _status_files(root)
     for status, path in entries:
-        if status == "??" and any(path.startswith(prefix) for prefix in IGNORED_STATUS_PREFIXES):
+        if status == "??" and any(
+            path.startswith(prefix) for prefix in IGNORED_STATUS_PREFIXES
+        ):
             continue
         if path in ALLOWED_CHANGED_PATHS:
             continue

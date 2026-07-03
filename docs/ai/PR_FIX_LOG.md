@@ -16765,3 +16765,49 @@ Result:
 - `tools/ci/check_mcim_docs.py` — switch `validate_changed_paths()` to PR diff; add `import os`
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 18.6 Phase 0 SOC review entry
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR 18.6.1 — Unified Navigation Framework
+
+**Branch:** `pr/18.6.1-unified-navigation-framework`
+
+**What was done:** Implemented the MCIM-driven navigation authority for FrostGate Console and Portal. Created `@fg/navigation` package with complete TypeScript navigation registry, all 43 page registrations (31 console + 12 portal), CI validator, and 399 tests. Refactored Console Sidebar and Portal layout to generate navigation from the registry instead of hardcoded arrays.
+
+**Changes:**
+
+1. **`packages/navigation/`** — new `@fg/navigation` package with: `types.ts` (15 exported types), `registry.ts` (NavigationRegistry), `resolver.ts` (NavigationResolver), `breadcrumbs.ts` (NavigationBreadcrumbResolver), `search.ts` (NavigationSearchIndex), `validator.ts` (NavigationValidator), `context.ts` (NavigationProvider/useNavigation hook), `registrations/groups.ts` (8 MCIM groups), `registrations/console.ts` (31 console pages), `registrations/portal.ts` (12 portal pages), `navigation-registry.json` (CI-consumable JSON snapshot), `package.json`, `tsconfig.json`.
+
+2. **`apps/console/components/layout/Sidebar.tsx`** — replaced hardcoded `NAV_GROUPS` array with `CONSOLE_REGISTRY.getByGroup()` calls. Groups reorganized to MCIM taxonomy: Operations, Governance, Intelligence, Trust, Compliance, Administration. Audit & Forensics moved to Trust; Provenance moved to Trust; Decisions moved to Trust; Workforce moved to Intelligence; Keys added to Administration; `/assessment` hidden (legacy).
+
+3. **`apps/portal/app/layout.tsx`** — replaced hardcoded `NAV_LINKS` with `PORTAL_REGISTRY.getAllItems()` filter + sort.
+
+4. **`tools/ci/check_navigation_registry.py`** — 14-check Python CI validator for `navigation-registry.json`. Passes: `python tools/ci/check_navigation_registry.py` → OK.
+
+5. **`tests/tools/test_navigation_registry.py`** — 399 deterministic tests. Passes: `pytest tests/tools/test_navigation_registry.py -q` → 399 passed.
+
+6. **`docs/architecture/MCIM_18_6_NAVIGATION_DECISION_LOG.md`** — PR 18.6.1 decisions logged (13 decisions).
+
+7. **`docs/architecture/MCIM_18_6_VALIDATION_CHECKLIST.md`** — PR 18.6.1 checklist completed, navigation validation commands added.
+
+8. **`docs/SOC_EXECUTION_GATES_2026-02-15.md`** — PR 18.6.1 SOC review entry added.
+
+9. **`apps/console/tsconfig.json`**, **`apps/portal/tsconfig.json`** — `@fg/navigation` path alias added.
+
+10. **`apps/console/package.json`**, **`apps/portal/package.json`** — `@fg/navigation: file:../../packages/navigation` added.
+
+**Files modified:**
+- `packages/navigation/` (13 new files)
+- `packages/navigation/navigation-registry.json` (new)
+- `apps/console/components/layout/Sidebar.tsx`
+- `apps/portal/app/layout.tsx`
+- `apps/console/tsconfig.json`
+- `apps/portal/tsconfig.json`
+- `apps/console/package.json`
+- `apps/portal/package.json`
+- `tools/ci/check_navigation_registry.py` (new)
+- `tests/tools/test_navigation_registry.py` (new)
+- `docs/architecture/MCIM_18_6_NAVIGATION_DECISION_LOG.md`
+- `docs/architecture/MCIM_18_6_VALIDATION_CHECKLIST.md`
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- `docs/ai/PR_FIX_LOG.md` — this entry
