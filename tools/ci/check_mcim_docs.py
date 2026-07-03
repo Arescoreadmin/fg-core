@@ -74,6 +74,8 @@ ALLOWED_CHANGED_PATHS = {
     "apps/portal/tsconfig.json",
     "apps/console/package.json",
     "apps/portal/package.json",
+    "apps/console/next.config.js",
+    "apps/portal/next.config.js",
     "tools/ci/check_navigation_registry.py",
     "tests/tools/test_navigation_registry.py",
     # Cross-PR shared artifacts (present on any 18.6.x branch)
@@ -83,9 +85,7 @@ ALLOWED_CHANGED_PATHS = {
 
 # The repo currently uses untracked audit notes as source material for MCIM.
 # They are explicitly read-only evidence inputs, not part of the deliverable set.
-IGNORED_STATUS_PREFIXES = (
-    "audits/",
-)
+IGNORED_STATUS_PREFIXES = ("audits/",)
 
 
 def repo_root() -> Path:
@@ -105,7 +105,11 @@ def validate_docs_exist(root: Path) -> list[str]:
 
 
 def validate_required_sections(text: str) -> list[str]:
-    return [f"missing required heading: {heading}" for heading in REQUIRED_SECTIONS if heading not in text]
+    return [
+        f"missing required heading: {heading}"
+        for heading in REQUIRED_SECTIONS
+        if heading not in text
+    ]
 
 
 def extract_named_json_blocks(text: str) -> dict[str, str]:
@@ -133,7 +137,9 @@ def validate_json_blocks(text: str) -> list[str]:
 
 
 def _git(args: list[str], root: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=root, check=False, capture_output=True, text=True)
+    return subprocess.run(
+        ["git", *args], cwd=root, check=False, capture_output=True, text=True
+    )
 
 
 def _pr_diff_files(root: Path) -> list[str] | None:
@@ -180,7 +186,9 @@ def validate_changed_paths(root: Path) -> list[str]:
     else:
         entries = _status_files(root)
     for status, path in entries:
-        if status == "??" and any(path.startswith(prefix) for prefix in IGNORED_STATUS_PREFIXES):
+        if status == "??" and any(
+            path.startswith(prefix) for prefix in IGNORED_STATUS_PREFIXES
+        ):
             continue
         if path in ALLOWED_CHANGED_PATHS:
             continue

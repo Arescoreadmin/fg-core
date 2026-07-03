@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for tools/ci/check_navigation_registry.py — 300+ deterministic tests."""
+
 from __future__ import annotations
 
 import json
@@ -387,7 +388,9 @@ class TestCheckNoDuplicateIds:
         assert check_no_duplicate_ids(reg) == []
 
     def test_single_item_no_error(self) -> None:
-        reg = _make_registry(console=[_item(item_id="only-one", route="/dashboard")], portal=[])
+        reg = _make_registry(
+            console=[_item(item_id="only-one", route="/dashboard")], portal=[]
+        )
         assert check_no_duplicate_ids(reg) == []
 
     def test_items_missing_id_skipped(self) -> None:
@@ -672,7 +675,14 @@ class TestCheckValidPlatforms:
     def test_each_valid_platform_passes(self, valid_platform: str) -> None:
         group = "Portal" if valid_platform == "portal" else "Operations"
         reg = _make_registry(
-            console=[_item(item_id="plat", route="/dashboard", platform=valid_platform, group=group)],
+            console=[
+                _item(
+                    item_id="plat",
+                    route="/dashboard",
+                    platform=valid_platform,
+                    group=group,
+                )
+            ],
             portal=[],
         )
         assert check_valid_platforms(reg) == []
@@ -734,7 +744,13 @@ class TestCheckValidRoles:
 
     def test_multiple_valid_roles_pass(self) -> None:
         reg = _make_registry(
-            console=[_item(item_id="r", route="/dashboard", roles=["Operator", "CISO", "Auditor"])],
+            console=[
+                _item(
+                    item_id="r",
+                    route="/dashboard",
+                    roles=["Operator", "CISO", "Auditor"],
+                )
+            ],
             portal=[],
         )
         assert check_valid_roles(reg) == []
@@ -782,7 +798,9 @@ class TestCheckValidRoles:
 
     def test_invalid_role_mentions_item_id(self) -> None:
         reg = _make_registry(
-            console=[_item(item_id="bad-role-item", route="/dashboard", roles=["BadRole"])],
+            console=[
+                _item(item_id="bad-role-item", route="/dashboard", roles=["BadRole"])
+            ],
             portal=[],
         )
         errors = check_valid_roles(reg)
@@ -790,7 +808,9 @@ class TestCheckValidRoles:
 
     def test_one_invalid_role_in_otherwise_valid_list_fails(self) -> None:
         reg = _make_registry(
-            console=[_item(item_id="r", route="/dashboard", roles=["Operator", "BadRole"])],
+            console=[
+                _item(item_id="r", route="/dashboard", roles=["Operator", "BadRole"])
+            ],
             portal=[],
         )
         errors = check_valid_roles(reg)
@@ -1016,7 +1036,9 @@ class TestCheckCapabilities:
 
     def test_valid_capability_with_spaces_passes(self) -> None:
         reg = _make_registry(
-            console=[_item(item_id="c", route="/dashboard", capability="AI Governance")],
+            console=[
+                _item(item_id="c", route="/dashboard", capability="AI Governance")
+            ],
             portal=[],
         )
         assert check_capabilities(reg) == []
@@ -1037,8 +1059,15 @@ class TestCheckPortalGroups:
 
     @pytest.mark.parametrize(
         "wrong_group",
-        ["Operations", "Governance", "Intelligence", "Trust", "Compliance",
-         "Enterprise", "Administration"],
+        [
+            "Operations",
+            "Governance",
+            "Intelligence",
+            "Trust",
+            "Compliance",
+            "Enterprise",
+            "Administration",
+        ],
     )
     def test_portal_item_in_wrong_group_fails(self, wrong_group: str) -> None:
         reg = _make_registry(
@@ -1050,7 +1079,9 @@ class TestCheckPortalGroups:
 
     def test_error_mentions_item_id(self) -> None:
         reg = _make_registry(
-            portal=[_portal_item(item_id="my-portal-item", route="/", group="Operations")],
+            portal=[
+                _portal_item(item_id="my-portal-item", route="/", group="Operations")
+            ],
             console=[],
         )
         errors = check_portal_groups(reg)
@@ -1101,34 +1132,53 @@ class TestCheckPortalGroups:
 
 class TestCheckLegacyRoutesPresent:
     def test_assessment_with_legacy_tier_passes(self) -> None:
-        item = _item(item_id="assess", route="/assessment", group="Operations", tier="legacy")
+        item = _item(
+            item_id="assess", route="/assessment", group="Operations", tier="legacy"
+        )
         reg = _make_registry(console=[item], portal=[])
         assert check_legacy_routes_present(reg) == []
 
     def test_assessment_with_primary_tier_fails(self) -> None:
-        item = _item(item_id="assess", route="/assessment", group="Operations", tier="primary")
+        item = _item(
+            item_id="assess", route="/assessment", group="Operations", tier="primary"
+        )
         reg = _make_registry(console=[item], portal=[])
         errors = check_legacy_routes_present(reg)
         assert len(errors) >= 1
 
     @pytest.mark.parametrize(
         "bad_tier",
-        ["primary", "secondary", "contextual", "administrative", "specialist",
-         "hidden", "deprecated", "future", "retired"],
+        [
+            "primary",
+            "secondary",
+            "contextual",
+            "administrative",
+            "specialist",
+            "hidden",
+            "deprecated",
+            "future",
+            "retired",
+        ],
     )
     def test_assessment_with_non_legacy_tier_fails(self, bad_tier: str) -> None:
-        item = _item(item_id="assess", route="/assessment", group="Operations", tier=bad_tier)
+        item = _item(
+            item_id="assess", route="/assessment", group="Operations", tier=bad_tier
+        )
         reg = _make_registry(console=[item], portal=[])
         errors = check_legacy_routes_present(reg)
         assert len(errors) >= 1
 
     def test_onboarding_with_legacy_tier_passes(self) -> None:
-        item = _item(item_id="onboard", route="/onboarding", group="Operations", tier="legacy")
+        item = _item(
+            item_id="onboard", route="/onboarding", group="Operations", tier="legacy"
+        )
         reg = _make_registry(console=[item], portal=[])
         assert check_legacy_routes_present(reg) == []
 
     def test_onboarding_with_primary_tier_fails(self) -> None:
-        item = _item(item_id="onboard", route="/onboarding", group="Operations", tier="primary")
+        item = _item(
+            item_id="onboard", route="/onboarding", group="Operations", tier="primary"
+        )
         reg = _make_registry(console=[item], portal=[])
         errors = check_legacy_routes_present(reg)
         assert len(errors) >= 1
@@ -1139,34 +1189,57 @@ class TestCheckLegacyRoutesPresent:
         assert check_legacy_routes_present(reg) == []
 
     def test_error_mentions_route(self) -> None:
-        item = _item(item_id="assess", route="/assessment", group="Operations", tier="primary")
+        item = _item(
+            item_id="assess", route="/assessment", group="Operations", tier="primary"
+        )
         reg = _make_registry(console=[item], portal=[])
         errors = check_legacy_routes_present(reg)
         assert any("/assessment" in e for e in errors)
 
     def test_error_mentions_item_id(self) -> None:
-        item = _item(item_id="my-assess", route="/assessment", group="Operations", tier="primary")
+        item = _item(
+            item_id="my-assess", route="/assessment", group="Operations", tier="primary"
+        )
         reg = _make_registry(console=[item], portal=[])
         errors = check_legacy_routes_present(reg)
         assert any("my-assess" in e for e in errors)
 
     def test_other_routes_not_subject_to_legacy_check(self) -> None:
-        item = _item(item_id="dash", route="/dashboard", group="Operations", tier="primary")
+        item = _item(
+            item_id="dash", route="/dashboard", group="Operations", tier="primary"
+        )
         reg = _make_registry(console=[item], portal=[])
         assert check_legacy_routes_present(reg) == []
 
     def test_both_legacy_routes_present_correct_tier_passes(self) -> None:
         items = [
-            _item(item_id="assess", route="/assessment", group="Operations", tier="legacy"),
-            _item(item_id="onboard", route="/onboarding", group="Operations", tier="legacy"),
+            _item(
+                item_id="assess", route="/assessment", group="Operations", tier="legacy"
+            ),
+            _item(
+                item_id="onboard",
+                route="/onboarding",
+                group="Operations",
+                tier="legacy",
+            ),
         ]
         reg = _make_registry(console=items, portal=[])
         assert check_legacy_routes_present(reg) == []
 
     def test_both_legacy_routes_wrong_tier_reports_two_errors(self) -> None:
         items = [
-            _item(item_id="assess", route="/assessment", group="Operations", tier="primary"),
-            _item(item_id="onboard", route="/onboarding", group="Operations", tier="primary"),
+            _item(
+                item_id="assess",
+                route="/assessment",
+                group="Operations",
+                tier="primary",
+            ),
+            _item(
+                item_id="onboard",
+                route="/onboarding",
+                group="Operations",
+                tier="primary",
+            ),
         ]
         reg = _make_registry(console=items, portal=[])
         errors = check_legacy_routes_present(reg)
@@ -1182,8 +1255,13 @@ class TestCheckNoOrphanedGroups:
     @pytest.mark.parametrize("valid_group", sorted(REQUIRED_GROUPS))
     def test_each_valid_group_passes(self, valid_group: str) -> None:
         platform = "portal" if valid_group == "Portal" else "console"
-        item = _item(item_id="g", route="/dashboard", group=valid_group, platform=platform)
-        reg = _make_registry(console=[item] if platform == "console" else [], portal=[item] if platform == "portal" else [])
+        item = _item(
+            item_id="g", route="/dashboard", group=valid_group, platform=platform
+        )
+        reg = _make_registry(
+            console=[item] if platform == "console" else [],
+            portal=[item] if platform == "portal" else [],
+        )
         assert check_no_orphaned_groups(reg) == []
 
     @pytest.mark.parametrize(
@@ -1215,7 +1293,9 @@ class TestCheckNoOrphanedGroups:
         assert any("UnknownGroup" in e for e in errors)
 
     def test_empty_lists_passes(self) -> None:
-        assert check_no_orphaned_groups({"console": [], "portal": [], "groups": []}) == []
+        assert (
+            check_no_orphaned_groups({"console": [], "portal": [], "groups": []}) == []
+        )
 
     def test_valid_registry_passes(self) -> None:
         assert check_no_orphaned_groups(_valid_registry()) == []
@@ -1337,7 +1417,9 @@ class TestRunAllChecks:
     def test_invalid_lifecycle_produces_error(self) -> None:
         console = _minimal_console_items()
         item = dict(console[0])
-        item["lifecycle"] = "bad-lifecycle"  # flat field (matches actual registry schema)
+        item["lifecycle"] = (
+            "bad-lifecycle"  # flat field (matches actual registry schema)
+        )
         console[0] = item
         reg = _make_registry(console=console)
         errors = run_all_checks(reg)
@@ -1385,7 +1467,7 @@ class TestRunAllChecks:
         portal = [i for i in _minimal_portal_items() if i["route"] != "/"]
         reg = _make_registry(portal=portal)
         errors = run_all_checks(reg)
-        assert any('/' in e for e in errors)
+        assert any("/" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -1503,7 +1585,9 @@ class TestEdgeCases:
         assert check_valid_roles(reg) == []
 
     def test_item_with_platform_both_passes_platform_check(self) -> None:
-        item = _item(item_id="b", route="/dashboard", platform="both", group="Administration")
+        item = _item(
+            item_id="b", route="/dashboard", platform="both", group="Administration"
+        )
         reg = _make_registry(console=[item], portal=[])
         assert check_valid_platforms(reg) == []
 
@@ -1758,8 +1842,15 @@ class TestPlatformsBoundary:
 
     def test_all_three_platforms_valid_in_single_registry(self) -> None:
         items = [
-            _item(item_id="c", route="/dashboard", platform="console", group="Operations"),
-            _item(item_id="b", route="/dashboard/readiness", platform="both", group="Operations"),
+            _item(
+                item_id="c", route="/dashboard", platform="console", group="Operations"
+            ),
+            _item(
+                item_id="b",
+                route="/dashboard/readiness",
+                platform="both",
+                group="Operations",
+            ),
         ]
         portal = [_portal_item(item_id="p", route="/", platform="portal")]
         reg = _make_registry(console=items, portal=portal)

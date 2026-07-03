@@ -28,7 +28,7 @@ const cspHeader = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  transpilePackages: ['@fg/ui'],
+  transpilePackages: ['@fg/ui', '@fg/navigation'],
 
   async rewrites() {
     // On Vercel, the BFF proxy at /app/api/core/[...path]/route.ts handles all

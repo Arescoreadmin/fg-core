@@ -2,37 +2,74 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 
 REGISTRY_PATH = REPO / "packages/navigation/navigation-registry.json"
 
-REQUIRED_GROUPS = frozenset({
-    "Operations", "Governance", "Intelligence", "Trust",
-    "Compliance", "Enterprise", "Administration", "Portal",
-})
+REQUIRED_GROUPS = frozenset(
+    {
+        "Operations",
+        "Governance",
+        "Intelligence",
+        "Trust",
+        "Compliance",
+        "Enterprise",
+        "Administration",
+        "Portal",
+    }
+)
 
 # Enterprise is a reserved group and is explicitly allowed to be empty.
 RESERVED_GROUPS = frozenset({"Enterprise"})
 
-VALID_TIERS = frozenset({
-    "primary", "secondary", "contextual", "administrative",
-    "specialist", "hidden", "legacy", "deprecated", "future", "retired",
-})
+VALID_TIERS = frozenset(
+    {
+        "primary",
+        "secondary",
+        "contextual",
+        "administrative",
+        "specialist",
+        "hidden",
+        "legacy",
+        "deprecated",
+        "future",
+        "retired",
+    }
+)
 
-VALID_LIFECYCLES = frozenset({
-    "core", "stable", "growing", "legacy", "future", "deprecated",
-})
+VALID_LIFECYCLES = frozenset(
+    {
+        "core",
+        "stable",
+        "growing",
+        "legacy",
+        "future",
+        "deprecated",
+    }
+)
 
 VALID_PLATFORMS = frozenset({"console", "portal", "both"})
 
-VALID_ROLES = frozenset({
-    "Executive", "Board", "CISO", "Compliance", "Auditor",
-    "Operator", "AssessmentEngineer", "FieldAssessor",
-    "Customer", "MSP", "Consultant", "Administrator", "Developer", "Support",
-})
+VALID_ROLES = frozenset(
+    {
+        "Executive",
+        "Board",
+        "CISO",
+        "Compliance",
+        "Auditor",
+        "Operator",
+        "AssessmentEngineer",
+        "FieldAssessor",
+        "Customer",
+        "MSP",
+        "Consultant",
+        "Administrator",
+        "Developer",
+        "Support",
+    }
+)
 
 CONSOLE_REQUIRED_ROUTES = {
     "/dashboard",
@@ -117,7 +154,10 @@ def check_no_duplicate_ids(registry: dict) -> list[str]:
     """No item id may appear more than once across console + portal."""
     errors: list[str] = []
     seen: dict[str, str] = {}  # id -> first-seen platform
-    for platform, items in (("console", _console_items(registry)), ("portal", _portal_items(registry))):
+    for platform, items in (
+        ("console", _console_items(registry)),
+        ("portal", _portal_items(registry)),
+    ):
         for item in items:
             item_id = str(item.get("id", ""))
             if not item_id:
@@ -135,7 +175,10 @@ def check_no_duplicate_ids(registry: dict) -> list[str]:
 def check_no_duplicate_routes(registry: dict) -> list[str]:
     """No route may appear more than once within the same platform."""
     errors: list[str] = []
-    for platform, items in (("console", _console_items(registry)), ("portal", _portal_items(registry))):
+    for platform, items in (
+        ("console", _console_items(registry)),
+        ("portal", _portal_items(registry)),
+    ):
         seen: dict[str, str] = {}  # route -> first-seen item id
         for item in items:
             route = str(item.get("route", ""))
@@ -170,9 +213,7 @@ def check_valid_tiers(registry: dict) -> list[str]:
     for item in _all_items(registry):
         tier = str(item.get("tier", ""))
         if tier not in VALID_TIERS:
-            errors.append(
-                f"item {item.get('id', '?')!r} has invalid tier {tier!r}"
-            )
+            errors.append(f"item {item.get('id', '?')!r} has invalid tier {tier!r}")
     return errors
 
 
@@ -225,9 +266,7 @@ def check_valid_roles(registry: dict) -> list[str]:
             continue
         for role in roles:
             if str(role) not in VALID_ROLES:
-                errors.append(
-                    f"item {item_id!r} has invalid role {str(role)!r}"
-                )
+                errors.append(f"item {item_id!r} has invalid role {str(role)!r}")
     return errors
 
 
@@ -316,9 +355,7 @@ def check_no_orphaned_groups(registry: dict) -> list[str]:
         item_id = str(item.get("id", "?"))
         group = str(item.get("group", ""))
         if group not in REQUIRED_GROUPS:
-            errors.append(
-                f"item {item_id!r} belongs to unknown group {group!r}"
-            )
+            errors.append(f"item {item_id!r} belongs to unknown group {group!r}")
     return errors
 
 
@@ -330,7 +367,9 @@ def check_group_coverage(registry: dict) -> list[str]:
     }
     for group in sorted(REQUIRED_GROUPS - RESERVED_GROUPS):
         if group not in groups_with_items:
-            errors.append(f"group {group!r} has no items (non-reserved groups must not be empty)")
+            errors.append(
+                f"group {group!r} has no items (non-reserved groups must not be empty)"
+            )
     return errors
 
 
