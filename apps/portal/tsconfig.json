@@ -19,7 +19,10 @@
       "@fg/navigation": ["../../packages/navigation/src/index.ts"],
       "@fg/navigation/*": ["../../packages/navigation/src/*"],
       "@fg/ui": ["../../packages/ui/src/index.ts"],
-      "@fg/ui/*": ["../../packages/ui/src/*"]
+      "@fg/ui/*": ["../../packages/ui/src/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"],
+      "react/jsx-dev-runtime": ["./node_modules/@types/react/jsx-dev-runtime.d.ts"]
     },
     "baseUrl": "."
   },
