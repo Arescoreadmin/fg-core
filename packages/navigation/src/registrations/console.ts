@@ -177,7 +177,7 @@ const items: NavigationItem[] = [
     roles: ['Operator', 'AssessmentEngineer', 'FieldAssessor', 'Administrator'],
     aliases: ['engagement detail', 'field session', 'assessment view'],
     keywords: ['engagement', 'field', 'detail', 'session', 'assessment', 'site'],
-    breadcrumbParent: 'field-assessment',
+    breadcrumbParent: 'field-assessments',
     metadata: {
       mcimId: 'MCIM-18.6-FIELD-DETAIL',
       capability: 'Field Assessment Detail',
