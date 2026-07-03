@@ -16,6 +16,8 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./*"],
+      "@fg/navigation": ["../../packages/navigation/src/index.ts"],
+      "@fg/navigation/*": ["../../packages/navigation/src/*"],
       "@fg/ui": ["../../packages/ui/src/index.ts"],
       "@fg/ui/*": ["../../packages/ui/src/*"]
     },

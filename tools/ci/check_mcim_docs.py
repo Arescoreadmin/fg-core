@@ -44,15 +44,41 @@ REQUIRED_JSON_BLOCKS = (
 )
 
 ALLOWED_CHANGED_PATHS = {
+    # MCIM phase 0 — architecture spec
     "docs/architecture/MCIM_18_6_MASTER_COMMAND_INFORMATION_MODEL.md",
     "docs/architecture/MCIM_18_6_NAVIGATION_DECISION_LOG.md",
     "docs/architecture/MCIM_18_6_VALIDATION_CHECKLIST.md",
     "tools/ci/check_mcim_docs.py",
     "tests/tools/test_mcim_docs.py",
-    "docs/SOC_EXECUTION_GATES_2026-02-15.md",
-    "docs/ai/PR_FIX_LOG.md",
     "audits/2026-07-02_frostgate_console_portal_architecture_audit_phase1.md",
     "audits/2026-07-02_pr18-6_unified_governance_command_center_portal_ia_blueprint.md",
+    # PR 18.6.1 — Unified Navigation Framework
+    "packages/navigation/",
+    "packages/navigation/package.json",
+    "packages/navigation/tsconfig.json",
+    "packages/navigation/navigation-registry.json",
+    "packages/navigation/src/types.ts",
+    "packages/navigation/src/registry.ts",
+    "packages/navigation/src/resolver.ts",
+    "packages/navigation/src/breadcrumbs.ts",
+    "packages/navigation/src/search.ts",
+    "packages/navigation/src/validator.ts",
+    "packages/navigation/src/context.ts",
+    "packages/navigation/src/index.ts",
+    "packages/navigation/src/registrations/groups.ts",
+    "packages/navigation/src/registrations/console.ts",
+    "packages/navigation/src/registrations/portal.ts",
+    "apps/console/components/layout/Sidebar.tsx",
+    "apps/portal/app/layout.tsx",
+    "apps/console/tsconfig.json",
+    "apps/portal/tsconfig.json",
+    "apps/console/package.json",
+    "apps/portal/package.json",
+    "tools/ci/check_navigation_registry.py",
+    "tests/tools/test_navigation_registry.py",
+    # Cross-PR shared artifacts (present on any 18.6.x branch)
+    "docs/SOC_EXECUTION_GATES_2026-02-15.md",
+    "docs/ai/PR_FIX_LOG.md",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.

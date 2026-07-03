@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LogoutButton } from '@/components/LogoutButton';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { PORTAL_REGISTRY } from '@fg/navigation';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -9,17 +10,13 @@ export const metadata: Metadata = {
   description: 'AI governance assessment results and remediation tracking.',
 };
 
-const NAV_LINKS = [
-  { href: '/', label: 'Overview' },
-  { href: '/engagement', label: 'Assessment' },
-  { href: '/findings', label: 'Findings' },
-  { href: '/reports', label: 'Reports' },
-  { href: '/coverage', label: 'Coverage' },
-  { href: '/attestation', label: 'Attestation' },
-  { href: '/remediation', label: 'Remediation' },
-  { href: '/continuity', label: 'Continuity' },
-  { href: '/assistant', label: 'AI Assistant' },
-];
+const NAV_LINKS = PORTAL_REGISTRY.getAllItems()
+  .filter((item) => item.visibility === 'visible' && item.tier !== 'hidden')
+  .sort((a, b) => {
+    const tierOrder: Record<string, number> = { primary: 0, secondary: 1, contextual: 2 };
+    return (tierOrder[a.tier] ?? 9) - (tierOrder[b.tier] ?? 9);
+  })
+  .map((item) => ({ href: item.route, label: item.title }));
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

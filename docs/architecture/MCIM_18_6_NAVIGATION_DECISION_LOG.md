@@ -19,3 +19,23 @@ Status: Canonical recommendation log for 18.6.x navigation and IA follow-on PRs
 | Keep billing out of primary nav until there is a customer/admin workflow beyond readiness banners. | billing monetization map, dashboard billing status only | high | avoids premature top-level commercial UI | medium | 18.6.7 | low |
 | Preserve all existing routes unless the MCIM explicitly retires them in a later amendment. | explicit MCIM rule and acceptance criteria | high | prevents silent regressions | low | all 18.6.x | high if ignored |
 | Require every future 18.6.x PR to update the decision log when it changes a route tier, lifecycle classification, or source-of-truth boundary. | governance need for traceable IA evolution | high | creates auditable IA decisions | low | all 18.6.x | low |
+
+---
+
+## PR 18.6.1 Decisions — Unified Navigation Framework (2026-07-03)
+
+| Decision | Rationale | Impact |
+| --- | --- | --- |
+| Created `packages/navigation/` as `@fg/navigation` package (not `apps/shared/navigation/`) | Matches existing `@fg/ui` monorepo convention. Avoids ambiguity between app-local and shared code. | Low risk — consistent with existing pattern. |
+| Used MCIM group names verbatim as sidebar group labels | Eliminates divergence between MCIM taxonomy and UI labels. "AI & Knowledge" → "Intelligence". "System" → split into "Intelligence" (Workforce) + "Administration" (Settings). | Cosmetic sidebar label change only. No routes changed. |
+| Reclassified Audit & Forensics from Compliance → Trust group | Forensics is a trust-verification surface, not a compliance-gating surface. Aligns with MCIM trust-center family. | Sidebar group changed. Route `/dashboard/forensics` unchanged. |
+| Moved Workforce Intel from standalone "Workforce" group → Intelligence group | Workforce Intel is an AI-generated intelligence capability, not a standalone ops domain. MCIM family: monitoring. | Sidebar group changed. Route unchanged. |
+| Moved Provenance from "AI & Knowledge" group → Trust group | Provenance is a chain-of-custody and explainability surface. MCIM family: trust-explainability. | Sidebar group changed. Route unchanged. |
+| Moved Decisions from Compliance → Trust group | Decision provenance is a trust-center surface. MCIM family: trust-explainability. | Sidebar group changed. Route unchanged. |
+| Moved Settings + Keys from System/Admin → Administration group | Consolidates platform administration into one group. Keys previously unlisted in sidebar. | Settings moved from "System" to "Administration". Keys now visible. |
+| /assessment demoted to tier=legacy, visibility=hidden | Overlaps with Field Assessment. sessionStorage coupling. MCIM recommendation from decision log. | No route breakage. Item removed from sidebar. Route remains reachable via URL. |
+| /audit kept at tier=specialist, visibility=visible in Compliance group | Route is reachable. Duplicate with /dashboard/forensics noted. Not removed per MCIM rule. | No change to route. |
+| Enterprise group reserved (no items) | Future workspace placeholder. MCIM requirement: reserve workspace containers without populating incomplete features. | No nav items. Group registered in registry for future PRs. |
+| Navigation generated from `CONSOLE_REGISTRY.getByGroup()` | Eliminates hardcoded sidebar tree. Single source of truth for nav. Validator enforces completeness. | Sidebar.tsx no longer contains nav data; registry is authoritative. |
+| Portal nav generated from `PORTAL_REGISTRY.getAllItems()` with tier sort | Same pattern as console. Portal layout.tsx no longer contains hardcoded NAV_LINKS. | Portal nav item order: primary first, then secondary. Same 9 links visible. |
+| Created `navigation-registry.json` as checked-in JSON snapshot | Enables Python CI tool (`check_navigation_registry.py`) to validate registry without running TypeScript. Pattern mirrors `tools/ci/route_inventory.json`. | Must be kept in sync with TypeScript registrations. |
