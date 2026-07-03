@@ -38,7 +38,7 @@ interface SearchResult {
 
 function performSearch(query: string): SearchResult[] {
   if (!query.trim()) return [];
-  const raw = searchIndex.search(query, { limit: 8 });
+  const raw = searchIndex.search(query, 'console', 8);
   return raw.map((r) => ({
     id: r.item.id,
     title: r.item.title,
