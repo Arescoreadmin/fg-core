@@ -78,6 +78,12 @@ ALLOWED_CHANGED_PATHS = {
     "apps/portal/next.config.js",
     "tools/ci/check_navigation_registry.py",
     "tests/tools/test_navigation_registry.py",
+    "apps/console/tests/console-shell.test.js",
+    "apps/console/tests/dashboard-mvp2.test.js",
+    "apps/console/tests/field-assessment-workspace.test.js",
+    "apps/console/tests/ai-workspace.test.js",
+    "apps/console/tests/source-evidence-panel.test.js",
+    "apps/console/tests/provenance-validation-panel.test.js",
     # Cross-PR shared artifacts (present on any 18.6.x branch)
     "docs/SOC_EXECUTION_GATES_2026-02-15.md",
     "docs/ai/PR_FIX_LOG.md",

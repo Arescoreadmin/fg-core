@@ -486,9 +486,12 @@ test('existing AI workspace tests still pass (file exists and loads)', () => {
 });
 
 test('existing shell navigation tests still pass (smoke check)', () => {
-  const sidebar = read('components/layout/Sidebar.tsx');
-  assert.match(sidebar, /AI Workspace/);
-  assert.match(sidebar, /\/dashboard\/assistant/);
+  // Sidebar is registry-driven; verify ai-workspace is registered with correct route.
+  const reg = JSON.parse(read('../../packages/navigation/navigation-registry.json'));
+  const item = reg.console.find((i) => i.id === 'ai-workspace');
+  assert.ok(item, 'ai-workspace must be registered');
+  assert.equal(item.route, '/dashboard/assistant');
+  assert.match(read('components/layout/Sidebar.tsx'), /CONSOLE_REGISTRY/);
 });
 
 test('existing dashboard truth anchors preserved', () => {

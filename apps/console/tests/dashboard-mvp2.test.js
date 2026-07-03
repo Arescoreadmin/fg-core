@@ -119,9 +119,11 @@ test('no NEXT_PUBLIC_CORE_API_KEY usage anywhere in console source', () => {
 });
 
 test('control tower route is canonical in nav and legacy keys route is removed', () => {
-  const layout = read('components/layout/Sidebar.tsx');
-  assert.match(layout, /\/dashboard\/control-tower/);
-  assert.doesNotMatch(layout, /\/dashboard\/keys/);
+  // Routes live in CONSOLE_REGISTRY; validate via the JSON snapshot.
+  const reg = JSON.parse(read('../../packages/navigation/navigation-registry.json'));
+  const routes = reg.console.map((i) => i.route);
+  assert.ok(routes.includes('/dashboard/control-tower'), 'control-tower must be in registry');
+  assert.ok(!routes.includes('/dashboard/keys'), '/dashboard/keys must not exist — keys lives at /keys');
 });
 
 test('control tower snapshot and action routes are allowlisted in BFF', () => {
