@@ -51,6 +51,8 @@ ALLOWED_CHANGED_PATHS = {
     "tests/tools/test_mcim_docs.py",
     "docs/SOC_EXECUTION_GATES_2026-02-15.md",
     "docs/ai/PR_FIX_LOG.md",
+    "audits/2026-07-02_frostgate_console_portal_architecture_audit_phase1.md",
+    "audits/2026-07-02_pr18-6_unified_governance_command_center_portal_ia_blueprint.md",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.
@@ -152,7 +154,7 @@ def validate_changed_paths(root: Path) -> list[str]:
     else:
         entries = _status_files(root)
     for status, path in entries:
-        if any(path.startswith(prefix) for prefix in IGNORED_STATUS_PREFIXES):
+        if status == "??" and any(path.startswith(prefix) for prefix in IGNORED_STATUS_PREFIXES):
             continue
         if path in ALLOWED_CHANGED_PATHS:
             continue
