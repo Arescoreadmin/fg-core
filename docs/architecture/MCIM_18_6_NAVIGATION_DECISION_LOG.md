@@ -1,0 +1,21 @@
+# MCIM 18.6 Navigation Decision Log
+
+Status: Canonical recommendation log for 18.6.x navigation and IA follow-on PRs
+
+| Recommendation | Evidence | Confidence | Business impact | Complexity | Target PR | Risks |
+| --- | --- | --- | --- | --- | --- | --- |
+| Keep `/dashboard`, `/dashboard/control-tower`, `/dashboard/readiness`, `/field-assessment`, and portal `/`, `/findings`, `/reports`, `/remediation` as primary destinations. | Phase 1 audit, PR 18.6 audit, operator guide, portal route inventory | high | preserves highest-value daily journeys | low | 18.6.1 | low |
+| Classify `/assessment` and `/onboarding` as legacy, not primary. | legacy sessionStorage coupling, overlap with Field Assessment list/create flow | high | reduces duplicate entry points without route breakage | low | 18.6.1 | medium if demos rely on them |
+| Preserve `/audit` and `/keys`, but demote them behind stronger specialist/admin homes. | duplicate with `/dashboard/forensics` and Control Tower | high | reduces admin confusion while preserving reachability | low | 18.6.1 | low |
+| Establish Trust Center as the future home for provenance, verification, forensics, decisions, and transparency. | provenance page, forensics page, report verify, verification bundle, trust evidence map | high | exposes FrostGate differentiator more clearly | medium | 18.6.5 | medium if provenance links break |
+| Establish Governance & Intelligence Workspace as the future home for topology, evaluation, providers, policies, intelligence, replay, simulation, and benchmarking. | hidden `/intelligence/*` routes, topology screen, evaluation lab, provider governance console | high | turns backend breadth into a coherent product story | medium | 18.6.4 | medium due to varying maturity |
+| Treat portal as collaborative and partially write-capable, not read-only. | portal footer says read-only, but BFF allows attestation submit, report verify, and finding patch | high | prevents expectation mismatch for customers | low | 18.6.6 | medium if labels are not updated consistently |
+| Replace portal engagement context dependence on `localStorage` with URL-first context and session fallback. | `apps/portal/lib/engagementStore.ts`, portal overview/findings/remediation/report pages | high | improves shareability, reliability, and recoverability | medium | 18.6.6 | medium |
+| Keep Field Assessment as the canonical operator spine and do not split it across multiple top-level workspaces. | `docs/architecture/PLATFORM_ARCHITECTURE.md`, workspace page breadth, tests coverage | high | preserves the strongest workflow in the product | low | 18.6.3 | low |
+| Keep report generation, QA approval, export, and verification as distinct states in IA. | workspace reports/history, portal reports, QA approval issuing portal access code | high | reduces accidental mixing of authoring and delivery semantics | medium | 18.6.2 / 18.6.6 | medium |
+| Elevate hidden but valuable report detail and topology surfaces via contextual links rather than new routes. | `/reports/{reportId}`, `/governance/topology` | medium | improves discoverability without route churn | low | 18.6.2 / 18.6.4 | low |
+| Leave backend-only authorities backend-only until a source-backed UX home is defined. | governance learning, optimization, orchestration, intelligence runtime-only routes | high | avoids speculative UI | low | 18.6.4 | low |
+| Keep provider and policy pages reachable, but mark them specialist/growing until capability maturity improves. | placeholder findings in frontend census, provider/policy route presence | medium | prevents overpromising in navigation | low | 18.6.4 | low |
+| Keep billing out of primary nav until there is a customer/admin workflow beyond readiness banners. | billing monetization map, dashboard billing status only | high | avoids premature top-level commercial UI | medium | 18.6.7 | low |
+| Preserve all existing routes unless the MCIM explicitly retires them in a later amendment. | explicit MCIM rule and acceptance criteria | high | prevents silent regressions | low | all 18.6.x | high if ignored |
+| Require every future 18.6.x PR to update the decision log when it changes a route tier, lifecycle classification, or source-of-truth boundary. | governance need for traceable IA evolution | high | creates auditable IA decisions | low | all 18.6.x | low |

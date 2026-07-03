@@ -5311,3 +5311,18 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations beyond SHA-256 content-addressing (not signing — no key material). All outputs from counterfactual, replay, and simulation-compare are permanently labeled `is_production=False` preventing confusion with production values. Every DB write goes through the engine; the engine never commits. Tenant isolation enforced at three layers: `require_bound_tenant`, `set_tenant_context` (RLS), and explicit `tenant_id` predicate in every repository query. Three append-only tables protected at ORM layer. `build_json_export` recursively strips `tenant_id` from all nested structures before packaging. No new external dependencies.
 
+## 2026-07-02 — PR 18.6 Phase 0: MCIM Architecture Spec & CI Gate
+
+**Classification:** Documentation-only PR plus a new CI enforcement gate. No application code changed. No DB schema changes. No auth logic changes.
+
+**Critical-path files changed:**
+- `tools/ci/check_mcim_docs.py` — new CI gate. Validates presence and structural integrity of the three MCIM master docs (`MCIM_18_6_MASTER_COMMAND_INFORMATION_MODEL.md`, `MCIM_18_6_NAVIGATION_DECISION_LOG.md`, `MCIM_18_6_VALIDATION_CHECKLIST.md`): checks required headings, required JSON appendix blocks, and restricts PR-changed paths to the MCIM doc set. Read-only subprocess calls only (`git diff`, `git status --porcelain`). No secrets accessed. No network I/O. Subsequent fix in this PR corrects `validate_changed_paths()` to use the PR diff (`GITHUB_BASE_REF`-driven `git diff --name-only origin/<base>...HEAD`) instead of `git status --porcelain` so the path allowlist enforces correctly after commit.
+
+**Non-critical-path additions:**
+- `docs/architecture/MCIM_18_6_MASTER_COMMAND_INFORMATION_MODEL.md` — architecture spec (documentation only).
+- `docs/architecture/MCIM_18_6_NAVIGATION_DECISION_LOG.md` — navigation decision log (documentation only).
+- `docs/architecture/MCIM_18_6_VALIDATION_CHECKLIST.md` — validation checklist (documentation only).
+- `tests/tools/test_mcim_docs.py` — unit tests for `check_mcim_docs.py`.
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. The new CI gate (`check_mcim_docs.py`) is read-only: it reads local files and calls `git diff`/`git status`; it never writes, never accesses credentials, and never makes network calls. Path allowlist enforcement is restricted to the MCIM doc set — any production code change in the same PR would trigger a gate failure. No new external dependencies.
+
