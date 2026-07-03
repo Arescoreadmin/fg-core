@@ -254,7 +254,7 @@ class TestLoadRegistry:
     def test_valid_json_returns_dict(self, tmp_path: Path) -> None:
         nav = tmp_path / "packages" / "navigation"
         nav.mkdir(parents=True)
-        payload = {"console": [], "portal": [], "groups": []}
+        payload: dict[str, list[object]] = {"console": [], "portal": [], "groups": []}
         (nav / "navigation-registry.json").write_text(
             json.dumps(payload), encoding="utf-8"
         )
@@ -326,7 +326,7 @@ class TestCheckRequiredGroups:
         assert any("Operations" in e for e in errors)
 
     def test_groups_not_list_treated_as_empty(self) -> None:
-        reg = {"console": [], "portal": [], "groups": None}
+        reg: dict[str, object] = {"console": [], "portal": [], "groups": None}
         errors = check_required_groups(reg)
         assert len(errors) == len(REQUIRED_GROUPS)
 
