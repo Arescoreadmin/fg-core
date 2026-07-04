@@ -64,6 +64,21 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function csvCell(value: string | number): string {
+  const str = String(value);
+  // Neutralize formula prefixes that spreadsheet tools may auto-execute
+  const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  // Quote any cell containing commas, quotes, or newlines
+  if (safe.includes(',') || safe.includes('"') || safe.includes('\n') || safe.includes('\r')) {
+    return `"${safe.replace(/"/g, '""')}"`;
+  }
+  return safe;
+}
+
+function csvRow(...cells: (string | number)[]): string {
+  return cells.map(csvCell).join(',');
+}
+
 function handleDownload(format: ExportFormat, state: WorkspaceSnapshot) {
   const ts = new Date(state.exportedAt).toISOString().slice(0, 10);
   if (format === 'json') {
@@ -71,18 +86,18 @@ function handleDownload(format: ExportFormat, state: WorkspaceSnapshot) {
     downloadBlob(blob, `workspace-snapshot-${ts}.json`);
   } else {
     const rows: string[] = [
-      'section,key,value',
-      `provenance,mcimId,${state.provenanceMetadata.mcimId}`,
-      `provenance,authority,${state.provenanceMetadata.authority}`,
-      `provenance,sourceOfTruth,${state.provenanceMetadata.sourceOfTruth}`,
-      `provenance,exportedBy,${state.provenanceMetadata.exportedBy}`,
-      `provenance,exportedAt,${state.exportedAt}`,
-      `provenance,tenantId,${state.tenantId}`,
-      `summary,queueItems,${state.queue.length}`,
-      `summary,cases,${state.cases.length}`,
-      `summary,ledgerEntries,${state.decisionLedger.length}`,
-      `summary,timelineEvents,${state.timeline.length}`,
-      `summary,workflowStates,${state.workflowState.length}`,
+      csvRow('section', 'key', 'value'),
+      csvRow('provenance', 'mcimId', state.provenanceMetadata.mcimId),
+      csvRow('provenance', 'authority', state.provenanceMetadata.authority),
+      csvRow('provenance', 'sourceOfTruth', state.provenanceMetadata.sourceOfTruth),
+      csvRow('provenance', 'exportedBy', state.provenanceMetadata.exportedBy),
+      csvRow('provenance', 'exportedAt', state.exportedAt),
+      csvRow('provenance', 'tenantId', state.tenantId),
+      csvRow('summary', 'queueItems', state.queue.length),
+      csvRow('summary', 'cases', state.cases.length),
+      csvRow('summary', 'ledgerEntries', state.decisionLedger.length),
+      csvRow('summary', 'timelineEvents', state.timeline.length),
+      csvRow('summary', 'workflowStates', state.workflowState.length),
     ];
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     downloadBlob(blob, `workspace-snapshot-${ts}.csv`);

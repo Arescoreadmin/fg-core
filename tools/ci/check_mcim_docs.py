@@ -140,6 +140,7 @@ ALLOWED_CHANGED_PATHS = {
     "apps/console/components/operations-workspace/ExportPanel.tsx",
     "apps/console/app/workspace/",
     "apps/console/app/workspace/page.tsx",
+    "apps/console/app/workspace/WorkspaceCommandPalette.tsx",
     "tools/ci/check_operations_workspace.py",
     "tests/console/operations-workspace.test.js",
     "docs/architecture/OPERATIONS_WORKSPACE_18_6_4.md",
