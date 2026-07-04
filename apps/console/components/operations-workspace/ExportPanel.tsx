@@ -55,6 +55,40 @@ const FORMAT_DETAILS: {
   },
 ];
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function handleDownload(format: ExportFormat, state: WorkspaceSnapshot) {
+  const ts = new Date(state.exportedAt).toISOString().slice(0, 10);
+  if (format === 'json') {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    downloadBlob(blob, `workspace-snapshot-${ts}.json`);
+  } else {
+    const rows: string[] = [
+      'section,key,value',
+      `provenance,mcimId,${state.provenanceMetadata.mcimId}`,
+      `provenance,authority,${state.provenanceMetadata.authority}`,
+      `provenance,sourceOfTruth,${state.provenanceMetadata.sourceOfTruth}`,
+      `provenance,exportedBy,${state.provenanceMetadata.exportedBy}`,
+      `provenance,exportedAt,${state.exportedAt}`,
+      `provenance,tenantId,${state.tenantId}`,
+      `summary,queueItems,${state.queue.length}`,
+      `summary,cases,${state.cases.length}`,
+      `summary,ledgerEntries,${state.decisionLedger.length}`,
+      `summary,timelineEvents,${state.timeline.length}`,
+      `summary,workflowStates,${state.workflowState.length}`,
+    ];
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    downloadBlob(blob, `workspace-snapshot-${ts}.csv`);
+  }
+}
+
 export default function ExportPanel({ workspaceState, onExport, loading }: ExportPanelProps) {
   return (
     <WorkspaceShell
@@ -147,7 +181,13 @@ export default function ExportPanel({ workspaceState, onExport, loading }: Expor
                     variant="outline"
                     size="sm"
                     className="h-auto flex-col items-start gap-1 px-3 py-2 text-left"
-                    onClick={() => onExport?.(format)}
+                    onClick={() => {
+                      if (onExport) {
+                        onExport(format);
+                      } else if (workspaceState) {
+                        handleDownload(format, workspaceState);
+                      }
+                    }}
                     disabled={!workspaceState}
                     aria-label={`Export as ${label}`}
                   >
