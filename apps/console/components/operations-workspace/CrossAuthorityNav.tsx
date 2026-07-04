@@ -29,17 +29,17 @@ interface AuthorityStep {
 }
 
 const AUTHORITY_CHAIN: AuthorityStep[] = [
-  { name: 'Assessment', path: '/dashboard/assessment', icon: ClipboardList },
-  { name: 'Evidence', path: '/dashboard/evidence', icon: FileSearch },
-  { name: 'Verification', path: '/dashboard/verification', icon: CheckSquare },
-  { name: 'Findings', path: '/dashboard/findings', icon: AlertTriangle },
-  { name: 'Report', path: '/dashboard/reports', icon: FileText },
-  { name: 'Governance', path: '/dashboard/governance', icon: ShieldCheck },
+  { name: 'Assessment', path: '/assessment', icon: ClipboardList },
+  { name: 'Evidence', path: '/dashboard/provenance', icon: FileSearch },
+  { name: 'Verification', path: '/dashboard/readiness', icon: CheckSquare },
+  { name: 'Findings', path: '/dashboard/forensics', icon: AlertTriangle },
+  { name: 'Report', path: '/dashboard/alignment', icon: FileText },
+  { name: 'Governance', path: '/governance/topology', icon: ShieldCheck },
   { name: 'Decision', path: '/dashboard/decisions', icon: Gavel },
-  { name: 'Simulation', path: '/dashboard/simulation', icon: Activity },
-  { name: 'Replay', path: '/dashboard/replay', icon: RotateCcw },
-  { name: 'Portal', path: '/dashboard/portal', icon: Globe },
-  { name: 'Customer', path: '/dashboard/customer', icon: Users },
+  { name: 'Simulation', path: '/dashboard/evaluation', icon: Activity },
+  { name: 'Replay', path: '/dashboard/forensics', icon: RotateCcw },
+  { name: 'Portal', path: '/dashboard/alignment', icon: Globe },
+  { name: 'Customer', path: '/products', icon: Users },
 ];
 
 interface CrossAuthorityNavProps {
