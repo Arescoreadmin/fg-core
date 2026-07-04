@@ -16860,4 +16860,30 @@ Result:
 **Files modified:**
 - `apps/console/components/command-center/DecisionProvenancePanel.tsx` — fix Badge variant mapping
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 18.6.2 SOC review entry
+
+---
+
+## PR 18.6.4 — Enterprise Operations Workspace
+
+**Branch:** `pr/18.6.4-enterprise-operations-workspace`
+
+**Date:** 2026-07-03
+
+**What was done:** Added `check_operations_workspace.py` CI validator for the Enterprise Operations Workspace. Validates all 13 workspace components for MCIM compliance, authority declarations, prohibited patterns, and workspace page anchors.
+
+**Changes:**
+
+1. **`tools/ci/check_operations_workspace.py`** — new CI gate validating all 13 `apps/console/components/operations-workspace/` components for MCIM reference, authority declaration, sourceOfTruth declaration, and absence of prohibited patterns. Also validates required workspace page anchors in `apps/console/app/workspace/page.tsx`. Read-only file inspection only. No subprocess calls, no secrets accessed, no network I/O.
+
+2. **`tools/ci/check_mcim_docs.py`** — updated `ALLOWED_CHANGED_PATHS` allowlist to register 19 new paths for PR 18.6.4: operations-workspace components directory, all 13 component files, workspace page directory and file, new CI gate, test file, and architecture doc.
+
+3. **`docs/SOC_EXECUTION_GATES_2026-02-15.md`** — PR 18.6.4 SOC gate entry added (PENDING).
+
+4. **`ROADMAP.md`** — PR 18.6.4 row added to the Phase 3 table.
+
+**Files modified:**
+- `tools/ci/check_operations_workspace.py` (new)
+- `tools/ci/check_mcim_docs.py`
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- `ROADMAP.md`
 - `docs/ai/PR_FIX_LOG.md` — this entry

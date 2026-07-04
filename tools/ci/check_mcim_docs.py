@@ -123,6 +123,26 @@ ALLOWED_CHANGED_PATHS = {
     "apps/console/tests/command-center.test.js",
     "apps/console/tests/dashboard-truth.test.js",
     "ROADMAP.md",
+    # PR 18.6.4 — Enterprise Operations Workspace
+    "apps/console/components/operations-workspace/",
+    "apps/console/components/operations-workspace/WorkspaceShell.tsx",
+    "apps/console/components/operations-workspace/UnifiedWorkQueue.tsx",
+    "apps/console/components/operations-workspace/CaseWorkspace.tsx",
+    "apps/console/components/operations-workspace/DecisionLedger.tsx",
+    "apps/console/components/operations-workspace/WorkflowProgress.tsx",
+    "apps/console/components/operations-workspace/InvestigationTimeline.tsx",
+    "apps/console/components/operations-workspace/CrossAuthorityNav.tsx",
+    "apps/console/components/operations-workspace/AuthorityHealthMap.tsx",
+    "apps/console/components/operations-workspace/CorrelationGraph2.tsx",
+    "apps/console/components/operations-workspace/CommandPalette.tsx",
+    "apps/console/components/operations-workspace/PlaybookPanel.tsx",
+    "apps/console/components/operations-workspace/DelegationPanel.tsx",
+    "apps/console/components/operations-workspace/ExportPanel.tsx",
+    "apps/console/app/workspace/",
+    "apps/console/app/workspace/page.tsx",
+    "tools/ci/check_operations_workspace.py",
+    "tests/console/operations-workspace.test.js",
+    "docs/architecture/OPERATIONS_WORKSPACE_18_6_4.md",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.

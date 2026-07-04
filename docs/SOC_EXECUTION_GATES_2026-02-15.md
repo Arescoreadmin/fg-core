@@ -1,3 +1,33 @@
+## 2026-07-03 — PR 18.6.4: Enterprise Operations Workspace
+
+**Classification:** Frontend-only feature + new CI gate. MCIM: MCIM-18.6-OPS-WORKSPACE. 13 new React client components, 1 new workspace page, 1 new CI Python script, static-analysis tests. No auth logic changes. No DB schema changes. No backend changes. No API route additions. No secrets stored.
+
+**Critical-path files changed:**
+- `tools/ci/check_operations_workspace.py` — new CI gate validating all 13 workspace components for MCIM compliance, authority declarations, prohibited patterns, and workspace page anchors. Read-only file inspection only. No subprocess calls, no secrets accessed, no network I/O.
+- `tools/ci/check_mcim_docs.py` — updated `ALLOWED_CHANGED_PATHS` allowlist to include 19 new paths for PR 18.6.4 (operations-workspace components directory, workspace page, new CI gate, test file, architecture doc).
+
+**Non-critical-path additions:**
+- `apps/console/components/operations-workspace/WorkspaceShell.tsx` — unified workspace shell container with authority metadata. No backend I/O.
+- `apps/console/components/operations-workspace/UnifiedWorkQueue.tsx` — work queue panel; read-only display component.
+- `apps/console/components/operations-workspace/CaseWorkspace.tsx` — case workspace panel; read-only display component.
+- `apps/console/components/operations-workspace/DecisionLedger.tsx` — decision ledger panel; read-only display component.
+- `apps/console/components/operations-workspace/WorkflowProgress.tsx` — workflow progress engine panel; read-only display component.
+- `apps/console/components/operations-workspace/InvestigationTimeline.tsx` — investigation timeline panel; read-only display component.
+- `apps/console/components/operations-workspace/CrossAuthorityNav.tsx` — cross-authority navigation panel; read-only display component.
+- `apps/console/components/operations-workspace/AuthorityHealthMap.tsx` — authority health map panel; read-only display component.
+- `apps/console/components/operations-workspace/CorrelationGraph2.tsx` — correlation graph 2.0 panel; list-based, no canvas, no SVG.
+- `apps/console/components/operations-workspace/CommandPalette.tsx` — command palette panel; read-only display component.
+- `apps/console/components/operations-workspace/PlaybookPanel.tsx` — playbook panel; read-only display component.
+- `apps/console/components/operations-workspace/DelegationPanel.tsx` — delegation panel; read-only display component.
+- `apps/console/components/operations-workspace/ExportPanel.tsx` — export panel; read-only display component.
+- `apps/console/app/workspace/page.tsx` — new workspace route page.
+- `tests/console/operations-workspace.test.js` — static-analysis tests for all workspace components.
+- `docs/architecture/OPERATIONS_WORKSPACE_18_6_4.md` — MCIM architecture documentation for the operations workspace.
+
+**SOC review outcome:** PENDING. Frontend-only PR. No auth, session, middleware, OPA, security, schema, migration, or backend files changed. No new API routes. No new external dependencies. No secrets stored or accessed. All new components are `'use client'` React components — no server-side data access. All panels are MCIM-compliant with full authority declarations. `check_operations_workspace.py` is a static Python CI gate with no runtime effects, no network access, no secrets. Exits 0/1 based on file structure analysis only.
+
+---
+
 ## 2026-07-03 — PR 18.6.3: Operations Workspace
 
 **Classification:** Frontend-only feature + new CI gate. 6 new React client components, 4 enhanced client components, dashboard page update, 1 new CI Python script, 700+ new static-analysis tests, 4 documentation files. No auth logic changes. No DB schema changes. No backend changes. No API route additions. No secrets stored.
