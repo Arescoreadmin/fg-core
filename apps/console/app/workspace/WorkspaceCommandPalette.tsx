@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Terminal } from 'lucide-react';
 import CommandPalette from '@/components/operations-workspace/CommandPalette';
 
 export default function WorkspaceCommandPalette() {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   return (
     <>
@@ -20,7 +22,15 @@ export default function WorkspaceCommandPalette() {
         Command Palette
         <kbd className="ml-1 font-mono text-[10px] opacity-60">Ctrl+K</kbd>
       </button>
-      <CommandPalette open={open} onClose={() => setOpen(false)} />
+      <CommandPalette
+        open={open}
+        onClose={() => setOpen(false)}
+        onOpen={() => setOpen(true)}
+        onNavigate={(path) => {
+          setOpen(false);
+          router.push(path);
+        }}
+      />
     </>
   );
 }

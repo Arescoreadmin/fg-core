@@ -58,9 +58,10 @@ interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
   onNavigate?: (path: string) => void;
+  onOpen?: () => void;
 }
 
-export default function CommandPalette({ open, onClose, onNavigate }: CommandPaletteProps) {
+export default function CommandPalette({ open, onClose, onNavigate, onOpen }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -82,19 +83,19 @@ export default function CommandPalette({ open, onClose, onNavigate }: CommandPal
     }
   }, [open]);
 
-  // Global Ctrl+K listener
+  // Global Ctrl+K listener — calls onOpen when closed so the wrapper can set open=true
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'k') {
         e.preventDefault();
         if (!open) {
-          // Caller controls open state — this event bubbles up via toggle button
+          onOpen?.();
         }
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [open]);
+  }, [open, onOpen]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

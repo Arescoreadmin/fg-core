@@ -33,7 +33,7 @@ const AUTHORITY_CHAIN: AuthorityStep[] = [
   { name: 'Evidence', path: '/dashboard/provenance', icon: FileSearch },
   { name: 'Verification', path: '/dashboard/readiness', icon: CheckSquare },
   { name: 'Findings', path: '/dashboard/forensics', icon: AlertTriangle },
-  { name: 'Report', path: '/reports', icon: FileText },
+  { name: 'Report', path: '/dashboard/alignment', icon: FileText },
   { name: 'Governance', path: '/governance/topology', icon: ShieldCheck },
   { name: 'Decision', path: '/dashboard/decisions', icon: Gavel },
   { name: 'Simulation', path: '/dashboard/evaluation', icon: Activity },
