@@ -71,9 +71,11 @@ function deriveRows(snapshot: ControlTowerSnapshotV1 | null): MatrixRow[] {
     : 'unknown';
 
   const keysHealth: HealthStatus = snap
-    ? snap.keys.expired === 0
-      ? 'ok'
-      : 'warning'
+    ? snap.key_lifecycle
+      ? snap.key_lifecycle.active_key_count > 0
+        ? 'ok'
+        : 'warning'
+      : 'unknown'
     : 'unknown';
 
   const lockersHealth: HealthStatus = snap

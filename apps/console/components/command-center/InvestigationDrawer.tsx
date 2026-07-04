@@ -62,7 +62,6 @@ export default function InvestigationDrawer({
     <div
       role="complementary"
       aria-label="investigation-drawer"
-      aria-expanded={open}
       data-testid="investigation-drawer"
       className="fixed inset-y-0 right-0 z-50 w-80 border-l border-border bg-background shadow-xl flex flex-col"
       tabIndex={0}
