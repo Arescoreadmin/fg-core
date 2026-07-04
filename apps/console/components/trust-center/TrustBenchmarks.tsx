@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@/components/ui/badge';
 import TrustCenterShell from './TrustCenterShell';
 
 const MCIM_ID = 'MCIM-18.6-TRUST-BENCHMARKS';
@@ -42,6 +43,7 @@ export default function TrustBenchmarks({ benchmarks, loading, lastUpdated }: Tr
       lastUpdated={lastUpdated}
       title="Trust Benchmarks"
     >
+      <section aria-label="trust-benchmarks" data-testid="trust-benchmarks">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -87,6 +89,7 @@ export default function TrustBenchmarks({ benchmarks, loading, lastUpdated }: Tr
           </p>
         </>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

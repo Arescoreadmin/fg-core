@@ -50,6 +50,7 @@ export default function BottleneckAnalysis({ entries, loading, lastUpdated }: Bo
       lastUpdated={lastUpdated}
       title="Bottleneck Analysis"
     >
+      <section aria-label="bottleneck-analysis" data-testid="bottleneck-analysis">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -96,6 +97,7 @@ export default function BottleneckAnalysis({ entries, loading, lastUpdated }: Bo
           </table>
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

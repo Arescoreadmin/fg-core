@@ -50,6 +50,7 @@ export default function SLAForecasting({ forecasts, hasHistoricalData, loading, 
       lastUpdated={lastUpdated}
       title="SLA Forecasting"
     >
+      <section aria-label="sla-forecasting" data-testid="sla-forecasting">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -101,6 +102,7 @@ export default function SLAForecasting({ forecasts, hasHistoricalData, loading, 
           </p>
         </>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

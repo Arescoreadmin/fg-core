@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@/components/ui/badge';
 import TrustCenterShell from './TrustCenterShell';
 
 const MCIM_ID = 'MCIM-18.6-TRUST-CERTIFICATES';
@@ -47,6 +48,7 @@ export default function TrustCertificates({ certificates, loading, lastUpdated }
       lastUpdated={lastUpdated}
       title="Trust Certificates"
     >
+      <section aria-label="trust-certificates" data-testid="trust-certificates">
       <div className="mb-3 rounded-md border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
         These trust certificates are internal audit artifacts and do not constitute legal certification.
       </div>
@@ -84,6 +86,7 @@ export default function TrustCertificates({ certificates, loading, lastUpdated }
           ))}
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

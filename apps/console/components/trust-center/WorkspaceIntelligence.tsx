@@ -52,6 +52,7 @@ export default function WorkspaceIntelligence({ items, loading, lastUpdated }: W
       lastUpdated={lastUpdated}
       title="Workspace Intelligence"
     >
+      <section aria-label="workspace-intelligence" data-testid="workspace-intelligence">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -81,6 +82,7 @@ export default function WorkspaceIntelligence({ items, loading, lastUpdated }: W
           ))}
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

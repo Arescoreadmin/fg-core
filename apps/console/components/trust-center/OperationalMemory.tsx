@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@/components/ui/badge';
 import TrustCenterShell from './TrustCenterShell';
 
 const MCIM_ID = 'MCIM-18.6-TRUST-MEMORY';
@@ -45,6 +46,7 @@ export default function OperationalMemory({ entries, activeWindow, onWindowChang
       lastUpdated={lastUpdated}
       title="Operational Memory"
     >
+      <section aria-label="operational-memory" data-testid="operational-memory">
       <div className="mb-3 flex gap-1">
         {WINDOWS.map((w) => (
           <button
@@ -101,6 +103,7 @@ export default function OperationalMemory({ entries, activeWindow, onWindowChang
           </table>
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

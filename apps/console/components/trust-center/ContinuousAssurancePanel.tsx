@@ -48,6 +48,7 @@ export default function ContinuousAssurancePanel({ controls, loading, lastUpdate
       lastUpdated={lastUpdated}
       title="Continuous Assurance Panel"
     >
+      <section aria-label="continuous-assurance-panel" data-testid="continuous-assurance">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -97,6 +98,7 @@ export default function ContinuousAssurancePanel({ controls, loading, lastUpdate
           </table>
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

@@ -50,6 +50,7 @@ export default function TrustScorecard({ scores, loading, lastUpdated }: TrustSc
       lastUpdated={lastUpdated}
       title="Trust Scorecard"
     >
+      <section aria-label="trust-scorecard" data-testid="trust-scorecard">
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -86,6 +87,7 @@ export default function TrustScorecard({ scores, loading, lastUpdated }: TrustSc
           ))}
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

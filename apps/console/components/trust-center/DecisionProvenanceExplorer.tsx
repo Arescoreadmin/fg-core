@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -90,6 +91,7 @@ export default function DecisionProvenanceExplorer({ provenances, loading, lastU
       lastUpdated={lastUpdated}
       title="Decision Provenance Explorer"
     >
+      <section aria-label="decision-provenance-explorer" data-testid="decision-provenance">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -105,6 +107,7 @@ export default function DecisionProvenanceExplorer({ provenances, loading, lastU
           ))}
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

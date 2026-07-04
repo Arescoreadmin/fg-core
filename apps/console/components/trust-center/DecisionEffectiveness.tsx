@@ -62,6 +62,7 @@ export default function DecisionEffectiveness({ outcomes, activeWindow, onWindow
       lastUpdated={lastUpdated}
       title="Decision Effectiveness"
     >
+      <section aria-label="decision-effectiveness" data-testid="decision-effectiveness">
       <div className="mb-3 flex gap-1">
         {WINDOWS.map((w) => (
           <button
@@ -123,6 +124,7 @@ export default function DecisionEffectiveness({ outcomes, activeWindow, onWindow
           </table>
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

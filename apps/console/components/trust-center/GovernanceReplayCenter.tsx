@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -92,6 +93,7 @@ export default function GovernanceReplayCenter({ entries, loading, lastUpdated }
       lastUpdated={lastUpdated}
       title="Governance Replay Center"
     >
+      <section aria-label="governance-replay-center" data-testid="governance-replay">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -107,6 +109,7 @@ export default function GovernanceReplayCenter({ entries, loading, lastUpdated }
           ))}
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

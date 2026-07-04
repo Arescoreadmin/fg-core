@@ -87,6 +87,7 @@ export default function AuditReadinessWorkspace({ domains, loading, lastUpdated 
       lastUpdated={lastUpdated}
       title="Audit Readiness Workspace"
     >
+      <section aria-label="audit-readiness-workspace" data-testid="audit-readiness">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -102,6 +103,7 @@ export default function AuditReadinessWorkspace({ domains, loading, lastUpdated 
           ))}
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

@@ -56,6 +56,7 @@ export default function TrustEvidenceGraph({ nodes, loading, lastUpdated }: Trus
       lastUpdated={lastUpdated}
       title="Trust Evidence Graph"
     >
+      <section aria-label="trust-evidence-graph" data-testid="trust-evidence-graph">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -85,6 +86,7 @@ export default function TrustEvidenceGraph({ nodes, loading, lastUpdated }: Trus
           ))}
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

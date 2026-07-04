@@ -56,6 +56,7 @@ export default function ChangeIntelligence({ events, loading, lastUpdated }: Cha
       lastUpdated={lastUpdated}
       title="Change Intelligence"
     >
+      <section aria-label="change-intelligence" data-testid="change-intelligence">
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -82,6 +83,7 @@ export default function ChangeIntelligence({ events, loading, lastUpdated }: Cha
           ))}
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

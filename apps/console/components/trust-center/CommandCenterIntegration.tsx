@@ -44,6 +44,7 @@ export default function CommandCenterIntegration({ loading }: CommandCenterInteg
       refreshPolicy="static"
       title="Command Center Integration"
     >
+      <section aria-label="command-center-integration" data-testid="command-center-integration">
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -66,6 +67,7 @@ export default function CommandCenterIntegration({ loading }: CommandCenterInteg
           ))}
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

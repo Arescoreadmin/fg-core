@@ -52,6 +52,7 @@ export default function CustomerTrustView({ customers, loading, lastUpdated }: C
       lastUpdated={lastUpdated}
       title="Customer Trust View"
     >
+      <section aria-label="customer-trust-view" data-testid="customer-trust-view">
       <div className="mb-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted">
         Operator preview only. This view reflects internal trust state and is not directly exposed to customers.
       </div>
@@ -101,6 +102,7 @@ export default function CustomerTrustView({ customers, loading, lastUpdated }: C
           </table>
         </div>
       )}
+      </section>
     </TrustCenterShell>
   );
 }

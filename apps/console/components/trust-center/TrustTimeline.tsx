@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import TrustCenterShell from './TrustCenterShell';
 
@@ -50,6 +51,7 @@ export default function TrustTimeline({ events, loading, lastUpdated }: TrustTim
       lastUpdated={lastUpdated}
       title="Trust Timeline"
     >
+      <section aria-label="trust-timeline" data-testid="trust-timeline">
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -82,6 +84,7 @@ export default function TrustTimeline({ events, loading, lastUpdated }: TrustTim
           ))}
         </ol>
       )}
+      </section>
     </TrustCenterShell>
   );
 }
