@@ -16887,3 +16887,44 @@ Result:
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md`
 - `ROADMAP.md`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR 18.6.5 — Enterprise Trust Center
+
+**Branch:** `pr/18.6.5-enterprise-trust-center`
+
+**Date:** 2026-07-04
+
+**What was done:** Implemented the full Enterprise Trust Center — 19 React components, 1 trust-center page, CI validator, 1000+ deterministic static-analysis tests, and MCIM architecture documentation. All components follow the TrustCenterShell wrapper pattern with full MCIM authority declarations.
+
+**Changes:**
+
+1. **`apps/console/components/trust-center/TrustCenterShell.tsx`** — shared card wrapper for all trust-center panels with collapsible authority metadata footer.
+
+2. **18 trust-center panel components** — `TrustScorecard`, `ContinuousAssurancePanel`, `TrustEvidenceGraph`, `DecisionProvenanceExplorer`, `GovernanceReplayCenter`, `ChangeIntelligence`, `TrustCertificates`, `AuditReadinessWorkspace`, `CustomerTrustView`, `TrustTimeline`, `OperationalMemory`, `DecisionEffectiveness`, `BottleneckAnalysis`, `TrustBenchmarks`, `CaseRelationships`, `WorkspaceIntelligence`, `SLAForecasting`, `CommandCenterIntegration`. All are read-only `'use client'` display components with no browser storage, no Math.random, no fetch calls, no hardcoded metric values.
+
+3. **`apps/console/app/trust-center/page.tsx`** — new trust-center route. Server component using `Promise.allSettled` pattern from `coreApi`. All 18 panels wrapped in `Suspense` with `PanelSkeleton` fallback. Empty data arrays passed pending future API wiring.
+
+4. **`tools/ci/check_trust_center.py`** — new CI gate validating all 19 trust-center components for MCIM compliance, authority declarations, prohibited patterns, and trust-center page anchors.
+
+5. **`tools/ci/check_mcim_docs.py`** — updated `ALLOWED_CHANGED_PATHS` allowlist to register 25 new paths for PR 18.6.5.
+
+6. **`tests/console/trust-center.test.js`** — 1000+ static-analysis tests covering all 19 components and the trust-center page.
+
+7. **`docs/architecture/TRUST_CENTER_18_6_5.md`** — MCIM architecture documentation including component inventory, authority chain, data flow, MCIM compliance registry, and component manifest.
+
+8. **`docs/SOC_EXECUTION_GATES_2026-02-15.md`** — PR 18.6.5 SOC gate entry added (PENDING).
+
+9. **`ROADMAP.md`** — PR 18.6.5 row added.
+
+**Files modified:**
+- `apps/console/components/trust-center/` (19 new files)
+- `apps/console/app/trust-center/page.tsx` (new)
+- `tools/ci/check_trust_center.py` (new)
+- `tools/ci/check_mcim_docs.py`
+- `tests/console/trust-center.test.js` (new)
+- `docs/architecture/TRUST_CENTER_18_6_5.md` (new)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- `ROADMAP.md`
+- `docs/ai/PR_FIX_LOG.md` — this entry
