@@ -1,7 +1,9 @@
 'use client';
 
-import { AlertCircle, Bell, CheckCircle2 } from 'lucide-react';
+import { useState } from 'react';
+import { AlertCircle, CheckCircle2, Layers } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import WidgetShell from './WidgetShell';
 import type { FeedItem } from '@/lib/coreApi';
 
@@ -101,7 +103,16 @@ export default function ExecutiveNotifications({
   loading = false,
   lastUpdated,
 }: ExecutiveNotificationsProps) {
+  const [clusterView, setClusterView] = useState(false);
   const notifications = loading ? [] : buildNotifications(feedItems);
+
+  // Group notifications by category for cluster view
+  const clustered: Partial<Record<NotifCategory, typeof notifications>> = {};
+  for (const n of notifications) {
+    if (!clustered[n.category]) clustered[n.category] = [];
+    clustered[n.category]!.push(n);
+  }
+  const clusterCategories = Object.keys(clustered) as NotifCategory[];
 
   return (
     <WidgetShell
@@ -115,13 +126,26 @@ export default function ExecutiveNotifications({
       title="Notifications"
     >
       <div aria-label="executive-notifications">
-        <p
-          className="text-[10px] uppercase tracking-wide text-muted mb-2"
-          data-testid="notifications-authority"
-          aria-label="notifications-authority"
-        >
-          Authority: {AUTHORITY}
-        </p>
+        <div className="flex items-center justify-between mb-2">
+          <p
+            className="text-[10px] uppercase tracking-wide text-muted"
+            data-testid="notifications-authority"
+            aria-label="notifications-authority"
+          >
+            Authority: {AUTHORITY}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-[10px] text-muted"
+            aria-label="toggle-cluster-view"
+            data-testid="toggle-cluster-view"
+            onClick={() => setClusterView((v) => !v)}
+          >
+            <Layers className="mr-1 h-3 w-3" aria-hidden="true" />
+            {clusterView ? 'Flat' : 'Cluster'}
+          </Button>
+        </div>
 
         {loading ? (
           <div className="space-y-2">
@@ -138,6 +162,43 @@ export default function ExecutiveNotifications({
             <CheckCircle2 className="mx-auto mb-2 h-6 w-6 text-success" aria-hidden="true" />
             <p>No actionable notifications.</p>
             <p className="mt-1 text-[10px]">All items are below actionable threshold.</p>
+          </div>
+        ) : clusterView ? (
+          <div className="space-y-3">
+            {clusterCategories.map((cat) => {
+              const config = CATEGORY_CONFIG[cat];
+              const items = clustered[cat] ?? [];
+              return (
+                <div
+                  key={cat}
+                  aria-label={`cluster-${cat}`}
+                  data-testid={`cluster-${cat}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant={config.variant} className="text-[9px]">
+                      {config.label}
+                    </Badge>
+                    <span className="text-[10px] text-muted">{items.length} item(s)</span>
+                  </div>
+                  <ul className="space-y-1" role="list">
+                    {items.map((n) => (
+                      <li
+                        key={n.id}
+                        className="flex items-start gap-2 border-b border-border/50 py-1.5 last:border-0 pl-2"
+                        data-testid={config.id}
+                        aria-label={config.id}
+                      >
+                        <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-danger" aria-hidden="true" />
+                        <p className="text-xs text-foreground truncate flex-1">{n.title}</p>
+                        <span className="shrink-0 text-[10px] text-muted/60">
+                          {relativeTime(n.timestamp)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <ul className="space-y-1.5" role="list">

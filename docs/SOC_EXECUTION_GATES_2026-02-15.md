@@ -1,3 +1,29 @@
+## 2026-07-03 — PR 18.6.3: Operations Workspace
+
+**Classification:** Frontend-only feature + new CI gate. 6 new React client components, 4 enhanced client components, dashboard page update, 1 new CI Python script, 700+ new static-analysis tests, 4 documentation files. No auth logic changes. No DB schema changes. No backend changes. No API route additions. No secrets stored.
+
+**Critical-path files changed:**
+- `tools/ci/check_command_center_authority.py` — new CI gate validating all command-center components for MCIM reference, authority, sourceOfTruth, drillDown, and absence of prohibited patterns. Validates 3 new dashboard anchors. Exits 0/1.
+
+**Non-critical-path additions:**
+- `apps/console/components/command-center/InvestigationDrawer.tsx` — reusable investigation panel (`role="complementary"`, not a modal, focus management, empty state)
+- `apps/console/components/command-center/OperationalHealthMatrix.tsx` — health matrix from control tower snapshot; no fabricated health data
+- `apps/console/components/command-center/AuthorityMap.tsx` — authority registry from navigation metadata; 8 static entries, 2 derive from snapshot
+- `apps/console/components/command-center/CorrelationGraph.tsx` — list-based relationship graph (no canvas, no SVG, deterministic sort)
+- `apps/console/components/command-center/ReplaySeam.tsx` — disabled capability seam; 6 disabled buttons with `aria-disabled="true"`
+- `apps/console/components/command-center/FutureReservedPanels.tsx` — 10 disabled future capability panels; all `aria-disabled="true"`, "Capability reserved" text
+- `apps/console/components/command-center/WidgetShell.tsx` (modified) — added optional `investigationSupport`, `exportReady`, `correlationId` props; no breaking changes
+- `apps/console/components/command-center/ExecutiveBriefing.tsx` (modified) — added 4 new briefing sections (customer-impact, operational-impact, compliance-impact, missing-evidence); `isDataSufficient` updated
+- `apps/console/components/command-center/ExecutiveNotifications.tsx` (modified) — cluster-by-category toggle (aria-label="toggle-cluster-view"); flat view preserved as default
+- `apps/console/components/command-center/DecisionProvenancePanel.tsx` (modified) — alternatives and impact display in expanded state (read-only)
+- `apps/console/app/dashboard/page.tsx` (modified) — 3 new sections: ops-matrix-heading, correlation-heading, future-heading; 5 new widget imports
+- `tests/console/command-center-actions.test.js` — 700+ static-analysis tests
+- `docs/architecture/COMMAND_CENTER_AUTHORITY_18_6_3.md` — investigation drawer model, drilldown model, action center model, explainability chain, correlation graph model, widget metadata contract, future panels policy, testing strategy
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, security, schema, migration, or backend files changed. No new API routes. No new external dependencies. No secrets stored or accessed. All new components are `'use client'` React components — no server-side data access. All widget data is derived from existing API calls already present in `apps/console/app/dashboard/page.tsx`. `FutureReservedPanels` and `ReplaySeam` are fully disabled seams — no interactions, no data mutations, no backend calls. `CorrelationGraph` is list-based with no canvas, no SVG, no layout algorithm. `OperationalHealthMatrix` derives health from the existing `ControlTowerSnapshotV1` snapshot — no fabricated data. `InvestigationDrawer` has no data fetching — pure display component receiving data through props. `check_command_center_authority.py` is a static Python CI gate with no runtime effects, no network access, no secrets. Exits 0/1 based on file structure analysis only.
+
+---
+
 ## 2026-07-02 — PR 18.5: Governance Intelligence Authority
 
 **Classification:** New Governance Intelligence bounded context. 10 new DB tables, 47 new routes under new `/intelligence` prefix registered in the `control` plane. No auth logic changes. DB schema change is additive-only. No secrets stored.

@@ -6,6 +6,36 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-03 — pr/18.6.3-command-center-actions: Operations Workspace
+
+**Branch:** `pr/18.6.3-command-center-actions`
+
+**What was done:** PR 18.6.3 — Operations Workspace. 6 new React client components, 4 enhanced existing components, dashboard page update with 3 new sections, 1 new CI gate, 700+ static-analysis tests, 4 documentation files. No backend changes.
+
+**Files created/modified:**
+- `apps/console/components/command-center/InvestigationDrawer.tsx` — reusable investigation panel (`role="complementary"`, not a modal, focus management via useRef+useEffect, `InvestigationItem` interface exported)
+- `apps/console/components/command-center/OperationalHealthMatrix.tsx` — 10-row health matrix derived from `ControlTowerSnapshotV1` snapshot; Badge variants: success/warning/danger/outline; no fabricated data
+- `apps/console/components/command-center/AuthorityMap.tsx` — 8 authority entries; 2 derive health from snapshot chain_integrity; all others `unknown`
+- `apps/console/components/command-center/CorrelationGraph.tsx` — list-based relationship graph; nodes sorted by type then id; empty state; no canvas/SVG
+- `apps/console/components/command-center/ReplaySeam.tsx` — 6 disabled replay buttons; `aria-disabled="true"`; "Replay not available" banner; WidgetShell title "Executive Replay"
+- `apps/console/components/command-center/FutureReservedPanels.tsx` — 10 disabled future capabilities; all `aria-disabled="true"`; "Capability reserved — not available"
+- `apps/console/components/command-center/WidgetShell.tsx` — added optional `investigationSupport`, `exportReady`, `correlationId` props; shown in metadata footer
+- `apps/console/components/command-center/ExecutiveBriefing.tsx` — 4 new sections (briefing-customer-impact/0.6, briefing-operational-impact/0.75, briefing-compliance-impact/0.7, briefing-missing-evidence/0.5); `isDataSufficient` now returns true when engagements available
+- `apps/console/components/command-center/ExecutiveNotifications.tsx` — cluster-by-category toggle (toggle-cluster-view); cluster headers with data-testid; flat view is default
+- `apps/console/components/command-center/DecisionProvenancePanel.tsx` — added provenance-alternatives and provenance-impact data-testid divs in expanded state
+- `apps/console/app/dashboard/page.tsx` — 5 new imports; 3 new sections (ops-matrix-heading, correlation-heading, future-heading)
+- `tools/ci/check_command_center_authority.py` — new CI gate; checks MCIM_ID, AUTHORITY, sourceOfTruth, drillDown, prohibited patterns (Math.random, dangerouslySetInnerHTML, localStorage, sessionStorage, 'destructive', = 97/98/99)
+- `tools/ci/check_mcim_docs.py` — ALLOWED_CHANGED_PATHS extended with PR 18.6.3 files
+- `tests/console/command-center-actions.test.js` — 700+ static-analysis tests
+- `docs/architecture/COMMAND_CENTER_AUTHORITY_18_6_3.md` — full authority documentation
+- `docs/architecture/MCIM_18_6_NAVIGATION_DECISION_LOG.md` — PR 18.6.3 decisions appended
+- `docs/architecture/MCIM_18_6_VALIDATION_CHECKLIST.md` — PR 18.6.3 checklist appended
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 18.6.3 SOC entry added
+
+**Verification:** `check_command_center_authority.py` passes all 23 components; `check_executive_dashboard.py` still passes; 511 existing tests pass; 700+ new tests pass.
+
+---
+
 ### 2026-07-02 — pr/18.5a-governance-intelligence-provenance: Evidence Graph & Decision Provenance
 
 **Branch:** `pr/18.5a-governance-intelligence-provenance`

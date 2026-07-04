@@ -22,6 +22,9 @@ export interface WidgetShellProps {
   title: string;
   className?: string;
   children: React.ReactNode;
+  investigationSupport?: boolean;
+  exportReady?: boolean;
+  correlationId?: string;
 }
 
 export default function WidgetShell({
@@ -36,6 +39,9 @@ export default function WidgetShell({
   title,
   className,
   children,
+  investigationSupport,
+  exportReady,
+  correlationId,
 }: WidgetShellProps) {
   const [metaOpen, setMetaOpen] = useState(false);
 
@@ -102,6 +108,24 @@ export default function WidgetShell({
               <div className="flex justify-between">
                 <span className="font-semibold uppercase tracking-wide">Updated</span>
                 <span>{new Date(lastUpdated).toLocaleString()}</span>
+              </div>
+            )}
+            {investigationSupport !== undefined && (
+              <div className="flex justify-between">
+                <span className="font-semibold uppercase tracking-wide">Investigation</span>
+                <span>{investigationSupport ? 'Supported' : 'Not supported'}</span>
+              </div>
+            )}
+            {exportReady !== undefined && (
+              <div className="flex justify-between">
+                <span className="font-semibold uppercase tracking-wide">Export</span>
+                <span>{exportReady ? 'Ready' : 'Not available'}</span>
+              </div>
+            )}
+            {correlationId && (
+              <div className="flex justify-between">
+                <span className="font-semibold uppercase tracking-wide">Correlation</span>
+                <span className="font-mono truncate max-w-[160px]">{correlationId}</span>
               </div>
             )}
             <div className="pt-1">

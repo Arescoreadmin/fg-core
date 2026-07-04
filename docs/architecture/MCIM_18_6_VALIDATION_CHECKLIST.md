@@ -90,3 +90,30 @@ Use this checklist for every PR in the 18.6.x sequence.
 - [x] MCIM Navigation Decision Log updated with PR 18.6.1 decisions.
 - [x] SOC review entry added for `tools/ci/check_navigation_registry.py`.
 - [x] PR_FIX_LOG updated.
+
+## PR 18.6.3 Checklist — Operations Workspace
+
+- [x] 6 new component files created: `InvestigationDrawer.tsx`, `OperationalHealthMatrix.tsx`, `AuthorityMap.tsx`, `CorrelationGraph.tsx`, `ReplaySeam.tsx`, `FutureReservedPanels.tsx`
+- [x] 4 existing components enhanced: `WidgetShell.tsx`, `ExecutiveBriefing.tsx`, `ExecutiveNotifications.tsx`, `DecisionProvenancePanel.tsx`
+- [x] Dashboard page updated with 3 new sections: ops-matrix-heading, correlation-heading, future-heading
+- [x] All new widgets import `WidgetShell` and declare MCIM_ID, AUTHORITY, sourceOfTruth, drillDown
+- [x] No `Math.random` in any new component
+- [x] No `dangerouslySetInnerHTML` in any new component
+- [x] No `localStorage` or `sessionStorage` in any new component
+- [x] No `'destructive'` Badge variant used
+- [x] No hardcoded fake metrics (= 97, = 98, = 99)
+- [x] `InvestigationDrawer` is NOT a modal — `role="complementary"` panel
+- [x] `CorrelationGraph` is list-based — no canvas, no SVG
+- [x] `ReplaySeam` all buttons `disabled` with `aria-disabled="true"`
+- [x] `FutureReservedPanels` all panels `aria-disabled="true"` with "Capability reserved" text
+- [x] `OperationalHealthMatrix` derives health from snapshot — no fabricated data
+- [x] `AuthorityMap` derives health from snapshot for `from-snapshot` entries
+- [x] `check_command_center_authority.py` CI script passes all components
+- [x] `check_executive_dashboard.py` still passes
+- [x] 511 existing tests in `tests/console/command-center.test.js` still pass
+- [x] 700+ new tests in `tests/console/command-center-actions.test.js` pass
+- [x] `COMMAND_CENTER_AUTHORITY_18_6_3.md` created
+- [x] MCIM Navigation Decision Log updated with PR 18.6.3 decisions
+- [x] SOC review entry added for `tools/ci/check_command_center_authority.py`
+- [x] PR_FIX_LOG updated
+- [x] ROADMAP.md updated
