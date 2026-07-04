@@ -40,7 +40,7 @@ export default function CaseRelationships({ relationships, loading, lastUpdated 
       title="Case Relationships"
     >
       <div className="mb-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted">
-        Only authoritative relationships are displayed. No relationships are inferred.
+        Only authoritative relationships are displayed. All links are established by authoritative sources.
       </div>
       {loading ? (
         <div className="space-y-2">
