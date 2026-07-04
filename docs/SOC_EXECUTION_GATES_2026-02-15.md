@@ -1,3 +1,39 @@
+## 2026-07-04 — PR 18.6.5: Enterprise Trust Center
+
+**Classification:** Frontend-only feature + new CI gate. MCIM: MCIM-18.6-TRUST-CENTER. 19 new React client components, 1 new trust-center page, 1 new CI Python script, 1000+ static-analysis tests, 1 architecture doc. No auth logic changes. No DB schema changes. No backend changes. No API route additions. No secrets stored.
+
+**Critical-path files changed:**
+- `tools/ci/check_trust_center.py` — new CI gate validating all 19 trust-center components for MCIM compliance, authority declarations, prohibited patterns, and trust-center page anchors. Read-only file inspection only. No subprocess calls, no secrets accessed, no network I/O.
+- `tools/ci/check_mcim_docs.py` — updated `ALLOWED_CHANGED_PATHS` allowlist to include 25 new paths for PR 18.6.5 (trust-center components directory, all 19 component files, trust-center page directory and file, new CI gate, test file, architecture doc).
+
+**Non-critical-path additions:**
+- `apps/console/components/trust-center/TrustCenterShell.tsx` — unified trust-center shell container with authority metadata. No backend I/O.
+- `apps/console/components/trust-center/TrustScorecard.tsx` — 12-domain trust scorecard panel; read-only display component.
+- `apps/console/components/trust-center/ContinuousAssurancePanel.tsx` — controls assurance panel; read-only display component.
+- `apps/console/components/trust-center/TrustEvidenceGraph.tsx` — evidence node graph panel; read-only display component.
+- `apps/console/components/trust-center/DecisionProvenanceExplorer.tsx` — decision provenance chain explorer; read-only display component.
+- `apps/console/components/trust-center/GovernanceReplayCenter.tsx` — governance replay comparison panel; read-only display component.
+- `apps/console/components/trust-center/ChangeIntelligence.tsx` — change event feed; read-only display component.
+- `apps/console/components/trust-center/TrustCertificates.tsx` — internal audit certificate display with Blob download; no secrets stored.
+- `apps/console/components/trust-center/AuditReadinessWorkspace.tsx` — audit readiness domain tracker; read-only display component.
+- `apps/console/components/trust-center/CustomerTrustView.tsx` — operator preview of customer-facing trust state; read-only display component.
+- `apps/console/components/trust-center/TrustTimeline.tsx` — unified trust event timeline; read-only display component.
+- `apps/console/components/trust-center/OperationalMemory.tsx` — historical queryable memory; no browser storage used; server-authoritative only.
+- `apps/console/components/trust-center/DecisionEffectiveness.tsx` — 30/60/90-day outcome tracking; read-only display component.
+- `apps/console/components/trust-center/BottleneckAnalysis.tsx` — stage bottleneck analysis; read-only display component.
+- `apps/console/components/trust-center/TrustBenchmarks.tsx` — authoritative benchmarks only; read-only display component.
+- `apps/console/components/trust-center/CaseRelationships.tsx` — authoritative case relationships only; no inferred links; read-only display component.
+- `apps/console/components/trust-center/WorkspaceIntelligence.tsx` — deterministic prioritization panel; no ML inference; read-only display component.
+- `apps/console/components/trust-center/SLAForecasting.tsx` — SLA forecasting gated on historical data; no fabricated projections; read-only display component.
+- `apps/console/components/trust-center/CommandCenterIntegration.tsx` — static cross-panel navigation links; read-only display component.
+- `apps/console/app/trust-center/page.tsx` — new trust-center route page; server component.
+- `tests/console/trust-center.test.js` — 1000+ static-analysis tests for all trust-center components.
+- `docs/architecture/TRUST_CENTER_18_6_5.md` — MCIM architecture documentation for the trust center.
+
+**SOC review outcome:** PENDING. Frontend-only PR. No auth, session, middleware, OPA, security, schema, migration, or backend files changed. No new API routes. No new external dependencies. No secrets stored or accessed. All 19 components are `'use client'` React components — no server-side data access. All panels are MCIM-compliant with full authority declarations. `check_trust_center.py` is a static Python CI gate with no runtime effects, no network access, no secrets. Exits 0/1 based on file structure analysis only. `TrustCertificates` Blob download is a pure browser-side operation using pre-provided data — no new API calls, no credentials. `OperationalMemory` explicitly does NOT use localStorage or sessionStorage — all data is prop-driven from server component.
+
+---
+
 ## 2026-07-03 — PR 18.6.4: Enterprise Operations Workspace
 
 **Classification:** Frontend-only feature + new CI gate. MCIM: MCIM-18.6-OPS-WORKSPACE. 13 new React client components, 1 new workspace page, 1 new CI Python script, static-analysis tests. No auth logic changes. No DB schema changes. No backend changes. No API route additions. No secrets stored.

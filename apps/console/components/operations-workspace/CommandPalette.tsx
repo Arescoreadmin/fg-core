@@ -17,41 +17,41 @@ interface CommandEntry {
   path: string;
 }
 
-// Static search map — covers all scopes without external navigation package
+// Static search map — only real app-router routes
 const STATIC_ENTRIES: CommandEntry[] = [
   // Authorities
-  { id: 'auth-assessment', label: 'Assessment Authority', scope: 'Authorities', path: '/dashboard/assessment' },
-  { id: 'auth-evidence', label: 'Evidence Authority', scope: 'Authorities', path: '/dashboard/evidence' },
-  { id: 'auth-verification', label: 'Verification Authority', scope: 'Authorities', path: '/dashboard/verification' },
-  { id: 'auth-governance', label: 'Governance Authority', scope: 'Authorities', path: '/dashboard/governance' },
+  { id: 'auth-assessment', label: 'Assessment Authority', scope: 'Authorities', path: '/assessment' },
+  { id: 'auth-evidence', label: 'Evidence Authority', scope: 'Authorities', path: '/dashboard/provenance' },
+  { id: 'auth-verification', label: 'Verification Authority', scope: 'Authorities', path: '/dashboard/readiness' },
+  { id: 'auth-governance', label: 'Governance Authority', scope: 'Authorities', path: '/governance/topology' },
   { id: 'auth-decision', label: 'Decision Authority', scope: 'Authorities', path: '/dashboard/decisions' },
-  { id: 'auth-replay', label: 'Replay Authority', scope: 'Authorities', path: '/dashboard/replay' },
+  { id: 'auth-replay', label: 'Replay Authority', scope: 'Authorities', path: '/dashboard/forensics' },
   { id: 'auth-control-tower', label: 'Control Tower Authority', scope: 'Authorities', path: '/dashboard/control-tower' },
   // Capabilities
   { id: 'cap-forensics', label: 'Forensics Capability', scope: 'Capabilities', path: '/dashboard/forensics' },
-  { id: 'cap-audit', label: 'Audit Trail Capability', scope: 'Capabilities', path: '/dashboard/audit' },
+  { id: 'cap-alignment', label: 'Alignment Capability', scope: 'Capabilities', path: '/dashboard/alignment' },
   { id: 'cap-keys', label: 'Key Management Capability', scope: 'Capabilities', path: '/keys' },
   // Assessments
-  { id: 'asm-list', label: 'All Assessments', scope: 'Assessments', path: '/dashboard/assessment' },
+  { id: 'asm-list', label: 'All Assessments', scope: 'Assessments', path: '/assessment' },
   { id: 'asm-new', label: 'New Assessment', scope: 'Assessments', path: '/onboarding' },
   // Evidence
-  { id: 'ev-list', label: 'Evidence List', scope: 'Evidence', path: '/dashboard/evidence' },
+  { id: 'ev-list', label: 'Evidence Provenance', scope: 'Evidence', path: '/dashboard/provenance' },
   // Reports
-  { id: 'rep-list', label: 'All Reports', scope: 'Reports', path: '/dashboard/reports' },
+  { id: 'rep-list', label: 'Report Alignment', scope: 'Reports', path: '/dashboard/alignment' },
   // Customers
-  { id: 'cust-list', label: 'Customer Overview', scope: 'Customers', path: '/dashboard/customer' },
+  { id: 'cust-list', label: 'Customer Overview', scope: 'Customers', path: '/products' },
   // Policies
   { id: 'pol-list', label: 'Policy List', scope: 'Policies', path: '/dashboard/policies' },
   // Findings
-  { id: 'find-list', label: 'All Findings', scope: 'Findings', path: '/dashboard/findings' },
+  { id: 'find-list', label: 'All Findings', scope: 'Findings', path: '/dashboard/forensics' },
   // Simulations
-  { id: 'sim-list', label: 'Simulations', scope: 'Simulations', path: '/dashboard/simulation' },
+  { id: 'sim-list', label: 'Simulations', scope: 'Simulations', path: '/dashboard/evaluation' },
   // Replay
-  { id: 'replay-list', label: 'Replay History', scope: 'Replay', path: '/dashboard/replay' },
+  { id: 'replay-list', label: 'Replay History', scope: 'Replay', path: '/dashboard/forensics' },
   // Remediation
-  { id: 'rem-list', label: 'Remediation Tasks', scope: 'Remediation', path: '/dashboard/remediation' },
+  { id: 'rem-list', label: 'Remediation Tasks', scope: 'Remediation', path: '/dashboard/workforce' },
   // Portal
-  { id: 'portal-pub', label: 'Portal Publications', scope: 'Portal', path: '/dashboard/portal' },
+  { id: 'portal-pub', label: 'Portal Publications', scope: 'Portal', path: '/dashboard/alignment' },
 ];
 
 interface CommandPaletteProps {
