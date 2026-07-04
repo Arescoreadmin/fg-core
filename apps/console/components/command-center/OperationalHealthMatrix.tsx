@@ -79,9 +79,9 @@ function deriveRows(snapshot: ControlTowerSnapshotV1 | null): MatrixRow[] {
     : 'unknown';
 
   const lockersHealth: HealthStatus = snap
-    ? snap.lockers.locked_count >= 0
+    ? snap.lockers.status === 'running'
       ? 'ok'
-      : 'unknown'
+      : 'warning'
     : 'unknown';
 
   const auditHealth: HealthStatus = snap ? 'ok' : 'unknown';
@@ -136,7 +136,7 @@ function deriveRows(snapshot: ControlTowerSnapshotV1 | null): MatrixRow[] {
       label: 'Keys',
       health: keysHealth,
       detail: snap
-        ? `Total: ${snap.keys.total}, Expired: ${snap.keys.expired}`
+        ? `Active: ${snap.key_lifecycle.active_key_count}`
         : 'No data',
       authority: AUTHORITY,
       drillDown: '/dashboard/control-tower',
@@ -145,7 +145,7 @@ function deriveRows(snapshot: ControlTowerSnapshotV1 | null): MatrixRow[] {
       id: 'lockers',
       label: 'Lockers',
       health: lockersHealth,
-      detail: snap ? `Locked: ${snap.lockers.locked_count}` : 'No data',
+      detail: snap ? `Status: ${snap.lockers.status}, Count: ${snap.lockers.count}` : 'No data',
       authority: AUTHORITY,
       drillDown: '/dashboard/control-tower',
     },
