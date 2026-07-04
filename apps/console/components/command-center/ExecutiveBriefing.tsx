@@ -31,6 +31,7 @@ interface BriefingSection {
 
 function isDataSufficient(data: BriefingData | null): boolean {
   if (!data) return false;
+  if (data.engagements !== null && data.engagements !== undefined) return true;
   if (!data.snapshot) return false;
   if (data.decisions.length === 0 && data.assessments.length === 0) return false;
   return true;
@@ -39,10 +40,11 @@ function isDataSufficient(data: BriefingData | null): boolean {
 function buildBriefing(data: BriefingData): BriefingSection[] {
   if (!isDataSufficient(data)) return [];
 
-  const snap = data.snapshot!;
-  const chainOk = snap.chain_integrity.status === 'pass';
-  const agentOk = snap.agents.quarantine_count === 0;
-  const connectorOk = snap.connectors.errors.length === 0;
+  const snap = data.snapshot;
+  const engagements = data.engagements;
+  const chainOk = snap ? snap.chain_integrity.status === 'pass' : false;
+  const agentOk = snap ? snap.agents.quarantine_count === 0 : false;
+  const connectorOk = snap ? snap.connectors.errors.length === 0 : false;
   const overallOk = chainOk && agentOk && connectorOk;
 
   const openDecisions = data.decisions.filter(
@@ -61,82 +63,137 @@ function buildBriefing(data: BriefingData): BriefingSection[] {
     (a) => a.assessment_status === 'finalized',
   ).length;
 
+  // Derive connector error count and quarantine count for operational impact
+  const connectorErrors = snap ? snap.connectors.errors.length : 0;
+  const quarantineCount = snap ? snap.agents.quarantine_count : 0;
+
+  // Identify missing/null data sources for missing evidence section
+  const missingSources: string[] = [];
+  if (!snap) missingSources.push('Control Tower Snapshot');
+  if (data.decisions.length === 0) missingSources.push('Decisions');
+  if (data.assessments.length === 0) missingSources.push('Assessments');
+  if (!engagements) missingSources.push('Field Engagements');
+
   const sections: BriefingSection[] = [
+    ...(snap
+      ? [
+          {
+            id: 'briefing-posture',
+            label: 'Current Posture',
+            content: overallOk
+              ? `Platform operating normally. Chain integrity: ${snap.chain_integrity.status}. ${snap.agents.total} agent(s) active, ${snap.connectors.enabled} connector(s) enabled.`
+              : `Attention required. Chain: ${snap.chain_integrity.status}, quarantined agents: ${snap.agents.quarantine_count}, connector errors: ${snap.connectors.errors.length}.`,
+            confidence: 0.95,
+          },
+          {
+            id: 'briefing-improved',
+            label: 'Improved',
+            content:
+              finalizedCount > 0
+                ? `${finalizedCount} assessment(s) finalized. Evidence chain active.`
+                : 'No finalized assessments in current window.',
+            confidence: 0.8,
+          },
+          {
+            id: 'briefing-regressed',
+            label: 'Regressed',
+            content:
+              !chainOk || !agentOk
+                ? `Chain integrity: ${snap.chain_integrity.status}. Quarantined: ${snap.agents.quarantine_count}.`
+                : 'No regressions detected in monitored indicators.',
+            confidence: 0.85,
+          },
+          {
+            id: 'briefing-decisions',
+            label: 'Critical Decisions',
+            content:
+              criticalDecisions.length > 0
+                ? `${criticalDecisions.length} critical decision(s) require review: ${criticalDecisions
+                    .slice(0, 2)
+                    .map((d) => d.explain_summary ?? d.event_type ?? d.id.slice(0, 8))
+                    .join('; ')}.`
+                : 'No critical decisions pending.',
+            confidence: 0.9,
+          },
+          {
+            id: 'briefing-risks',
+            label: 'Top Risks',
+            content:
+              openDecisions.length > 0
+                ? `${openDecisions.length} high/critical decision(s) open. ${snap.connectors.errors.length > 0 ? `${snap.connectors.errors.length} connector error(s).` : ''}`
+                : 'No elevated risks identified from available data.',
+            confidence: 0.85,
+          },
+          {
+            id: 'briefing-opportunities',
+            label: 'Top Opportunities',
+            content:
+              activeAssessments.length > 0
+                ? `${activeAssessments.length} active assessment(s) in progress — completing these will improve posture.`
+                : 'Initiate new assessments to expand governance coverage.',
+            confidence: 0.7,
+          },
+          {
+            id: 'briefing-deadlines',
+            label: 'Upcoming Deadlines',
+            content: 'No deadlines sourced from available API data — check field assessments.',
+            confidence: 0.5,
+          },
+          {
+            id: 'briefing-actions',
+            label: 'Recommended Actions',
+            content: [
+              !chainOk && 'Review chain integrity failures in Forensics.',
+              !agentOk && `Unquarantine or review ${snap.agents.quarantine_count} agent(s).`,
+              !connectorOk && `Resolve ${snap.connectors.errors.length} connector error(s).`,
+              criticalDecisions.length > 0 && `Act on ${criticalDecisions.length} critical decision(s).`,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .trim() || 'Platform indicators are within normal operating range.',
+            confidence: 0.9,
+          },
+        ]
+      : []),
     {
-      id: 'briefing-posture',
-      label: 'Current Posture',
-      content: overallOk
-        ? `Platform operating normally. Chain integrity: ${snap.chain_integrity.status}. ${snap.agents.total} agent(s) active, ${snap.connectors.enabled} connector(s) enabled.`
-        : `Attention required. Chain: ${snap.chain_integrity.status}, quarantined agents: ${snap.agents.quarantine_count}, connector errors: ${snap.connectors.errors.length}.`,
-      confidence: 0.95,
+      id: 'briefing-customer-impact',
+      label: 'Customer Impact',
+      content:
+        engagements !== null && engagements !== undefined && engagements.total > 0
+          ? `${engagements.total} active engagement(s) tracked.`
+          : 'No engagement data available.',
+      confidence: 0.6,
     },
     {
-      id: 'briefing-improved',
-      label: 'Improved',
+      id: 'briefing-operational-impact',
+      label: 'Operational Impact',
       content:
-        finalizedCount > 0
-          ? `${finalizedCount} assessment(s) finalized. Evidence chain active.`
-          : 'No finalized assessments in current window.',
-      confidence: 0.8,
+        connectorErrors > 0 || quarantineCount > 0
+          ? `${connectorErrors} connector error(s) detected. ${quarantineCount} agent(s) in quarantine.`
+          : snap
+            ? 'No operational impact detected from connector or agent data.'
+            : 'Operational impact data not available — snapshot unreachable.',
+      confidence: 0.75,
     },
     {
-      id: 'briefing-regressed',
-      label: 'Regressed',
+      id: 'briefing-compliance-impact',
+      label: 'Compliance Impact',
       content:
-        !chainOk || !agentOk
-          ? `Chain integrity: ${snap.chain_integrity.status}. Quarantined: ${snap.agents.quarantine_count}.`
-          : 'No regressions detected in monitored indicators.',
-      confidence: 0.85,
-    },
-    {
-      id: 'briefing-decisions',
-      label: 'Critical Decisions',
-      content:
-        criticalDecisions.length > 0
-          ? `${criticalDecisions.length} critical decision(s) require review: ${criticalDecisions
-              .slice(0, 2)
-              .map((d) => d.explain_summary ?? d.event_type ?? d.id.slice(0, 8))
-              .join('; ')}.`
-          : 'No critical decisions pending.',
-      confidence: 0.9,
-    },
-    {
-      id: 'briefing-risks',
-      label: 'Top Risks',
-      content:
-        openDecisions.length > 0
-          ? `${openDecisions.length} high/critical decision(s) open. ${snap.connectors.errors.length > 0 ? `${snap.connectors.errors.length} connector error(s).` : ''}`
-          : 'No elevated risks identified from available data.',
-      confidence: 0.85,
-    },
-    {
-      id: 'briefing-opportunities',
-      label: 'Top Opportunities',
-      content:
-        activeAssessments.length > 0
-          ? `${activeAssessments.length} active assessment(s) in progress — completing these will improve posture.`
-          : 'Initiate new assessments to expand governance coverage.',
+        data.assessments.length > 0
+          ? `${data.assessments.length} assessment(s) tracked across ${
+              data.assessments.filter((a) => a.assessment_status === 'finalized').length
+            } finalized framework(s).`
+          : 'No assessment or framework data available for compliance impact.',
       confidence: 0.7,
     },
     {
-      id: 'briefing-deadlines',
-      label: 'Upcoming Deadlines',
-      content: 'No deadlines sourced from available API data — check field assessments.',
+      id: 'briefing-missing-evidence',
+      label: 'Missing Evidence / Low Confidence',
+      content:
+        missingSources.length > 0
+          ? `Data sources returning null or empty: ${missingSources.join(', ')}.`
+          : 'All data sources returned data. Confidence is maximal for available signals.',
       confidence: 0.5,
-    },
-    {
-      id: 'briefing-actions',
-      label: 'Recommended Actions',
-      content: [
-        !chainOk && 'Review chain integrity failures in Forensics.',
-        !agentOk && `Unquarantine or review ${snap.agents.quarantine_count} agent(s).`,
-        !connectorOk && `Resolve ${snap.connectors.errors.length} connector error(s).`,
-        criticalDecisions.length > 0 && `Act on ${criticalDecisions.length} critical decision(s).`,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .trim() || 'Platform indicators are within normal operating range.',
-      confidence: 0.9,
     },
   ];
 

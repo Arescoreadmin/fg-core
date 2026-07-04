@@ -93,6 +93,22 @@ function ProvenanceRow({ decision }: { decision: DecisionOut }) {
               <span className="font-semibold text-foreground">Authority: </span>
               <span>{AUTHORITY}</span>
             </div>
+            <div data-testid="provenance-alternatives">
+              <span className="font-semibold text-foreground">Alternatives: </span>
+              <span>
+                {(decision as Record<string, unknown>).alternatives != null
+                  ? String((decision as Record<string, unknown>).alternatives)
+                  : 'No alternatives documented'}
+              </span>
+            </div>
+            <div data-testid="provenance-impact">
+              <span className="font-semibold text-foreground">Impact: </span>
+              <span>
+                {(decision as Record<string, unknown>).impact != null
+                  ? String((decision as Record<string, unknown>).impact)
+                  : 'Expected impact: unknown'}
+              </span>
+            </div>
           </div>
         </div>
       )}

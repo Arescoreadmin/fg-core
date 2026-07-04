@@ -36,6 +36,11 @@ import CustomerImpact from '@/components/command-center/CustomerImpact';
 import WorkloadDashboard from '@/components/command-center/WorkloadDashboard';
 import ExecutiveBriefing from '@/components/command-center/ExecutiveBriefing';
 import GlobalSearch from '@/components/command-center/GlobalSearch';
+import OperationalHealthMatrix from '@/components/command-center/OperationalHealthMatrix';
+import AuthorityMap from '@/components/command-center/AuthorityMap';
+import CorrelationGraph from '@/components/command-center/CorrelationGraph';
+import ReplaySeam from '@/components/command-center/ReplaySeam';
+import FutureReservedPanels from '@/components/command-center/FutureReservedPanels';
 
 // ─── Skeleton loading fallback ────────────────────────────────────────────────
 
@@ -457,6 +462,46 @@ export default async function DashboardOverviewPage() {
               <GlobalSearch />
             </Suspense>
           </div>
+        </section>
+
+        {/* === Operational Health + Authority Map === */}
+        <section aria-labelledby="ops-matrix-heading">
+          <h2 id="ops-matrix-heading" className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted/60">
+            Operational Health &amp; Authority Map
+          </h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Suspense fallback={<WidgetSkeleton />}>
+              <OperationalHealthMatrix snapshot={snapshot} loading={false} lastUpdated={now} />
+            </Suspense>
+            <Suspense fallback={<WidgetSkeleton />}>
+              <AuthorityMap snapshot={snapshot} loading={false} lastUpdated={now} />
+            </Suspense>
+          </div>
+        </section>
+
+        {/* === Correlation Graph + Replay === */}
+        <section aria-labelledby="correlation-heading">
+          <h2 id="correlation-heading" className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted/60">
+            Correlation &amp; Replay
+          </h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Suspense fallback={<WidgetSkeleton />}>
+              <CorrelationGraph nodes={[]} edges={[]} loading={false} lastUpdated={now} />
+            </Suspense>
+            <Suspense fallback={<WidgetSkeleton />}>
+              <ReplaySeam loading={false} lastUpdated={now} />
+            </Suspense>
+          </div>
+        </section>
+
+        {/* === Future Reserved Panels === */}
+        <section aria-labelledby="future-heading">
+          <h2 id="future-heading" className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted/60">
+            Future Capabilities
+          </h2>
+          <Suspense fallback={<WidgetSkeleton />}>
+            <FutureReservedPanels loading={false} lastUpdated={now} />
+          </Suspense>
         </section>
       </div>
     </main>

@@ -110,11 +110,25 @@ ALLOWED_CHANGED_PATHS = {
     # Cross-PR shared artifacts (present on any 18.6.x branch)
     "docs/SOC_EXECUTION_GATES_2026-02-15.md",
     "docs/ai/PR_FIX_LOG.md",
+    # PR 18.6.3 — Operations Workspace
+    "apps/console/components/command-center/InvestigationDrawer.tsx",
+    "apps/console/components/command-center/OperationalHealthMatrix.tsx",
+    "apps/console/components/command-center/AuthorityMap.tsx",
+    "apps/console/components/command-center/CorrelationGraph.tsx",
+    "apps/console/components/command-center/ReplaySeam.tsx",
+    "apps/console/components/command-center/FutureReservedPanels.tsx",
+    "tools/ci/check_command_center_authority.py",
+    "tests/console/command-center-actions.test.js",
+    "docs/architecture/COMMAND_CENTER_AUTHORITY_18_6_3.md",
+    "apps/console/tests/command-center.test.js",
+    "apps/console/tests/dashboard-truth.test.js",
+    "ROADMAP.md",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.
 # They are explicitly read-only evidence inputs, not part of the deliverable set.
-IGNORED_STATUS_PREFIXES = ("audits/",)
+# .venv is gitignored but git status --porcelain may still show it as untracked.
+IGNORED_STATUS_PREFIXES = ("audits/", ".venv")
 
 
 def repo_root() -> Path:
