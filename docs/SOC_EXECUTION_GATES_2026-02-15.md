@@ -5532,3 +5532,20 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - `artifacts/platform_inventory.json`, `artifacts/platform_inventory.det.json` — auto-generated artifacts. Regenerated via `scripts/generate_platform_inventory.py` after the plane registry source was updated.
 
 **SOC review outcome:** approved. Only the Plane Registry source registration and its downstream auto-generated snapshots changed. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations. No new routes added (all 11 executive routes already existed; this fix only corrects their governance classification). The `governance:read` scope requirement and `require_bound_tenant()` tenant isolation on all 11 routes are unchanged. The `control` plane's `allowed_dependency_categories`, `required_route_invariants`, and `auth_class` already cover `governance:` scoped, tenant-bound, read-only routes — no plane security properties were weakened. No manual edits to generated artifacts.
+
+## 2026-07-05 — PR 18.6.8: Enterprise Workspace Integration & Demo Readiness
+
+**Classification:** Frontend integration layer only. No backend changes. No API schema changes. No DB schema migrations. No auth changes. No business logic rewrites.
+
+**Critical-path files changed:**
+- `tools/ci/check_workspace_integration.py` — new CI validation script. Validates presence and content of workspace-integration components, lib files, architecture doc, and navigation registry. No auth logic, no data mutations, no security gates modified. Read-only static analysis tool.
+
+**Non-critical-path files changed:**
+- `apps/console/components/workspace-integration/` — 8 new React components (CrossWorkspaceNav, WorkspaceContextBridge, WorkspaceMetadata, WorkspaceEmptyState, WorkspaceLoadingState, DemoModeIndicator, WorkspaceSearch, index.ts). All frontend-only, no backend calls, no tenant_id exposure, no sessionStorage/localStorage.
+- `apps/console/lib/workspaceContext.ts`, `demoFixtures.ts`, `workspaceNav.ts` — 3 new TypeScript lib modules. Pure utility functions. No API calls, no secrets, no auth logic. Demo fixtures have DEMO_MODE_ACTIVE=false by default.
+- `apps/console/tests/workspace-integration.test.js` — 819 static-analysis tests. Read-only test suite.
+- `packages/navigation/navigation-registry.json` — version bump 18.6.1→18.6.8. Added 4 Enterprise workspace entries (workspace-integration, executive-intelligence, operations-workspace, trust-center-workspace). No auth, route, or permission changes.
+- `docs/architecture/WORKSPACE_INTEGRATION_18_6_8.md` — architecture documentation.
+- `ROADMAP.md` — tracking entry added.
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations. No new API endpoints. No mutation surfaces. All workspace-integration components are presentational with no direct data authority. Context preservation uses URL search parameters only — no browser-authoritative state. Demo fixtures are static constants with DEMO_MODE_ACTIVE=false (off by default). The CI script is a read-only validator with no side effects.

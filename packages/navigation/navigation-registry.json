@@ -1,6 +1,6 @@
 {
-  "version": "18.6.1",
-  "generated_at": "2026-07-03",
+  "version": "18.6.8",
+  "generated_at": "2026-07-05",
   "platform": "both",
   "groups": [
     {
@@ -928,6 +928,74 @@
       "maturity": "strong"
     },
     {
+      "id": "workspace-integration",
+      "title": "Workspace Integration",
+      "route": "/workspace-integration",
+      "group": "Enterprise",
+      "tier": "contextual",
+      "classification": "contextual",
+      "visibility": "hidden",
+      "platform": "console",
+      "roles": ["Operator", "Administrator", "CISO", "Executive", "Auditor"],
+      "aliases": ["integration", "cross-workspace", "workspace bridge"],
+      "keywords": ["workspace", "integration", "context", "navigation", "cross"],
+      "mcim_id": "MCIM-18.6-WS-INTEGRATION",
+      "capability": "Workspace Integration Layer",
+      "lifecycle": "growing",
+      "maturity": "functional"
+    },
+    {
+      "id": "executive-intelligence",
+      "title": "Executive Intelligence Center",
+      "route": "/dashboard/executive",
+      "group": "Enterprise",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": ["Executive", "CISO", "Auditor", "Administrator"],
+      "aliases": ["executive", "executive dashboard", "intelligence center", "executive command"],
+      "keywords": ["executive", "intelligence", "posture", "risk", "compliance", "strategic"],
+      "mcim_id": "MCIM-18.6.7-EXEC-INTEL",
+      "capability": "Executive Intelligence Center",
+      "lifecycle": "growing",
+      "maturity": "functional"
+    },
+    {
+      "id": "operations-workspace",
+      "title": "Operations Workspace",
+      "route": "/workspace",
+      "group": "Enterprise",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": ["Operator", "Administrator", "CISO"],
+      "aliases": ["operations", "ops workspace", "workspace"],
+      "keywords": ["operations", "workspace", "case", "work queue", "investigation"],
+      "mcim_id": "MCIM-18.6-OPS-WS",
+      "capability": "Enterprise Operations Workspace",
+      "lifecycle": "growing",
+      "maturity": "functional"
+    },
+    {
+      "id": "trust-center-workspace",
+      "title": "Trust Center",
+      "route": "/trust-center",
+      "group": "Enterprise",
+      "tier": "primary",
+      "classification": "primary",
+      "visibility": "visible",
+      "platform": "console",
+      "roles": ["Auditor", "CISO", "Executive"],
+      "aliases": ["trust", "trust workspace", "trust hub"],
+      "keywords": ["trust", "verification", "certificate", "scorecard", "benchmark"],
+      "mcim_id": "MCIM-18.6-TRUST-CTR",
+      "capability": "Enterprise Trust Center",
+      "lifecycle": "growing",
+      "maturity": "functional"
+    },
+    {
       "id": "onboarding",
       "title": "Onboarding",
       "route": "/onboarding",
@@ -1526,7 +1594,7 @@
     }
   ],
   "stats": {
-    "console_total": 31,
+    "console_total": 35,
     "portal_total": 12,
     "groups_total": 8,
     "primary_count": 8,
