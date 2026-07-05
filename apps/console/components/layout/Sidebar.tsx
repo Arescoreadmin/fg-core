@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
+  Brain,
   Building2,
   ClipboardCheck,
   ClipboardList,
@@ -30,6 +31,7 @@ import { FrostGateShield } from '@/components/governance/FrostGateShield';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const ICON_MAP: Record<string, LucideIcon> = {
+  'executive-intelligence': Brain,
   'command-center': LayoutDashboard,
   'control-tower': Radio,
   'readiness': Activity,

@@ -74,6 +74,8 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   // Identity Governance Control Plane — identity:read/write gated; console admin panel (PR4)
   { prefix: 'admin/identity/tenants', methods: new Set(['GET', 'POST', 'PUT', 'HEAD']) },
   { prefix: 'admin/identity/invitations', methods: new Set(['GET', 'POST', 'HEAD']) },
+  // Executive Intelligence — governance:read gated; read-only surface (PR 18.6.7)
+  { prefix: 'api/executive', methods: new Set(['GET', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {

@@ -91,6 +91,7 @@ from api.remediation import router as remediation_router
 from api.trust_arc import router as trust_arc_router
 from api.trust_monitoring import router as trust_monitoring_router
 from api.executive_trust import router as executive_trust_router
+from api.executive_intelligence import router as executive_intelligence_router
 from api.quarterly_briefs import router as quarterly_briefs_router
 from api.clm import router as clm_router
 from api.control_tower import router as control_tower_router
@@ -734,6 +735,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(trust_arc_router)
     app.include_router(trust_monitoring_router)
     app.include_router(executive_trust_router)
+    app.include_router(executive_intelligence_router)
     app.include_router(quarterly_briefs_router)
     app.include_router(clm_router)
     app.include_router(control_tower_router)
@@ -1190,6 +1192,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(trust_arc_router)
     app.include_router(trust_monitoring_router)
     app.include_router(executive_trust_router)
+    app.include_router(executive_intelligence_router)
     app.include_router(quarterly_briefs_router)
     app.include_router(clm_router)
     app.include_router(control_tower_router)

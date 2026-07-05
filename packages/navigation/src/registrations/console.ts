@@ -7,6 +7,37 @@ const items: NavigationItem[] = [
   // ─── Operations ──────────────────────────────────────────────────────────────
 
   {
+    id: 'executive-intelligence',
+    title: 'Executive Intelligence',
+    route: '/dashboard/executive',
+    group: 'Operations',
+    tier: 'primary',
+    classification: 'primary',
+    visibility: 'visible',
+    platform: 'console',
+    roles: ['Executive', 'CISO', 'Auditor', 'Administrator'],
+    aliases: [
+      'executive center', 'strategic intelligence', 'board view', 'exec dashboard',
+      'ceo dashboard', 'ciso command', 'governance command', 'executive workspace',
+    ],
+    keywords: [
+      'executive', 'board', 'strategic', 'governance health', 'compliance score',
+      'risk heatmap', 'forecast', 'recommendations', 'business impact', 'audit readiness',
+    ],
+    metadata: {
+      mcimId: 'MCIM-18.6.7-EXEC-INTEL',
+      capability: 'Executive Intelligence Center',
+      family: 'intelligence',
+      authority: 'FrostGate Platform',
+      sourceOfTruth: 'apps/console/app/dashboard/executive/page.tsx',
+      maturity: 'strong',
+      lifecycle: 'core',
+      businessValue:
+        'Primary executive workspace for CEOs, CIOs, CISOs, Boards, and regulators — deterministic governance intelligence derived from accumulated evidence, with board-ready reporting and evidence-backed forecasts.',
+    },
+  },
+
+  {
     id: 'command-center',
     title: 'Command Center',
     route: '/dashboard',

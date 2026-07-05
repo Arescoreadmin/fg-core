@@ -5489,3 +5489,46 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - `docs/architecture/MCIM_18_6_NAVIGATION_DECISION_LOG.md` — PR 18.6.2 decisions appended.
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations. No new network I/O beyond existing `coreApi` and `readinessApi` calls already established in the codebase. No new external dependencies. The new CI gate (`check_executive_dashboard.py`) is read-only Python: it reads local files, performs string inspection, and exits with a status code. No writes, no credentials, no network calls. All 17 widget components are pure presentational components that receive data as props from the server component — they introduce no new data access paths. The `Promise.allSettled` pattern ensures individual data source failures are isolated and never propagate to crash the dashboard. No mutations, no form handlers, no POST routes added.
+
+
+## 2026-07-05 — PR 18.6.7: Executive Intelligence Center
+
+**Classification:** New read-only API feature. No auth logic changes. No DB schema migrations. No middleware changes. No OPA policy changes. No secrets accessed.
+
+**Critical-path files changed:**
+- `tools/ci/route_inventory.json` — auto-generated artifact. Regenerated via `make route-inventory-generate` to include 11 new `GET /api/executive/*` routes. All 11 routes: scoped (`governance:read`), tenant-bound, no public exposure.
+- `tools/ci/contract_routes.json` — auto-generated artifact derived from `contracts/core/openapi.json`. Regenerated after adding `executive_intelligence_router` to `build_contract_app()` so routes appear in the OpenAPI spec.
+- `tools/ci/plane_registry_snapshot.json` — auto-generated artifact. Regenerated alongside route inventory.
+- `tools/ci/route_inventory_summary.json` — auto-generated artifact. Regenerated alongside route inventory.
+- `tools/ci/topology.sha256` — auto-generated content hash of the above artifacts. Updated after regeneration.
+
+**Non-critical-path additions and modifications:**
+- `api/executive_intelligence.py` — new FastAPI router with 11 GET endpoints: `/api/executive/{overview,posture,risk,compliance,business,trends,recommendations,forecast,priorities,summary,workspace}`. All routes: `Depends(require_scopes("governance:read"))`, `require_bound_tenant(request)` (tenant_id never from request body), deterministic DB aggregations only (no AI-generated metrics), `_compute_*` pure functions shared between individual routes and `/workspace` aggregate.
+- `api/main.py` — added `app.include_router(executive_intelligence_router)` to both the runtime app and `build_contract_app()`. The `build_contract_app()` omission was the root cause of the route-inventory-audit CI failure (routes present at runtime, absent from OpenAPI contract).
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` — regenerated via `make contracts-gen` to include 11 new `GET /api/executive/*` paths. No existing paths removed or modified.
+- `apps/console/lib/executiveApi.ts` — new TypeScript API client. BFF proxy (`/api/core`) path; no secrets in browser. `SafeResult<T>` pattern; never throws to callers.
+- `apps/console/app/dashboard/executive/page.tsx` — new 8-tab workspace UI. Workspace-first hydration: single `getExecutiveWorkspace()` call distributes data to all tabs. Individual tab fallback if workspace endpoint fails.
+- `apps/console/app/api/core/[...path]/route.ts` — added `{ prefix: 'api/executive', methods: Set(['GET', 'HEAD']) }` to `PROXY_RULES`. Tenant context resolved server-side; no tenant_id from browser.
+- `packages/navigation/src/registrations/console.ts` — added Executive Intelligence Center entry with `family: 'intelligence'` (corrected from `'strategic-governance'` which is not a valid `NavigationFamily` union member).
+- `tests/test_executive_intelligence.py` — 46 deterministic tests for all 11 routes and `_compute_*` functions.
+- `docs/ai/PR_FIX_LOG.md` — PR 18.6.7 entry added (required by `pr-fix-log-guard` for `api/` path changes).
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations. All 11 new routes require `governance:read` scope enforced by `Depends(require_scopes(...))` at router level; tenant isolation enforced by `require_bound_tenant(request)`. No tenant_id ever accepted from the request body or URL — always resolved from auth context server-side. All metrics are deterministic DB aggregations with explainability envelopes; no AI-generated or fabricated values. The `/workspace` aggregate uses a single DB session with a shared timestamp and snapshot version. The `tools/ci/` files changed are all auto-generated artifacts produced by `make contracts-gen` and `make route-inventory-generate` — no manual edits to CI gate logic. No new external dependencies. No mutation endpoints (all GET).
+
+## 2026-07-05 — PR 18.6.7 P1: Executive Intelligence Plane Registry Authority Fix
+
+**Classification:** Authority synchronization only. No business logic changes. No API schema changes. No DB schema migrations. No auth changes. No frontend changes.
+
+**Root cause:** `services/plane_registry/registry.py` was not updated when PR 18.6.7 added the `executive_intelligence` router. The 11 `GET /api/executive/*` routes were registered in FastAPI and in the OpenAPI contract but the Plane Registry prefix `/api/executive` was missing from the `control` plane's `route_prefixes`, causing `check_plane_registry.py --use-runtime-app` to report all 11 routes as `unexpected-route gap`.
+
+**Critical-path files changed:**
+- `tools/ci/plane_registry_snapshot.json` — auto-generated artifact. Regenerated via `make route-inventory-generate` after adding `/api/executive` to the `control` plane. Snapshot now reflects the correct `plane_id: control` for all 11 executive routes.
+- `tools/ci/route_inventory.json` — auto-generated artifact. Regenerated alongside plane registry snapshot; executive routes now show `plane: control` instead of `plane: unmapped`.
+- `tools/ci/route_inventory_summary.json` — auto-generated artifact. Regenerated alongside inventory.
+- `tools/ci/topology.sha256` — auto-generated content hash. Updated after regeneration.
+
+**Non-critical-path files changed:**
+- `services/plane_registry/registry.py` — added `"/api/executive"` to the `control` plane's `route_prefixes` tuple. This is the authoritative source that drives both the runtime `check_plane_registry` gate and all downstream snapshot artifacts. No other plane definitions modified. No exceptions added.
+- `artifacts/platform_inventory.json`, `artifacts/platform_inventory.det.json` — auto-generated artifacts. Regenerated via `scripts/generate_platform_inventory.py` after the plane registry source was updated.
+
+**SOC review outcome:** approved. Only the Plane Registry source registration and its downstream auto-generated snapshots changed. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations. No new routes added (all 11 executive routes already existed; this fix only corrects their governance classification). The `governance:read` scope requirement and `require_bound_tenant()` tenant isolation on all 11 routes are unchanged. The `control` plane's `allowed_dependency_categories`, `required_route_invariants`, and `auth_class` already cover `governance:` scoped, tenant-bound, read-only routes — no plane security properties were weakened. No manual edits to generated artifacts.
