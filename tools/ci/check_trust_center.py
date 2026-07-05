@@ -61,26 +61,26 @@ TRUST_CENTER_PAGE = (
 EXEMPT_FILES = {"TrustCenterShell.tsx"}
 
 REQUIRED_PAGE_ANCHORS = [
-    'trust-center-page',
-    'trust-center-heading',
-    'tc-scorecard-heading',
-    'tc-assurance-heading',
-    'tc-evidence-heading',
-    'tc-provenance-heading',
-    'tc-replay-heading',
-    'tc-change-intel-heading',
-    'tc-certs-heading',
-    'tc-audit-ready-heading',
-    'tc-customer-trust-heading',
-    'tc-timeline-heading',
-    'tc-memory-heading',
-    'tc-effectiveness-heading',
-    'tc-bottleneck-heading',
-    'tc-benchmarks-heading',
-    'tc-case-rel-heading',
-    'tc-intel-heading',
-    'tc-sla-heading',
-    'tc-cmd-center-heading',
+    "trust-center-page",
+    "trust-center-heading",
+    "tc-scorecard-heading",
+    "tc-assurance-heading",
+    "tc-evidence-heading",
+    "tc-provenance-heading",
+    "tc-replay-heading",
+    "tc-change-intel-heading",
+    "tc-certs-heading",
+    "tc-audit-ready-heading",
+    "tc-customer-trust-heading",
+    "tc-timeline-heading",
+    "tc-memory-heading",
+    "tc-effectiveness-heading",
+    "tc-bottleneck-heading",
+    "tc-benchmarks-heading",
+    "tc-case-rel-heading",
+    "tc-intel-heading",
+    "tc-sla-heading",
+    "tc-cmd-center-heading",
 ]
 
 PROHIBITED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
@@ -145,7 +145,9 @@ _INFERRED_RE = re.compile(r"\binferred\b", re.IGNORECASE)
 _DETERMINISTIC_RE = re.compile(r"deterministic", re.IGNORECASE)
 
 # OperationalMemory: no browser storage pattern
-_NO_BROWSER_STORAGE_RE = re.compile(r"no browser storage|server-authoritative", re.IGNORECASE)
+_NO_BROWSER_STORAGE_RE = re.compile(
+    r"no browser storage|server-authoritative", re.IGNORECASE
+)
 
 # CustomerTrustView: must contain "operator preview"
 _OPERATOR_PREVIEW_RE = re.compile(r"operator preview", re.IGNORECASE)
@@ -159,7 +161,7 @@ def _has_fake_percentage(text: str) -> bool:
     """
     # Remove className and style attribute strings so we don't flag them
     cleaned = re.sub(r'className\s*=\s*[{"\'][^}\'\"]*[}\'"]', "", text)
-    cleaned = re.sub(r'style\s*=\s*\{[^}]*\}', "", cleaned)
+    cleaned = re.sub(r"style\s*=\s*\{[^}]*\}", "", cleaned)
     return bool(_FAKE_PERCENT_RE.search(cleaned))
 
 
@@ -174,7 +176,10 @@ def check_file(path: Path) -> list[str]:
     name = path.name
 
     # MCIM_ID declaration matching MCIM-18.6-TRUST-
-    if not re.search(r"MCIM_ID\s*=.*MCIM-18\.6-TRUST-", text) and "MCIM-18.6-TRUST-" not in text:
+    if (
+        not re.search(r"MCIM_ID\s*=.*MCIM-18\.6-TRUST-", text)
+        and "MCIM-18.6-TRUST-" not in text
+    ):
         errors.append(f"{name}: missing MCIM_ID declaration matching MCIM-18.6-TRUST-")
 
     # AUTHORITY declaration
@@ -196,7 +201,7 @@ def check_file(path: Path) -> list[str]:
     # aria-expanded must not co-occur with role="complementary"
     if _ARIA_EXPANDED_RE.search(text) and _ROLE_COMPLEMENTARY_RE.search(text):
         errors.append(
-            f"{name}: aria-expanded found alongside role=\"complementary\" — "
+            f'{name}: aria-expanded found alongside role="complementary" — '
             "trust-center panels must not use aria-expanded on complementary regions"
         )
 
