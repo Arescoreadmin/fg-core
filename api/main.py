@@ -1192,6 +1192,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(trust_arc_router)
     app.include_router(trust_monitoring_router)
     app.include_router(executive_trust_router)
+    app.include_router(executive_intelligence_router)
     app.include_router(quarterly_briefs_router)
     app.include_router(clm_router)
     app.include_router(control_tower_router)
