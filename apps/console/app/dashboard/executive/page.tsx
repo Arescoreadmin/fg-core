@@ -696,9 +696,10 @@ function ForecastTab({ initialData }: { initialData?: ExecutiveForecast }) {
   const [loading, setLoading] = useState(!initialData);
   const [data, setData] = useState<ExecutiveForecast | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
+  const hasInitialRef = useRef(Boolean(initialData));
 
   useEffect(() => {
-    if (initialData) return;
+    if (hasInitialRef.current) return;
     let cancelled = false;
     getExecutiveForecast().then((r) => {
       if (cancelled) return;
@@ -786,9 +787,10 @@ function BoardSummaryTab({ initialData }: { initialData?: ExecutiveSummary }) {
   const [loading, setLoading] = useState(!initialData);
   const [data, setData] = useState<ExecutiveSummary | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
+  const hasInitialRef = useRef(Boolean(initialData));
 
   useEffect(() => {
-    if (initialData) return;
+    if (hasInitialRef.current) return;
     let cancelled = false;
     getExecutiveSummary().then((r) => {
       if (cancelled) return;
