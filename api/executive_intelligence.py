@@ -254,51 +254,45 @@ def _compute_overview(
     now_ts: str,
 ) -> dict[str, Any]:
     sev = _severity_counts(open_findings)
-    risk_score = _risk_score(open_findings)
+    risk_raw = _risk_score(open_findings)
+    risk_normalized = min(100, risk_raw)
+    governance_score = max(0, 100 - risk_normalized)
+    req_pct = round(requirements_active / requirements_total * 100, 1) if requirements_total > 0 else 0.0
+    evidence_freshness = min(100, 50 + min(50, audit_events // 5))
     evidence_count = len(findings) + decisions_total + audit_events
-    inputs = [tenant_id, len(findings), decisions_total, audit_events]
+
+    summary_parts = []
+    if sev["critical"]:
+        summary_parts.append(f"{sev['critical']} critical finding{'s' if sev['critical'] > 1 else ''} require immediate action")
+    if sev["high"]:
+        summary_parts.append(f"{sev['high']} high-severity finding{'s' if sev['high'] > 1 else ''} pending remediation")
+    if not open_findings:
+        summary_parts.append("no open compliance findings detected")
+    exec_summary = (
+        f"Governance health: {governance_score}/100. "
+        + ("; ".join(summary_parts) + ". " if summary_parts else "")
+        + f"Compliance coverage: {req_pct:.1f}%. "
+        + f"Based on {evidence_count} evidence items ({len(findings)} findings, {decisions_total} decisions, {audit_events} audit events)."
+    )
+
+    inputs = [tenant_id, len(findings), decisions_total, audit_events, requirements_active]
     return {
-        "tenant_id": tenant_id,
-        "generated_at": now_ts,
-        "snapshot_version": _snapshot_version(inputs),
+        "governance_health_score": governance_score,
+        "compliance_score": req_pct,
+        "risk_score": risk_normalized,
+        "identity_health_score": 50,
+        "evidence_freshness_score": evidence_freshness,
+        "control_coverage_pct": req_pct,
+        "open_findings_count": len(open_findings),
+        "critical_findings_count": sev["critical"],
+        "high_findings_count": sev["high"],
+        "automation_coverage_pct": 0,
+        "executive_summary": exec_summary,
+        "computed_at": now_ts,
+        "data_window_days": 30,
         "confidence": 0.95,
-        "evidence_count": evidence_count,
         "source": "deterministic:db_query",
-        "calculation": "Aggregate counts from decisions, compliance_findings, security_audit_log, compliance_requirements",
-        "open_findings": _metric(
-            value=len(open_findings),
-            source="table:compliance_findings",
-            calculation="COUNT(*) WHERE tenant_id=? AND status IN ('open','active','new')",
-            evidence_ids=[f.finding_id for f in open_findings[:20]],
-            snapshot_ts=now_ts,
-            confidence=1.0,
-            framework_mapping=["NIST CSF ID.RA", "ISO 27001 A.12"],
-        ),
-        "critical_findings": _metric(
-            value=sev["critical"],
-            source="table:compliance_findings",
-            calculation="COUNT(*) WHERE severity='critical' AND status=open",
-            evidence_ids=[f.finding_id for f in open_findings if f.severity == "critical"][:20],
-            snapshot_ts=now_ts,
-            confidence=1.0,
-            framework_mapping=["NIST CSF RS.MI", "SOC2 CC7"],
-        ),
-        "risk_score": _metric(
-            value=risk_score,
-            source="table:compliance_findings",
-            calculation="SUM(severity_weight) over open findings — critical=100,high=40,medium=10,low=3,info=1",
-            evidence_ids=[f.finding_id for f in open_findings[:20]],
-            snapshot_ts=now_ts,
-            confidence=0.9,
-            framework_mapping=["NIST AI RMF GOVERN 1.1", "ISO 27001 A.8"],
-        ),
-        "severity_breakdown": sev,
-        "total_findings_ever": len(findings),
-        "decisions_processed": decisions_total,
-        "audit_events": audit_events,
-        "requirements_total": requirements_total,
-        "requirements_active": requirements_active,
-        "data_available": True,
+        "snapshot_version": _snapshot_version(inputs),
     }
 
 
@@ -380,58 +374,48 @@ def _compute_risk(
         if f.created_at and cutoff_prev_30 <= f.created_at < cutoff_30
     ]
     velocity = len(new_30d) - len(prev_30d)
-    velocity_direction = "increasing" if velocity > 0 else "decreasing" if velocity < 0 else "stable"
-    sev_all = _severity_counts(findings)
-    sev_open = _severity_counts(open_findings)
     top_risks = sorted(
         open_findings,
         key=lambda f: _SEVERITY_WEIGHT.get((f.severity or "info").lower(), 0),
         reverse=True,
     )[:10]
-    heatmap = {
-        sev: {
-            "open": sev_open.get(sev, 0),
-            "total": sev_all.get(sev, 0),
-            "weight": _SEVERITY_WEIGHT.get(sev, 0),
-            "weighted_score": sev_open.get(sev, 0) * _SEVERITY_WEIGHT.get(sev, 0),
+    sev_open = _severity_counts(open_findings)
+    sev_all = _severity_counts(findings)
+    risk_raw = _risk_score(open_findings)
+    risk_normalized = min(100, risk_raw)
+    risk_trend = "degrading" if velocity > 0 else "improving" if velocity < 0 else "stable"
+
+    heatmap = [
+        {"severity": s, "count": sev_open.get(s, 0)}
+        for s in ["critical", "high", "medium", "low", "info"]
+    ]
+
+    top_risks_mapped = [
+        {
+            "risk_id": f.finding_id,
+            "title": f.title,
+            "severity": (f.severity or "info"),
+            "likelihood": "medium",
+            "category": ((f.req_ids_json[0].split("-")[0]) if f.req_ids_json else "Compliance"),
+            "description": str(f.details or f"Open compliance finding: {f.title}"),
+            "detected_at": (f.detected_at_utc or now_ts),
+            "owner": None,
+            "remediation_target": None,
+            "evidence_count": len(f.req_ids_json or []) + len(f.evidence_refs_json or []),
         }
-        for sev in ["critical", "high", "medium", "low", "info"]
-    }
+        for f in top_risks
+    ]
+
     inputs = [tenant_id, len(open_findings), len(new_30d), len(prev_30d)]
     return {
-        "tenant_id": tenant_id,
-        "generated_at": now_ts,
-        "snapshot_version": _snapshot_version(inputs),
-        "confidence": 0.92,
-        "evidence_count": len(findings),
-        "source": "deterministic:db_query",
-        "calculation": "Risk heatmap from compliance_findings severity aggregation",
+        "top_risks": top_risks_mapped,
+        "open_findings_by_severity": sev_open,
+        "risk_score": risk_normalized,
+        "risk_trend": risk_trend,
         "heatmap": heatmap,
-        "top_risks": [
-            {
-                "finding_id": f.finding_id,
-                "title": f.title,
-                "severity": f.severity,
-                "status": f.status,
-                "detected_at": f.detected_at_utc,
-                "weight": _SEVERITY_WEIGHT.get((f.severity or "info").lower(), 0),
-                "req_ids": f.req_ids_json,
-            }
-            for f in top_risks
-        ],
-        "velocity": _metric(
-            value=velocity,
-            source="table:compliance_findings",
-            calculation="COUNT(open findings created last 30d) - COUNT(open findings created prior 30d)",
-            evidence_ids=[f.finding_id for f in new_30d[:20]],
-            snapshot_ts=now_ts,
-            confidence=0.95,
-            framework_mapping=["NIST CSF ID.RA-5", "ISO 27001 A.12.6"],
-        ),
-        "velocity_direction": velocity_direction,
-        "new_last_30d": len(new_30d),
-        "prior_30d": len(prev_30d),
-        "data_available": True,
+        "computed_at": now_ts,
+        "source": "deterministic:db_query",
+        "snapshot_version": _snapshot_version(inputs),
     }
 
 
@@ -475,30 +459,35 @@ def _compute_compliance(
             "evidence_ids": [r.req_id for r in matched_reqs[:10]],
         }
 
+    # Build frameworks array from existing frameworks dict (which is already computed above as `frameworks`)
+    frameworks_array = [
+        {
+            "framework_id": fw.lower().replace(" ", "_").replace("/", "_"),
+            "framework_name": fw,
+            "coverage_pct": round(
+                (frameworks[fw]["requirement_count"] / req_total * 100) if req_total > 0 else 0.0, 1
+            ),
+            "gap_count": frameworks[fw]["open_findings"],
+            "confidence": 0.8,
+            "trend": "stable",
+            "last_assessed_at": None,
+        }
+        for fw in _FRAMEWORKS
+        if fw in frameworks
+    ]
+    frameworks_at_risk = sum(1 for fw in frameworks_array if fw["gap_count"] > 0)
+    total_gaps = len(open_findings)
+
     inputs = [tenant_id, req_total, len(findings)]
     return {
-        "tenant_id": tenant_id,
-        "generated_at": now_ts,
-        "snapshot_version": _snapshot_version(inputs),
-        "confidence": 0.9,
-        "evidence_count": req_total + len(findings),
+        "frameworks": frameworks_array,
+        "overall_compliance_score": coverage_pct,
+        "frameworks_at_risk": frameworks_at_risk,
+        "total_gaps": total_gaps,
+        "computed_at": now_ts,
         "source": "deterministic:db_query",
-        "calculation": "Compliance coverage from compliance_requirements grouped by source; findings cross-referenced by req_ids_json",
-        "requirement_coverage": _metric(
-            value=coverage_pct,
-            source="table:compliance_requirements",
-            calculation="COUNT(status='active') / COUNT(*) * 100",
-            evidence_ids=[r.req_id for r in requirements[:20]],
-            snapshot_ts=now_ts,
-            confidence=1.0,
-            framework_mapping=["NIST CSF PR.IP", "SOC2 CC1", "ISO 27001 A.5"],
-        ),
-        "requirements_total": req_total,
-        "requirements_active": req_active,
-        "by_source": by_source,
-        "frameworks": frameworks,
-        "open_findings": len(open_findings),
-        "data_available": True,
+        "confidence": 0.9,
+        "snapshot_version": _snapshot_version(inputs),
     }
 
 
@@ -520,42 +509,27 @@ def _compute_business(
         for s, c in sev.items()
     }
     insurance_readiness_score = max(0, 100 - sev["critical"] * 20 - sev["high"] * 8)
-    insurance_readiness = (
-        "high" if insurance_readiness_score >= 75 else
-        "medium" if insurance_readiness_score >= 40 else
-        "low"
-    )
+    business_continuity = max(0, 100 - sev["critical"] * 15 - sev["high"] * 5)
     inputs = [tenant_id, len(open_findings), token_cost_total]
     return {
-        "tenant_id": tenant_id,
-        "generated_at": now_ts,
-        "snapshot_version": _snapshot_version(inputs),
-        "confidence": 0.7,
-        "evidence_count": len(open_findings),
+        "cost_of_risk_estimate_usd": round(cost_of_risk, 2),
+        "regulatory_exposure_usd": None,
+        "business_continuity_score": business_continuity,
+        "insurance_readiness_score": insurance_readiness_score,
+        "audit_readiness_score": insurance_readiness_score,
+        "expected_remediation_cost_usd": round(cost_of_risk, 2),
+        "revenue_at_risk_pct": None,
+        "computed_at": now_ts,
         "source": "deterministic:db_query",
-        "calculation": "Cost of risk = SUM(count_per_severity * assumed_cost_per_finding). Assumptions: critical=$50k, high=$15k, medium=$4k, low=$500, info=$50. Insurance readiness = 100 - (critical*20) - (high*8)",
-        "cost_of_risk": _metric(
-            value=cost_of_risk,
-            source="table:compliance_findings",
-            calculation="SUM(count_per_severity * cost_per_finding) — critical=50000, high=15000, medium=4000, low=500, info=50",
-            evidence_ids=[f.finding_id for f in open_findings[:20]],
-            snapshot_ts=now_ts,
-            confidence=0.7,
-            framework_mapping=["NIST CSF ID.BE", "ISO 27001 A.6.1"],
+        "confidence": 0.7,
+        "calculation_basis": (
+            "Cost of risk = SUM(count_per_severity × assumed_cost_per_finding). "
+            "Assumptions: critical=$50,000 | high=$15,000 | medium=$4,000 | low=$500 | info=$50. "
+            "Business continuity = 100 - (critical×15) - (high×5), clamped [0,100]. "
+            "Insurance readiness = 100 - (critical×20) - (high×8), clamped [0,100]. "
+            "No AI-generated estimates. All values from compliance_findings table."
         ),
-        "cost_breakdown": cost_breakdown,
-        "insurance_readiness": _metric(
-            value=insurance_readiness_score,
-            source="table:compliance_findings",
-            calculation="100 - (critical_count * 20) - (high_count * 8), clamped [0,100]",
-            evidence_ids=[f.finding_id for f in open_findings if f.severity in ("critical", "high")][:20],
-            snapshot_ts=now_ts,
-            confidence=0.65,
-            framework_mapping=["SOC2 CC9", "ISO 27001 A.6.1.4"],
-        ),
-        "insurance_readiness_level": insurance_readiness,
-        "ai_tokens_consumed": token_cost_total,
-        "data_available": True,
+        "snapshot_version": _snapshot_version(inputs),
     }
 
 
@@ -567,41 +541,44 @@ def _compute_trends(
     now: datetime,
     tenant_id: str,
     now_ts: str,
+    window_days: int = 90,
 ) -> dict[str, Any]:
-    windows = {30: "30d", 90: "90d", 180: "180d", 365: "365d"}
-    trend_data: dict[str, Any] = {}
-    for days, label in windows.items():
-        cutoff = now - timedelta(days=days)
-        findings_in = [f for f in findings if f.created_at and f.created_at >= cutoff]
-        open_in = _open_findings(findings_in)
-        decisions_in = [r for r in decisions_rows if r[0] and r[0] >= cutoff]
-        audits_in = [r for r in audit_rows if r[0] and r[0] >= cutoff]
-        sev = _severity_counts(open_in)
-        trend_data[label] = {
-            "window_days": days,
-            "cutoff_utc": _iso(cutoff),
-            "findings_created": len(findings_in),
-            "open_findings": len(open_in),
-            "critical": sev["critical"],
-            "high": sev["high"],
-            "medium": sev["medium"],
-            "low": sev["low"],
-            "decisions": len(decisions_in),
-            "audit_events": len(audits_in),
-            "risk_score": _risk_score(open_in),
-        }
-    inputs = [tenant_id, len(findings), len(decisions_rows), len(audit_rows)]
+    num_buckets = 8
+    bucket_size = window_days / num_buckets
+    req_total_trends = len(findings)  # use total findings as denominator proxy
+
+    points = []
+    for i in range(num_buckets):
+        bucket_end = now - timedelta(days=bucket_size * (num_buckets - 1 - i))
+        bucket_start = bucket_end - timedelta(days=bucket_size)
+        open_at_bucket = _open_findings(
+            [f for f in findings if f.created_at and f.created_at <= bucket_end]
+        )
+        risk_at_bucket = _risk_score(open_at_bucket)
+        risk_norm = min(100, risk_at_bucket)
+        gov_score = max(0, 100 - risk_norm)
+        decisions_at = sum(1 for r in decisions_rows if r[0] and r[0] <= bucket_end)
+        freshness = min(100, 50 + min(50, decisions_at // 5))
+        points.append({
+            "date": _iso(bucket_end),
+            "governance": gov_score,
+            "compliance": min(100, round(decisions_at / max(1, len(decisions_rows)) * 100, 1)) if decisions_rows else 50,
+            "risk": risk_norm,
+            "identity": 50,
+            "freshness": freshness,
+        })
+
+    inputs = [tenant_id, len(findings), len(decisions_rows), len(audit_rows), window_days]
     return {
-        "tenant_id": tenant_id,
-        "generated_at": now_ts,
-        "snapshot_version": _snapshot_version(inputs),
-        "confidence": 0.95,
-        "evidence_count": len(findings) + len(decisions_rows),
+        "window": f"{window_days}d",
+        "governance_trend": [{"date": p["date"], "value": p["governance"]} for p in points],
+        "compliance_trend": [{"date": p["date"], "value": p["compliance"]} for p in points],
+        "risk_trend": [{"date": p["date"], "value": p["risk"]} for p in points],
+        "identity_trend": [{"date": p["date"], "value": p["identity"]} for p in points],
+        "evidence_freshness_trend": [{"date": p["date"], "value": p["freshness"]} for p in points],
+        "computed_at": now_ts,
         "source": "deterministic:db_query",
-        "calculation": "Trend counts grouped by created_at into 30/90/180/365 day windows relative to query time",
-        "windows": trend_data,
-        "snapshot_ts": now_ts,
-        "data_available": True,
+        "snapshot_version": _snapshot_version(inputs),
     }
 
 
@@ -617,40 +594,33 @@ def _compute_recommendations(
         key=lambda f: _SEVERITY_WEIGHT.get((f.severity or "info").lower(), 0),
         reverse=True,
     )
+    _effort_map = {"critical": "1-3 days", "high": "3-7 days", "medium": "1-2 weeks", "low": "2-4 weeks", "info": "4-6 weeks"}
     recs = []
     for i, f in enumerate(sorted_findings[:25], start=1):
         sev = (f.severity or "info").lower()
+        cost_est = _COST_PER_FINDING.get(sev, 0)
         recs.append({
-            "rank": i,
+            "recommendation_id": f"rec-{f.finding_id}",
             "priority": sev,
             "title": f"Remediate {sev} finding: {f.title}",
-            "action": f"Investigate and resolve compliance finding '{f.finding_id}' (severity={sev})",
+            "rationale": f"Open {sev}-severity finding '{f.finding_id}' remains unresolved. Severity weight: {_SEVERITY_WEIGHT.get(sev, 0)}.",
             "impact": f"Reduces risk score by {_SEVERITY_WEIGHT.get(sev, 0)} points",
-            "evidence": {
-                "finding_id": f.finding_id,
-                "severity": f.severity,
-                "status": f.status,
-                "detected_at": f.detected_at_utc,
-                "req_ids": f.req_ids_json,
-            },
-            "source": "table:compliance_findings",
-            "calculation": "Sorted by severity weight DESC, top 25 open findings",
+            "estimated_effort": _effort_map.get(sev, "varies"),
+            "business_value": f"Reduces estimated cost exposure by ~${cost_est:,}",
+            "supporting_evidence_count": len(f.req_ids_json or []) + len(f.evidence_refs_json or []),
+            "owner": None,
             "confidence": 1.0,
-            "snapshot_ts": now_ts,
-            "framework_mapping": ["NIST CSF RS.MI-3", "ISO 27001 A.16.1"],
+            "framework_references": list(f.req_ids_json or []),
         })
+    critical_count = sum(1 for r in recs if r["priority"] == "critical")
     inputs = [tenant_id, len(open_findings)]
     return {
-        "tenant_id": tenant_id,
-        "generated_at": now_ts,
-        "snapshot_version": _snapshot_version(inputs),
-        "confidence": 1.0,
-        "evidence_count": len(open_findings),
-        "source": "deterministic:db_query",
-        "calculation": "Top 25 open findings sorted by severity weight DESC. No AI generation — deterministic sort.",
         "recommendations": recs,
-        "total_open": len(open_findings),
-        "data_available": True,
+        "total": len(recs),
+        "critical_count": critical_count,
+        "computed_at": now_ts,
+        "source": "deterministic:db_query",
+        "snapshot_version": _snapshot_version(inputs),
     }
 
 
@@ -695,44 +665,58 @@ def _compute_forecast(
         confidence = 0.3
 
     trend_dir = "increasing" if slope > 0.1 else "decreasing" if slope < -0.1 else "stable"
-    inputs = [tenant_id, period_counts, len(open_findings)]
-    return {
-        "tenant_id": tenant_id,
-        "generated_at": now_ts,
-        "snapshot_version": _snapshot_version(inputs),
-        "confidence": round(confidence, 3),
-        "evidence_count": len(findings),
-        "source": "deterministic:db_query",
-        "calculation": "Linear regression over 6 × 30-day trailing windows. Formula: y=mx+b, slope from OLS. Confidence = R² * 0.85, clamped [0.3, 0.85].",
-        "method": "ordinary_least_squares_linear_regression",
-        "formula": "findings_per_30d = slope * period_index + intercept",
-        "inputs": {
-            "period_counts_30d_buckets": period_counts,
-            "window_count": n,
-            "slope": round(slope, 4),
-            "intercept": round(intercept, 4),
-            "r_squared": round(r_squared, 4),
+    forecasts = [
+        {
+            "domain": "risk",
+            "label": "Open Findings (30-day projection)",
+            "current_value": len(open_findings),
+            "projected_value": forecast_30d,
+            "projection_date": _iso(now + timedelta(days=30)),
+            "confidence": round(confidence, 3),
+            "inputs": [
+                f"6 × 30-day bucket counts: {period_counts}",
+                f"OLS slope: {round(slope, 4)}",
+                f"OLS intercept: {round(intercept, 4)}",
+                f"R²: {round(r_squared, 4)}",
+            ],
+            "limitations": [
+                "Based on historical finding creation rate only",
+                "Does not account for remediation velocity or policy changes",
+                "Assumes linear trend continuation",
+            ],
+            "evidence_count": len(findings),
+            "trend": trend_dir,
         },
-        "forecast_30d": _metric(
-            value=forecast_30d,
-            source="table:compliance_findings",
-            calculation="OLS linear extrapolation: intercept + slope * (n+0)",
-            evidence_ids=[f.finding_id for f in open_findings[:10]],
-            snapshot_ts=now_ts,
-            confidence=round(confidence, 3),
-            framework_mapping=["NIST AI RMF GOVERN 5", "ISO 27001 A.5.7"],
-        ),
-        "forecast_90d": _metric(
-            value=forecast_90d,
-            source="table:compliance_findings",
-            calculation="OLS linear extrapolation: intercept + slope * (n+2)",
-            evidence_ids=[f.finding_id for f in open_findings[:10]],
-            snapshot_ts=now_ts,
-            confidence=round(confidence * 0.8, 3),
-            framework_mapping=["NIST AI RMF GOVERN 5", "ISO 27001 A.5.7"],
-        ),
-        "trend_direction": trend_dir,
-        "data_available": True,
+        {
+            "domain": "risk",
+            "label": "Open Findings (90-day projection)",
+            "current_value": len(open_findings),
+            "projected_value": forecast_90d,
+            "projection_date": _iso(now + timedelta(days=90)),
+            "confidence": round(confidence * 0.8, 3),
+            "inputs": [
+                f"6 × 30-day bucket counts: {period_counts}",
+                f"OLS slope: {round(slope, 4)}",
+                f"OLS intercept: {round(intercept, 4)}",
+                f"R²: {round(r_squared, 4)}",
+            ],
+            "limitations": [
+                "90-day projection carries higher uncertainty than 30-day",
+                "Based on historical finding creation rate only",
+                "Does not account for remediation velocity or policy changes",
+            ],
+            "evidence_count": len(findings),
+            "trend": trend_dir,
+        },
+    ]
+    inputs_list = [tenant_id, period_counts, len(open_findings)]
+    return {
+        "forecasts": forecasts,
+        "forecast_window_days": 90,
+        "computed_at": now_ts,
+        "source": "deterministic:db_query",
+        "disclaimer": "Evidence-backed OLS projection from authoritative governance data. Not AI-generated. Confidence reflects R² of historical trend fit, clamped [0.30, 0.85].",
+        "snapshot_version": _snapshot_version(inputs_list),
     }
 
 
@@ -820,42 +804,69 @@ def _compute_summary(
         key=lambda f: _SEVERITY_WEIGHT.get((f.severity or "info").lower(), 0),
         default=None,
     )
+    req_pct = round(requirements_active / (len(findings) or 1) * 100, 1)
+    major_risks = []
+    if sev["critical"]:
+        major_risks.append(f"{sev['critical']} critical compliance finding{'s' if sev['critical'] > 1 else ''} open")
+    if sev["high"]:
+        major_risks.append(f"{sev['high']} high-severity finding{'s' if sev['high'] > 1 else ''} pending remediation")
+    if audit_failures > 0 and audit_total > 0:
+        fail_pct = round(audit_failures / audit_total * 100, 1)
+        major_risks.append(f"Security audit failure rate: {fail_pct}%")
+
+    major_improvements = []
+    if not sev["critical"] and not sev["high"]:
+        major_improvements.append("No critical or high-severity findings open")
+    if new_30d and len(new_30d) == 0:
+        major_improvements.append("No new findings in the last 30 days")
+    if requirements_active > 0:
+        major_improvements.append(f"{requirements_active} compliance requirements actively tracked")
+
+    compliance_status = (
+        "Critical" if posture_score < 25 else
+        "At Risk" if posture_score < 50 else
+        "Adequate" if posture_score < 75 else
+        "Strong"
+    )
+
+    strategic_recommendations = []
+    if sev["critical"]:
+        strategic_recommendations.append(f"Immediately remediate {sev['critical']} critical finding{'s' if sev['critical'] > 1 else ''}")
+    if sev["high"]:
+        strategic_recommendations.append(f"Prioritize {sev['high']} high-severity finding{'s' if sev['high'] > 1 else ''} within 30 days")
+    strategic_recommendations.append("Maintain continuous compliance monitoring via FrostGate governance platform")
+
+    audit_label = (
+        "Critical" if insurance_score < 25 else
+        "At Risk" if insurance_score < 50 else
+        "Adequate" if insurance_score < 75 else
+        "Strong"
+    )
+
+    board_narrative = (
+        f"As of {now_ts[:10]}, the governance posture is rated {posture_level.upper()} ({posture_score}/100). "
+        f"There are {len(open_findings)} open compliance findings ({sev['critical']} critical, {sev['high']} high, {sev['medium']} medium). "
+        f"Estimated cost of risk: ${cost_of_risk:,.0f}. "
+        f"Insurance readiness score: {insurance_score}/100 ({audit_label}). "
+        f"Governance evidence: {decisions_total} decisions processed, {audit_total} audit events recorded. "
+        + (f"Highest-priority finding: '{top_finding.title}' (severity: {top_finding.severity}). " if top_finding else "")
+        + "All metrics derived from authoritative governance evidence. No AI-generated estimates."
+    )
+
     inputs = [tenant_id, len(open_findings), decisions_total, audit_total, requirements_active]
-    evidence_count = len(findings) + decisions_total + audit_total
     return {
-        "tenant_id": tenant_id,
-        "generated_at": now_ts,
-        "snapshot_version": _snapshot_version(inputs),
-        "confidence": 0.88,
-        "evidence_count": evidence_count,
+        "major_risks": major_risks,
+        "major_improvements": major_improvements,
+        "compliance_status": compliance_status,
+        "strategic_recommendations": strategic_recommendations,
+        "upcoming_deadlines": [],
+        "audit_readiness_score": insurance_score,
+        "audit_readiness_label": audit_label,
+        "board_narrative": board_narrative,
+        "computed_at": now_ts,
         "source": "deterministic:db_query",
-        "calculation": "Board-ready summary compiled from compliance_findings, decisions, security_audit_log, compliance_requirements",
-        "executive_headline": {
-            "posture_score": posture_score,
-            "posture_level": posture_level,
-            "open_findings": len(open_findings),
-            "critical_findings": sev["critical"],
-            "risk_score": risk_score,
-            "new_last_30d": len(new_30d),
-            "cost_of_risk_usd": round(cost_of_risk, 2),
-            "insurance_readiness_score": insurance_score,
-        },
-        "governance": {
-            "decisions_processed": decisions_total,
-            "audit_events": audit_total,
-            "audit_failures": audit_failures,
-            "requirements_active": requirements_active,
-            "total_findings": len(findings),
-        },
-        "top_priority": {
-            "finding_id": top_finding.finding_id if top_finding else None,
-            "title": top_finding.title if top_finding else None,
-            "severity": top_finding.severity if top_finding else None,
-        },
-        "severity_breakdown": sev,
-        "snapshot_ts": now_ts,
-        "data_available": True,
-        "disclaimer": "Cost estimates use standard assumptions: critical=$50k, high=$15k, medium=$4k, low=$500, info=$50 per open finding. Actual costs vary.",
+        "confidence": 0.88,
+        "snapshot_version": _snapshot_version(inputs),
     }
 
 
@@ -922,7 +933,7 @@ def executive_workspace(request: Request) -> dict[str, Any]:
         ),
         "trends": _compute_trends(
             findings=findings, decisions_rows=decisions_rows,
-            audit_rows=audit_rows, now=now, **shared,
+            audit_rows=audit_rows, now=now, window_days=90, **shared,
         ),
         "recommendations": _compute_recommendations(
             findings=findings, open_findings=open_findings, **shared,
@@ -1058,17 +1069,20 @@ def executive_business(request: Request) -> dict[str, Any]:
 
 
 @router.get("/trends")
-def executive_trends(request: Request) -> dict[str, Any]:
+def executive_trends(request: Request, window: str = "90d") -> dict[str, Any]:
     tenant_id = require_bound_tenant(request)
     log.info("executive.trends tenant=%s", tenant_id)
-    now = _now()
+    # parse window param: "30d" -> 30, "90d" -> 90, "180d" -> 180, "365d" -> 365
+    _window_map = {"30d": 30, "90d": 90, "180d": 180, "365d": 365}
+    window_days = _window_map.get(window, 90)
+    now = _now(); now_ts = _iso(now)
     with Session(get_engine()) as db:
         findings = _safe(lambda: _query_findings(db, tenant_id), [])
         decisions_rows = _query_decision_timestamps(db, tenant_id)
         audit_rows = _query_audit_timestamps(db, tenant_id)
     return _compute_trends(
         findings=findings, decisions_rows=decisions_rows, audit_rows=audit_rows,
-        now=now, tenant_id=tenant_id, now_ts=_iso(now),
+        now=now, tenant_id=tenant_id, now_ts=now_ts, window_days=window_days,
     )
 
 

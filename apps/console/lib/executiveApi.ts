@@ -104,7 +104,6 @@ export interface ExecutiveRisk {
   risk_trend: 'improving' | 'stable' | 'degrading';
   heatmap: Array<{
     severity: string;
-    likelihood: string;
     count: number;
   }>;
   computed_at: string;

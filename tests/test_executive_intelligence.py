@@ -419,7 +419,7 @@ class TestComputeOverview:
             tenant_id="tenant-a",
             now_ts=now_ts,
         )
-        for key in ("tenant_id", "snapshot_version", "open_findings", "risk_score", "severity_breakdown"):
+        for key in ("governance_health_score", "compliance_score", "risk_score", "open_findings_count", "computed_at"):
             assert key in result, f"Missing key: {key}"
 
     def test_snapshot_version_changes_with_inputs(self):
@@ -450,7 +450,7 @@ class TestComputeOverview:
             tenant_id="t",
             now_ts=now_ts,
         )
-        assert result["open_findings"]["value"] == 3
+        assert result["open_findings_count"] == 3
 
 
 class TestComputeRisk:
@@ -463,7 +463,7 @@ class TestComputeRisk:
             tenant_id="t",
             now_ts=_iso(now),
         )
-        for key in ("heatmap", "top_risks", "velocity", "velocity_direction", "new_last_30d"):
+        for key in ("heatmap", "top_risks", "open_findings_by_severity", "risk_score", "risk_trend"):
             assert key in result, f"Missing key: {key}"
 
     def test_no_findings_stable_velocity(self):
@@ -475,8 +475,8 @@ class TestComputeRisk:
             tenant_id="t",
             now_ts=_iso(now),
         )
-        assert result["velocity_direction"] == "stable"
-        assert result["velocity"]["value"] == 0
+        assert result["risk_trend"] == "stable"
+        assert result["risk_score"] == 0
 
     def test_recent_findings_increase_velocity(self):
         now = datetime.now(timezone.utc)
@@ -488,8 +488,8 @@ class TestComputeRisk:
             tenant_id="t",
             now_ts=_iso(now),
         )
-        assert result["velocity_direction"] == "increasing"
-        assert result["new_last_30d"] == 1
+        assert result["risk_trend"] == "degrading"
+        assert result["risk_score"] > 0
 
 
 class TestComputeBusiness:
@@ -502,7 +502,7 @@ class TestComputeBusiness:
             tenant_id="t",
             now_ts=now_ts,
         )
-        assert result["cost_of_risk"]["value"] == 0
+        assert result["cost_of_risk_estimate_usd"] == 0
 
     def test_cost_scales_with_critical_findings(self):
         now_ts = "2026-01-01T00:00:00Z"
@@ -516,4 +516,4 @@ class TestComputeBusiness:
         )
         from api.executive_intelligence import _COST_PER_FINDING
         expected = 3 * _COST_PER_FINDING["critical"]
-        assert result["cost_of_risk"]["value"] == expected
+        assert result["cost_of_risk_estimate_usd"] == expected

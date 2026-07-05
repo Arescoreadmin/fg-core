@@ -292,7 +292,6 @@ function RiskTab({ initialData }: { initialData?: ExecutiveRisk }) {
   if (!data) return null;
 
   const severities = ['critical', 'high', 'medium', 'low'];
-  const likelihoods = ['very_high', 'high', 'medium', 'low', 'very_low'];
 
   return (
     <div className="flex flex-col gap-6">
@@ -308,40 +307,22 @@ function RiskTab({ initialData }: { initialData?: ExecutiveRisk }) {
       </div>
 
       <SectionCard>
-        <h2 className="text-sm font-semibold text-foreground mb-4">Risk Heatmap (Severity × Likelihood)</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr>
-                <th className="text-left text-muted-foreground pb-2 pr-4">Severity ↓ / Likelihood →</th>
-                {likelihoods.map((l) => (
-                  <th key={l} className="text-center text-muted-foreground pb-2 px-3 capitalize">{l.replace('_', ' ')}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {severities.map((sev) => (
-                <tr key={sev} className="border-t border-border">
-                  <td className="py-2 pr-4 capitalize text-muted-foreground">{sev}</td>
-                  {likelihoods.map((like) => {
-                    const cell = data.heatmap.find((h) => h.severity === sev && h.likelihood === like);
-                    const count = cell?.count ?? 0;
-                    return (
-                      <td key={like} className="text-center py-2 px-3">
-                        {count > 0 ? (
-                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${severityBadge(sev)}`}>
-                            {count}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <h2 className="text-sm font-semibold text-foreground mb-4">Risk Breakdown by Severity</h2>
+        <div className="flex flex-col gap-3">
+          {data.heatmap.map((cell) => (
+            <div key={cell.severity} className="flex items-center gap-3">
+              <span className={`text-xs capitalize w-16 shrink-0 ${cell.severity === 'critical' ? 'text-red-400' : cell.severity === 'high' ? 'text-orange-400' : cell.severity === 'medium' ? 'text-yellow-400' : 'text-muted-foreground'}`}>
+                {cell.severity}
+              </span>
+              <div className="flex-1 bg-border rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full ${cell.severity === 'critical' ? 'bg-red-500' : cell.severity === 'high' ? 'bg-orange-500' : cell.severity === 'medium' ? 'bg-yellow-500' : 'bg-blue-500'}`}
+                  style={{ width: `${Math.min(100, cell.count * 10)}%` }}
+                />
+              </div>
+              <span className="text-xs text-foreground w-6 text-right">{cell.count}</span>
+            </div>
+          ))}
         </div>
         <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
           <span>Source: {data.source}</span>
