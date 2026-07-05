@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -26,6 +26,7 @@ import {
   getExecutiveRisk,
   getExecutiveSummary,
   getExecutiveTrends,
+  getExecutiveWorkspace,
   type ExecutiveBusiness,
   type ExecutiveCompliance,
   type ExecutiveForecast,
@@ -34,6 +35,7 @@ import {
   type ExecutiveRisk,
   type ExecutiveSummary,
   type ExecutiveTrends,
+  type ExecutiveWorkspace,
 } from '@/lib/executiveApi';
 
 // ---------------------------------------------------------------------------
@@ -168,7 +170,27 @@ function ErrorRow({ msg }: { msg: string }) {
 // Tab content components
 // ---------------------------------------------------------------------------
 
-function OverviewTab({ data }: { data: ExecutiveOverview }) {
+function OverviewTab({ initialData }: { initialData?: ExecutiveOverview }) {
+  const [loading, setLoading] = useState(!initialData);
+  const [data, setData] = useState<ExecutiveOverview | null>(initialData ?? null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialData) return;
+    let cancelled = false;
+    getExecutiveOverview().then((r) => {
+      if (cancelled) return;
+      setLoading(false);
+      if (!r.ok) { setError(r.error); return; }
+      setData(r.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) return <LoadingRow />;
+  if (error) return <ErrorRow msg={error} />;
+  if (!data) return null;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -248,12 +270,13 @@ function OverviewTab({ data }: { data: ExecutiveOverview }) {
   );
 }
 
-function RiskTab() {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ExecutiveRisk | null>(null);
+function RiskTab({ initialData }: { initialData?: ExecutiveRisk }) {
+  const [loading, setLoading] = useState(!initialData);
+  const [data, setData] = useState<ExecutiveRisk | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initialData) return;
     let cancelled = false;
     getExecutiveRisk().then((r) => {
       if (cancelled) return;
@@ -360,12 +383,13 @@ function RiskTab() {
 
 const FRAMEWORK_ORDER = ['NIST AI RMF', 'ISO 42001', 'SOC 2', 'HIPAA', 'PCI DSS', 'CIS Controls'];
 
-function ComplianceTab() {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ExecutiveCompliance | null>(null);
+function ComplianceTab({ initialData }: { initialData?: ExecutiveCompliance }) {
+  const [loading, setLoading] = useState(!initialData);
+  const [data, setData] = useState<ExecutiveCompliance | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initialData) return;
     let cancelled = false;
     getExecutiveCompliance().then((r) => {
       if (cancelled) return;
@@ -450,24 +474,27 @@ function ComplianceTab() {
   );
 }
 
-function TrendsTab() {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ExecutiveTrends | null>(null);
+function TrendsTab({ initialData }: { initialData?: ExecutiveTrends }) {
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ExecutiveTrends | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [window, setWindow] = useState<TrendWindow>('90d');
+  const [trendWindow, setTrendWindow] = useState<TrendWindow>('90d');
+  const hasInitialRef = useRef(Boolean(initialData));
 
   useEffect(() => {
+    // Skip re-fetch for default 90d window when workspace pre-loaded it
+    if (trendWindow === '90d' && hasInitialRef.current) return;
     let cancelled = false;
     setLoading(true);
     setData(null);
-    getExecutiveTrends(window).then((r) => {
+    getExecutiveTrends(trendWindow).then((r) => {
       if (cancelled) return;
       setLoading(false);
       if (!r.ok) { setError(r.error); return; }
       setData(r.data);
     });
     return () => { cancelled = true; };
-  }, [window]);
+  }, [trendWindow]);
 
   const WINDOWS: TrendWindow[] = ['30d', '90d', '180d', '365d'];
 
@@ -485,9 +512,9 @@ function TrendsTab() {
         {WINDOWS.map((w) => (
           <button
             key={w}
-            onClick={() => setWindow(w)}
+            onClick={() => setTrendWindow(w)}
             className={`px-3 py-1 text-xs rounded border transition-colors ${
-              window === w
+              trendWindow === w
                 ? 'bg-primary text-primary-foreground border-primary'
                 : 'bg-surface text-muted-foreground border-border hover:border-primary/50'
             }`}
@@ -515,7 +542,7 @@ function TrendsTab() {
                     <h3 className="text-sm font-semibold text-foreground">{label}</h3>
                     {delta !== null && (
                       <span className={`ml-auto text-xs ${delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
-                        {delta > 0 ? '+' : ''}{delta.toFixed(1)} over {window}
+                        {delta > 0 ? '+' : ''}{delta.toFixed(1)} over {trendWindow}
                       </span>
                     )}
                   </div>
@@ -548,12 +575,13 @@ function TrendsTab() {
   );
 }
 
-function BusinessTab() {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ExecutiveBusiness | null>(null);
+function BusinessTab({ initialData }: { initialData?: ExecutiveBusiness }) {
+  const [loading, setLoading] = useState(!initialData);
+  const [data, setData] = useState<ExecutiveBusiness | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initialData) return;
     let cancelled = false;
     getExecutiveBusiness().then((r) => {
       if (cancelled) return;
@@ -599,12 +627,13 @@ function BusinessTab() {
   );
 }
 
-function RecommendationsTab() {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ExecutiveRecommendations | null>(null);
+function RecommendationsTab({ initialData }: { initialData?: ExecutiveRecommendations }) {
+  const [loading, setLoading] = useState(!initialData);
+  const [data, setData] = useState<ExecutiveRecommendations | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initialData) return;
     let cancelled = false;
     getExecutiveRecommendations().then((r) => {
       if (cancelled) return;
@@ -677,12 +706,13 @@ function RecommendationsTab() {
   );
 }
 
-function ForecastTab() {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ExecutiveForecast | null>(null);
+function ForecastTab({ initialData }: { initialData?: ExecutiveForecast }) {
+  const [loading, setLoading] = useState(!initialData);
+  const [data, setData] = useState<ExecutiveForecast | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initialData) return;
     let cancelled = false;
     getExecutiveForecast().then((r) => {
       if (cancelled) return;
@@ -766,12 +796,13 @@ function ForecastTab() {
   );
 }
 
-function BoardSummaryTab() {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ExecutiveSummary | null>(null);
+function BoardSummaryTab({ initialData }: { initialData?: ExecutiveSummary }) {
+  const [loading, setLoading] = useState(!initialData);
+  const [data, setData] = useState<ExecutiveSummary | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initialData) return;
     let cancelled = false;
     getExecutiveSummary().then((r) => {
       if (cancelled) return;
@@ -901,21 +932,21 @@ function BoardSummaryTab() {
 
 export default function ExecutivePage() {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
-  const [overviewLoading, setOverviewLoading] = useState(true);
-  const [overviewData, setOverviewData] = useState<ExecutiveOverview | null>(null);
-  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(true);
+  const [workspace, setWorkspace] = useState<ExecutiveWorkspace | null>(null);
 
-  // Load overview data on mount
   useEffect(() => {
     let cancelled = false;
-    getExecutiveOverview().then((r) => {
+    getExecutiveWorkspace().then((r) => {
       if (cancelled) return;
-      setOverviewLoading(false);
-      if (!r.ok) { setOverviewError(r.error); return; }
-      setOverviewData(r.data);
+      setWorkspaceLoading(false);
+      if (r.ok) setWorkspace(r.data);
+      // On failure workspace stays null; tabs self-fetch via individual endpoints
     });
     return () => { cancelled = true; };
   }, []);
+
+  const sections = workspace?.sections;
 
   return (
     <div className="flex flex-col">
@@ -943,22 +974,19 @@ export default function ExecutivePage() {
         </div>
 
         {/* Tab content */}
-        <div aria-label="executive-tab-content">
-          {activeTab === 'overview' && (
-            <>
-              {overviewLoading && <LoadingRow />}
-              {overviewError && <ErrorRow msg={overviewError} />}
-              {overviewData && <OverviewTab data={overviewData} />}
-            </>
-          )}
-          {activeTab === 'risk' && <RiskTab />}
-          {activeTab === 'compliance' && <ComplianceTab />}
-          {activeTab === 'trends' && <TrendsTab />}
-          {activeTab === 'business' && <BusinessTab />}
-          {activeTab === 'recommendations' && <RecommendationsTab />}
-          {activeTab === 'forecast' && <ForecastTab />}
-          {activeTab === 'board' && <BoardSummaryTab />}
-        </div>
+        {workspaceLoading && <LoadingRow />}
+        {!workspaceLoading && (
+          <div aria-label="executive-tab-content">
+            {activeTab === 'overview' && <OverviewTab initialData={sections?.overview} />}
+            {activeTab === 'risk' && <RiskTab initialData={sections?.risk} />}
+            {activeTab === 'compliance' && <ComplianceTab initialData={sections?.compliance} />}
+            {activeTab === 'trends' && <TrendsTab initialData={sections?.trends} />}
+            {activeTab === 'business' && <BusinessTab initialData={sections?.business} />}
+            {activeTab === 'recommendations' && <RecommendationsTab initialData={sections?.recommendations} />}
+            {activeTab === 'forecast' && <ForecastTab initialData={sections?.forecast} />}
+            {activeTab === 'board' && <BoardSummaryTab initialData={sections?.summary} />}
+          </div>
+        )}
       </div>
     </div>
   );

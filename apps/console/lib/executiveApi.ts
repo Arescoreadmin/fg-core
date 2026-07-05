@@ -287,3 +287,38 @@ export async function getExecutivePriorities(): Promise<SafeResult<ExecutivePrio
 export async function getExecutiveSummary(): Promise<SafeResult<ExecutiveSummary>> {
   return safeGet<ExecutiveSummary>(`${BFF}/api/executive/summary`);
 }
+
+// ---------------------------------------------------------------------------
+// Workspace aggregate
+// ---------------------------------------------------------------------------
+
+export interface ExecutiveWorkspace {
+  tenant_id: string;
+  generated_at: string;
+  snapshot_version: string;
+  source: string;
+  calculation: string;
+  evidence_summary: {
+    findings_total: number;
+    open_findings: number;
+    decisions_total: number;
+    audit_events: number;
+    requirements_total: number;
+  };
+  sections: {
+    overview: ExecutiveOverview;
+    posture: ExecutivePosture;
+    risk: ExecutiveRisk;
+    compliance: ExecutiveCompliance;
+    business: ExecutiveBusiness;
+    trends: ExecutiveTrends;
+    recommendations: ExecutiveRecommendations;
+    forecast: ExecutiveForecast;
+    priorities: ExecutivePriorities;
+    summary: ExecutiveSummary;
+  };
+}
+
+export async function getExecutiveWorkspace(): Promise<SafeResult<ExecutiveWorkspace>> {
+  return safeGet<ExecutiveWorkspace>(`${BFF}/api/executive/workspace`);
+}

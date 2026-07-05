@@ -40,6 +40,11 @@ from api.executive_intelligence import (
     _open_findings,
     _risk_score,
     _severity_counts,
+    _compute_overview,
+    _compute_risk,
+    _compute_compliance,
+    _compute_business,
+    _compute_recommendations,
     router,
 )
 
@@ -367,7 +372,7 @@ class TestRouterStructure:
         expected_suffixes = [
             "/overview", "/posture", "/risk", "/compliance",
             "/business", "/trends", "/recommendations",
-            "/forecast", "/priorities", "/summary",
+            "/forecast", "/priorities", "/summary", "/workspace",
         ]
         for suffix in expected_suffixes:
             full_path = f"/api/executive{suffix}"
@@ -393,3 +398,122 @@ class TestDeterminismInvariant:
     def test_same_inputs_same_snapshot(self):
         inputs = ["tenant-x", 10, 2, 8]
         assert _snapshot_version(inputs) == _snapshot_version(inputs)
+
+
+# ---------------------------------------------------------------------------
+# Pure _compute_* functions
+# ---------------------------------------------------------------------------
+
+class TestComputeOverview:
+    def test_returns_required_keys(self):
+        now_ts = "2026-01-01T00:00:00Z"
+        findings = [_mock_finding("f-1", severity="high", status="open")]
+        open_f = [findings[0]]
+        result = _compute_overview(
+            findings=findings,
+            open_findings=open_f,
+            decisions_total=5,
+            audit_events=10,
+            requirements_total=20,
+            requirements_active=15,
+            tenant_id="tenant-a",
+            now_ts=now_ts,
+        )
+        for key in ("tenant_id", "snapshot_version", "open_findings", "risk_score", "severity_breakdown"):
+            assert key in result, f"Missing key: {key}"
+
+    def test_snapshot_version_changes_with_inputs(self):
+        now_ts = "2026-01-01T00:00:00Z"
+        base = dict(
+            findings=[],
+            open_findings=[],
+            decisions_total=0,
+            audit_events=0,
+            requirements_total=0,
+            requirements_active=0,
+            now_ts=now_ts,
+        )
+        r1 = _compute_overview(**base, tenant_id="tenant-a")
+        r2 = _compute_overview(**base, tenant_id="tenant-b")
+        assert r1["snapshot_version"] != r2["snapshot_version"]
+
+    def test_open_findings_count_reflects_input(self):
+        now_ts = "2026-01-01T00:00:00Z"
+        findings = [_mock_finding(f"f-{i}", status="open") for i in range(3)]
+        result = _compute_overview(
+            findings=findings,
+            open_findings=findings,
+            decisions_total=0,
+            audit_events=0,
+            requirements_total=0,
+            requirements_active=0,
+            tenant_id="t",
+            now_ts=now_ts,
+        )
+        assert result["open_findings"]["value"] == 3
+
+
+class TestComputeRisk:
+    def test_returns_required_keys(self):
+        now = datetime.now(timezone.utc)
+        result = _compute_risk(
+            findings=[],
+            open_findings=[],
+            now=now,
+            tenant_id="t",
+            now_ts=_iso(now),
+        )
+        for key in ("heatmap", "top_risks", "velocity", "velocity_direction", "new_last_30d"):
+            assert key in result, f"Missing key: {key}"
+
+    def test_no_findings_stable_velocity(self):
+        now = datetime.now(timezone.utc)
+        result = _compute_risk(
+            findings=[],
+            open_findings=[],
+            now=now,
+            tenant_id="t",
+            now_ts=_iso(now),
+        )
+        assert result["velocity_direction"] == "stable"
+        assert result["velocity"]["value"] == 0
+
+    def test_recent_findings_increase_velocity(self):
+        now = datetime.now(timezone.utc)
+        recent = _mock_finding("f-1", status="open", created_at=now - timedelta(days=5))
+        result = _compute_risk(
+            findings=[recent],
+            open_findings=[recent],
+            now=now,
+            tenant_id="t",
+            now_ts=_iso(now),
+        )
+        assert result["velocity_direction"] == "increasing"
+        assert result["new_last_30d"] == 1
+
+
+class TestComputeBusiness:
+    def test_zero_findings_zero_cost(self):
+        now_ts = "2026-01-01T00:00:00Z"
+        result = _compute_business(
+            findings=[],
+            open_findings=[],
+            token_cost_total=0,
+            tenant_id="t",
+            now_ts=now_ts,
+        )
+        assert result["cost_of_risk"]["value"] == 0
+
+    def test_cost_scales_with_critical_findings(self):
+        now_ts = "2026-01-01T00:00:00Z"
+        criticals = [_mock_finding(f"f-{i}", severity="critical", status="open") for i in range(3)]
+        result = _compute_business(
+            findings=criticals,
+            open_findings=criticals,
+            token_cost_total=0,
+            tenant_id="t",
+            now_ts=now_ts,
+        )
+        from api.executive_intelligence import _COST_PER_FINDING
+        expected = 3 * _COST_PER_FINDING["critical"]
+        assert result["cost_of_risk"]["value"] == expected
