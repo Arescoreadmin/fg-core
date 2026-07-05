@@ -27,7 +27,7 @@ const items: NavigationItem[] = [
     metadata: {
       mcimId: 'MCIM-18.6.7-EXEC-INTEL',
       capability: 'Executive Intelligence Center',
-      family: 'strategic-governance',
+      family: 'intelligence',
       authority: 'FrostGate Platform',
       sourceOfTruth: 'apps/console/app/dashboard/executive/page.tsx',
       maturity: 'strong',
