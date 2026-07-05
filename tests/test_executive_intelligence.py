@@ -20,8 +20,6 @@ Covers:
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
@@ -33,7 +31,6 @@ from api.executive_intelligence import (
     _SEVERITY_WEIGHT,
     _COST_PER_FINDING,
     _metric,
-    _now,
     _iso,
     _snapshot_version,
     _safe,
@@ -42,9 +39,7 @@ from api.executive_intelligence import (
     _severity_counts,
     _compute_overview,
     _compute_risk,
-    _compute_compliance,
     _compute_business,
-    _compute_recommendations,
     router,
 )
 
@@ -297,7 +292,6 @@ class TestForecastMath:
     def test_forecast_non_negative(self):
         result = self._ols([6, 5, 4, 3, 2, 1])
         n = 6
-        x_mean = (n - 1) / 2.0
         forecast = result["intercept"] + result["slope"] * n
         assert max(0, int(forecast)) >= 0
 

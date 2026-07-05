@@ -380,7 +380,6 @@ def _compute_risk(
         reverse=True,
     )[:10]
     sev_open = _severity_counts(open_findings)
-    sev_all = _severity_counts(findings)
     risk_raw = _risk_score(open_findings)
     risk_normalized = min(100, risk_raw)
     risk_trend = "degrading" if velocity > 0 else "improving" if velocity < 0 else "stable"
@@ -504,10 +503,6 @@ def _compute_business(
         _COST_PER_FINDING.get(severity, 0) * count
         for severity, count in sev.items()
     )
-    cost_breakdown = {
-        s: {"count": c, "unit_cost": _COST_PER_FINDING.get(s, 0), "total": c * _COST_PER_FINDING.get(s, 0)}
-        for s, c in sev.items()
-    }
     insurance_readiness_score = max(0, 100 - sev["critical"] * 20 - sev["high"] * 8)
     business_continuity = max(0, 100 - sev["critical"] * 15 - sev["high"] * 5)
     inputs = [tenant_id, len(open_findings), token_cost_total]
@@ -545,12 +540,10 @@ def _compute_trends(
 ) -> dict[str, Any]:
     num_buckets = 8
     bucket_size = window_days / num_buckets
-    req_total_trends = len(findings)  # use total findings as denominator proxy
 
     points = []
     for i in range(num_buckets):
         bucket_end = now - timedelta(days=bucket_size * (num_buckets - 1 - i))
-        bucket_start = bucket_end - timedelta(days=bucket_size)
         open_at_bucket = _open_findings(
             [f for f in findings if f.created_at and f.created_at <= bucket_end]
         )
@@ -804,7 +797,6 @@ def _compute_summary(
         key=lambda f: _SEVERITY_WEIGHT.get((f.severity or "info").lower(), 0),
         default=None,
     )
-    req_pct = round(requirements_active / (len(findings) or 1) * 100, 1)
     major_risks = []
     if sev["critical"]:
         major_risks.append(f"{sev['critical']} critical compliance finding{'s' if sev['critical'] > 1 else ''} open")
@@ -1075,7 +1067,8 @@ def executive_trends(request: Request, window: str = "90d") -> dict[str, Any]:
     # parse window param: "30d" -> 30, "90d" -> 90, "180d" -> 180, "365d" -> 365
     _window_map = {"30d": 30, "90d": 90, "180d": 180, "365d": 365}
     window_days = _window_map.get(window, 90)
-    now = _now(); now_ts = _iso(now)
+    now = _now()
+    now_ts = _iso(now)
     with Session(get_engine()) as db:
         findings = _safe(lambda: _query_findings(db, tenant_id), [])
         decisions_rows = _query_decision_timestamps(db, tenant_id)
