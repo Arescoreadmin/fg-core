@@ -86,6 +86,7 @@ _FRAMEWORKS = ["NIST", "ISO27001", "SOC2", "HIPAA", "PCI", "CIS", "AI_RMF"]
 # Pure helpers (no I/O)
 # ---------------------------------------------------------------------------
 
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -129,24 +130,37 @@ def _metric(
 
 
 def _severity_counts(findings: list[ComplianceFindingRecord]) -> dict[str, int]:
-    counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    counts: dict[str, int] = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+    }
     for f in findings:
         sev = (f.severity or "info").lower()
         counts[sev] = counts.get(sev, 0) + 1
     return counts
 
 
-def _open_findings(findings: list[ComplianceFindingRecord]) -> list[ComplianceFindingRecord]:
-    return [f for f in findings if (f.status or "").lower() in ("open", "active", "new")]
+def _open_findings(
+    findings: list[ComplianceFindingRecord],
+) -> list[ComplianceFindingRecord]:
+    return [
+        f for f in findings if (f.status or "").lower() in ("open", "active", "new")
+    ]
 
 
 def _risk_score(findings: list[ComplianceFindingRecord]) -> int:
-    return sum(_SEVERITY_WEIGHT.get((f.severity or "info").lower(), 0) for f in findings)
+    return sum(
+        _SEVERITY_WEIGHT.get((f.severity or "info").lower(), 0) for f in findings
+    )
 
 
 # ---------------------------------------------------------------------------
 # DB fetch helpers
 # ---------------------------------------------------------------------------
+
 
 def _query_findings(db: Session, tenant_id: str) -> list[ComplianceFindingRecord]:
     return (
@@ -157,7 +171,9 @@ def _query_findings(db: Session, tenant_id: str) -> list[ComplianceFindingRecord
     )
 
 
-def _query_requirements(db: Session, tenant_id: str) -> list[ComplianceRequirementRecord]:
+def _query_requirements(
+    db: Session, tenant_id: str
+) -> list[ComplianceRequirementRecord]:
     return (
         db.query(ComplianceRequirementRecord)
         .filter(ComplianceRequirementRecord.tenant_id == tenant_id)
@@ -167,71 +183,90 @@ def _query_requirements(db: Session, tenant_id: str) -> list[ComplianceRequireme
 
 def _count_decisions(db: Session, tenant_id: str) -> int:
     return _safe(
-        lambda: db.query(func.count(DecisionRecord.id))
-        .filter(DecisionRecord.tenant_id == tenant_id)
-        .scalar() or 0,
+        lambda: (
+            db.query(func.count(DecisionRecord.id))
+            .filter(DecisionRecord.tenant_id == tenant_id)
+            .scalar()
+            or 0
+        ),
         0,
     )
 
 
 def _query_decision_timestamps(db: Session, tenant_id: str) -> list[Any]:
     return _safe(
-        lambda: db.query(DecisionRecord.created_at)
-        .filter(DecisionRecord.tenant_id == tenant_id)
-        .order_by(DecisionRecord.created_at.desc())
-        .all(),
+        lambda: (
+            db.query(DecisionRecord.created_at)
+            .filter(DecisionRecord.tenant_id == tenant_id)
+            .order_by(DecisionRecord.created_at.desc())
+            .all()
+        ),
         [],
     )
 
 
 def _count_audit(db: Session, tenant_id: str) -> int:
     return _safe(
-        lambda: db.query(func.count(SecurityAuditLog.id))
-        .filter(SecurityAuditLog.tenant_id == tenant_id)
-        .scalar() or 0,
+        lambda: (
+            db.query(func.count(SecurityAuditLog.id))
+            .filter(SecurityAuditLog.tenant_id == tenant_id)
+            .scalar()
+            or 0
+        ),
         0,
     )
 
 
 def _count_audit_failures(db: Session, tenant_id: str) -> int:
     return _safe(
-        lambda: db.query(func.count(SecurityAuditLog.id))
-        .filter(
-            SecurityAuditLog.tenant_id == tenant_id,
-            SecurityAuditLog.success == False,  # noqa: E712
-        )
-        .scalar() or 0,
+        lambda: (
+            db.query(func.count(SecurityAuditLog.id))
+            .filter(
+                SecurityAuditLog.tenant_id == tenant_id,
+                SecurityAuditLog.success == False,  # noqa: E712
+            )
+            .scalar()
+            or 0
+        ),
         0,
     )
 
 
 def _query_audit_timestamps(db: Session, tenant_id: str) -> list[Any]:
     return _safe(
-        lambda: db.query(SecurityAuditLog.created_at)
-        .filter(SecurityAuditLog.tenant_id == tenant_id)
-        .order_by(SecurityAuditLog.created_at.desc())
-        .all(),
+        lambda: (
+            db.query(SecurityAuditLog.created_at)
+            .filter(SecurityAuditLog.tenant_id == tenant_id)
+            .order_by(SecurityAuditLog.created_at.desc())
+            .all()
+        ),
         [],
     )
 
 
 def _count_ai_violations(db: Session, tenant_id: str) -> int:
     return _safe(
-        lambda: db.query(func.count(AIQueryLog.id))
-        .filter(
-            AIQueryLog.tenant_id == tenant_id,
-            AIQueryLog.policy_decision == "deny",
-        )
-        .scalar() or 0,
+        lambda: (
+            db.query(func.count(AIQueryLog.id))
+            .filter(
+                AIQueryLog.tenant_id == tenant_id,
+                AIQueryLog.policy_decision == "deny",
+            )
+            .scalar()
+            or 0
+        ),
         0,
     )
 
 
 def _sum_tokens(db: Session, tenant_id: str) -> int:
     return _safe(
-        lambda: db.query(func.sum(AITokenUsage.total_tokens))
-        .filter(AITokenUsage.tenant_id == tenant_id)
-        .scalar() or 0,
+        lambda: (
+            db.query(func.sum(AITokenUsage.total_tokens))
+            .filter(AITokenUsage.tenant_id == tenant_id)
+            .scalar()
+            or 0
+        ),
         0,
     )
 
@@ -241,6 +276,7 @@ def _sum_tokens(db: Session, tenant_id: str) -> int:
 # All accept pre-fetched data and return section dicts.
 # Used by both individual routes and /workspace.
 # ---------------------------------------------------------------------------
+
 
 def _compute_overview(
     *,
@@ -257,15 +293,23 @@ def _compute_overview(
     risk_raw = _risk_score(open_findings)
     risk_normalized = min(100, risk_raw)
     governance_score = max(0, 100 - risk_normalized)
-    req_pct = round(requirements_active / requirements_total * 100, 1) if requirements_total > 0 else 0.0
+    req_pct = (
+        round(requirements_active / requirements_total * 100, 1)
+        if requirements_total > 0
+        else 0.0
+    )
     evidence_freshness = min(100, 50 + min(50, audit_events // 5))
     evidence_count = len(findings) + decisions_total + audit_events
 
     summary_parts = []
     if sev["critical"]:
-        summary_parts.append(f"{sev['critical']} critical finding{'s' if sev['critical'] > 1 else ''} require immediate action")
+        summary_parts.append(
+            f"{sev['critical']} critical finding{'s' if sev['critical'] > 1 else ''} require immediate action"
+        )
     if sev["high"]:
-        summary_parts.append(f"{sev['high']} high-severity finding{'s' if sev['high'] > 1 else ''} pending remediation")
+        summary_parts.append(
+            f"{sev['high']} high-severity finding{'s' if sev['high'] > 1 else ''} pending remediation"
+        )
     if not open_findings:
         summary_parts.append("no open compliance findings detected")
     exec_summary = (
@@ -275,7 +319,13 @@ def _compute_overview(
         + f"Based on {evidence_count} evidence items ({len(findings)} findings, {decisions_total} decisions, {audit_events} audit events)."
     )
 
-    inputs = [tenant_id, len(findings), decisions_total, audit_events, requirements_active]
+    inputs = [
+        tenant_id,
+        len(findings),
+        decisions_total,
+        audit_events,
+        requirements_active,
+    ]
     return {
         "governance_health_score": governance_score,
         "compliance_score": req_pct,
@@ -311,10 +361,13 @@ def _compute_posture(
     security_failure_rate = (audit_failures / audit_total) if audit_total > 0 else 0.0
     posture_score = max(0, 100 - risk_score // 10 - int(security_failure_rate * 50))
     posture_level = (
-        "critical" if posture_score < 25 else
-        "poor" if posture_score < 50 else
-        "fair" if posture_score < 75 else
-        "good"
+        "critical"
+        if posture_score < 25
+        else "poor"
+        if posture_score < 50
+        else "fair"
+        if posture_score < 75
+        else "good"
     )
     inputs = [tenant_id, len(open_findings), audit_failures, audit_total, ai_violations]
     evidence_count = len(open_findings) + audit_total
@@ -370,7 +423,8 @@ def _compute_risk(
     cutoff_prev_30 = now - timedelta(days=60)
     new_30d = [f for f in open_findings if f.created_at and f.created_at >= cutoff_30]
     prev_30d = [
-        f for f in open_findings
+        f
+        for f in open_findings
         if f.created_at and cutoff_prev_30 <= f.created_at < cutoff_30
     ]
     velocity = len(new_30d) - len(prev_30d)
@@ -382,7 +436,9 @@ def _compute_risk(
     sev_open = _severity_counts(open_findings)
     risk_raw = _risk_score(open_findings)
     risk_normalized = min(100, risk_raw)
-    risk_trend = "degrading" if velocity > 0 else "improving" if velocity < 0 else "stable"
+    risk_trend = (
+        "degrading" if velocity > 0 else "improving" if velocity < 0 else "stable"
+    )
 
     heatmap = [
         {"severity": s, "count": sev_open.get(s, 0)}
@@ -395,12 +451,15 @@ def _compute_risk(
             "title": f.title,
             "severity": (f.severity or "info"),
             "likelihood": "medium",
-            "category": ((f.req_ids_json[0].split("-")[0]) if f.req_ids_json else "Compliance"),
+            "category": (
+                (f.req_ids_json[0].split("-")[0]) if f.req_ids_json else "Compliance"
+            ),
             "description": str(f.details or f"Open compliance finding: {f.title}"),
             "detected_at": (f.detected_at_utc or now_ts),
             "owner": None,
             "remediation_target": None,
-            "evidence_count": len(f.req_ids_json or []) + len(f.evidence_refs_json or []),
+            "evidence_count": len(f.req_ids_json or [])
+            + len(f.evidence_refs_json or []),
         }
         for f in top_risks
     ]
@@ -444,12 +503,17 @@ def _compute_compliance(
     frameworks: dict[str, Any] = {}
     for fw in _FRAMEWORKS:
         matched_reqs = [
-            r for r in requirements
-            if fw.lower() in (r.source or "").lower() or fw.lower() in (r.source_name or "").lower()
+            r
+            for r in requirements
+            if fw.lower() in (r.source or "").lower()
+            or fw.lower() in (r.source_name or "").lower()
         ]
         matched_findings = [
-            f for f in open_findings
-            if any(fw.lower() in str(req_id).lower() for req_id in (f.req_ids_json or []))
+            f
+            for f in open_findings
+            if any(
+                fw.lower() in str(req_id).lower() for req_id in (f.req_ids_json or [])
+            )
         ]
         frameworks[fw] = {
             "requirement_count": len(matched_reqs),
@@ -464,7 +528,10 @@ def _compute_compliance(
             "framework_id": fw.lower().replace(" ", "_").replace("/", "_"),
             "framework_name": fw,
             "coverage_pct": round(
-                (frameworks[fw]["requirement_count"] / req_total * 100) if req_total > 0 else 0.0, 1
+                (frameworks[fw]["requirement_count"] / req_total * 100)
+                if req_total > 0
+                else 0.0,
+                1,
             ),
             "gap_count": frameworks[fw]["open_findings"],
             "confidence": 0.8,
@@ -500,8 +567,7 @@ def _compute_business(
 ) -> dict[str, Any]:
     sev = _severity_counts(open_findings)
     cost_of_risk = sum(
-        _COST_PER_FINDING.get(severity, 0) * count
-        for severity, count in sev.items()
+        _COST_PER_FINDING.get(severity, 0) * count for severity, count in sev.items()
     )
     insurance_readiness_score = max(0, 100 - sev["critical"] * 20 - sev["high"] * 8)
     business_continuity = max(0, 100 - sev["critical"] * 15 - sev["high"] * 5)
@@ -552,23 +618,41 @@ def _compute_trends(
         gov_score = max(0, 100 - risk_norm)
         decisions_at = sum(1 for r in decisions_rows if r[0] and r[0] <= bucket_end)
         freshness = min(100, 50 + min(50, decisions_at // 5))
-        points.append({
-            "date": _iso(bucket_end),
-            "governance": gov_score,
-            "compliance": min(100, round(decisions_at / max(1, len(decisions_rows)) * 100, 1)) if decisions_rows else 50,
-            "risk": risk_norm,
-            "identity": 50,
-            "freshness": freshness,
-        })
+        points.append(
+            {
+                "date": _iso(bucket_end),
+                "governance": gov_score,
+                "compliance": min(
+                    100, round(decisions_at / max(1, len(decisions_rows)) * 100, 1)
+                )
+                if decisions_rows
+                else 50,
+                "risk": risk_norm,
+                "identity": 50,
+                "freshness": freshness,
+            }
+        )
 
-    inputs = [tenant_id, len(findings), len(decisions_rows), len(audit_rows), window_days]
+    inputs = [
+        tenant_id,
+        len(findings),
+        len(decisions_rows),
+        len(audit_rows),
+        window_days,
+    ]
     return {
         "window": f"{window_days}d",
-        "governance_trend": [{"date": p["date"], "value": p["governance"]} for p in points],
-        "compliance_trend": [{"date": p["date"], "value": p["compliance"]} for p in points],
+        "governance_trend": [
+            {"date": p["date"], "value": p["governance"]} for p in points
+        ],
+        "compliance_trend": [
+            {"date": p["date"], "value": p["compliance"]} for p in points
+        ],
         "risk_trend": [{"date": p["date"], "value": p["risk"]} for p in points],
         "identity_trend": [{"date": p["date"], "value": p["identity"]} for p in points],
-        "evidence_freshness_trend": [{"date": p["date"], "value": p["freshness"]} for p in points],
+        "evidence_freshness_trend": [
+            {"date": p["date"], "value": p["freshness"]} for p in points
+        ],
         "computed_at": now_ts,
         "source": "deterministic:db_query",
         "snapshot_version": _snapshot_version(inputs),
@@ -587,24 +671,33 @@ def _compute_recommendations(
         key=lambda f: _SEVERITY_WEIGHT.get((f.severity or "info").lower(), 0),
         reverse=True,
     )
-    _effort_map = {"critical": "1-3 days", "high": "3-7 days", "medium": "1-2 weeks", "low": "2-4 weeks", "info": "4-6 weeks"}
+    _effort_map = {
+        "critical": "1-3 days",
+        "high": "3-7 days",
+        "medium": "1-2 weeks",
+        "low": "2-4 weeks",
+        "info": "4-6 weeks",
+    }
     recs = []
     for i, f in enumerate(sorted_findings[:25], start=1):
         sev = (f.severity or "info").lower()
         cost_est = _COST_PER_FINDING.get(sev, 0)
-        recs.append({
-            "recommendation_id": f"rec-{f.finding_id}",
-            "priority": sev,
-            "title": f"Remediate {sev} finding: {f.title}",
-            "rationale": f"Open {sev}-severity finding '{f.finding_id}' remains unresolved. Severity weight: {_SEVERITY_WEIGHT.get(sev, 0)}.",
-            "impact": f"Reduces risk score by {_SEVERITY_WEIGHT.get(sev, 0)} points",
-            "estimated_effort": _effort_map.get(sev, "varies"),
-            "business_value": f"Reduces estimated cost exposure by ~${cost_est:,}",
-            "supporting_evidence_count": len(f.req_ids_json or []) + len(f.evidence_refs_json or []),
-            "owner": None,
-            "confidence": 1.0,
-            "framework_references": list(f.req_ids_json or []),
-        })
+        recs.append(
+            {
+                "recommendation_id": f"rec-{f.finding_id}",
+                "priority": sev,
+                "title": f"Remediate {sev} finding: {f.title}",
+                "rationale": f"Open {sev}-severity finding '{f.finding_id}' remains unresolved. Severity weight: {_SEVERITY_WEIGHT.get(sev, 0)}.",
+                "impact": f"Reduces risk score by {_SEVERITY_WEIGHT.get(sev, 0)} points",
+                "estimated_effort": _effort_map.get(sev, "varies"),
+                "business_value": f"Reduces estimated cost exposure by ~${cost_est:,}",
+                "supporting_evidence_count": len(f.req_ids_json or [])
+                + len(f.evidence_refs_json or []),
+                "owner": None,
+                "confidence": 1.0,
+                "framework_references": list(f.req_ids_json or []),
+            }
+        )
     critical_count = sum(1 for r in recs if r["priority"] == "critical")
     inputs = [tenant_id, len(open_findings)]
     return {
@@ -630,7 +723,9 @@ def _compute_forecast(
     for days in windows:
         cutoff = now - timedelta(days=days)
         prev_cutoff = now - timedelta(days=days + 30)
-        period = [f for f in findings if f.created_at and prev_cutoff <= f.created_at < cutoff]
+        period = [
+            f for f in findings if f.created_at and prev_cutoff <= f.created_at < cutoff
+        ]
         period_counts.append(len(period))
 
     n = len(period_counts)
@@ -645,7 +740,9 @@ def _compute_forecast(
         forecast_90d = max(0, int(intercept + slope * (n + 2)))
         r_squared = 0.0
         if den != 0 and y_mean != 0:
-            ss_res = sum((period_counts[i] - (intercept + slope * i)) ** 2 for i in range(n))
+            ss_res = sum(
+                (period_counts[i] - (intercept + slope * i)) ** 2 for i in range(n)
+            )
             ss_tot = sum((period_counts[i] - y_mean) ** 2 for i in range(n))
             r_squared = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
         confidence = min(0.85, max(0.3, r_squared * 0.85))
@@ -657,7 +754,9 @@ def _compute_forecast(
         r_squared = 0.0
         confidence = 0.3
 
-    trend_dir = "increasing" if slope > 0.1 else "decreasing" if slope < -0.1 else "stable"
+    trend_dir = (
+        "increasing" if slope > 0.1 else "decreasing" if slope < -0.1 else "stable"
+    )
     forecasts = [
         {
             "domain": "risk",
@@ -732,25 +831,31 @@ def _compute_priorities(
     priorities = []
     for rank, f in enumerate(sorted_findings[:15], start=1):
         score = _score(f)
-        priorities.append({
-            "rank": rank,
-            "finding_id": f.finding_id,
-            "title": f.title,
-            "severity": f.severity,
-            "status": f.status,
-            "priority_score": score,
-            "score_breakdown": {
-                "severity_weight": _SEVERITY_WEIGHT.get((f.severity or "info").lower(), 0),
-                "recency_bonus": 20 if (f.created_at and f.created_at >= cutoff_7d) else 0,
-            },
-            "detected_at": f.detected_at_utc,
-            "req_ids": f.req_ids_json,
-            "evidence_refs": f.evidence_refs_json,
-            "source": "table:compliance_findings",
-            "calculation": "severity_weight + recency_bonus(+20 if created < 7d ago)",
-            "snapshot_ts": now_ts,
-            "confidence": 1.0,
-        })
+        priorities.append(
+            {
+                "rank": rank,
+                "finding_id": f.finding_id,
+                "title": f.title,
+                "severity": f.severity,
+                "status": f.status,
+                "priority_score": score,
+                "score_breakdown": {
+                    "severity_weight": _SEVERITY_WEIGHT.get(
+                        (f.severity or "info").lower(), 0
+                    ),
+                    "recency_bonus": 20
+                    if (f.created_at and f.created_at >= cutoff_7d)
+                    else 0,
+                },
+                "detected_at": f.detected_at_utc,
+                "req_ids": f.req_ids_json,
+                "evidence_refs": f.evidence_refs_json,
+                "source": "table:compliance_findings",
+                "calculation": "severity_weight + recency_bonus(+20 if created < 7d ago)",
+                "snapshot_ts": now_ts,
+                "confidence": 1.0,
+            }
+        )
     inputs = [tenant_id, len(open_findings)]
     return {
         "tenant_id": tenant_id,
@@ -781,12 +886,20 @@ def _compute_summary(
 ) -> dict[str, Any]:
     sev = _severity_counts(open_findings)
     risk_score = _risk_score(open_findings)
-    posture_score = max(0, 100 - risk_score // 10 - (int((audit_failures / audit_total) * 50) if audit_total else 0))
+    posture_score = max(
+        0,
+        100
+        - risk_score // 10
+        - (int((audit_failures / audit_total) * 50) if audit_total else 0),
+    )
     posture_level = (
-        "critical" if posture_score < 25 else
-        "poor" if posture_score < 50 else
-        "fair" if posture_score < 75 else
-        "good"
+        "critical"
+        if posture_score < 25
+        else "poor"
+        if posture_score < 50
+        else "fair"
+        if posture_score < 75
+        else "good"
     )
     cost_of_risk = sum(_COST_PER_FINDING.get(s, 0) * c for s, c in sev.items())
     insurance_score = max(0, 100 - sev["critical"] * 20 - sev["high"] * 8)
@@ -799,9 +912,13 @@ def _compute_summary(
     )
     major_risks = []
     if sev["critical"]:
-        major_risks.append(f"{sev['critical']} critical compliance finding{'s' if sev['critical'] > 1 else ''} open")
+        major_risks.append(
+            f"{sev['critical']} critical compliance finding{'s' if sev['critical'] > 1 else ''} open"
+        )
     if sev["high"]:
-        major_risks.append(f"{sev['high']} high-severity finding{'s' if sev['high'] > 1 else ''} pending remediation")
+        major_risks.append(
+            f"{sev['high']} high-severity finding{'s' if sev['high'] > 1 else ''} pending remediation"
+        )
     if audit_failures > 0 and audit_total > 0:
         fail_pct = round(audit_failures / audit_total * 100, 1)
         major_risks.append(f"Security audit failure rate: {fail_pct}%")
@@ -812,27 +929,41 @@ def _compute_summary(
     if new_30d and len(new_30d) == 0:
         major_improvements.append("No new findings in the last 30 days")
     if requirements_active > 0:
-        major_improvements.append(f"{requirements_active} compliance requirements actively tracked")
+        major_improvements.append(
+            f"{requirements_active} compliance requirements actively tracked"
+        )
 
     compliance_status = (
-        "Critical" if posture_score < 25 else
-        "At Risk" if posture_score < 50 else
-        "Adequate" if posture_score < 75 else
-        "Strong"
+        "Critical"
+        if posture_score < 25
+        else "At Risk"
+        if posture_score < 50
+        else "Adequate"
+        if posture_score < 75
+        else "Strong"
     )
 
     strategic_recommendations = []
     if sev["critical"]:
-        strategic_recommendations.append(f"Immediately remediate {sev['critical']} critical finding{'s' if sev['critical'] > 1 else ''}")
+        strategic_recommendations.append(
+            f"Immediately remediate {sev['critical']} critical finding{'s' if sev['critical'] > 1 else ''}"
+        )
     if sev["high"]:
-        strategic_recommendations.append(f"Prioritize {sev['high']} high-severity finding{'s' if sev['high'] > 1 else ''} within 30 days")
-    strategic_recommendations.append("Maintain continuous compliance monitoring via FrostGate governance platform")
+        strategic_recommendations.append(
+            f"Prioritize {sev['high']} high-severity finding{'s' if sev['high'] > 1 else ''} within 30 days"
+        )
+    strategic_recommendations.append(
+        "Maintain continuous compliance monitoring via FrostGate governance platform"
+    )
 
     audit_label = (
-        "Critical" if insurance_score < 25 else
-        "At Risk" if insurance_score < 50 else
-        "Adequate" if insurance_score < 75 else
-        "Strong"
+        "Critical"
+        if insurance_score < 25
+        else "At Risk"
+        if insurance_score < 50
+        else "Adequate"
+        if insurance_score < 75
+        else "Strong"
     )
 
     board_narrative = (
@@ -841,11 +972,21 @@ def _compute_summary(
         f"Estimated cost of risk: ${cost_of_risk:,.0f}. "
         f"Insurance readiness score: {insurance_score}/100 ({audit_label}). "
         f"Governance evidence: {decisions_total} decisions processed, {audit_total} audit events recorded. "
-        + (f"Highest-priority finding: '{top_finding.title}' (severity: {top_finding.severity}). " if top_finding else "")
+        + (
+            f"Highest-priority finding: '{top_finding.title}' (severity: {top_finding.severity}). "
+            if top_finding
+            else ""
+        )
         + "All metrics derived from authoritative governance evidence. No AI-generated estimates."
     )
 
-    inputs = [tenant_id, len(open_findings), decisions_total, audit_total, requirements_active]
+    inputs = [
+        tenant_id,
+        len(open_findings),
+        decisions_total,
+        audit_total,
+        requirements_active,
+    ]
     return {
         "major_risks": major_risks,
         "major_improvements": major_improvements,
@@ -865,6 +1006,7 @@ def _compute_summary(
 # ---------------------------------------------------------------------------
 # Route: /api/executive/workspace  (aggregated — single fetch, one snapshot)
 # ---------------------------------------------------------------------------
+
 
 @router.get("/workspace")
 def executive_workspace(request: Request) -> dict[str, Any]:
@@ -896,57 +1038,92 @@ def executive_workspace(request: Request) -> dict[str, Any]:
 
     open_findings = _open_findings(findings)
     requirements_total = len(requirements)
-    requirements_active = sum(1 for r in requirements if (r.status or "").lower() == "active")
+    requirements_active = sum(
+        1 for r in requirements if (r.status or "").lower() == "active"
+    )
 
     shared = dict(tenant_id=tenant_id, now_ts=now_ts)
 
     sections = {
         "overview": _compute_overview(
-            findings=findings, open_findings=open_findings,
-            decisions_total=decisions_total, audit_events=audit_total,
-            requirements_total=requirements_total, requirements_active=requirements_active,
+            findings=findings,
+            open_findings=open_findings,
+            decisions_total=decisions_total,
+            audit_events=audit_total,
+            requirements_total=requirements_total,
+            requirements_active=requirements_active,
             **shared,
         ),
         "posture": _compute_posture(
-            findings=findings, open_findings=open_findings,
-            audit_failures=audit_failures, audit_total=audit_total,
-            ai_violations=ai_violations, **shared,
+            findings=findings,
+            open_findings=open_findings,
+            audit_failures=audit_failures,
+            audit_total=audit_total,
+            ai_violations=ai_violations,
+            **shared,
         ),
         "risk": _compute_risk(
-            findings=findings, open_findings=open_findings, now=now, **shared,
+            findings=findings,
+            open_findings=open_findings,
+            now=now,
+            **shared,
         ),
         "compliance": _compute_compliance(
-            requirements=requirements, findings=findings, open_findings=open_findings,
+            requirements=requirements,
+            findings=findings,
+            open_findings=open_findings,
             **shared,
         ),
         "business": _compute_business(
-            findings=findings, open_findings=open_findings,
-            token_cost_total=token_cost_total, **shared,
+            findings=findings,
+            open_findings=open_findings,
+            token_cost_total=token_cost_total,
+            **shared,
         ),
         "trends": _compute_trends(
-            findings=findings, decisions_rows=decisions_rows,
-            audit_rows=audit_rows, now=now, window_days=90, **shared,
+            findings=findings,
+            decisions_rows=decisions_rows,
+            audit_rows=audit_rows,
+            now=now,
+            window_days=90,
+            **shared,
         ),
         "recommendations": _compute_recommendations(
-            findings=findings, open_findings=open_findings, **shared,
+            findings=findings,
+            open_findings=open_findings,
+            **shared,
         ),
         "forecast": _compute_forecast(
-            findings=findings, open_findings=open_findings, now=now, **shared,
+            findings=findings,
+            open_findings=open_findings,
+            now=now,
+            **shared,
         ),
         "priorities": _compute_priorities(
-            findings=findings, open_findings=open_findings, now=now, **shared,
+            findings=findings,
+            open_findings=open_findings,
+            now=now,
+            **shared,
         ),
         "summary": _compute_summary(
-            findings=findings, open_findings=open_findings,
-            decisions_total=decisions_total, audit_total=audit_total,
-            audit_failures=audit_failures, requirements_active=requirements_active,
-            now=now, **shared,
+            findings=findings,
+            open_findings=open_findings,
+            decisions_total=decisions_total,
+            audit_total=audit_total,
+            audit_failures=audit_failures,
+            requirements_active=requirements_active,
+            now=now,
+            **shared,
         ),
     }
 
     all_inputs = [
-        tenant_id, len(findings), len(open_findings),
-        decisions_total, audit_total, requirements_total,
+        tenant_id,
+        len(findings),
+        len(open_findings),
+        decisions_total,
+        audit_total,
+        requirements_total,
     ]
 
     return {
@@ -970,6 +1147,7 @@ def executive_workspace(request: Request) -> dict[str, Any]:
 # Individual routes (thin wrappers — fetch own data, delegate to _compute_*)
 # ---------------------------------------------------------------------------
 
+
 @router.get("/overview")
 def executive_overview(request: Request) -> dict[str, Any]:
     tenant_id = require_bound_tenant(request)
@@ -981,23 +1159,35 @@ def executive_overview(request: Request) -> dict[str, Any]:
         decisions_total = _count_decisions(db, tenant_id)
         audit_events = _count_audit(db, tenant_id)
         requirements_total = _safe(
-            lambda: db.query(func.count(ComplianceRequirementRecord.id))
-            .filter(ComplianceRequirementRecord.tenant_id == tenant_id)
-            .scalar() or 0, 0,
+            lambda: (
+                db.query(func.count(ComplianceRequirementRecord.id))
+                .filter(ComplianceRequirementRecord.tenant_id == tenant_id)
+                .scalar()
+                or 0
+            ),
+            0,
         )
         requirements_active = _safe(
-            lambda: db.query(func.count(ComplianceRequirementRecord.id))
-            .filter(
-                ComplianceRequirementRecord.tenant_id == tenant_id,
-                ComplianceRequirementRecord.status == "active",
-            )
-            .scalar() or 0, 0,
+            lambda: (
+                db.query(func.count(ComplianceRequirementRecord.id))
+                .filter(
+                    ComplianceRequirementRecord.tenant_id == tenant_id,
+                    ComplianceRequirementRecord.status == "active",
+                )
+                .scalar()
+                or 0
+            ),
+            0,
         )
     return _compute_overview(
-        findings=findings, open_findings=_open_findings(findings),
-        decisions_total=decisions_total, audit_events=audit_events,
-        requirements_total=requirements_total, requirements_active=requirements_active,
-        tenant_id=tenant_id, now_ts=now_ts,
+        findings=findings,
+        open_findings=_open_findings(findings),
+        decisions_total=decisions_total,
+        audit_events=audit_events,
+        requirements_total=requirements_total,
+        requirements_active=requirements_active,
+        tenant_id=tenant_id,
+        now_ts=now_ts,
     )
 
 
@@ -1012,9 +1202,13 @@ def executive_posture(request: Request) -> dict[str, Any]:
         audit_total = _count_audit(db, tenant_id)
         ai_violations = _count_ai_violations(db, tenant_id)
     return _compute_posture(
-        findings=findings, open_findings=_open_findings(findings),
-        audit_failures=audit_failures, audit_total=audit_total,
-        ai_violations=ai_violations, tenant_id=tenant_id, now_ts=now_ts,
+        findings=findings,
+        open_findings=_open_findings(findings),
+        audit_failures=audit_failures,
+        audit_total=audit_total,
+        ai_violations=ai_violations,
+        tenant_id=tenant_id,
+        now_ts=now_ts,
     )
 
 
@@ -1026,8 +1220,11 @@ def executive_risk(request: Request) -> dict[str, Any]:
     with Session(get_engine()) as db:
         findings = _safe(lambda: _query_findings(db, tenant_id), [])
     return _compute_risk(
-        findings=findings, open_findings=_open_findings(findings),
-        now=now, tenant_id=tenant_id, now_ts=_iso(now),
+        findings=findings,
+        open_findings=_open_findings(findings),
+        now=now,
+        tenant_id=tenant_id,
+        now_ts=_iso(now),
     )
 
 
@@ -1040,9 +1237,11 @@ def executive_compliance(request: Request) -> dict[str, Any]:
         requirements = _safe(lambda: _query_requirements(db, tenant_id), [])
         findings = _safe(lambda: _query_findings(db, tenant_id), [])
     return _compute_compliance(
-        requirements=requirements, findings=findings,
+        requirements=requirements,
+        findings=findings,
         open_findings=_open_findings(findings),
-        tenant_id=tenant_id, now_ts=now_ts,
+        tenant_id=tenant_id,
+        now_ts=now_ts,
     )
 
 
@@ -1055,8 +1254,11 @@ def executive_business(request: Request) -> dict[str, Any]:
         findings = _safe(lambda: _query_findings(db, tenant_id), [])
         token_cost_total = _sum_tokens(db, tenant_id)
     return _compute_business(
-        findings=findings, open_findings=_open_findings(findings),
-        token_cost_total=token_cost_total, tenant_id=tenant_id, now_ts=now_ts,
+        findings=findings,
+        open_findings=_open_findings(findings),
+        token_cost_total=token_cost_total,
+        tenant_id=tenant_id,
+        now_ts=now_ts,
     )
 
 
@@ -1074,8 +1276,13 @@ def executive_trends(request: Request, window: str = "90d") -> dict[str, Any]:
         decisions_rows = _query_decision_timestamps(db, tenant_id)
         audit_rows = _query_audit_timestamps(db, tenant_id)
     return _compute_trends(
-        findings=findings, decisions_rows=decisions_rows, audit_rows=audit_rows,
-        now=now, tenant_id=tenant_id, now_ts=now_ts, window_days=window_days,
+        findings=findings,
+        decisions_rows=decisions_rows,
+        audit_rows=audit_rows,
+        now=now,
+        tenant_id=tenant_id,
+        now_ts=now_ts,
+        window_days=window_days,
     )
 
 
@@ -1087,8 +1294,10 @@ def executive_recommendations(request: Request) -> dict[str, Any]:
     with Session(get_engine()) as db:
         findings = _safe(lambda: _query_findings(db, tenant_id), [])
     return _compute_recommendations(
-        findings=findings, open_findings=_open_findings(findings),
-        tenant_id=tenant_id, now_ts=now_ts,
+        findings=findings,
+        open_findings=_open_findings(findings),
+        tenant_id=tenant_id,
+        now_ts=now_ts,
     )
 
 
@@ -1101,8 +1310,11 @@ def executive_forecast(request: Request) -> dict[str, Any]:
         findings = _safe(lambda: _query_findings(db, tenant_id), [])
     open_findings = _open_findings(findings)
     return _compute_forecast(
-        findings=findings, open_findings=open_findings,
-        now=now, tenant_id=tenant_id, now_ts=_iso(now),
+        findings=findings,
+        open_findings=open_findings,
+        now=now,
+        tenant_id=tenant_id,
+        now_ts=_iso(now),
     )
 
 
@@ -1114,8 +1326,11 @@ def executive_priorities(request: Request) -> dict[str, Any]:
     with Session(get_engine()) as db:
         findings = _safe(lambda: _query_findings(db, tenant_id), [])
     return _compute_priorities(
-        findings=findings, open_findings=_open_findings(findings),
-        now=now, tenant_id=tenant_id, now_ts=_iso(now),
+        findings=findings,
+        open_findings=_open_findings(findings),
+        now=now,
+        tenant_id=tenant_id,
+        now_ts=_iso(now),
     )
 
 
@@ -1130,16 +1345,25 @@ def executive_summary(request: Request) -> dict[str, Any]:
         audit_total = _count_audit(db, tenant_id)
         audit_failures = _count_audit_failures(db, tenant_id)
         requirements_active = _safe(
-            lambda: db.query(func.count(ComplianceRequirementRecord.id))
-            .filter(
-                ComplianceRequirementRecord.tenant_id == tenant_id,
-                ComplianceRequirementRecord.status == "active",
-            )
-            .scalar() or 0, 0,
+            lambda: (
+                db.query(func.count(ComplianceRequirementRecord.id))
+                .filter(
+                    ComplianceRequirementRecord.tenant_id == tenant_id,
+                    ComplianceRequirementRecord.status == "active",
+                )
+                .scalar()
+                or 0
+            ),
+            0,
         )
     return _compute_summary(
-        findings=findings, open_findings=_open_findings(findings),
-        decisions_total=decisions_total, audit_total=audit_total,
-        audit_failures=audit_failures, requirements_active=requirements_active,
-        now=now, tenant_id=tenant_id, now_ts=_iso(now),
+        findings=findings,
+        open_findings=_open_findings(findings),
+        decisions_total=decisions_total,
+        audit_total=audit_total,
+        audit_failures=audit_failures,
+        requirements_active=requirements_active,
+        now=now,
+        tenant_id=tenant_id,
+        now_ts=_iso(now),
     )

@@ -48,6 +48,7 @@ from api.executive_intelligence import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _mock_finding(
     finding_id: str = "f-001",
     severity: str = "high",
@@ -72,6 +73,7 @@ def _mock_finding(
 # Constants
 # ---------------------------------------------------------------------------
 
+
 class TestSeverityWeights:
     def test_critical_highest(self):
         assert _SEVERITY_WEIGHT["critical"] > _SEVERITY_WEIGHT["high"]
@@ -94,6 +96,7 @@ class TestSeverityWeights:
 # _snapshot_version
 # ---------------------------------------------------------------------------
 
+
 class TestSnapshotVersion:
     def test_deterministic(self):
         v1 = _snapshot_version(["tenant-a", 5, 3])
@@ -114,6 +117,7 @@ class TestSnapshotVersion:
 # _safe helper
 # ---------------------------------------------------------------------------
 
+
 class TestSafeHelper:
     def test_returns_value_on_success(self):
         assert _safe(lambda: 42, 0) == 42
@@ -129,6 +133,7 @@ class TestSafeHelper:
 # ---------------------------------------------------------------------------
 # _metric (explainability envelope)
 # ---------------------------------------------------------------------------
+
 
 class TestMetricEnvelope:
     def test_required_keys(self):
@@ -176,6 +181,7 @@ class TestMetricEnvelope:
 # _open_findings
 # ---------------------------------------------------------------------------
 
+
 class TestOpenFindings:
     def test_open_status_included(self):
         findings = [
@@ -201,6 +207,7 @@ class TestOpenFindings:
 # _risk_score
 # ---------------------------------------------------------------------------
 
+
 class TestRiskScore:
     def test_single_critical(self):
         f = _mock_finding(severity="critical", status="open")
@@ -213,9 +220,9 @@ class TestRiskScore:
             _mock_finding("f-3", severity="low", status="open"),
         ]
         expected = (
-            _SEVERITY_WEIGHT["critical"] +
-            _SEVERITY_WEIGHT["high"] +
-            _SEVERITY_WEIGHT["low"]
+            _SEVERITY_WEIGHT["critical"]
+            + _SEVERITY_WEIGHT["high"]
+            + _SEVERITY_WEIGHT["low"]
         )
         assert _risk_score(findings) == expected
 
@@ -230,6 +237,7 @@ class TestRiskScore:
 # ---------------------------------------------------------------------------
 # _severity_counts
 # ---------------------------------------------------------------------------
+
 
 class TestSeverityCounts:
     def test_counts_by_severity(self):
@@ -255,6 +263,7 @@ class TestSeverityCounts:
 # Forecast OLS math
 # ---------------------------------------------------------------------------
 
+
 class TestForecastMath:
     """Validate OLS linear regression used in /forecast endpoint."""
 
@@ -268,7 +277,9 @@ class TestForecastMath:
         den = sum((i - x_mean) ** 2 for i in range(n))
         slope = num / den if den != 0 else 0.0
         intercept = y_mean - slope * x_mean
-        ss_res = sum((period_counts[i] - (intercept + slope * i)) ** 2 for i in range(n))
+        ss_res = sum(
+            (period_counts[i] - (intercept + slope * i)) ** 2 for i in range(n)
+        )
         ss_tot = sum((period_counts[i] - y_mean) ** 2 for i in range(n))
         r_squared = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
         return {"slope": slope, "intercept": intercept, "r_squared": r_squared}
@@ -300,6 +311,7 @@ class TestForecastMath:
 # Priority score
 # ---------------------------------------------------------------------------
 
+
 class TestPriorityScore:
     def test_critical_scores_higher_than_low(self):
         base_critical = _SEVERITY_WEIGHT["critical"]
@@ -312,7 +324,9 @@ class TestPriorityScore:
         old = _mock_finding(severity="low", created_at=now - timedelta(days=30))
 
         cutoff_7d = now - timedelta(days=7)
-        score_recent = _SEVERITY_WEIGHT["low"] + (20 if recent.created_at >= cutoff_7d else 0)
+        score_recent = _SEVERITY_WEIGHT["low"] + (
+            20 if recent.created_at >= cutoff_7d else 0
+        )
         score_old = _SEVERITY_WEIGHT["low"] + (20 if old.created_at >= cutoff_7d else 0)
         assert score_recent > score_old
 
@@ -326,6 +340,7 @@ class TestPriorityScore:
 # Business cost calculation
 # ---------------------------------------------------------------------------
 
+
 class TestBusinessCost:
     def test_cost_scales_with_severity(self):
         assert _COST_PER_FINDING["critical"] > _COST_PER_FINDING["high"]
@@ -334,10 +349,7 @@ class TestBusinessCost:
 
     def test_total_cost_correct(self):
         severity_counts = {"critical": 2, "high": 1, "medium": 0, "low": 0, "info": 0}
-        expected = (
-            2 * _COST_PER_FINDING["critical"] +
-            1 * _COST_PER_FINDING["high"]
-        )
+        expected = 2 * _COST_PER_FINDING["critical"] + 1 * _COST_PER_FINDING["high"]
         computed = sum(
             _COST_PER_FINDING.get(sev, 0) * count
             for sev, count in severity_counts.items()
@@ -357,6 +369,7 @@ class TestBusinessCost:
 # Router structure
 # ---------------------------------------------------------------------------
 
+
 class TestRouterStructure:
     def test_router_prefix(self):
         assert router.prefix == "/api/executive"
@@ -364,22 +377,35 @@ class TestRouterStructure:
     def test_router_has_expected_routes(self):
         routes = {r.path for r in router.routes}
         expected_suffixes = [
-            "/overview", "/posture", "/risk", "/compliance",
-            "/business", "/trends", "/recommendations",
-            "/forecast", "/priorities", "/summary", "/workspace",
+            "/overview",
+            "/posture",
+            "/risk",
+            "/compliance",
+            "/business",
+            "/trends",
+            "/recommendations",
+            "/forecast",
+            "/priorities",
+            "/summary",
+            "/workspace",
         ]
         for suffix in expected_suffixes:
             full_path = f"/api/executive{suffix}"
             assert full_path in routes, f"Missing route: {full_path}"
 
     def test_router_has_governance_read_dependency(self):
-        dep_names = {d.dependency.__name__ for d in router.dependencies if hasattr(d, 'dependency')}
+        dep_names = {
+            d.dependency.__name__
+            for d in router.dependencies
+            if hasattr(d, "dependency")
+        }
         assert "require_scopes" in dep_names or len(router.dependencies) > 0
 
 
 # ---------------------------------------------------------------------------
 # Tenant isolation: no cross-tenant leakage
 # ---------------------------------------------------------------------------
+
 
 class TestDeterminismInvariant:
     """Verify that snapshot_version changes when inputs change."""
@@ -398,6 +424,7 @@ class TestDeterminismInvariant:
 # Pure _compute_* functions
 # ---------------------------------------------------------------------------
 
+
 class TestComputeOverview:
     def test_returns_required_keys(self):
         now_ts = "2026-01-01T00:00:00Z"
@@ -413,7 +440,13 @@ class TestComputeOverview:
             tenant_id="tenant-a",
             now_ts=now_ts,
         )
-        for key in ("governance_health_score", "compliance_score", "risk_score", "open_findings_count", "computed_at"):
+        for key in (
+            "governance_health_score",
+            "compliance_score",
+            "risk_score",
+            "open_findings_count",
+            "computed_at",
+        ):
             assert key in result, f"Missing key: {key}"
 
     def test_snapshot_version_changes_with_inputs(self):
@@ -457,7 +490,13 @@ class TestComputeRisk:
             tenant_id="t",
             now_ts=_iso(now),
         )
-        for key in ("heatmap", "top_risks", "open_findings_by_severity", "risk_score", "risk_trend"):
+        for key in (
+            "heatmap",
+            "top_risks",
+            "open_findings_by_severity",
+            "risk_score",
+            "risk_trend",
+        ):
             assert key in result, f"Missing key: {key}"
 
     def test_no_findings_stable_velocity(self):
@@ -500,7 +539,10 @@ class TestComputeBusiness:
 
     def test_cost_scales_with_critical_findings(self):
         now_ts = "2026-01-01T00:00:00Z"
-        criticals = [_mock_finding(f"f-{i}", severity="critical", status="open") for i in range(3)]
+        criticals = [
+            _mock_finding(f"f-{i}", severity="critical", status="open")
+            for i in range(3)
+        ]
         result = _compute_business(
             findings=criticals,
             open_findings=criticals,
@@ -509,5 +551,6 @@ class TestComputeBusiness:
             now_ts=now_ts,
         )
         from api.executive_intelligence import _COST_PER_FINDING
+
         expected = 3 * _COST_PER_FINDING["critical"]
         assert result["cost_of_risk_estimate_usd"] == expected
