@@ -6,6 +6,40 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-05 — pr/18.6.8-workspace-integration-demo-readiness: P1 CI/Vercel Fix
+
+**Branch:** `pr/18.6.8-workspace-integration-demo-readiness`
+
+**What was done:** PR 18.6.8 P1 — repaired 8 CI/Vercel gate failures discovered after the initial 18.6.8 commit. No business logic rewritten; all fixes are targeted correctness repairs.
+
+**Root causes and fixes:**
+
+1. **MapIterator spread (TypeScript target):** `WorkspaceSearch.tsx` line 56 used `[...groupResults(results).values()].flat()` — this requires `--downlevelIteration` and fails on older ES targets. Fixed to `Array.from(groupResults(results).values()).flat()`.
+
+2. **PR_FIX_LOG gate:** `tools/ci/check_workspace_integration.py` is a new file matching the `^tools/` source pattern in `scripts/ci/enforce_pr_fix_log.sh`. This entry satisfies that gate.
+
+3. **CrossWorkspaceNav stale context spread:** `contextParams` was typed as `Record<string,string>` and spread wholesale into `WorkspaceContext`, propagating stale keys (e.g. `report`, `finding`) to workspaces that did not declare them. Fixed: `contextParams` retyped as `WorkspaceContextKey[]`; `resolveHref` now iterates the declared keys and builds a filtered context object — only declared keys are forwarded.
+
+4. **Wrong Executive Intelligence route:** `workspaceNav.ts` linked all executive-intelligence nav entries to `/dashboard/evaluation` (the Evaluation Lab). Corrected to `/dashboard/executive` in all 5+ occurrences.
+
+5. **Reports 404:** `/reports` had no `page.tsx` — only `/reports/[reportId]/page.tsx` existed. Created `apps/console/app/reports/page.tsx` as a minimal landing page with `data-testid="reports-landing"`, `data-mcim-id`, `data-workspace`, `role="status"`, and a link to `/field-assessment`.
+
+6. **Nav registry source drift:** `packages/navigation/navigation-registry.json` was updated in PR 18.6.8 but `packages/navigation/src/registrations/console.ts` was not. Added `operations-workspace` (route `/workspace`, group `Operations`, tier `primary`, MCIM-18.6-OPS-WS) and `trust-center-workspace` (route `/trust-center`, group `Trust`, tier `primary`, MCIM-18.6-TRUST-CTR) to `console.ts`.
+
+7. **React Hook exhaustive-deps warnings:** `apps/console/app/dashboard/executive/page.tsx` had 5 tab components (OverviewTab, RiskTab, ComplianceTab, BusinessTab, RecommendationsTab) with `if (initialData) return` inside `useEffect(fn, [])`, creating a stale closure on `initialData`. Applied `useRef(Boolean(initialData))` pattern (matching TrendsTab) — `hasInitialRef.current` is stable across renders.
+
+**Files modified:**
+- `apps/console/components/workspace-integration/WorkspaceSearch.tsx` — `Array.from()` fix
+- `apps/console/components/workspace-integration/CrossWorkspaceNav.tsx` — `contextParams: WorkspaceContextKey[]`, `resolveHref` key-filtering loop
+- `apps/console/lib/workspaceNav.ts` — corrected all executive-intelligence routes to `/dashboard/executive`
+- `apps/console/app/reports/page.tsx` — new landing page (no route 404)
+- `packages/navigation/src/registrations/console.ts` — added `operations-workspace`, `trust-center-workspace`
+- `apps/console/app/dashboard/executive/page.tsx` — `useRef` pattern for 5 tab components
+- `apps/console/tests/workspace-integration.test.js` — added C-P1 and AT-P1 test blocks
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
 ### 2026-07-05 — feat/pr-18.6.7-executive-intelligence-center: Executive Intelligence Center
 
 **Branch:** `feat/pr-18.6.7-executive-intelligence-center`
