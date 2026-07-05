@@ -78,7 +78,7 @@ export const WORKSPACE_NAV_MAP: Record<string, WorkspaceNavLink[]> = {
     {
       id: 'executive-intelligence',
       label: 'Executive Intelligence',
-      route: '/dashboard/evaluation',
+      route: '/dashboard/executive',
       mcimId: 'MCIM-18.6-EXEC-INTEL',
       description: 'Executive posture and risk metrics',
       contextParams: ['tenant'],
@@ -121,7 +121,7 @@ export const WORKSPACE_NAV_MAP: Record<string, WorkspaceNavLink[]> = {
     {
       id: 'executive-intelligence',
       label: 'Executive Intelligence',
-      route: '/dashboard/evaluation',
+      route: '/dashboard/executive',
       mcimId: 'MCIM-18.6-EXEC-INTEL',
       description: 'Executive posture and risk metrics',
       contextParams: ['tenant'],
@@ -172,7 +172,7 @@ export const WORKSPACE_NAV_MAP: Record<string, WorkspaceNavLink[]> = {
     {
       id: 'executive-intelligence',
       label: 'Executive Intelligence',
-      route: '/dashboard/evaluation',
+      route: '/dashboard/executive',
       mcimId: 'MCIM-18.6-EXEC-INTEL',
       description: 'Executive posture and risk metrics',
       contextParams: ['tenant'],
@@ -215,7 +215,7 @@ export const WORKSPACE_NAV_MAP: Record<string, WorkspaceNavLink[]> = {
     {
       id: 'executive-intelligence',
       label: 'Executive Intelligence',
-      route: '/dashboard/evaluation',
+      route: '/dashboard/executive',
       mcimId: 'MCIM-18.6-EXEC-INTEL',
       description: 'Executive posture and risk metrics',
       contextParams: ['tenant'],
@@ -277,7 +277,7 @@ export const WORKSPACE_NAV_MAP: Record<string, WorkspaceNavLink[]> = {
     {
       id: 'executive-intelligence',
       label: 'Executive Intelligence',
-      route: '/dashboard/evaluation',
+      route: '/dashboard/executive',
       mcimId: 'MCIM-18.6-EXEC-INTEL',
       description: 'Executive posture and risk metrics',
       contextParams: ['tenant'],

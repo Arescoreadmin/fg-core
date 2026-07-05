@@ -174,9 +174,10 @@ function OverviewTab({ initialData }: { initialData?: ExecutiveOverview }) {
   const [loading, setLoading] = useState(!initialData);
   const [data, setData] = useState<ExecutiveOverview | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
+  const hasInitialRef = useRef(Boolean(initialData));
 
   useEffect(() => {
-    if (initialData) return;
+    if (hasInitialRef.current) return;
     let cancelled = false;
     getExecutiveOverview().then((r) => {
       if (cancelled) return;
@@ -274,9 +275,10 @@ function RiskTab({ initialData }: { initialData?: ExecutiveRisk }) {
   const [loading, setLoading] = useState(!initialData);
   const [data, setData] = useState<ExecutiveRisk | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
+  const hasInitialRef = useRef(Boolean(initialData));
 
   useEffect(() => {
-    if (initialData) return;
+    if (hasInitialRef.current) return;
     let cancelled = false;
     getExecutiveRisk().then((r) => {
       if (cancelled) return;
@@ -368,9 +370,10 @@ function ComplianceTab({ initialData }: { initialData?: ExecutiveCompliance }) {
   const [loading, setLoading] = useState(!initialData);
   const [data, setData] = useState<ExecutiveCompliance | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
+  const hasInitialRef = useRef(Boolean(initialData));
 
   useEffect(() => {
-    if (initialData) return;
+    if (hasInitialRef.current) return;
     let cancelled = false;
     getExecutiveCompliance().then((r) => {
       if (cancelled) return;
@@ -560,9 +563,10 @@ function BusinessTab({ initialData }: { initialData?: ExecutiveBusiness }) {
   const [loading, setLoading] = useState(!initialData);
   const [data, setData] = useState<ExecutiveBusiness | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
+  const hasInitialRef = useRef(Boolean(initialData));
 
   useEffect(() => {
-    if (initialData) return;
+    if (hasInitialRef.current) return;
     let cancelled = false;
     getExecutiveBusiness().then((r) => {
       if (cancelled) return;
@@ -612,9 +616,10 @@ function RecommendationsTab({ initialData }: { initialData?: ExecutiveRecommenda
   const [loading, setLoading] = useState(!initialData);
   const [data, setData] = useState<ExecutiveRecommendations | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
+  const hasInitialRef = useRef(Boolean(initialData));
 
   useEffect(() => {
-    if (initialData) return;
+    if (hasInitialRef.current) return;
     let cancelled = false;
     getExecutiveRecommendations().then((r) => {
       if (cancelled) return;

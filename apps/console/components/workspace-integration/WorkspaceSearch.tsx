@@ -53,7 +53,7 @@ export default function WorkspaceSearch({
   const searchId = useId();
 
   const flatResults = groupByWorkspace
-    ? [...groupResults(results).values()].flat()
+    ? Array.from(groupResults(results).values()).flat()
     : results;
 
   const handleChange = useCallback(

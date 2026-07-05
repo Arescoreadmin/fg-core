@@ -840,6 +840,58 @@ const items: NavigationItem[] = [
         'Renders the AI-generated advisory PDF report for a completed field assessment engagement.',
     },
   },
+
+  // ─── PR 18.6.8 — Workspace Integration ───────────────────────────────────────
+
+  {
+    id: 'operations-workspace',
+    title: 'Operations Workspace',
+    route: '/workspace',
+    group: 'Operations',
+    tier: 'primary',
+    classification: 'primary',
+    visibility: 'visible',
+    platform: 'console',
+    roles: ['Operator', 'Administrator', 'CISO'],
+    aliases: ['operations', 'ops workspace', 'work queue', 'case workspace'],
+    keywords: ['operations', 'workspace', 'case', 'work queue', 'investigation', 'delegation'],
+    metadata: {
+      mcimId: 'MCIM-18.6-OPS-WS',
+      capability: 'Enterprise Operations Workspace',
+      family: 'operator-execution',
+      authority: 'FrostGate Platform',
+      sourceOfTruth: 'apps/console/app/workspace/page.tsx',
+      maturity: 'functional',
+      lifecycle: 'growing',
+      businessValue:
+        'Unified operator workspace for managing active cases, work queues, delegations, and cross-authority investigations.',
+    },
+  },
+
+  {
+    id: 'trust-center-workspace',
+    title: 'Trust Center',
+    route: '/trust-center',
+    group: 'Trust',
+    tier: 'primary',
+    classification: 'primary',
+    visibility: 'visible',
+    platform: 'console',
+    roles: ['Auditor', 'CISO', 'Executive'],
+    aliases: ['trust', 'trust workspace', 'trust hub', 'verification center'],
+    keywords: ['trust', 'verification', 'certificate', 'scorecard', 'benchmark', 'assurance'],
+    metadata: {
+      mcimId: 'MCIM-18.6-TRUST-CTR',
+      capability: 'Enterprise Trust Center',
+      family: 'trust-center',
+      authority: 'FrostGate Platform',
+      sourceOfTruth: 'apps/console/app/trust-center/page.tsx',
+      maturity: 'functional',
+      lifecycle: 'growing',
+      businessValue:
+        'Centralised trust hub providing scorecard, evidence graph, governance replay, change intelligence, and SLA forecasting for auditors and executives.',
+    },
+  },
 ];
 
 for (const item of items) {

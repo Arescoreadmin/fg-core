@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { buildWorkspaceUrl } from '@/lib/workspaceContext';
-import type { WorkspaceContext } from '@/lib/workspaceContext';
+import type { WorkspaceContext, WorkspaceContextKey } from '@/lib/workspaceContext';
 
 const MCIM_ID = 'MCIM-18.6-CROSS-WS-NAV';
 const AUTHORITY = 'Cross-Workspace Navigation Authority';
@@ -16,7 +16,8 @@ export interface WorkspaceLink {
   route: string;
   icon?: React.ElementType;
   description?: string;
-  contextParams?: Record<string, string>;
+  /** Keys to forward from active context — only declared keys are included; stale keys are dropped. */
+  contextParams?: WorkspaceContextKey[];
   mcimId: string;
 }
 
@@ -48,8 +49,18 @@ export default function CrossWorkspaceNav({
   );
 
   const resolveHref = (link: WorkspaceLink): string => {
-    const merged: WorkspaceContext = { ...context, ...(link.contextParams as WorkspaceContext) };
-    return buildWorkspaceUrl(link.route, merged);
+    // Only forward context keys explicitly declared in contextParams.
+    // Stale keys (e.g. report, finding) are not propagated unless the target link requests them.
+    const filtered: WorkspaceContext = {};
+    if (context && link.contextParams) {
+      for (const key of link.contextParams) {
+        const val = context[key];
+        if (val !== undefined) {
+          (filtered as Record<string, string | undefined>)[key] = val;
+        }
+      }
+    }
+    return buildWorkspaceUrl(link.route, filtered);
   };
 
   const listClasses = cn(

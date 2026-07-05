@@ -364,6 +364,36 @@ test('C: CrossWorkspaceNav has onKeyDown or onKeyUp keyboard event handler', () 
   assert.match(src, /onKey(?:Down|Up)/);
 });
 
+// P1 fix tests — stale context filtering (PR 18.6.8 P1)
+test('C-P1: CrossWorkspaceNav contextParams type is WorkspaceContextKey[] not Record', () => {
+  const src = read(CROSS_WORKSPACE_NAV);
+  // Must use WorkspaceContextKey[] — not Record<string,string> (which leaks stale keys)
+  assert.match(src, /WorkspaceContextKey/);
+  assert.doesNotMatch(src, /contextParams\?\s*:\s*Record<string/);
+});
+
+test('C-P1: CrossWorkspaceNav resolveHref filters to declared keys only', () => {
+  const src = read(CROSS_WORKSPACE_NAV);
+  // Must iterate over link.contextParams (declared keys) rather than spread full context
+  assert.match(src, /for.*contextParams|contextParams.*for/);
+  // Must NOT spread full context object into merged (stale key leakage)
+  assert.doesNotMatch(src, /\.\.\.\s*context\s*,\s*\.\.\.\s*\(link\.contextParams/);
+});
+
+test('C-P1: CrossWorkspaceNav builds filtered context not merged spread', () => {
+  const src = read(CROSS_WORKSPACE_NAV);
+  // filtered/empty object construction — stale keys dropped
+  assert.match(src, /filtered|stale keys|only forward/);
+});
+
+test('C-P1: WorkspaceSearch uses Array.from not MapIterator spread', () => {
+  const src = read(WORKSPACE_SEARCH);
+  // MapIterator spread [...map.values()] fails without downlevelIteration
+  assert.doesNotMatch(src, /\[\s*\.\.\.\s*groupResults\s*\(.*\)\s*\.values\s*\(\s*\)/);
+  // Must use Array.from
+  assert.match(src, /Array\.from/);
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECTION D — WorkspaceContextBridge
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3300,4 +3330,102 @@ test('AS: Navigation registry JSON round-trips cleanly', () => {
   const reserialized = JSON.stringify(parsed);
   const reparsed = JSON.parse(reserialized);
   assert.deepEqual(reparsed, parsed);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION AT — P1 Route correctness and console.ts sync
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test('AT-P1: workspaceNav.ts executive-intelligence route is /dashboard/executive not /dashboard/evaluation', () => {
+  const src = read(WORKSPACE_NAV);
+  // No link pointing to /dashboard/evaluation (that is the Evaluation Lab, not Executive Intelligence)
+  assert.doesNotMatch(src, /route.*\/dashboard\/evaluation/, 'Found wrong route /dashboard/evaluation — executive-intelligence must route to /dashboard/executive');
+  assert.match(src, /\/dashboard\/executive/, 'Executive Intelligence route must be /dashboard/executive');
+});
+
+test('AT-P1: All executive-intelligence links in workspaceNav.ts use /dashboard/executive', () => {
+  const src = read(WORKSPACE_NAV);
+  const lines = src.split('\n');
+  lines.forEach((line, i) => {
+    if (line.includes('route') && line.includes('/dashboard/evaluation')) {
+      assert.fail(`Line ${i + 1}: Found /dashboard/evaluation in a route — should be /dashboard/executive`);
+    }
+  });
+});
+
+test('AT-P1: /reports landing page exists (reports/page.tsx)', () => {
+  const REPORTS_LANDING = path.join(__dirname, '../app/reports/page.tsx');
+  assert.ok(existsAbsolute(REPORTS_LANDING), 'Missing /reports landing page — apps/console/app/reports/page.tsx must exist');
+});
+
+test('AT-P1: reports/page.tsx has data-testid="reports-landing"', () => {
+  const REPORTS_LANDING = path.join(__dirname, '../app/reports/page.tsx');
+  if (!existsAbsolute(REPORTS_LANDING)) return;
+  const src = readAbsolute(REPORTS_LANDING);
+  assert.match(src, /data-testid="reports-landing"/, 'reports/page.tsx missing data-testid="reports-landing"');
+});
+
+test('AT-P1: reports/page.tsx has MCIM compliance attributes', () => {
+  const REPORTS_LANDING = path.join(__dirname, '../app/reports/page.tsx');
+  if (!existsAbsolute(REPORTS_LANDING)) return;
+  const src = readAbsolute(REPORTS_LANDING);
+  assert.match(src, /data-mcim-id/, 'reports/page.tsx missing data-mcim-id');
+  assert.match(src, /data-workspace/, 'reports/page.tsx missing data-workspace');
+});
+
+test('AT-P1: console.ts has operations-workspace entry', () => {
+  const CONSOLE_TS = path.join(__dirname, '../../../packages/navigation/src/registrations/console.ts');
+  if (!existsAbsolute(CONSOLE_TS)) return;
+  const src = readAbsolute(CONSOLE_TS);
+  assert.match(src, /operations-workspace|operations_workspace|'operations'.*workspace|"operations".*workspace/i, 'console.ts missing operations-workspace registration');
+});
+
+test('AT-P1: console.ts has trust-center-workspace or trust-center entry', () => {
+  const CONSOLE_TS = path.join(__dirname, '../../../packages/navigation/src/registrations/console.ts');
+  if (!existsAbsolute(CONSOLE_TS)) return;
+  const src = readAbsolute(CONSOLE_TS);
+  assert.match(src, /trust-center|trust_center/i, 'console.ts missing trust-center registration');
+});
+
+test('AT-P1: WorkspaceSearch uses Array.from not spread on MapIterator', () => {
+  const src = read(WORKSPACE_SEARCH);
+  // Must NOT spread a Map iterator directly — use Array.from()
+  assert.doesNotMatch(src, /\[\s*\.\.\.\s*\w+\s*\.\s*values\s*\(\s*\)\s*\]/, 'WorkspaceSearch must not use [...map.values()] spread — use Array.from()');
+  assert.match(src, /Array\.from/, 'WorkspaceSearch must use Array.from() for Map iteration');
+});
+
+test('AT-P1: CrossWorkspaceNav contextParams is WorkspaceContextKey[] (array), not Record', () => {
+  const src = read(CROSS_WORKSPACE_NAV);
+  // contextParams should be typed as WorkspaceContextKey[] not Record
+  assert.doesNotMatch(src, /contextParams\s*\??\s*:\s*Record/, 'contextParams must not be Record<string,string>');
+  assert.match(src, /WorkspaceContextKey/, 'CrossWorkspaceNav must import/use WorkspaceContextKey');
+});
+
+test('AT-P1: CrossWorkspaceNav resolveHref filters to declared contextParams keys', () => {
+  const src = read(CROSS_WORKSPACE_NAV);
+  // Should have explicit loop over contextParams, not a spread of context
+  assert.match(src, /for.*of.*contextParams|contextParams.*forEach|contextParams.*filter|filtered/i, 'resolveHref must filter context to declared keys');
+});
+
+test('AT-P1: executive/page.tsx uses useRef pattern for initialData guard (not stale closure)', () => {
+  const EXEC_PAGE = path.join(__dirname, '../app/dashboard/executive/page.tsx');
+  if (!existsAbsolute(EXEC_PAGE)) return;
+  const src = readAbsolute(EXEC_PAGE);
+  assert.match(src, /useRef/, 'executive/page.tsx must use useRef to guard initialData in useEffect');
+});
+
+test('AT-P1: executive/page.tsx does not have bare if(initialData) return inside useEffect with empty dep array', () => {
+  const EXEC_PAGE = path.join(__dirname, '../app/dashboard/executive/page.tsx');
+  if (!existsAbsolute(EXEC_PAGE)) return;
+  const src = readAbsolute(EXEC_PAGE);
+  // The stale closure pattern: useEffect(() => { if (initialData) return; ... }, [])
+  // This should NOT appear — should use useRef instead
+  assert.doesNotMatch(src, /useEffect\(\s*\(\s*\)\s*=>\s*\{[^}]*if\s*\(\s*initialData\s*\)\s*return[^}]*\}\s*,\s*\[\s*\]\s*\)/, 'Found stale closure pattern — use useRef(Boolean(initialData)) instead');
+});
+
+test('AT-P1: PR_FIX_LOG.md has entry for 18.6.8 P1 fix', () => {
+  const PRFL = path.join(__dirname, '../../../docs/ai/PR_FIX_LOG.md');
+  if (!existsAbsolute(PRFL)) return;
+  const src = readAbsolute(PRFL);
+  assert.match(src, /18\.6\.8.*[Pp]1|P1.*18\.6\.8|P1.*workspace/i, 'PR_FIX_LOG.md must have an entry for the 18.6.8 P1 fix');
 });
