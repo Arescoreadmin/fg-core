@@ -667,7 +667,8 @@
         "/cgin/trust",
         "/cgin/transparency",
         "/governance-orchestration",
-        "/intelligence"
+        "/intelligence",
+        "/api/executive"
       ]
     },
     {
@@ -1223,7 +1224,7 @@
       ]
     }
   ],
-  "generated_at": "2026-07-05T14:17:21.241098+00:00",
+  "generated_at": "2026-07-05T18:09:43.791677+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
