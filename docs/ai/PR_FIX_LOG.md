@@ -6,6 +6,24 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-04 — pr/18.6.6-enterprise-customer-portal: Enterprise Customer Portal Experience
+
+**Branch:** `pr/18.6.6-enterprise-customer-portal`
+
+**What was done:** PR 18.6.6 — Enterprise Customer Portal Experience. 22 new portal components + 8 new pages + CI gate + 564 tests + architecture doc. No backend changes.
+
+**Files created/modified:**
+- `apps/portal/components/portal/` — 22 new MCIM-compliant portal components with customerSafe=true. Uses inline Tailwind badge patterns, no console UI library imports, no tenant_id exposure.
+- `apps/portal/app/{dashboard,trust,timeline,actions,changes,export,notifications,support}/page.tsx` — 8 new client-side portal pages with Suspense, portalApi data fetching, engagementId handling.
+- `tools/ci/check_customer_portal.py` — new CI gate; 30/30 passing; checks MCIM prefix, customerSafe, void declarations, PortalShell usage, aria-label, forbidden patterns, trust disclaimer, hash fields, operator notice.
+- `tests/portal/customer-portal.test.js` — 564 static-analysis tests across 20 suites; 0 failures.
+- `docs/architecture/CUSTOMER_PORTAL_18_6_6.md` — full component/page registry, security model, CI validation documentation.
+- `tools/ci/check_mcim_docs.py` — ALLOWED_CHANGED_PATHS extended with ~50 new PR 18.6.6 paths.
+- `ROADMAP.md` — PR 18.6.6 row added; PR 18.6.5 updated to Complete.
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 18.6.6 gate entry added.
+
+---
+
 ### 2026-07-03 — pr/18.6.3-command-center-actions: Operations Workspace
 
 **Branch:** `pr/18.6.3-command-center-actions`

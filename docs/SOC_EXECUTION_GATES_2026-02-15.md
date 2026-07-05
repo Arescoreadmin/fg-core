@@ -1,3 +1,20 @@
+## 2026-07-04 — PR 18.6.6: Enterprise Customer Portal Experience
+
+**Classification:** Frontend-only feature + new CI gate. MCIM: MCIM-18.6-PORTAL-*. 22 new React client components in `apps/portal/components/portal/`, 8 new portal pages (/dashboard /trust /timeline /actions /changes /export /notifications /support), 1 new CI Python script, 564 static-analysis tests, 1 architecture doc. No auth logic changes. No DB schema changes. No backend changes. No API route additions. No secrets stored.
+
+**Critical-path files changed:**
+- `tools/ci/check_customer_portal.py` — new CI gate validating all 22 portal components for MCIM compliance, customerSafe declaration, forbidden patterns, and 8 page anchor testids. Read-only file inspection only.
+- `tools/ci/check_mcim_docs.py` — updated `ALLOWED_CHANGED_PATHS` allowlist to include ~50 new paths for PR 18.6.6 (portal components directory, all 22 component files, 8 new page directories and files, new CI gate, test file, architecture doc).
+
+**Non-critical-path additions:**
+- `apps/portal/components/portal/PortalShell.tsx` — unified portal shell container with collapsible authority metadata. No backend I/O.
+- 13 core portal components (CustomerDashboard, EngagementOverview, FindingsView, EvidenceSummary, ReportDelivery, AttestationCenter, RemediationCenter, ChangeSummary, TrustVerificationCenter, CustomerTrustTimeline, CustomerActionQueue, CustomerExportCenter, AssessmentDelivery) — MCIM-compliant portal display components with customerSafe=true and inline Tailwind badge patterns.
+- 8 extended portal components (NotificationCenter, SupportCenter, ObservationsPanel, AuditEventsLog, DocumentCenter, ScanHistoryPanel, QuestionnaireSummary, ComplianceOverview) — additional MCIM-compliant portal display components.
+- 8 new portal pages — all 'use client' with Suspense, using portalApi.* for data, getStoredEngagementId() for engagement context.
+- `tests/portal/customer-portal.test.js` — 564 static-analysis tests across 20 suites.
+
+---
+
 ## 2026-07-04 — PR 18.6.5: Enterprise Trust Center
 
 **Classification:** Frontend-only feature + new CI gate. MCIM: MCIM-18.6-TRUST-CENTER. 19 new React client components, 1 new trust-center page, 1 new CI Python script, 1000+ static-analysis tests, 1 architecture doc. No auth logic changes. No DB schema changes. No backend changes. No API route additions. No secrets stored.
