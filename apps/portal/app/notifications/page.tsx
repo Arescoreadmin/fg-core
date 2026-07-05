@@ -29,14 +29,17 @@ function saveReadIds(engagementId: string, ids: Set<string>) {
   }
 }
 
+// Keys are the actual backend event_type values from fa_engagement_audit_events.
 const EVENT_TYPE_MAP: Record<string, NotificationType> = {
-  report_compiled: 'report-published',
-  report_published: 'report-published',
-  finding_created: 'finding-updated',
-  finding_updated: 'finding-updated',
-  attestation_submitted: 'attestation-due',
-  engagement_updated: 'engagement-update',
-  remediation_updated: 'remediation-update',
+  'engagement_report_created': 'report-published',
+  'report.qa_approved': 'report-published',
+  'finding_status_updated': 'finding-updated',
+  'finding.remediation_hint_updated': 'finding-updated',
+  'attestation.submitted': 'attestation-due',
+  'engagement.metadata_updated': 'engagement-update',
+  'engagement.status_transitioned': 'engagement-update',
+  'verification_bundle.generated': 'engagement-update',
+  'questionnaire.submitted': 'engagement-update',
 };
 
 function NotificationsPageInner() {
@@ -63,7 +66,7 @@ function NotificationsPageInner() {
           .map((e) => ({
             id: e.id,
             type: EVENT_TYPE_MAP[e.event_type],
-            title: e.event_type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+            title: e.event_type.replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
             message: `Event recorded by ${e.actor}${e.reason_code ? ` (${e.reason_code})` : ''}.`,
             severity: 'info' as const,
             isRead: readIds.has(e.id),

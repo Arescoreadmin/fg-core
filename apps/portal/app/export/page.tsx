@@ -54,10 +54,14 @@ const DEFAULT_OPTIONS: ExportOption[] = [
 function handleExport(type: string, format: string, engagementId: string) {
   if (type === 'report' && (format === 'json' || format === 'pdf')) {
     portalApi
-      .listReports(engagementId, { limit: 1 })
+      // list_versions returns ascending order; fetch enough and take the highest version
+      .listReports(engagementId, { limit: 50 })
       .then((res) => {
         if (!res.items.length) return;
-        return portalApi.exportReport(engagementId, res.items[0].version, format as 'json' | 'pdf');
+        const latest = res.items.reduce((max, item) =>
+          item.version > max.version ? item : max,
+        );
+        return portalApi.exportReport(engagementId, latest.version, format as 'json' | 'pdf');
       })
       .then((blob) => {
         if (!blob) return;
@@ -88,11 +92,14 @@ function ExportPageInner() {
       .listReports(engagementId, { limit: 1 })
       .then((res) => {
         const hasReport = res.items.length > 0;
+        // Only enable export types that have a wired handler in handleExport.
+        // Other types (evidence-summary, remediation, attestation, portal-snapshot)
+        // remain unavailable until their export endpoints are implemented.
         setOptions((prev) =>
           prev.map((opt) =>
             opt.type === 'report' || opt.type === 'trust-verification'
               ? { ...opt, available: hasReport }
-              : { ...opt, available: true },
+              : opt,
           ),
         );
         setLastUpdated(new Date().toISOString());

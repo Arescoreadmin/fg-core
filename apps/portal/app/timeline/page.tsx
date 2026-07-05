@@ -6,27 +6,43 @@ import { portalApi, PortalApiError, type AuditEvent } from '@/lib/portalApi';
 import { getStoredEngagementId } from '@/lib/engagementStore';
 import CustomerTrustTimeline, { type CustomerTimelineEvent, type CustomerTimelineEventType } from '@/components/portal/CustomerTrustTimeline';
 
+// Actual backend event_type values emitted by field_assessment API routes.
+// Must match the dot/underscore names the backend writes to fa_engagement_audit_events.
 const PORTAL_SAFE_EVENT_TYPES = new Set([
-  'report_compiled', 'report_published', 'evidence_verified', 'engagement_created',
-  'engagement_updated', 'attestation_submitted', 'remediation_updated', 'portal_update',
+  'engagement.created',
+  'engagement.metadata_updated',
+  'engagement.status_transitioned',
+  'engagement_report_created',
+  'report.qa_approved',
+  'verification_bundle.generated',
+  'attestation.submitted',
+  'questionnaire.submitted',
+  'evidence_link.created',
+  'scan_result.ingested',
 ]);
+
+const TIMELINE_TYPE_MAP: Record<string, CustomerTimelineEventType> = {
+  'engagement.created': 'assessment-started',
+  'engagement.metadata_updated': 'portal-update',
+  'engagement.status_transitioned': 'portal-update',
+  'engagement_report_created': 'report-generated',
+  'report.qa_approved': 'report-published',
+  'verification_bundle.generated': 'verification-completed',
+  'attestation.submitted': 'attestation-submitted',
+  'questionnaire.submitted': 'portal-update',
+  'evidence_link.created': 'evidence-collected',
+  'scan_result.ingested': 'evidence-collected',
+};
 
 function auditEventToTimeline(event: AuditEvent): CustomerTimelineEvent | null {
   if (!PORTAL_SAFE_EVENT_TYPES.has(event.event_type)) return null;
-  const TYPE_MAP: Record<string, CustomerTimelineEventType> = {
-    report_compiled: 'report-generated',
-    report_published: 'report-published',
-    evidence_verified: 'evidence-verified',
-    engagement_created: 'assessment-started',
-    engagement_updated: 'portal-update',
-    attestation_submitted: 'attestation-submitted',
-    remediation_updated: 'remediation-opened',
-    portal_update: 'portal-update',
-  };
+  const label = event.event_type
+    .replace(/[._]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
   return {
     id: event.id,
-    eventType: TYPE_MAP[event.event_type] ?? 'portal-update',
-    label: event.event_type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+    eventType: TIMELINE_TYPE_MAP[event.event_type] ?? 'portal-update',
+    label,
     timestamp: event.created_at,
     sourceAuthority: event.reason_code ?? 'Engagement Authority',
     drillDown: null,
