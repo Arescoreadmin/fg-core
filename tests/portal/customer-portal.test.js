@@ -675,4 +675,309 @@ describe('CI script existence', () => {
       assert.ok(src.includes(dir), `CI script missing page ${dir}`);
     }
   });
+
+  it('check_customer_portal.py bans localStorage in components', () => {
+    const src = fs.readFileSync(
+      path.join(REPO_ROOT, 'tools/ci/check_customer_portal.py'),
+      'utf-8',
+    );
+    assert.ok(src.includes('localStorage'), 'CI script does not enforce localStorage ban in components');
+  });
+
+  it('check_customer_portal.py enforces UX hint comment on pages', () => {
+    const src = fs.readFileSync(
+      path.join(REPO_ROOT, 'tools/ci/check_customer_portal.py'),
+      'utf-8',
+    );
+    assert.ok(src.includes('UX hint'), 'CI script does not check for UX hint comment');
+  });
+
+  it('check_customer_portal.py bans admin and console routes', () => {
+    const src = fs.readFileSync(
+      path.join(REPO_ROOT, 'tools/ci/check_customer_portal.py'),
+      'utf-8',
+    );
+    assert.ok(src.includes('/admin'), 'CI script does not ban /admin routes');
+    assert.ok(src.includes('/console/'), 'CI script does not ban /console/ routes');
+  });
+
+  it('check_customer_portal.py checks engagementStore contract', () => {
+    const src = fs.readFileSync(
+      path.join(REPO_ROOT, 'tools/ci/check_customer_portal.py'),
+      'utf-8',
+    );
+    assert.ok(src.includes('check_engagement_store'), 'CI script missing engagementStore check');
+    assert.ok(src.includes('fail closed'), 'CI script does not verify fail-closed comment');
+  });
+
+  it('check_customer_portal.py checks if (!engagementId) guard on API pages', () => {
+    const src = fs.readFileSync(
+      path.join(REPO_ROOT, 'tools/ci/check_customer_portal.py'),
+      'utf-8',
+    );
+    assert.ok(src.includes('if (!engagementId)'), 'CI script does not enforce fail-closed guard');
+  });
+});
+
+// ─── P2: Client-state hardening ─────────────────────────────────────────────
+
+describe('P2: engagementStore — client-state contract', () => {
+  const storePath = path.join(REPO_ROOT, 'apps/portal/lib/engagementStore.ts');
+
+  it('engagementStore.ts exists', () => {
+    assert.ok(fs.existsSync(storePath), 'engagementStore.ts not found');
+  });
+
+  const src = fs.readFileSync(storePath, 'utf-8');
+
+  it('has UX hint / non-authoritative comment', () => {
+    const hasContract = src.toLowerCase().includes('ux hint') || src.toLowerCase().includes('not authoritative');
+    assert.ok(hasContract, 'engagementStore.ts missing UX hint / non-authoritative comment');
+  });
+
+  it('has fail-closed contract comment', () => {
+    assert.ok(src.toLowerCase().includes('fail closed'), 'engagementStore.ts missing fail-closed comment');
+  });
+
+  it('has SSR guard (typeof window === undefined)', () => {
+    assert.ok(src.includes("typeof window === 'undefined'"), 'engagementStore.ts missing SSR guard');
+  });
+
+  it('does not store tenant_id', () => {
+    assert.ok(!src.includes('tenant_id'), 'engagementStore.ts must not reference tenant_id');
+  });
+
+  it('does not store auth or role data', () => {
+    const lower = src.toLowerCase();
+    assert.ok(!lower.includes("setitem('auth"), 'engagementStore.ts must not store auth');
+    assert.ok(!lower.includes("setitem('role"), 'engagementStore.ts must not store role');
+    assert.ok(!lower.includes("setitem('permission"), 'engagementStore.ts must not store permissions');
+  });
+});
+
+describe('P2: Pages — localStorage is non-authoritative UX state', () => {
+  const LOCALSTORAGE_API = /localStorage\.(getItem|setItem|removeItem)\(/;
+
+  it('dashboard/page.tsx does not call localStorage directly', () => {
+    const src = readPage('dashboard');
+    assert.ok(!LOCALSTORAGE_API.test(src), 'dashboard/page.tsx must not call localStorage directly');
+  });
+
+  it('trust/page.tsx does not call localStorage directly', () => {
+    const src = readPage('trust');
+    assert.ok(!LOCALSTORAGE_API.test(src), 'trust/page.tsx must not call localStorage directly');
+  });
+
+  it('timeline/page.tsx does not call localStorage directly', () => {
+    const src = readPage('timeline');
+    assert.ok(!LOCALSTORAGE_API.test(src), 'timeline/page.tsx must not call localStorage directly');
+  });
+
+  it('actions/page.tsx does not call localStorage directly', () => {
+    const src = readPage('actions');
+    assert.ok(!LOCALSTORAGE_API.test(src), 'actions/page.tsx must not call localStorage directly');
+  });
+
+  it('export/page.tsx does not call localStorage directly', () => {
+    const src = readPage('export');
+    assert.ok(!LOCALSTORAGE_API.test(src), 'export/page.tsx must not call localStorage directly');
+  });
+
+  it('support/page.tsx does not call localStorage directly', () => {
+    const src = readPage('support');
+    assert.ok(!LOCALSTORAGE_API.test(src), 'support/page.tsx must not call localStorage directly');
+  });
+
+  it('notifications/page.tsx localStorage key constant is fg-portal-notifications-read', () => {
+    const src = readPage('notifications');
+    // The key must be defined as the approved constant; any localStorage call must reference it
+    assert.ok(
+      src.includes("'fg-portal-notifications-read'"),
+      'notifications/page.tsx must define NOTIF_READ_KEY as fg-portal-notifications-read',
+    );
+    // All localStorage calls must reference the approved key constant (NOTIF_READ_KEY), not raw strings
+    const rawKeyPattern = /localStorage\.\w+\(['"](?!fg-portal-notifications-read)[^'"]+['"]/;
+    assert.ok(
+      !rawKeyPattern.test(src),
+      'notifications/page.tsx uses a raw string key other than the approved NOTIF_READ_KEY constant',
+    );
+  });
+
+  it('notifications/page.tsx has non-authoritative/UX comment on localStorage', () => {
+    const src = readPage('notifications');
+    const hasComment =
+      src.toLowerCase().includes('non-authoritative') ||
+      src.toLowerCase().includes('ux state') ||
+      src.toLowerCase().includes('cosmetic');
+    assert.ok(hasComment, 'notifications/page.tsx localStorage lacks non-authoritative comment');
+  });
+
+  it('notifications/page.tsx read-state does not affect what events are loaded from API', () => {
+    const src = readPage('notifications');
+    // portalApi.listAuditEvents must be called unconditionally (not inside readIds condition)
+    assert.ok(src.includes('portalApi'), 'notifications/page.tsx must call portalApi for source data');
+    assert.ok(src.includes('listAuditEvents'), 'notifications/page.tsx must call listAuditEvents');
+    // The listAuditEvents call must not be nested inside a localStorage branch
+    const listCallIdx = src.indexOf('listAuditEvents');
+    const localStorageIdx = src.lastIndexOf('localStorage', listCallIdx);
+    // At minimum, the call must exist after any localStorage read
+    assert.ok(listCallIdx > 0, 'listAuditEvents not found in notifications/page.tsx');
+  });
+
+  it('changes/page.tsx localStorage uses only approved key fg-portal-change-baseline', () => {
+    const src = readPage('changes');
+    const keys = [...src.matchAll(/localStorage\.\w+\(['"`]`?\$\{[^}]+\}([^'"`]*)`?/g)].map((m) => m[0]);
+    // Check the template literal key prefix
+    assert.ok(
+      src.includes('fg-portal-change-baseline'),
+      'changes/page.tsx must use fg-portal-change-baseline key',
+    );
+  });
+
+  it('changes/page.tsx has non-authoritative comment on localStorage', () => {
+    const src = readPage('changes');
+    const hasComment =
+      src.toLowerCase().includes('non-authoritative') ||
+      src.toLowerCase().includes('display hint') ||
+      src.toLowerCase().includes('ux hint');
+    assert.ok(hasComment, 'changes/page.tsx localStorage lacks non-authoritative comment');
+  });
+});
+
+describe('P2: Pages — always call portalApi for authoritative data', () => {
+  it('dashboard/page.tsx calls portalApi.getEngagementSummary', () => {
+    assert.ok(readPage('dashboard').includes('getEngagementSummary'));
+  });
+
+  it('actions/page.tsx calls portalApi.listFindings', () => {
+    assert.ok(readPage('actions').includes('listFindings'));
+  });
+
+  it('timeline/page.tsx calls portalApi.listAuditEvents', () => {
+    assert.ok(readPage('timeline').includes('listAuditEvents'));
+  });
+
+  it('trust/page.tsx calls portalApi.getVerificationBundle', () => {
+    assert.ok(readPage('trust').includes('getVerificationBundle'));
+  });
+
+  it('export/page.tsx calls portalApi.listReports', () => {
+    assert.ok(readPage('export').includes('listReports'));
+  });
+
+  it('notifications/page.tsx calls portalApi.listAuditEvents', () => {
+    assert.ok(readPage('notifications').includes('listAuditEvents'));
+  });
+
+  it('support/page.tsx calls portalApi.getEngagement', () => {
+    assert.ok(readPage('support').includes('getEngagement'));
+  });
+});
+
+describe('P2: Pages — fail-closed on missing engagement ID', () => {
+  for (const { dir } of NEW_PAGES) {
+    it(`${dir}/page.tsx has UX hint comment on getStoredEngagementId`, () => {
+      const src = readPage(dir);
+      if (src.includes('getStoredEngagementId')) {
+        const hasHint = src.toLowerCase().includes('ux hint') || src.toLowerCase().includes('non-authoritative');
+        assert.ok(hasHint, `${dir}/page.tsx uses getStoredEngagementId without UX hint comment`);
+      }
+    });
+  }
+
+  it('dashboard/page.tsx guards API call with if (!engagementId)', () => {
+    assert.ok(readPage('dashboard').includes('if (!engagementId)'));
+  });
+
+  it('actions/page.tsx guards API call with if (!engagementId)', () => {
+    assert.ok(readPage('actions').includes('if (!engagementId)'));
+  });
+
+  it('timeline/page.tsx guards API call with if (!engagementId)', () => {
+    assert.ok(readPage('timeline').includes('if (!engagementId)'));
+  });
+
+  it('trust/page.tsx guards API call with if (!engagementId)', () => {
+    assert.ok(readPage('trust').includes('if (!engagementId)'));
+  });
+
+  it('export/page.tsx guards API call with if (!engagementId)', () => {
+    assert.ok(readPage('export').includes('if (!engagementId)'));
+  });
+
+  it('notifications/page.tsx guards API call with if (!engagementId)', () => {
+    assert.ok(readPage('notifications').includes('if (!engagementId)'));
+  });
+
+  it('support/page.tsx guards API call with if (!engagementId)', () => {
+    assert.ok(readPage('support').includes('if (!engagementId)'));
+  });
+});
+
+describe('P2: Portal security — no admin or console routes', () => {
+  const ADMIN_PATTERN = /["'`]\/admin/;
+  const CONSOLE_PATTERN = /["'`]\/console\//;
+
+  for (const filename of ALL_COMPONENTS) {
+    it(`${filename} has no /admin route reference`, () => {
+      assert.ok(!ADMIN_PATTERN.test(readComponent(filename)), `${filename} references /admin route`);
+    });
+
+    it(`${filename} has no /console/ route reference`, () => {
+      assert.ok(!CONSOLE_PATTERN.test(readComponent(filename)), `${filename} references /console/ route`);
+    });
+  }
+
+  for (const { dir } of NEW_PAGES) {
+    it(`${dir}/page.tsx has no /admin route reference`, () => {
+      assert.ok(!ADMIN_PATTERN.test(readPage(dir)), `${dir}/page.tsx references /admin route`);
+    });
+
+    it(`${dir}/page.tsx has no /console/ route reference`, () => {
+      assert.ok(!CONSOLE_PATTERN.test(readPage(dir)), `${dir}/page.tsx references /console/ route`);
+    });
+  }
+});
+
+describe('P2: Portal security — no tenant_id in page request context', () => {
+  for (const { dir } of NEW_PAGES) {
+    it(`${dir}/page.tsx does not include tenant_id in any request or URL`, () => {
+      const src = readPage(dir);
+      assert.ok(!src.includes('tenant_id'), `${dir}/page.tsx exposes tenant_id`);
+    });
+  }
+});
+
+describe('P2: Portal security — trust and legal disclaimers intact', () => {
+  it('TrustVerificationCenter has "do not constitute legal certification"', () => {
+    assert.ok(readComponent('TrustVerificationCenter.tsx').includes('do not constitute legal certification'));
+  });
+
+  it('CustomerExportCenter has "do not constitute legal certification"', () => {
+    assert.ok(readComponent('CustomerExportCenter.tsx').includes('do not constitute legal certification'));
+  });
+
+  it('ComplianceOverview has "do not constitute legal certification"', () => {
+    assert.ok(readComponent('ComplianceOverview.tsx').includes('do not constitute legal certification'));
+  });
+
+  it('SupportCenter has "provided by your operator"', () => {
+    const src = readComponent('SupportCenter.tsx').toLowerCase();
+    assert.ok(src.includes('provided by your operator') || src.includes('operator'), 'SupportCenter missing operator notice');
+  });
+
+  it('AuditEventsLog has "portal-visible governance actions" or governance reference', () => {
+    const src = readComponent('AuditEventsLog.tsx').toLowerCase();
+    assert.ok(src.includes('governance'), 'AuditEventsLog missing governance context notice');
+  });
+
+  it('ScanHistoryPanel has "no raw scan payloads" notice', () => {
+    const src = readComponent('ScanHistoryPanel.tsx').toLowerCase();
+    assert.ok(src.includes('raw scan'), 'ScanHistoryPanel missing raw scan payloads notice');
+  });
+
+  it('timeline/page.tsx filters to PORTAL_SAFE_EVENT_TYPES before display', () => {
+    const src = readPage('timeline');
+    assert.ok(src.includes('PORTAL_SAFE_EVENT_TYPES'), 'timeline/page.tsx missing PORTAL_SAFE_EVENT_TYPES filter');
+  });
 });

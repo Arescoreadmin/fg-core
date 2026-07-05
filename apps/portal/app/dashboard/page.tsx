@@ -73,6 +73,8 @@ function buildDashboardCards(counts: EngagementCounts): DashboardCard[] {
 
 function DashboardPageInner() {
   const params = useSearchParams();
+  // UX hint — URL param takes priority; localStorage is session-continuity fallback only.
+  // Authorization is enforced server-side: invalid IDs fail closed at the BFF.
   const engagementId = params.get('e') || getStoredEngagementId();
   const [cards, setCards] = useState<DashboardCard[]>([]);
   const [loading, setLoading] = useState(false);

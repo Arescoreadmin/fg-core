@@ -8,6 +8,9 @@ import NotificationCenter, { type PortalNotification, type NotificationType } fr
 
 const NOTIF_READ_KEY = 'fg-portal-notifications-read';
 
+// Non-authoritative UX state: read-status is cosmetic display only.
+// Source data is always loaded fresh from portalApi.listAuditEvents().
+// localStorage never gates API access or alters what data is fetched.
 function getReadIds(engagementId: string): Set<string> {
   try {
     const raw = localStorage.getItem(`${NOTIF_READ_KEY}-${engagementId}`);
@@ -19,6 +22,7 @@ function getReadIds(engagementId: string): Set<string> {
 
 function saveReadIds(engagementId: string, ids: Set<string>) {
   try {
+    // Non-authoritative UX state: persisting cosmetic read-status only.
     localStorage.setItem(`${NOTIF_READ_KEY}-${engagementId}`, JSON.stringify(Array.from(ids)));
   } catch {
     // ignore storage errors
@@ -37,6 +41,8 @@ const EVENT_TYPE_MAP: Record<string, NotificationType> = {
 
 function NotificationsPageInner() {
   const params = useSearchParams();
+  // UX hint — URL param takes priority; localStorage is session-continuity fallback only.
+  // Authorization is enforced server-side: invalid IDs fail closed at the BFF.
   const engagementId = params.get('e') || getStoredEngagementId();
   const [notifications, setNotifications] = useState<PortalNotification[]>([]);
   const [loading, setLoading] = useState(false);

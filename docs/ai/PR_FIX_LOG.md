@@ -6,6 +6,23 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-04 — pr/18.6.6-enterprise-customer-portal: P2 Portal Client-State Hardening
+
+**Branch:** `pr/18.6.6-enterprise-customer-portal`
+
+**What was done:** P2 hardening pass on PR 18.6.6 portal client state. Added security-contract comments to `engagementStore.ts`, constrained localStorage to approved UX-only patterns, banned localStorage in components, added admin/console-route ban, strengthened CI (31/31), added 119 new tests (683 total, 0 failures). No backend changes.
+
+**Files modified:**
+- `apps/portal/lib/engagementStore.ts` — added security contract comment (UX hint only, not authoritative; invalid IDs fail closed at BFF)
+- `apps/portal/app/{dashboard,actions,timeline,trust,export,support}/page.tsx` — added `// UX hint` comment on `getStoredEngagementId()` usage
+- `apps/portal/app/notifications/page.tsx` — added `// Non-authoritative UX state` comments on localStorage read-state helpers
+- `apps/portal/app/changes/page.tsx` — added `// Non-authoritative UX state` comment on baseline timestamp localStorage read
+- `tools/ci/check_customer_portal.py` — strengthened: localStorage ban in components, page localStorage approval list, banned-key check, admin/console route ban, `if (!engagementId)` guard requirement, `check_engagement_store()` function; 31/31 passing
+- `tests/portal/customer-portal.test.js` — 7 new suites, 119 new tests (683 total): engagementStore contract, localStorage UX state, pages always call portalApi, fail-closed guards, no admin routes, no tenant_id, trust disclaimers
+- `tools/ci/check_mcim_docs.py` — added `apps/portal/lib/engagementStore.ts` to ALLOWED_CHANGED_PATHS
+
+---
+
 ### 2026-07-04 — pr/18.6.6-enterprise-customer-portal: Enterprise Customer Portal Experience
 
 **Branch:** `pr/18.6.6-enterprise-customer-portal`

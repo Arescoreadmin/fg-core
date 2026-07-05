@@ -9,6 +9,8 @@ const CHANGE_STORAGE_KEY = 'fg-portal-change-baseline';
 
 function ChangesPageInner() {
   const params = useSearchParams();
+  // UX hint — URL param takes priority; localStorage is session-continuity fallback only.
+  // Authorization is enforced server-side: invalid IDs fail closed at the BFF.
   const engagementId = params.get('e') || getStoredEngagementId();
   const [groups] = useState<ChangeGroup[]>([]);
   const [sinceTimestamp, setSinceTimestamp] = useState<string | null>(null);
@@ -17,6 +19,8 @@ function ChangesPageInner() {
 
   useEffect(() => {
     if (!engagementId) return;
+    // Non-authoritative UX state: baseline timestamp is a display hint for change comparison only.
+    // This value is never passed to the API or used for authorization decisions.
     const baseline = localStorage.getItem(`${CHANGE_STORAGE_KEY}-${engagementId}`);
     if (baseline) {
       setHasHistoricalState(true);

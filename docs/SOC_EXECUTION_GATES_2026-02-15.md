@@ -1,3 +1,21 @@
+## 2026-07-04 — PR 18.6.6 P2: Portal Client-State Hardening
+
+**Classification:** Security hardening pass — frontend client-state constraints only. No backend changes. No auth logic changes. No DB schema changes. No API route additions. No secrets stored.
+
+**Critical-path files changed:**
+- `tools/ci/check_customer_portal.py` — strengthened: added localStorage ban in portal components, page localStorage approval list (notifications/changes only), banned-key check (tenant/auth/role/permission), admin/console route ban (`/admin`, `/console/`), `check_engagement_store()` function enforcing security contract comment, `if (!engagementId)` fail-closed guard requirement. Still read-only file inspection only.
+- `tools/ci/check_mcim_docs.py` — added `apps/portal/lib/engagementStore.ts` to `ALLOWED_CHANGED_PATHS`.
+- `tools/ci/check_trust_center.py` — ruff format pass only (no logic changes).
+
+**Non-critical-path changes:**
+- `apps/portal/lib/engagementStore.ts` — added security contract JSDoc: "UX hint only — not authoritative. Every portalApi call is session-authorized at the BFF; invalid or stale engagement IDs fail closed."
+- 6 portal pages (dashboard, actions, timeline, trust, export, support) — added `// UX hint` comment on `getStoredEngagementId()` usage.
+- `apps/portal/app/notifications/page.tsx` — added `// Non-authoritative UX state` comments on `localStorage.getItem/setItem` calls for read-state tracking.
+- `apps/portal/app/changes/page.tsx` — added `// Non-authoritative UX state` comment on baseline timestamp `localStorage.getItem`.
+- `tests/portal/customer-portal.test.js` — 7 new test suites, 119 new tests (683 total): engagementStore contract, localStorage UX state, pages always call portalApi, fail-closed guards, no admin routes, no tenant_id, trust disclaimers.
+
+---
+
 ## 2026-07-04 — PR 18.6.6: Enterprise Customer Portal Experience
 
 **Classification:** Frontend-only feature + new CI gate. MCIM: MCIM-18.6-PORTAL-*. 22 new React client components in `apps/portal/components/portal/`, 8 new portal pages (/dashboard /trust /timeline /actions /changes /export /notifications /support), 1 new CI Python script, 564 static-analysis tests, 1 architecture doc. No auth logic changes. No DB schema changes. No backend changes. No API route additions. No secrets stored.

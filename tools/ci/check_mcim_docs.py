@@ -214,6 +214,8 @@ ALLOWED_CHANGED_PATHS = {
     "tests/portal/",
     "tests/portal/customer-portal.test.js",
     "docs/architecture/CUSTOMER_PORTAL_18_6_6.md",
+    # PR 18.6.6 P2 — Portal Client-State Hardening
+    "apps/portal/lib/engagementStore.ts",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.

@@ -27,6 +27,8 @@ function findingToAction(f: FindingSummary): CustomerAction {
 
 function ActionsPageInner() {
   const params = useSearchParams();
+  // UX hint — URL param takes priority; localStorage is session-continuity fallback only.
+  // Authorization is enforced server-side: invalid IDs fail closed at the BFF.
   const engagementId = params.get('e') || getStoredEngagementId();
   const [actions, setActions] = useState<CustomerAction[]>([]);
   const [loading, setLoading] = useState(false);

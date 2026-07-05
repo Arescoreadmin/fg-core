@@ -36,6 +36,8 @@ function auditEventToTimeline(event: AuditEvent): CustomerTimelineEvent | null {
 
 function TimelinePageInner() {
   const params = useSearchParams();
+  // UX hint — URL param takes priority; localStorage is session-continuity fallback only.
+  // Authorization is enforced server-side: invalid IDs fail closed at the BFF.
   const engagementId = params.get('e') || getStoredEngagementId();
   const [events, setEvents] = useState<CustomerTimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
