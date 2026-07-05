@@ -6,6 +6,24 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-05 — feat/pr-18.6.7-executive-intelligence-center: Executive Intelligence Center
+
+**Branch:** `feat/pr-18.6.7-executive-intelligence-center`
+
+**What was done:** PR 18.6.7 — Executive Intelligence Center. New primary executive workspace for CEOs, CIOs, CISOs, CROs, Boards, and Compliance Officers. 11 new API endpoints under `/api/executive/*`, a full Next.js 14 8-tab frontend workspace, typed API client, and 46 tests. Added `/workspace` aggregate endpoint (single DB session, shared timestamp, one snapshot_version) so the UI hydrates from one round-trip instead of 10.
+
+**Files created/modified:**
+- `api/executive_intelligence.py` — new 960-line FastAPI module. Two-layer architecture: `_query_*`/`_count_*` DB helpers + pure `_compute_*` compute functions. 11 routes: `/workspace` (aggregate), `/overview`, `/posture`, `/risk`, `/compliance`, `/business`, `/trends`, `/recommendations`, `/forecast`, `/priorities`, `/summary`. Router-level `governance:read` RBAC. `_safe()` wraps every DB call. OLS forecast engine over 6×30-day buckets. Deterministic explainability envelope on every metric.
+- `api/main.py` — registered `executive_intelligence_router` (duplicate registration removed).
+- `apps/console/app/dashboard/executive/page.tsx` — new 980-line Next.js 14 client page. 8-tab workspace (Overview, Risk, Compliance, Trends, Business, Recommendations, Forecast, Board Summary). Workspace-first hydration: calls `getExecutiveWorkspace()` on mount, distributes `initialData` props to each tab; tabs fall back to individual endpoints if workspace fails.
+- `apps/console/lib/executiveApi.ts` — new typed API client with `SafeResult<T>` pattern. 10 interfaces + `ExecutiveWorkspace` aggregate type. 11 async functions.
+- `packages/navigation/src/registrations/console.ts` — added `executive-intelligence` nav item (group: Operations, MCIM-18.6.7-EXEC-INTEL).
+- `apps/console/components/layout/Sidebar.tsx` — mapped `executive-intelligence` → `Brain` icon.
+- `tests/test_executive_intelligence.py` — 46 tests: severity weights, snapshot determinism, `_safe()`, metric envelopes, open findings filtering, risk scoring, severity counts, OLS math, priority scoring, business cost, router structure (all 11 routes), pure `_compute_*` functions.
+- `ROADMAP.md` — PR 18.6.7 row added to Phase 3.
+
+---
+
 ### 2026-07-04 — pr/18.6.6-enterprise-customer-portal: P2 Portal Client-State Hardening
 
 **Branch:** `pr/18.6.6-enterprise-customer-portal`
