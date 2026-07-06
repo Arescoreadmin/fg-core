@@ -1,0 +1,169 @@
+"""Governance Execution Engine — PR 18.8.3."""
+
+from __future__ import annotations
+
+from services.governance_execution.approvals import (
+    check_approval_requirements,
+    create_approval,
+)
+from services.governance_execution.constitution import (
+    GOVERNANCE_EXECUTION_CONSTITUTION_VERSION,
+    GOVERNANCE_EXECUTION_PERMANENT_RULES,
+)
+from services.governance_execution.contract import (
+    GovernanceExecutionService,
+    GovernanceExecutionServiceContract,
+)
+from services.governance_execution.execution import (
+    advance_state,
+    complete_step,
+    create_run,
+    fail_step,
+)
+from services.governance_execution.exporter import export_execution_replay_package
+from services.governance_execution.fingerprint import (
+    compute_audit_fingerprint,
+    compute_execution_fingerprint,
+    compute_ledger_hash,
+    compute_measurement_hash,
+    compute_plan_fingerprint,
+    compute_replay_fingerprint,
+    compute_run_fingerprint,
+    compute_step_hash,
+    compute_verification_hash,
+)
+from services.governance_execution.manifest import build_execution_manifest
+from services.governance_execution.mcim_registration import MCIM_REGISTRATION_SOURCE
+from services.governance_execution.measurement import measure_outcome
+from services.governance_execution.models import (
+    GOVERNANCE_EXECUTION_FINGERPRINT_DOMAIN,
+    GOVERNANCE_EXECUTION_MANIFEST_VERSION,
+    GOVERNANCE_EXECUTION_MCIM_VERSION,
+    GOVERNANCE_EXECUTION_PLANNER_VERSION,
+    GOVERNANCE_EXECUTION_REPLAY_VERSION,
+    GOVERNANCE_EXECUTION_SCHEMA_VERSION,
+    GOVERNANCE_EXECUTION_VALIDATOR_VERSION,
+    GOVERNANCE_EXECUTION_VERSION,
+    ApprovalType,
+    ExecutionApproval,
+    ExecutionApprovalRequirement,
+    ExecutionAuditRecord,
+    ExecutionAuthority,
+    ExecutionDecisionLedger,
+    ExecutionDecisionRecord,
+    ExecutionGate,
+    ExecutionGateResult,
+    ExecutionManifest,
+    ExecutionMeasurement,
+    ExecutionOutcomeConfidence,
+    ExecutionPlan,
+    ExecutionPolicy,
+    ExecutionReplayPackage,
+    ExecutionRollbackPlan,
+    ExecutionRollbackStep,
+    ExecutionRun,
+    ExecutionState,
+    ExecutionStep,
+    ExecutionStepState,
+    ExecutionSummary,
+    ExecutionValidationFinding,
+    ExecutionValidationReport,
+    ExecutionVerification,
+)
+from services.governance_execution.planner import plan_execution
+from services.governance_execution.registry import (
+    APPROVAL_TYPE_REGISTRY,
+    EXECUTION_STATE_TRANSITIONS,
+    GOVERNANCE_GATES,
+    get_required_approvers,
+    is_valid_transition,
+)
+from services.governance_execution.replay import build_execution_replay_package
+from services.governance_execution.rollback import execute_rollback, plan_rollback
+from services.governance_execution.validator import (
+    ExecutionValidationError,
+    validate_execution_plan,
+)
+from services.governance_execution.verification import verify_step
+
+__all__ = [
+    # Version constants
+    "GOVERNANCE_EXECUTION_VERSION",
+    "GOVERNANCE_EXECUTION_PLANNER_VERSION",
+    "GOVERNANCE_EXECUTION_VALIDATOR_VERSION",
+    "GOVERNANCE_EXECUTION_SCHEMA_VERSION",
+    "GOVERNANCE_EXECUTION_REPLAY_VERSION",
+    "GOVERNANCE_EXECUTION_MANIFEST_VERSION",
+    "GOVERNANCE_EXECUTION_FINGERPRINT_DOMAIN",
+    "GOVERNANCE_EXECUTION_MCIM_VERSION",
+    # Enums
+    "ExecutionState",
+    "ApprovalType",
+    "ExecutionOutcomeConfidence",
+    "ExecutionGateResult",
+    "ExecutionStepState",
+    # Dataclasses
+    "ExecutionAuthority",
+    "ExecutionPolicy",
+    "ExecutionGate",
+    "ExecutionStep",
+    "ExecutionApprovalRequirement",
+    "ExecutionApproval",
+    "ExecutionRollbackStep",
+    "ExecutionRollbackPlan",
+    "ExecutionPlan",
+    "ExecutionVerification",
+    "ExecutionMeasurement",
+    "ExecutionDecisionRecord",
+    "ExecutionDecisionLedger",
+    "ExecutionRun",
+    "ExecutionAuditRecord",
+    "ExecutionValidationFinding",
+    "ExecutionValidationReport",
+    "ExecutionManifest",
+    "ExecutionSummary",
+    "ExecutionReplayPackage",
+    # Exceptions
+    "ExecutionValidationError",
+    # Service
+    "GovernanceExecutionService",
+    "GovernanceExecutionServiceContract",
+    # Functions
+    "plan_execution",
+    "validate_execution_plan",
+    "create_approval",
+    "check_approval_requirements",
+    "create_run",
+    "advance_state",
+    "complete_step",
+    "fail_step",
+    "verify_step",
+    "measure_outcome",
+    "plan_rollback",
+    "execute_rollback",
+    "build_execution_manifest",
+    "build_execution_replay_package",
+    "export_execution_replay_package",
+    # Fingerprinting
+    "compute_plan_fingerprint",
+    "compute_step_hash",
+    "compute_approval_hash",
+    "compute_run_fingerprint",
+    "compute_verification_hash",
+    "compute_measurement_hash",
+    "compute_ledger_hash",
+    "compute_audit_fingerprint",
+    "compute_execution_fingerprint",
+    "compute_replay_fingerprint",
+    # Registry
+    "EXECUTION_STATE_TRANSITIONS",
+    "APPROVAL_TYPE_REGISTRY",
+    "GOVERNANCE_GATES",
+    "is_valid_transition",
+    "get_required_approvers",
+    # Constitution
+    "GOVERNANCE_EXECUTION_PERMANENT_RULES",
+    "GOVERNANCE_EXECUTION_CONSTITUTION_VERSION",
+    # MCIM
+    "MCIM_REGISTRATION_SOURCE",
+]

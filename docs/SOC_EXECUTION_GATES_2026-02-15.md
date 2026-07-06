@@ -5602,3 +5602,18 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md` — tracking entries added.
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic signing operations — SHA-256 is used for content-addressing only (no key material). No new API endpoints or routes. No DB schema changes. No new external dependencies. The Digital Twin snapshot is immutable by construction (frozen dataclass). The CI gate is a read-only static analysis tool with no side effects. Tenant isolation is enforced at the FATAL severity level in the validator. The service layer has no import of `sqlalchemy`, `Session`, or `create_engine`.
+
+## 2026-07-06 — PR 18.8.3: Closed-Loop Governance Execution Engine
+
+**Classification:** New bounded-context service layer only. No API routes. No DB schema changes. No auth changes. No secrets. Pure-Python deterministic execution orchestration substrate. Does not execute infrastructure changes — records governance decisions only.
+
+**Critical-path files changed:**
+- `tools/ci/check_governance_execution.py` — new 16-check read-only CI gate. Validates: all 17 required service module files present; version constants defined; MCIM registration has 13 keys; no forbidden keys in service files; no DB access in service layer; frozen dataclasses; `ExecutionValidationError` is Exception; all 10 contract methods present; SHA-256 fingerprinting; `deep_freeze` in exporter; validator fail-closed; rollback in planner; test file has ≥250 assert statements; constitution doc exists; PR fix log has 18.8.3 entry. Exits 0/1. No side effects.
+
+**Non-critical-path additions:**
+- `services/governance_execution/` — 17 new pure-Python modules. No DB access. No API surface. No auth logic. No secrets. Frozen dataclasses only. Engine consumes SimulationResult and produces governed execution records. Fail-closed on ERROR/FATAL (`ExecutionValidationError` raised). Tenant isolation enforced at FATAL severity. All fingerprints SHA-256 over canonical JSON with domain separation (`FG_GOVERNANCE_EXECUTION_V1`). Rollback plan required before any execution begins. No autonomous execution — governance orchestration records only.
+- `tests/test_governance_execution.py` — 250+ assertions, pure Python, no DB.
+- `docs/GOVERNANCE_EXECUTION_CONSTITUTION.md` — 17 permanent rules.
+- `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md` — tracking entries added.
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic signing — SHA-256 content-addressing only (no key material). No new API endpoints. No DB schema changes. No new external dependencies. The execution engine records governance decisions — it does not execute infrastructure changes, run scripts, or provision resources. Tenant isolation enforced at FATAL severity. The CI gate is a read-only static analysis tool.
