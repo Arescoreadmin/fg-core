@@ -273,6 +273,49 @@ export const WORKSPACE_NAV_MAP: Record<string, WorkspaceNavLink[]> = {
     },
   ],
 
+  'operations-center': [
+    {
+      id: 'executive-intelligence',
+      label: 'Executive Intelligence',
+      route: '/dashboard/executive',
+      mcimId: 'MCIM-18.7-OPS-CTR',
+      description: 'Executive posture and risk metrics',
+      contextParams: ['tenant'],
+    },
+    {
+      id: 'trust-center',
+      label: 'Trust Center',
+      route: '/trust-center',
+      mcimId: 'MCIM-18.7-OPS-CTR',
+      description: 'View trust graph and verification status',
+      contextParams: ['tenant'],
+    },
+    {
+      id: 'decisions',
+      label: 'Decision Ledger',
+      route: '/dashboard/decisions',
+      mcimId: 'MCIM-18.7-OPS-CTR',
+      description: 'Governance decision records',
+      contextParams: ['tenant', 'decision'],
+    },
+    {
+      id: 'forensics',
+      label: 'Forensics & Remediation',
+      route: '/dashboard/forensics',
+      mcimId: 'MCIM-18.7-OPS-CTR',
+      description: 'Findings and remediation tracking',
+      contextParams: ['tenant', 'finding'],
+    },
+    {
+      id: 'operations-workspace',
+      label: 'Operations Workspace',
+      route: '/workspace',
+      mcimId: 'MCIM-18.7-OPS-CTR',
+      description: 'Real-time operational health',
+      contextParams: ['tenant'],
+    },
+  ],
+
   'command-center': [
     {
       id: 'executive-intelligence',
@@ -296,6 +339,14 @@ export const WORKSPACE_NAV_MAP: Record<string, WorkspaceNavLink[]> = {
       route: '/workspace',
       mcimId: 'MCIM-18.6-OPS-WS',
       description: 'Real-time operational health',
+      contextParams: ['tenant'],
+    },
+    {
+      id: 'operations-center',
+      label: 'Operations Center',
+      route: '/dashboard/operations-center',
+      mcimId: 'MCIM-18.7-OPS-CTR',
+      description: 'Autonomous governance operations queue and pipeline',
       contextParams: ['tenant'],
     },
     {

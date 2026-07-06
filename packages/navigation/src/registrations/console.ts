@@ -63,6 +63,37 @@ const items: NavigationItem[] = [
   },
 
   {
+    id: 'operations-center',
+    title: 'Operations Center',
+    route: '/dashboard/operations-center',
+    group: 'Operations',
+    tier: 'primary',
+    classification: 'primary',
+    visibility: 'visible',
+    platform: 'console',
+    roles: ['Operator', 'Administrator', 'CISO', 'Executive'],
+    aliases: [
+      'agoc', 'autonomous governance', 'governance operations', 'operations center',
+      'governance work queue', 'automation queue', 'decision pipeline',
+    ],
+    keywords: [
+      'operations', 'governance', 'automation', 'pipeline', 'queue', 'sla',
+      'policy', 'conflict', 'evidence', 'briefing', 'risk', 'heatmap',
+    ],
+    metadata: {
+      mcimId: 'MCIM-18.7-OPERATIONS-CENTER',
+      capability: 'Autonomous Governance Operations Center',
+      family: 'operator-execution',
+      authority: 'FrostGate Platform',
+      sourceOfTruth: 'apps/console/app/dashboard/operations-center/page.tsx',
+      maturity: 'strong',
+      lifecycle: 'core',
+      businessValue:
+        'Primary location where governance events become governed work — deterministic operations queue, automation pipeline, policy conflict detection, and evidence freshness monitoring derived from authoritative platform state.',
+    },
+  },
+
+  {
     id: 'control-tower',
     title: 'Control Tower',
     route: '/dashboard/control-tower',
