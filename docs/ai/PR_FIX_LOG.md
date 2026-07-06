@@ -24,6 +24,7 @@ This log records **completed, intentional fixes**.
 
 ---
 
+
 ### 2026-07-05 — pr/18.6.8-workspace-integration-demo-readiness: P1 CI/Vercel Fix
 
 **Branch:** `pr/18.6.8-workspace-integration-demo-readiness`

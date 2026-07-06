@@ -335,6 +335,7 @@ def check_demo_mode_safe() -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
+
 def run_checks() -> int:
     errors: list[str] = []
     warnings: list[str] = []
