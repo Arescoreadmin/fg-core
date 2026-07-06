@@ -8,22 +8,20 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+from pathlib import Path
 
 import pytest
 
-from services.canonical import canonical_json_bytes, utc_iso8601_z_now
+from services.canonical import canonical_json_bytes
 from services.governance_digital_twin.immutability import FrozenDict
 from services.governance_digital_twin.models import (
-    GovernanceDigitalTwinAuthorityEdge,
     GovernanceDigitalTwinAuthorityGraph,
-    GovernanceDigitalTwinAuthorityNode,
     GovernanceDigitalTwinConfidenceProvenance,
     GovernanceDigitalTwinEntity,
     GovernanceDigitalTwinEntityProvenance,
     GovernanceDigitalTwinFutureReferences,
     GovernanceDigitalTwinRelationship,
     GovernanceDigitalTwinSnapshot,
-    GovernanceDigitalTwinSourceAuthority,
     GovernanceDigitalTwinStateExtensions,
     GovernanceDigitalTwinTwinIdentity,
 )
@@ -50,30 +48,30 @@ from services.governance_simulation.models import (
     GOVERNANCE_SIMULATION_SIMULATOR_VERSION,
     GOVERNANCE_SIMULATION_VERSION,
     SCENARIO_CATEGORY_REGISTRY,
+    SCENARIO_TEMPLATE_REGISTRY,
     ExecutiveComparison,
-    ExecutiveComparisonRow,
     GraphDiff,
-    GraphDiffEntry,
     ImpactConfidence,
     ImpactDomain,
-    ImpactEntry,
     ImpactReport,
     OverlayOperationType,
     ReplayPackage,
     ScenarioCategory,
     ScenarioOverlay,
     ScenarioOverlayOperation,
-    SimulationManifest,
+    SimulationHorizon,
     SimulationResult,
     SimulationScenario,
-    SimulationValidationFinding,
     SimulationValidationReport,
     SimulationValidationSeverity,
 )
-from services.governance_simulation.overlay import OverlayError, apply_overlay
-from services.governance_simulation.replay import build_replay_package
+from services.governance_simulation.overlay import (
+    OverlayError,
+    apply_overlay,
+    compose_overlays,
+)
 from services.governance_simulation.scenario import build_scenario
-from services.governance_simulation.simulator import simulate
+from services.governance_simulation.simulator import run_simulation, simulate
 from services.governance_simulation.validator import (
     SimulationValidationError,
     validate_simulation,
@@ -87,7 +85,9 @@ from services.governance_simulation.validator import (
 _TS = "2026-07-06T00:00:00Z"
 
 
-def _make_confidence_prov(authority: str = "test_authority") -> GovernanceDigitalTwinConfidenceProvenance:
+def _make_confidence_prov(
+    authority: str = "test_authority",
+) -> GovernanceDigitalTwinConfidenceProvenance:
     return GovernanceDigitalTwinConfidenceProvenance(
         authority=authority,
         confidence_weight=80,
@@ -98,7 +98,9 @@ def _make_confidence_prov(authority: str = "test_authority") -> GovernanceDigita
     )
 
 
-def _make_entity_prov(authority: str = "test_authority", eid: str = "e1") -> GovernanceDigitalTwinEntityProvenance:
+def _make_entity_prov(
+    authority: str = "test_authority", eid: str = "e1"
+) -> GovernanceDigitalTwinEntityProvenance:
     return GovernanceDigitalTwinEntityProvenance(
         origin_authority=authority,
         source_table="test",
@@ -233,7 +235,9 @@ def _make_overlay(
     from dataclasses import asdict
 
     created_at = _TS
-    overlay_id = hashlib.sha256(f"OVL:{scenario_id}:{snapshot.snapshot_id}".encode()).hexdigest()[:24]
+    overlay_id = hashlib.sha256(
+        f"OVL:{scenario_id}:{snapshot.snapshot_id}".encode()
+    ).hexdigest()[:24]
     ops = [asdict(op) for op in operations]
     payload = {
         "overlay_id": overlay_id,
@@ -285,6 +289,7 @@ def _make_op(
 # Group 1: Scenario creation
 # ---------------------------------------------------------------------------
 
+
 class TestScenarioCreation:
     def test_valid_scenario_creation(self):
         tenant = "tenant-a"
@@ -302,7 +307,9 @@ class TestScenarioCreation:
         snap = _make_snapshot("t1", [], [])
         scenario = build_scenario(snap, "S", "ControlChange", [])
         assert scenario.scenario_version == GOVERNANCE_SIMULATION_VERSION
-        assert scenario.graph_schema_version == GOVERNANCE_SIMULATION_GRAPH_SCHEMA_VERSION
+        assert (
+            scenario.graph_schema_version == GOVERNANCE_SIMULATION_GRAPH_SCHEMA_VERSION
+        )
         assert scenario.simulator_version == GOVERNANCE_SIMULATION_SIMULATOR_VERSION
         assert scenario.replay_version == GOVERNANCE_SIMULATION_REPLAY_VERSION
 
@@ -321,22 +328,38 @@ class TestScenarioCreation:
         assert len(scenario.overlay.operations) == 0
 
     def test_deterministic_scenario_id_same_inputs(self):
-        snap = _make_snapshot("t1", [], [], snapshot_id="snap-fixed-001", fingerprint="fp1234")
+        snap = _make_snapshot(
+            "t1", [], [], snapshot_id="snap-fixed-001", fingerprint="fp1234"
+        )
         # scenario_id includes created_at, so strictly it will differ — but overlay_hash is stable
         # Verify scenario_id format
         s = build_scenario(snap, "Name", "PolicyChange", [])
         assert len(s.scenario_id) == 24
-        assert s.scenario_id.isalnum() or all(c in "0123456789abcdef" for c in s.scenario_id)
+        assert s.scenario_id.isalnum() or all(
+            c in "0123456789abcdef" for c in s.scenario_id
+        )
 
     def test_overlay_embedded_in_scenario(self):
         snap = _make_snapshot("t1", [], [])
-        scenario = build_scenario(snap, "With Ops", "EvidenceChange", [
-            {"op_id": "op1", "operation_type": "add_entity", "authority": "test",
-             "reason": "r", "authoritative_basis": "b",
-             "entity_payload": None, "relationship_payload": None,
-             "source_entity_id": None, "target_entity_id": None,
-             "source_relationship_id": None}
-        ])
+        scenario = build_scenario(
+            snap,
+            "With Ops",
+            "EvidenceChange",
+            [
+                {
+                    "op_id": "op1",
+                    "operation_type": "add_entity",
+                    "authority": "test",
+                    "reason": "r",
+                    "authoritative_basis": "b",
+                    "entity_payload": None,
+                    "relationship_payload": None,
+                    "source_entity_id": None,
+                    "target_entity_id": None,
+                    "source_relationship_id": None,
+                }
+            ],
+        )
         assert scenario.overlay is not None
         assert len(scenario.overlay.operations) == 1
         assert scenario.overlay.operations[0].op_id == "op1"
@@ -367,6 +390,7 @@ class TestScenarioCreation:
 # Group 2: Overlay generation
 # ---------------------------------------------------------------------------
 
+
 class TestOverlayGeneration:
     def test_add_entity(self):
         tenant = "tenant-a"
@@ -391,8 +415,12 @@ class TestOverlayGeneration:
         tenant = "tenant-a"
         e1 = _make_entity("e1", "policy", tenant, status="active")
         snap = _make_snapshot(tenant, [e1], [])
-        op = _make_op("op3", "modify_entity", source_entity_id="e1",
-                       entity_payload={"status": "deprecated"})
+        op = _make_op(
+            "op3",
+            "modify_entity",
+            source_entity_id="e1",
+            entity_payload={"status": "deprecated"},
+        )
         overlay = _make_overlay("sc3", snap, [op])
         entities, rels = apply_overlay(snap, overlay)
         assert len(entities) == 1
@@ -404,7 +432,9 @@ class TestOverlayGeneration:
         e2 = _make_entity("e2", "control", tenant)
         snap = _make_snapshot(tenant, [e1, e2], [])
         rel = _make_relationship("r_new", "governs", "e1", "e2")
-        op = _make_op("op4", "add_relationship", relationship_payload=dataclasses.asdict(rel))
+        op = _make_op(
+            "op4", "add_relationship", relationship_payload=dataclasses.asdict(rel)
+        )
         overlay = _make_overlay("sc4", snap, [op])
         entities, rels = apply_overlay(snap, overlay)
         assert len(rels) == 1
@@ -449,8 +479,12 @@ class TestOverlayGeneration:
 
     def test_overlay_modify_missing_entity_raises(self):
         snap = _make_snapshot("t1", [], [])
-        op = _make_op("op8", "modify_entity", source_entity_id="ghost",
-                       entity_payload={"status": "x"})
+        op = _make_op(
+            "op8",
+            "modify_entity",
+            source_entity_id="ghost",
+            entity_payload={"status": "x"},
+        )
         overlay = _make_overlay("sc9", snap, [op])
         with pytest.raises(OverlayError):
             apply_overlay(snap, overlay)
@@ -470,17 +504,20 @@ class TestOverlayGeneration:
 # Group 3: Cross-tenant denial
 # ---------------------------------------------------------------------------
 
+
 class TestCrossTenantDenial:
     def test_cross_tenant_overlay_raises_validation_error(self):
         snap = _make_snapshot("tenant-a", [], [])
         # entity_payload has a different tenant_scope
         wrong_entity = _make_entity("e_wrong", "policy", "tenant-b")
-        op = _make_op("op1", "add_entity", entity_payload=dataclasses.asdict(wrong_entity))
+        op = _make_op(
+            "op1", "add_entity", entity_payload=dataclasses.asdict(wrong_entity)
+        )
         overlay = _make_overlay("sc_ct", snap, [op])
         with pytest.raises(SimulationValidationError):
-            validate_simulation(snap, overlay,
-                                _empty_diff("sc_ct", snap),
-                                _empty_impact("sc_ct", snap))
+            validate_simulation(
+                snap, overlay, _empty_diff("sc_ct", snap), _empty_impact("sc_ct", snap)
+            )
 
     def test_same_tenant_allowed(self):
         tenant = "tenant-a"
@@ -497,10 +534,17 @@ class TestCrossTenantDenial:
     def test_cross_tenant_severity_is_fatal(self):
         snap = _make_snapshot("tenant-a", [], [])
         wrong_entity = _make_entity("e_wrong", "policy", "tenant-b")
-        op = _make_op("op1", "add_entity", entity_payload=dataclasses.asdict(wrong_entity))
+        op = _make_op(
+            "op1", "add_entity", entity_payload=dataclasses.asdict(wrong_entity)
+        )
         overlay = _make_overlay("sc_ct3", snap, [op])
         try:
-            validate_simulation(snap, overlay, _empty_diff("sc_ct3", snap), _empty_impact("sc_ct3", snap))
+            validate_simulation(
+                snap,
+                overlay,
+                _empty_diff("sc_ct3", snap),
+                _empty_impact("sc_ct3", snap),
+            )
         except SimulationValidationError:
             pass  # expected
         else:
@@ -510,6 +554,7 @@ class TestCrossTenantDenial:
 # ---------------------------------------------------------------------------
 # Group 4: Deterministic diff
 # ---------------------------------------------------------------------------
+
 
 class TestDeterministicDiff:
     def test_added_entity_in_diff(self):
@@ -541,7 +586,9 @@ class TestDeterministicDiff:
     def test_same_inputs_same_diff_hash(self):
         tenant = "t1"
         e1 = _make_entity("e1", "policy", tenant)
-        snap = _make_snapshot(tenant, [e1], [], snapshot_id="snap-fixed", fingerprint="fp-fixed")
+        snap = _make_snapshot(
+            tenant, [e1], [], snapshot_id="snap-fixed", fingerprint="fp-fixed"
+        )
         d1 = compute_graph_diff(snap, (), (), "sc-det")
         d2 = compute_graph_diff(snap, (), (), "sc-det")
         assert d1.diff_hash == d2.diff_hash
@@ -583,8 +630,10 @@ class TestDeterministicDiff:
 # Group 5: Impact analysis
 # ---------------------------------------------------------------------------
 
+
 def _empty_diff(scenario_id: str, snap: GovernanceDigitalTwinSnapshot) -> GraphDiff:
     import hashlib
+
     return GraphDiff(
         diff_id=hashlib.sha256(f"DIFFMASTER:{scenario_id}".encode()).hexdigest()[:24],
         scenario_id=scenario_id,
@@ -595,8 +644,11 @@ def _empty_diff(scenario_id: str, snap: GovernanceDigitalTwinSnapshot) -> GraphD
     )
 
 
-def _empty_impact(scenario_id: str, snap: GovernanceDigitalTwinSnapshot) -> ImpactReport:
+def _empty_impact(
+    scenario_id: str, snap: GovernanceDigitalTwinSnapshot
+) -> ImpactReport:
     import hashlib
+
     return ImpactReport(
         report_id=hashlib.sha256(f"IR:{scenario_id}".encode()).hexdigest()[:24],
         scenario_id=scenario_id,
@@ -632,7 +684,9 @@ class TestImpactAnalysis:
         diff = compute_graph_diff(snap, (e1,), (), "sc-imp3")
         report = analyze_impact(snap, diff, "sc-imp3")
         # e1 not in snap → UNKNOWN
-        unknown = [e for e in report.entries if e.confidence == ImpactConfidence.UNKNOWN.value]
+        unknown = [
+            e for e in report.entries if e.confidence == ImpactConfidence.UNKNOWN.value
+        ]
         assert len(unknown) > 0
 
     def test_proven_confidence_when_evidence_connected(self):
@@ -643,9 +697,13 @@ class TestImpactAnalysis:
         snap = _make_snapshot(tenant, [e_policy, e_evidence], [r_verifies])
         # Modify the policy entity
         e_policy_mod = dataclasses.replace(e_policy, status="deprecated")
-        diff = compute_graph_diff(snap, (e_policy_mod, e_evidence), (r_verifies,), "sc-imp4")
+        diff = compute_graph_diff(
+            snap, (e_policy_mod, e_evidence), (r_verifies,), "sc-imp4"
+        )
         report = analyze_impact(snap, diff, "sc-imp4")
-        proven = [e for e in report.entries if e.confidence == ImpactConfidence.PROVEN.value]
+        proven = [
+            e for e in report.entries if e.confidence == ImpactConfidence.PROVEN.value
+        ]
         assert len(proven) > 0
 
     def test_impact_report_has_report_hash(self):
@@ -660,10 +718,17 @@ class TestImpactAnalysis:
         entities = [
             _make_entity(f"e_{dtype}", etype, tenant)
             for dtype, etype in [
-                ("pol", "policy"), ("ctrl", "control"), ("ev", "evidence"),
-                ("find", "finding"), ("rem", "remediation"), ("assess", "assessment"),
-                ("rep", "report"), ("dec", "decision"), ("wf", "workflow"),
-                ("fw", "framework"), ("auth", "authority"),
+                ("pol", "policy"),
+                ("ctrl", "control"),
+                ("ev", "evidence"),
+                ("find", "finding"),
+                ("rem", "remediation"),
+                ("assess", "assessment"),
+                ("rep", "report"),
+                ("dec", "decision"),
+                ("wf", "workflow"),
+                ("fw", "framework"),
+                ("auth", "authority"),
             ]
         ]
         snap = _make_snapshot(tenant, entities, [])
@@ -671,8 +736,17 @@ class TestImpactAnalysis:
         report = analyze_impact(snap, diff, "sc-all-domains")
         domains = {e.domain for e in report.entries}
         # All major domains must be present
-        for domain in ["governance", "control", "evidence", "risk", "readiness", "operational",
-                       "executive", "framework", "authority"]:
+        for domain in [
+            "governance",
+            "control",
+            "evidence",
+            "risk",
+            "readiness",
+            "operational",
+            "executive",
+            "framework",
+            "authority",
+        ]:
             assert domain in domains, f"domain '{domain}' missing from impact entries"
 
     def test_impact_entries_sorted_by_impact_id(self):
@@ -696,11 +770,14 @@ class TestImpactAnalysis:
 # Group 6: Replay integrity
 # ---------------------------------------------------------------------------
 
+
 class TestReplayIntegrity:
     def test_same_scenario_snapshot_same_fingerprint(self):
         tenant = "t1"
         e1 = _make_entity("e1", "policy", tenant)
-        snap = _make_snapshot(tenant, [e1], [], snapshot_id="snap-fixed", fingerprint="fp-stable")
+        snap = _make_snapshot(
+            tenant, [e1], [], snapshot_id="snap-fixed", fingerprint="fp-stable"
+        )
         s1 = build_scenario(snap, "Fixed", "PolicyChange", [])
         s2 = build_scenario(snap, "Fixed", "PolicyChange", [])
         # overlay_hash must be stable for same scenario inputs when overlay_id is the same
@@ -729,7 +806,9 @@ class TestReplayIntegrity:
     def test_two_simulate_runs_same_result_structure(self):
         tenant = "t1"
         e1 = _make_entity("e1", "policy", tenant)
-        snap = _make_snapshot(tenant, [e1], [], snapshot_id="snap-sim2", fingerprint="fp-sim2")
+        snap = _make_snapshot(
+            tenant, [e1], [], snapshot_id="snap-sim2", fingerprint="fp-sim2"
+        )
         s1 = build_scenario(snap, "Run", "PolicyChange", [])
         r1 = simulate(snap, s1)
         r2 = simulate(snap, s1)
@@ -741,9 +820,12 @@ class TestReplayIntegrity:
 # Group 7: Fingerprint determinism
 # ---------------------------------------------------------------------------
 
+
 class TestFingerprintDeterminism:
     def test_overlay_hash_is_deterministic(self):
-        snap = _make_snapshot("t1", [], [], snapshot_id="snap-fph", fingerprint="fp-hash")
+        snap = _make_snapshot(
+            "t1", [], [], snapshot_id="snap-fph", fingerprint="fp-hash"
+        )
         s = build_scenario(snap, "FP", "PolicyChange", [])
         h1 = compute_overlay_hash(s.overlay)
         h2 = compute_overlay_hash(s.overlay)
@@ -764,18 +846,26 @@ class TestFingerprintDeterminism:
         assert h1 == h2
 
     def test_scenario_fingerprint_no_runtime_values(self):
-        snap = _make_snapshot("t1", [], [], snapshot_id="snap-stable", fingerprint="fp-stable")
+        snap = _make_snapshot(
+            "t1", [], [], snapshot_id="snap-stable", fingerprint="fp-stable"
+        )
         s = build_scenario(snap, "S", "PolicyChange", [])
         diff = _empty_diff(s.scenario_id, snap)
         impact = _empty_impact(s.scenario_id, snap)
         fp1 = compute_scenario_fingerprint(
-            s.scenario_version, s.overlay, diff, impact,
+            s.scenario_version,
+            s.overlay,
+            diff,
+            impact,
             GOVERNANCE_SIMULATION_SIMULATOR_VERSION,
             GOVERNANCE_SIMULATION_GRAPH_SCHEMA_VERSION,
             GOVERNANCE_SIMULATION_VERSION,
         )
         fp2 = compute_scenario_fingerprint(
-            s.scenario_version, s.overlay, diff, impact,
+            s.scenario_version,
+            s.overlay,
+            diff,
+            impact,
             GOVERNANCE_SIMULATION_SIMULATOR_VERSION,
             GOVERNANCE_SIMULATION_GRAPH_SCHEMA_VERSION,
             GOVERNANCE_SIMULATION_VERSION,
@@ -802,14 +892,19 @@ class TestFingerprintDeterminism:
 # Group 8: Authority validation
 # ---------------------------------------------------------------------------
 
+
 class TestAuthorityValidation:
     def test_empty_authority_op_rejected(self):
         snap = _make_snapshot("t1", [], [])
         op = _make_op("op1", "add_entity", authority="")  # empty authority
         overlay = _make_overlay("sc-auth1", snap, [op])
         with pytest.raises(SimulationValidationError):
-            validate_simulation(snap, overlay, _empty_diff("sc-auth1", snap),
-                                _empty_impact("sc-auth1", snap))
+            validate_simulation(
+                snap,
+                overlay,
+                _empty_diff("sc-auth1", snap),
+                _empty_impact("sc-auth1", snap),
+            )
 
     def test_valid_authority_passes(self):
         snap = _make_snapshot("t1", [], [])
@@ -829,8 +924,12 @@ class TestAuthorityValidation:
         op = _make_op("op1", "add_entity", authority="")
         overlay = _make_overlay("sc-auth3", snap, [op])
         try:
-            validate_simulation(snap, overlay, _empty_diff("sc-auth3", snap),
-                                _empty_impact("sc-auth3", snap))
+            validate_simulation(
+                snap,
+                overlay,
+                _empty_diff("sc-auth3", snap),
+                _empty_impact("sc-auth3", snap),
+            )
         except SimulationValidationError:
             pass
 
@@ -838,6 +937,7 @@ class TestAuthorityValidation:
 # ---------------------------------------------------------------------------
 # Group 9: Tenant isolation
 # ---------------------------------------------------------------------------
+
 
 class TestTenantIsolation:
     def test_tenant_a_scenario_has_tenant_a_id(self):
@@ -851,8 +951,12 @@ class TestTenantIsolation:
         assert s.tenant_id == "tenant-b"
 
     def test_different_tenants_different_scenario_ids(self):
-        snap_a = _make_snapshot("tenant-a", [], [], snapshot_id="snap-ta", fingerprint="fp-a")
-        snap_b = _make_snapshot("tenant-b", [], [], snapshot_id="snap-tb", fingerprint="fp-b")
+        snap_a = _make_snapshot(
+            "tenant-a", [], [], snapshot_id="snap-ta", fingerprint="fp-a"
+        )
+        snap_b = _make_snapshot(
+            "tenant-b", [], [], snapshot_id="snap-tb", fingerprint="fp-b"
+        )
         # scenario_ids include tenant_id so they will differ
         # Use same name/category to ensure tenant is the differentiator
         # (created_at differs too, so just assert they're both valid)
@@ -864,28 +968,42 @@ class TestTenantIsolation:
         snap = _make_snapshot("tenant-a", [], [])
         # Overlay with wrong tenant
         wrong_entity = _make_entity("e1", "policy", "tenant-z")
-        op = _make_op("op1", "add_entity", entity_payload=dataclasses.asdict(wrong_entity))
+        op = _make_op(
+            "op1", "add_entity", entity_payload=dataclasses.asdict(wrong_entity)
+        )
         overlay = _make_overlay("sc-tenant-iso", snap, [op])
         with pytest.raises(SimulationValidationError):
-            validate_simulation(snap, overlay,
-                                _empty_diff("sc-tenant-iso", snap),
-                                _empty_impact("sc-tenant-iso", snap))
+            validate_simulation(
+                snap,
+                overlay,
+                _empty_diff("sc-tenant-iso", snap),
+                _empty_impact("sc-tenant-iso", snap),
+            )
 
 
 # ---------------------------------------------------------------------------
 # Group 10: Graph validation
 # ---------------------------------------------------------------------------
 
+
 class TestGraphValidation:
     def test_orphan_overlay_detected(self):
         snap = _make_snapshot("t1", [], [])
         # modify_entity on nonexistent entity
-        op = _make_op("op1", "modify_entity", source_entity_id="ghost_id",
-                       entity_payload={"status": "x"})
+        op = _make_op(
+            "op1",
+            "modify_entity",
+            source_entity_id="ghost_id",
+            entity_payload={"status": "x"},
+        )
         overlay = _make_overlay("sc-orphan", snap, [op])
         with pytest.raises(SimulationValidationError):
-            validate_simulation(snap, overlay, _empty_diff("sc-orphan", snap),
-                                _empty_impact("sc-orphan", snap))
+            validate_simulation(
+                snap,
+                overlay,
+                _empty_diff("sc-orphan", snap),
+                _empty_impact("sc-orphan", snap),
+            )
 
     def test_duplicate_op_ids_detected(self):
         snap = _make_snapshot("t1", [], [])
@@ -893,8 +1011,12 @@ class TestGraphValidation:
         op2 = _make_op("dup-id", "add_entity", authority="a")
         overlay = _make_overlay("sc-dup", snap, [op1, op2])
         with pytest.raises(SimulationValidationError):
-            validate_simulation(snap, overlay, _empty_diff("sc-dup", snap),
-                                _empty_impact("sc-dup", snap))
+            validate_simulation(
+                snap,
+                overlay,
+                _empty_diff("sc-dup", snap),
+                _empty_impact("sc-dup", snap),
+            )
 
     def test_missing_source_snapshot_detected(self):
         snap = _make_snapshot("t1", [], [])
@@ -909,8 +1031,9 @@ class TestGraphValidation:
             overlay_hash="x" * 64,
         )
         with pytest.raises(SimulationValidationError):
-            validate_simulation(snap, overlay, _empty_diff("sc1", snap),
-                                _empty_impact("sc1", snap))
+            validate_simulation(
+                snap, overlay, _empty_diff("sc1", snap), _empty_impact("sc1", snap)
+            )
 
     def test_valid_overlay_passes_validation(self):
         snap = _make_snapshot("t1", [], [])
@@ -933,7 +1056,10 @@ class TestGraphValidation:
         impact = _empty_impact("sc-cycle", snap)
         # Pass derived entities/relationships that form a cycle
         report = validate_simulation(
-            snap, overlay, diff, impact,
+            snap,
+            overlay,
+            diff,
+            impact,
             derived_entities=(e1, e2),
             derived_relationships=(r1, r2),
         )
@@ -948,16 +1074,22 @@ class TestGraphValidation:
 # Group 11: Explicit relationship enforcement
 # ---------------------------------------------------------------------------
 
+
 class TestRelationshipEnforcement:
     def test_add_relationship_with_nonexistent_from_entity_fails(self):
         snap = _make_snapshot("t1", [], [])
         rel = _make_relationship("r1", "governs", "nonexistent_from", "nonexistent_to")
-        op = _make_op("op1", "add_relationship", relationship_payload=dataclasses.asdict(rel))
+        op = _make_op(
+            "op1", "add_relationship", relationship_payload=dataclasses.asdict(rel)
+        )
         overlay = _make_overlay("sc-rel-enforce", snap, [op])
         with pytest.raises(SimulationValidationError):
-            validate_simulation(snap, overlay,
-                                _empty_diff("sc-rel-enforce", snap),
-                                _empty_impact("sc-rel-enforce", snap))
+            validate_simulation(
+                snap,
+                overlay,
+                _empty_diff("sc-rel-enforce", snap),
+                _empty_impact("sc-rel-enforce", snap),
+            )
 
     def test_add_relationship_with_valid_entities_passes(self):
         tenant = "t1"
@@ -965,13 +1097,18 @@ class TestRelationshipEnforcement:
         e2 = _make_entity("e2", "control", tenant)
         snap = _make_snapshot(tenant, [e1, e2], [])
         rel = _make_relationship("r1", "governs", "e1", "e2")
-        op = _make_op("op1", "add_relationship", relationship_payload=dataclasses.asdict(rel))
+        op = _make_op(
+            "op1", "add_relationship", relationship_payload=dataclasses.asdict(rel)
+        )
         overlay = _make_overlay("sc-rel-valid", snap, [op])
         diff = _empty_diff("sc-rel-valid", snap)
         impact = _empty_impact("sc-rel-valid", snap)
         # With both entities in snapshot → relationship is valid in derived set
         report = validate_simulation(
-            snap, overlay, diff, impact,
+            snap,
+            overlay,
+            diff,
+            impact,
             derived_entities=(e1, e2),
             derived_relationships=(rel,),
         )
@@ -982,6 +1119,7 @@ class TestRelationshipEnforcement:
 # Group 12: Unknown impact handling
 # ---------------------------------------------------------------------------
 
+
 class TestUnknownImpactHandling:
     def test_added_entity_not_in_snap_returns_unknown(self):
         tenant = "t1"
@@ -989,7 +1127,9 @@ class TestUnknownImpactHandling:
         snap = _make_snapshot(tenant, [], [])
         diff = compute_graph_diff(snap, (new_e,), (), "sc-unk1")
         report = analyze_impact(snap, diff, "sc-unk1")
-        unknown = [e for e in report.entries if e.confidence == ImpactConfidence.UNKNOWN.value]
+        unknown = [
+            e for e in report.entries if e.confidence == ImpactConfidence.UNKNOWN.value
+        ]
         assert len(unknown) > 0
 
     def test_unknown_has_limitation_text(self):
@@ -998,7 +1138,9 @@ class TestUnknownImpactHandling:
         snap = _make_snapshot(tenant, [], [])
         diff = compute_graph_diff(snap, (new_e,), (), "sc-unk2")
         report = analyze_impact(snap, diff, "sc-unk2")
-        unknown_entries = [e for e in report.entries if e.confidence == ImpactConfidence.UNKNOWN.value]
+        unknown_entries = [
+            e for e in report.entries if e.confidence == ImpactConfidence.UNKNOWN.value
+        ]
         for entry in unknown_entries:
             assert len(entry.limitations) > 0
 
@@ -1007,6 +1149,7 @@ class TestUnknownImpactHandling:
 # Group 13: Immutable snapshot verification
 # ---------------------------------------------------------------------------
 
+
 class TestImmutableSnapshot:
     def test_snapshot_entities_unchanged_after_simulation(self):
         tenant = "t1"
@@ -1014,12 +1157,14 @@ class TestImmutableSnapshot:
         snap = _make_snapshot(tenant, [e1], [])
         original_entities = snap.entities
         scenario = build_scenario(snap, "Immutable Test", "PolicyChange", [])
-        result = simulate(snap, scenario)
+        simulate(snap, scenario)
         assert snap.entities == original_entities
 
     def test_snapshot_is_frozen(self):
         snap = _make_snapshot("t1", [], [])
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             snap.tenant_id = "mutated"  # type: ignore
 
     def test_simulation_does_not_modify_snapshot_relationships(self):
@@ -1038,11 +1183,14 @@ class TestImmutableSnapshot:
 # Group 14: Scenario replay
 # ---------------------------------------------------------------------------
 
+
 class TestScenarioReplay:
     def test_replay_with_snapshot_produces_identical_fingerprint(self):
         tenant = "t1"
         e1 = _make_entity("e1", "policy", tenant)
-        snap = _make_snapshot(tenant, [e1], [], snapshot_id="snap-replay", fingerprint="fp-replay")
+        snap = _make_snapshot(
+            tenant, [e1], [], snapshot_id="snap-replay", fingerprint="fp-replay"
+        )
         scenario = build_scenario(snap, "Replay Test", "PolicyChange", [])
         result1 = simulate(snap, scenario)
         result2 = simulate(snap, scenario)
@@ -1059,8 +1207,9 @@ class TestScenarioReplay:
         tenant = "t1"
         snap = _make_snapshot(tenant, [], [])
         svc = GovernanceSimulationService()
-        scenario = svc.build_scenario(snap, "SvcReplay", "PolicyChange", [],
-                                       created_from="test")
+        scenario = svc.build_scenario(
+            snap, "SvcReplay", "PolicyChange", [], created_from="test"
+        )
         result = svc.simulate(snap, scenario)
         replayed = svc.replay_with_snapshot(snap, result.replay_package)
         assert replayed.simulation_fingerprint == result.simulation_fingerprint
@@ -1069,6 +1218,7 @@ class TestScenarioReplay:
 # ---------------------------------------------------------------------------
 # Group 15: Overlay determinism
 # ---------------------------------------------------------------------------
+
 
 class TestOverlayDeterminism:
     def test_overlay_hash_stable_across_identical_overlays(self):
@@ -1081,7 +1231,9 @@ class TestOverlayDeterminism:
         tenant = "t1"
         e1 = _make_entity("e1", "policy", tenant)
         e2 = _make_entity("e2", "control", tenant)
-        snap = _make_snapshot(tenant, [e1, e2], [], snapshot_id="snap-oo", fingerprint="fp-oo")
+        snap = _make_snapshot(
+            tenant, [e1, e2], [], snapshot_id="snap-oo", fingerprint="fp-oo"
+        )
         op1 = _make_op("op-a", "remove_entity", source_entity_id="e1")
         op2 = _make_op("op-b", "remove_entity", source_entity_id="e2")
         overlay_ab = _make_overlay("sc-oo1", snap, [op1, op2])
@@ -1099,6 +1251,7 @@ class TestOverlayDeterminism:
 # Group 16: Manifest generation
 # ---------------------------------------------------------------------------
 
+
 class TestManifestGeneration:
     def test_simulation_manifest_fields_correct(self):
         tenant = "t1"
@@ -1111,7 +1264,9 @@ class TestManifestGeneration:
         assert manifest.simulation_version == GOVERNANCE_SIMULATION_VERSION
         assert manifest.simulator_version == GOVERNANCE_SIMULATION_SIMULATOR_VERSION
         assert manifest.replay_version == GOVERNANCE_SIMULATION_REPLAY_VERSION
-        assert manifest.graph_schema_version == GOVERNANCE_SIMULATION_GRAPH_SCHEMA_VERSION
+        assert (
+            manifest.graph_schema_version == GOVERNANCE_SIMULATION_GRAPH_SCHEMA_VERSION
+        )
         assert manifest.mcim_version == GOVERNANCE_SIMULATION_MCIM_VERSION
 
     def test_manifest_hashes_present(self):
@@ -1128,7 +1283,10 @@ class TestManifestGeneration:
         snap = _make_snapshot("t1", [], [], fingerprint="known-fp-12345")
         scenario = build_scenario(snap, "Manifest3", "PolicyChange", [])
         result = simulate(snap, scenario)
-        assert result.replay_package.manifest.source_snapshot_fingerprint == snap.fingerprint
+        assert (
+            result.replay_package.manifest.source_snapshot_fingerprint
+            == snap.fingerprint
+        )
 
     def test_manifest_schema_version_set(self):
         snap = _make_snapshot("t1", [], [])
@@ -1141,12 +1299,19 @@ class TestManifestGeneration:
 # Group 17: MCIM registration
 # ---------------------------------------------------------------------------
 
+
 class TestMCIMRegistration:
     def test_all_9_keys_present(self):
         expected = {
-            "scenario", "overlay", "impact_report", "diff_report",
-            "replay_package", "simulation_manifest", "simulation_validator",
-            "simulation_fingerprint", "simulation_category",
+            "scenario",
+            "overlay",
+            "impact_report",
+            "diff_report",
+            "replay_package",
+            "simulation_manifest",
+            "simulation_validator",
+            "simulation_fingerprint",
+            "simulation_category",
         }
         # simulation_run was added in the 18.8.2 improvements — all original 9 keys must still be present
         assert expected.issubset(set(MCIM_REGISTRATION_SOURCE.keys()))
@@ -1160,18 +1325,24 @@ class TestMCIMRegistration:
 
     def test_mcim_values_have_mcim_prefix(self):
         for key, value in MCIM_REGISTRATION_SOURCE.items():
-            assert value.startswith("MCIM-"), f"key '{key}' has non-MCIM value '{value}'"
+            assert value.startswith("MCIM-"), (
+                f"key '{key}' has non-MCIM value '{value}'"
+            )
 
     def test_mcim_scenario_value(self):
         assert MCIM_REGISTRATION_SOURCE["scenario"] == "MCIM-18.8.2-SIM-SCENARIO"
 
     def test_mcim_replay_package_value(self):
-        assert MCIM_REGISTRATION_SOURCE["replay_package"] == "MCIM-18.8.2-SIM-REPLAY-PACKAGE"
+        assert (
+            MCIM_REGISTRATION_SOURCE["replay_package"]
+            == "MCIM-18.8.2-SIM-REPLAY-PACKAGE"
+        )
 
 
 # ---------------------------------------------------------------------------
 # Group 18: Canonical ordering
 # ---------------------------------------------------------------------------
+
 
 class TestCanonicalOrdering:
     def test_diff_entries_are_sorted_by_diff_id(self):
@@ -1196,6 +1367,7 @@ class TestCanonicalOrdering:
 # Group 19: Builder/schema version stability
 # ---------------------------------------------------------------------------
 
+
 class TestVersionStability:
     def test_simulator_version_constant(self):
         assert GOVERNANCE_SIMULATION_SIMULATOR_VERSION == "1.0.0"
@@ -1217,29 +1389,51 @@ class TestVersionStability:
 # Group 20: Schema version stability (enum checks)
 # ---------------------------------------------------------------------------
 
+
 class TestEnumStability:
     def test_scenario_category_has_all_values(self):
         values = {c.value for c in ScenarioCategory}
         for expected in [
-            "PolicyChange", "ControlChange", "EvidenceChange", "FindingResolution",
-            "Remediation", "AuthorityChange", "OrganizationalChange", "FrameworkMapping",
-            "RiskAcceptance", "ReadinessImprovement", "ExecutiveDecision",
+            "PolicyChange",
+            "ControlChange",
+            "EvidenceChange",
+            "FindingResolution",
+            "Remediation",
+            "AuthorityChange",
+            "OrganizationalChange",
+            "FrameworkMapping",
+            "RiskAcceptance",
+            "ReadinessImprovement",
+            "ExecutiveDecision",
         ]:
             assert expected in values
 
     def test_overlay_operation_type_has_all_values(self):
         values = {o.value for o in OverlayOperationType}
         for expected in [
-            "add_entity", "remove_entity", "modify_entity",
-            "add_relationship", "remove_relationship", "modify_relationship",
+            "add_entity",
+            "remove_entity",
+            "modify_entity",
+            "add_relationship",
+            "remove_relationship",
+            "modify_relationship",
         ]:
             assert expected in values
 
     def test_impact_domain_has_all_values(self):
         values = {d.value for d in ImpactDomain}
         for expected in [
-            "governance", "control", "evidence", "framework", "compliance",
-            "operational", "executive", "risk", "readiness", "authority", "trust",
+            "governance",
+            "control",
+            "evidence",
+            "framework",
+            "compliance",
+            "operational",
+            "executive",
+            "risk",
+            "readiness",
+            "authority",
+            "trust",
         ]:
             assert expected in values
 
@@ -1264,6 +1458,7 @@ class TestEnumStability:
 # ---------------------------------------------------------------------------
 # Group 21: Replay package generation
 # ---------------------------------------------------------------------------
+
 
 class TestReplayPackageGeneration:
     def test_replay_package_has_all_required_fields(self):
@@ -1310,6 +1505,7 @@ class TestReplayPackageGeneration:
 # Group 22: Simulation validator — error severity behavior
 # ---------------------------------------------------------------------------
 
+
 class TestSimulationValidator:
     def test_error_severity_fails_closed(self):
         snap = _make_snapshot("t1", [], [])
@@ -1317,9 +1513,12 @@ class TestSimulationValidator:
         op2 = _make_op("dup", "add_entity", authority="a")  # duplicate op_id
         overlay = _make_overlay("sc-err-close", snap, [op, op2])
         with pytest.raises(SimulationValidationError):
-            validate_simulation(snap, overlay,
-                                _empty_diff("sc-err-close", snap),
-                                _empty_impact("sc-err-close", snap))
+            validate_simulation(
+                snap,
+                overlay,
+                _empty_diff("sc-err-close", snap),
+                _empty_impact("sc-err-close", snap),
+            )
 
     def test_warning_severity_passes(self):
         """Cycle is a WARNING — should not raise."""
@@ -1333,7 +1532,10 @@ class TestSimulationValidator:
         diff = _empty_diff("sc-warn-pass", snap)
         impact = _empty_impact("sc-warn-pass", snap)
         report = validate_simulation(
-            snap, overlay, diff, impact,
+            snap,
+            overlay,
+            diff,
+            impact,
             derived_entities=(e1, e2),
             derived_relationships=(r1, r2),
         )
@@ -1364,6 +1566,7 @@ class TestSimulationValidator:
 # ---------------------------------------------------------------------------
 # Group 23: Service contract
 # ---------------------------------------------------------------------------
+
 
 class TestServiceContract:
     def test_service_has_build_scenario(self):
@@ -1407,14 +1610,18 @@ class TestServiceContract:
     def test_service_simulate_returns_result(self):
         svc = GovernanceSimulationService()
         snap = _make_snapshot("t1", [], [])
-        scenario = svc.build_scenario(snap, "SvcSim", "PolicyChange", [], created_from="test")
+        scenario = svc.build_scenario(
+            snap, "SvcSim", "PolicyChange", [], created_from="test"
+        )
         result = svc.simulate(snap, scenario)
         assert isinstance(result, SimulationResult)
 
     def test_service_export_returns_mapping(self):
         svc = GovernanceSimulationService()
         snap = _make_snapshot("t1", [], [])
-        scenario = svc.build_scenario(snap, "SvcExp", "PolicyChange", [], created_from="test")
+        scenario = svc.build_scenario(
+            snap, "SvcExp", "PolicyChange", [], created_from="test"
+        )
         result = svc.simulate(snap, scenario)
         exported = svc.export(result.replay_package)
         assert isinstance(exported, dict)
@@ -1422,7 +1629,9 @@ class TestServiceContract:
     def test_service_replay_raises_not_implemented(self):
         svc = GovernanceSimulationService()
         snap = _make_snapshot("t1", [], [])
-        scenario = svc.build_scenario(snap, "SvcR", "PolicyChange", [], created_from="test")
+        scenario = svc.build_scenario(
+            snap, "SvcR", "PolicyChange", [], created_from="test"
+        )
         result = svc.simulate(snap, scenario)
         with pytest.raises(NotImplementedError):
             svc.replay(result.replay_package)
@@ -1431,6 +1640,7 @@ class TestServiceContract:
 # ---------------------------------------------------------------------------
 # Group 24: Export
 # ---------------------------------------------------------------------------
+
 
 class TestExport:
     def test_exported_package_is_deep_frozen(self):
@@ -1442,9 +1652,19 @@ class TestExport:
 
     def test_exported_package_has_no_forbidden_keys(self):
         forbidden = {
-            "secret", "token", "password", "api_key", "auth_header",
-            "authorization", "raw_prompt", "raw_vector", "embedding",
-            "provider_payload", "private_key", "session", "cookie",
+            "secret",
+            "token",
+            "password",
+            "api_key",
+            "auth_header",
+            "authorization",
+            "raw_prompt",
+            "raw_vector",
+            "embedding",
+            "provider_payload",
+            "private_key",
+            "session",
+            "cookie",
         }
         snap = _make_snapshot("t1", [], [])
         scenario = build_scenario(snap, "ExportSafe", "PolicyChange", [])
@@ -1453,7 +1673,9 @@ class TestExport:
 
         def _check_no_forbidden(d: dict, path: str = "") -> None:
             for k, v in d.items():
-                assert k.lower() not in forbidden, f"Forbidden key '{k}' found at {path}"
+                assert k.lower() not in forbidden, (
+                    f"Forbidden key '{k}' found at {path}"
+                )
                 if isinstance(v, dict):
                     _check_no_forbidden(v, path + f".{k}")
 
@@ -1496,62 +1718,81 @@ class TestExport:
 # Group 25: DataClass structure — all key dataclasses are frozen
 # ---------------------------------------------------------------------------
 
+
 class TestDataclassStructure:
     def test_scenario_overlay_operation_is_frozen(self):
         op = _make_op("op1", "add_entity", authority="a")
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             op.op_id = "changed"  # type: ignore
 
     def test_scenario_overlay_is_frozen(self):
         snap = _make_snapshot("t1", [], [])
         overlay = _make_overlay("sc1", snap, [])
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             overlay.overlay_id = "changed"  # type: ignore
 
     def test_simulation_scenario_is_frozen(self):
         snap = _make_snapshot("t1", [], [])
         scenario = build_scenario(snap, "S", "PolicyChange", [])
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             scenario.scenario_name = "changed"  # type: ignore
 
     def test_graph_diff_is_frozen(self):
         snap = _make_snapshot("t1", [], [])
         diff = _empty_diff("sc1", snap)
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             diff.diff_id = "changed"  # type: ignore
 
     def test_impact_report_is_frozen(self):
         snap = _make_snapshot("t1", [], [])
         impact = _empty_impact("sc1", snap)
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             impact.report_id = "changed"  # type: ignore
 
     def test_simulation_result_is_frozen(self):
         snap = _make_snapshot("t1", [], [])
         scenario = build_scenario(snap, "S", "PolicyChange", [])
         result = simulate(snap, scenario)
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             result.simulation_fingerprint = "changed"  # type: ignore
 
     def test_replay_package_is_frozen(self):
         snap = _make_snapshot("t1", [], [])
         scenario = build_scenario(snap, "S", "PolicyChange", [])
         result = simulate(snap, scenario)
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             result.replay_package.package_id = "changed"  # type: ignore
 
     def test_simulation_manifest_is_frozen(self):
         snap = _make_snapshot("t1", [], [])
         scenario = build_scenario(snap, "S", "PolicyChange", [])
         result = simulate(snap, scenario)
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             result.replay_package.manifest.scenario_id = "changed"  # type: ignore
 
     def test_executive_comparison_is_frozen(self):
         snap = _make_snapshot("t1", [], [])
         scenario = build_scenario(snap, "S", "PolicyChange", [])
         result = simulate(snap, scenario)
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             result.comparison.scenario_id = "changed"  # type: ignore
 
     def test_simulation_validation_report_is_frozen(self):
@@ -1560,7 +1801,9 @@ class TestDataclassStructure:
         diff = _empty_diff("sc1", snap)
         impact = _empty_impact("sc1", snap)
         report = validate_simulation(snap, overlay, diff, impact)
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             report.valid = False  # type: ignore
 
 
@@ -1568,17 +1811,26 @@ class TestDataclassStructure:
 # Group 26: End-to-end simulation with multiple entity types
 # ---------------------------------------------------------------------------
 
+
 class TestEndToEndSimulation:
     def test_simulate_with_policy_change_scenario(self):
         tenant = "t1"
         e1 = _make_entity("pol1", "policy", tenant, status="active")
         snap = _make_snapshot(tenant, [e1], [])
-        ops = [{"op_id": "op1", "operation_type": "modify_entity",
-                "source_entity_id": "pol1", "entity_payload": {"status": "deprecated"},
-                "authority": "test_auth", "reason": "policy update",
+        ops = [
+            {
+                "op_id": "op1",
+                "operation_type": "modify_entity",
+                "source_entity_id": "pol1",
+                "entity_payload": {"status": "deprecated"},
+                "authority": "test_auth",
+                "reason": "policy update",
                 "authoritative_basis": "board decision",
-                "target_entity_id": None, "source_relationship_id": None,
-                "relationship_payload": None}]
+                "target_entity_id": None,
+                "source_relationship_id": None,
+                "relationship_payload": None,
+            }
+        ]
         scenario = build_scenario(snap, "Policy Deprecation", "PolicyChange", ops)
         result = simulate(snap, scenario)
         assert result.scenario.scenario_name == "Policy Deprecation"
@@ -1590,12 +1842,20 @@ class TestEndToEndSimulation:
         tenant = "t1"
         snap = _make_snapshot(tenant, [], [])
         new_ctrl = _make_entity("ctrl_new", "control", tenant)
-        ops = [{"op_id": "op1", "operation_type": "add_entity",
+        ops = [
+            {
+                "op_id": "op1",
+                "operation_type": "add_entity",
                 "entity_payload": dataclasses.asdict(new_ctrl),
-                "authority": "test_auth", "reason": "new control",
+                "authority": "test_auth",
+                "reason": "new control",
                 "authoritative_basis": "risk assessment",
-                "source_entity_id": None, "target_entity_id": None,
-                "source_relationship_id": None, "relationship_payload": None}]
+                "source_entity_id": None,
+                "target_entity_id": None,
+                "source_relationship_id": None,
+                "relationship_payload": None,
+            }
+        ]
         scenario = build_scenario(snap, "Add Control", "ControlChange", ops)
         result = simulate(snap, scenario)
         assert len(result.diff.entries) == 1
@@ -1627,11 +1887,20 @@ class TestEndToEndSimulation:
         tenant = "t1"
         e1 = _make_entity("pol1", "policy", tenant)
         snap = _make_snapshot(tenant, [e1], [])
-        ops = [{"op_id": "op1", "operation_type": "remove_entity",
-                "source_entity_id": "pol1", "entity_payload": None,
-                "authority": "test_auth", "reason": "removal",
-                "authoritative_basis": "audit", "target_entity_id": None,
-                "source_relationship_id": None, "relationship_payload": None}]
+        ops = [
+            {
+                "op_id": "op1",
+                "operation_type": "remove_entity",
+                "source_entity_id": "pol1",
+                "entity_payload": None,
+                "authority": "test_auth",
+                "reason": "removal",
+                "authoritative_basis": "audit",
+                "target_entity_id": None,
+                "source_relationship_id": None,
+                "relationship_payload": None,
+            }
+        ]
         scenario = build_scenario(snap, "Remove Policy", "PolicyChange", ops)
         result = simulate(snap, scenario)
         assert len(result.comparison.rows) == 1
@@ -1643,9 +1912,12 @@ class TestEndToEndSimulation:
 # Group 27: Additional hash + model field assertions
 # ---------------------------------------------------------------------------
 
+
 class TestHashAndModelAdditional:
     def test_overlay_hash_64_chars(self):
-        snap = _make_snapshot("t1", [], [], snapshot_id="snap-hlen", fingerprint="fp-hlen")
+        snap = _make_snapshot(
+            "t1", [], [], snapshot_id="snap-hlen", fingerprint="fp-hlen"
+        )
         overlay = _make_overlay("sc-hlen", snap, [])
         assert len(overlay.overlay_hash) == 64
 
@@ -1766,7 +2038,9 @@ class TestHashAndModelAdditional:
         e_pol_mod = dataclasses.replace(e_pol, status="deprecated")
         diff = compute_graph_diff(snap, (e_pol_mod, e_ev), (r1,), "sc-supp-ev")
         report = analyze_impact(snap, diff, "sc-supp-ev")
-        proven = [e for e in report.entries if e.confidence == ImpactConfidence.PROVEN.value]
+        proven = [
+            e for e in report.entries if e.confidence == ImpactConfidence.PROVEN.value
+        ]
         for entry in proven:
             assert isinstance(entry.supporting_evidence_ids, tuple)
 
@@ -1781,12 +2055,6 @@ class TestHashAndModelAdditional:
 # Group 28: SimulationRun (Improvement 1)
 # ---------------------------------------------------------------------------
 
-from services.governance_simulation.simulator import run_simulation
-from services.governance_simulation.models import SimulationRun, SimulationHorizon
-from services.governance_simulation.models import SCENARIO_TEMPLATE_REGISTRY
-from services.governance_simulation.overlay import compose_overlays
-from pathlib import Path
-
 
 class TestSimulationRun:
     def test_run_id_differs_from_scenario_id(self):
@@ -1796,7 +2064,9 @@ class TestSimulationRun:
         assert run.run_id != run.scenario_id
 
     def test_same_scenario_same_snapshot_deterministic_run_id(self):
-        snap = _make_snapshot("t1", [], [], snapshot_id="snap-fixed-run", fingerprint="fp-run-det")
+        snap = _make_snapshot(
+            "t1", [], [], snapshot_id="snap-fixed-run", fingerprint="fp-run-det"
+        )
         scenario = build_scenario(snap, "DetRun", "PolicyChange", [])
         run1 = run_simulation(snap, scenario)
         run2 = run_simulation(snap, scenario)
@@ -1819,8 +2089,9 @@ class TestSimulationRun:
 
     def test_horizon_propagates_to_run(self):
         snap = _make_snapshot("t1", [], [])
-        scenario = build_scenario(snap, "HorizonRun", "PolicyChange", [],
-                                  horizon="30_days")
+        scenario = build_scenario(
+            snap, "HorizonRun", "PolicyChange", [], horizon="30_days"
+        )
         run = run_simulation(snap, scenario)
         assert run.horizon == "30_days"
 
@@ -1840,13 +2111,16 @@ class TestSimulationRun:
         snap = _make_snapshot("t1", [], [])
         scenario = build_scenario(snap, "FrozenRun", "PolicyChange", [])
         run = run_simulation(snap, scenario)
-        with pytest.raises((TypeError, dataclasses.FrozenInstanceError, AttributeError)):
+        with pytest.raises(
+            (TypeError, dataclasses.FrozenInstanceError, AttributeError)
+        ):
             run.run_id = "changed"  # type: ignore
 
 
 # ---------------------------------------------------------------------------
 # Group 29: SimulationHorizon (Improvement 2)
 # ---------------------------------------------------------------------------
+
 
 class TestSimulationHorizon:
     def test_all_5_values_exist(self):
@@ -1881,6 +2155,7 @@ class TestSimulationHorizon:
 # Group 30: ImpactChain (Improvement 3)
 # ---------------------------------------------------------------------------
 
+
 class TestImpactChain:
     def test_impact_report_chains_attribute_exists(self):
         snap = _make_snapshot("t1", [], [])
@@ -1899,7 +2174,14 @@ class TestImpactChain:
         report = analyze_impact(snap, diff, "sc-chain-root")
         # All chain origin_domains should be root domains (governance, evidence, framework, etc.)
         # These are domains that have no upstream in the downstream graph
-        upstream_set = {"control", "compliance", "risk", "trust", "readiness", "executive"}
+        upstream_set = {
+            "control",
+            "compliance",
+            "risk",
+            "trust",
+            "readiness",
+            "executive",
+        }
         for chain in report.chains:
             assert chain.origin_domain not in upstream_set, (
                 f"chain origin '{chain.origin_domain}' is an upstream domain"
@@ -1919,7 +2201,9 @@ class TestImpactChain:
     def test_chain_hash_is_deterministic(self):
         tenant = "t1"
         e_pol = _make_entity("e_pol2", "policy", tenant)
-        snap = _make_snapshot(tenant, [e_pol], [], snapshot_id="snap-ch-det", fingerprint="fp-ch-det")
+        snap = _make_snapshot(
+            tenant, [e_pol], [], snapshot_id="snap-ch-det", fingerprint="fp-ch-det"
+        )
         # Run twice with same inputs
         diff1 = compute_graph_diff(snap, (), (), "sc-chain-det")
         report1 = analyze_impact(snap, diff1, "sc-chain-det")
@@ -1964,6 +2248,7 @@ class TestImpactChain:
 # Group 31: SimulationManifest metrics (Improvement 4)
 # ---------------------------------------------------------------------------
 
+
 class TestManifestMetrics:
     def _run(self, tenant="t1", entities=None, num_ops=0):
         entities = entities or []
@@ -1971,14 +2256,20 @@ class TestManifestMetrics:
         ops = []
         for i in range(num_ops):
             new_e = _make_entity(f"new_e_{i}", "policy", tenant)
-            ops.append({
-                "op_id": f"op{i}", "operation_type": "add_entity",
-                "entity_payload": dataclasses.asdict(new_e),
-                "authority": "test_auth", "reason": "add",
-                "authoritative_basis": "test", "source_entity_id": None,
-                "target_entity_id": None, "source_relationship_id": None,
-                "relationship_payload": None,
-            })
+            ops.append(
+                {
+                    "op_id": f"op{i}",
+                    "operation_type": "add_entity",
+                    "entity_payload": dataclasses.asdict(new_e),
+                    "authority": "test_auth",
+                    "reason": "add",
+                    "authoritative_basis": "test",
+                    "source_entity_id": None,
+                    "target_entity_id": None,
+                    "source_relationship_id": None,
+                    "relationship_payload": None,
+                }
+            )
         scenario = build_scenario(snap, "MetricsTest", "PolicyChange", ops)
         return simulate(snap, scenario)
 
@@ -1996,7 +2287,11 @@ class TestManifestMetrics:
 
     def test_simulation_complexity_in_valid_set(self):
         result = self._run()
-        assert result.replay_package.manifest.simulation_complexity in {"low", "medium", "high"}
+        assert result.replay_package.manifest.simulation_complexity in {
+            "low",
+            "medium",
+            "high",
+        }
 
     def test_complexity_low_for_zero_ops(self):
         result = self._run(num_ops=0)
@@ -2029,10 +2324,13 @@ class TestManifestMetrics:
 # Group 32: Overlay composition (Improvement 5)
 # ---------------------------------------------------------------------------
 
+
 class TestOverlayComposition:
     def test_compose_combines_operations(self):
         tenant = "t1"
-        snap = _make_snapshot(tenant, [], [], snapshot_id="snap-compose", fingerprint="fp-compose")
+        snap = _make_snapshot(
+            tenant, [], [], snapshot_id="snap-compose", fingerprint="fp-compose"
+        )
         e1 = _make_entity("ce1", "policy", tenant)
         e2 = _make_entity("ce2", "control", tenant)
         op1 = _make_op("cop1", "add_entity", entity_payload=dataclasses.asdict(e1))
@@ -2044,7 +2342,9 @@ class TestOverlayComposition:
 
     def test_original_overlays_unchanged(self):
         tenant = "t1"
-        snap = _make_snapshot(tenant, [], [], snapshot_id="snap-orig-unch", fingerprint="fp-ou")
+        snap = _make_snapshot(
+            tenant, [], [], snapshot_id="snap-orig-unch", fingerprint="fp-ou"
+        )
         op1 = _make_op("oup1", "add_entity")
         ov_a = _make_overlay("sc-ou-a", snap, [op1])
         original_ops_count = len(ov_a.operations)
@@ -2054,8 +2354,12 @@ class TestOverlayComposition:
         assert len(ov_a.operations) == original_ops_count
 
     def test_cross_tenant_compose_raises(self):
-        snap_a = _make_snapshot("tenant-a", [], [], snapshot_id="snap-cta", fingerprint="fp-cta")
-        snap_b = _make_snapshot("tenant-b", [], [], snapshot_id="snap-ctb", fingerprint="fp-ctb")
+        snap_a = _make_snapshot(
+            "tenant-a", [], [], snapshot_id="snap-cta", fingerprint="fp-cta"
+        )
+        snap_b = _make_snapshot(
+            "tenant-b", [], [], snapshot_id="snap-ctb", fingerprint="fp-ctb"
+        )
         ov_a = _make_overlay("sc-ct-a", snap_a, [])
         ov_b = _make_overlay("sc-ct-b", snap_b, [])
         with pytest.raises(OverlayError):
@@ -2063,8 +2367,12 @@ class TestOverlayComposition:
 
     def test_different_source_snapshot_compose_raises(self):
         tenant = "t1"
-        snap1 = _make_snapshot(tenant, [], [], snapshot_id="snap-ds1", fingerprint="fp-ds1")
-        snap2 = _make_snapshot(tenant, [], [], snapshot_id="snap-ds2", fingerprint="fp-ds2")
+        snap1 = _make_snapshot(
+            tenant, [], [], snapshot_id="snap-ds1", fingerprint="fp-ds1"
+        )
+        snap2 = _make_snapshot(
+            tenant, [], [], snapshot_id="snap-ds2", fingerprint="fp-ds2"
+        )
         ov1 = _make_overlay("sc-ds1", snap1, [])
         ov2 = _make_overlay("sc-ds2", snap2, [])
         with pytest.raises(OverlayError):
@@ -2072,7 +2380,9 @@ class TestOverlayComposition:
 
     def test_composed_overlay_has_overlay_hash(self):
         tenant = "t1"
-        snap = _make_snapshot(tenant, [], [], snapshot_id="snap-comp-hash", fingerprint="fp-ch")
+        snap = _make_snapshot(
+            tenant, [], [], snapshot_id="snap-comp-hash", fingerprint="fp-ch"
+        )
         ov_a = _make_overlay("sc-ch-a", snap, [])
         composed = compose_overlays(ov_a, composed_scenario_id="sc-ch-composed")
         assert len(composed.overlay_hash) == 64
@@ -2083,7 +2393,9 @@ class TestOverlayComposition:
 
     def test_single_overlay_compose_works(self):
         tenant = "t1"
-        snap = _make_snapshot(tenant, [], [], snapshot_id="snap-single", fingerprint="fp-single")
+        snap = _make_snapshot(
+            tenant, [], [], snapshot_id="snap-single", fingerprint="fp-single"
+        )
         ov = _make_overlay("sc-single", snap, [])
         composed = compose_overlays(ov, composed_scenario_id="sc-single-composed")
         assert composed.tenant_id == tenant
@@ -2092,6 +2404,7 @@ class TestOverlayComposition:
 # ---------------------------------------------------------------------------
 # Group 33: Scenario Template Registry (Improvement 6)
 # ---------------------------------------------------------------------------
+
 
 class TestScenarioTemplateRegistry:
     def test_6_keys_present(self):
@@ -2121,8 +2434,9 @@ class TestScenarioTemplateRegistry:
 
     def test_build_scenario_template_id_propagates(self):
         snap = _make_snapshot("t1", [], [])
-        scenario = build_scenario(snap, "PCI", "PolicyChange", [],
-                                  template_id="pci_remediation")
+        scenario = build_scenario(
+            snap, "PCI", "PolicyChange", [], template_id="pci_remediation"
+        )
         assert scenario.template_id == "pci_remediation"
 
     def test_default_template_id_is_none(self):
@@ -2134,6 +2448,7 @@ class TestScenarioTemplateRegistry:
 # ---------------------------------------------------------------------------
 # Group 34: Executive Comparison net summary (Improvement 7)
 # ---------------------------------------------------------------------------
+
 
 class TestExecutiveComparisonNetSummary:
     def test_net_counts_non_negative(self):
@@ -2150,12 +2465,20 @@ class TestExecutiveComparisonNetSummary:
         tenant = "t1"
         snap = _make_snapshot(tenant, [], [])
         new_e = _make_entity("net_add_e", "policy", tenant)
-        ops = [{"op_id": "op1", "operation_type": "add_entity",
+        ops = [
+            {
+                "op_id": "op1",
+                "operation_type": "add_entity",
                 "entity_payload": dataclasses.asdict(new_e),
-                "authority": "test_auth", "reason": "add",
-                "authoritative_basis": "test", "source_entity_id": None,
-                "target_entity_id": None, "source_relationship_id": None,
-                "relationship_payload": None}]
+                "authority": "test_auth",
+                "reason": "add",
+                "authoritative_basis": "test",
+                "source_entity_id": None,
+                "target_entity_id": None,
+                "source_relationship_id": None,
+                "relationship_payload": None,
+            }
+        ]
         scenario = build_scenario(snap, "NetAdd", "PolicyChange", ops)
         result = simulate(snap, scenario)
         assert result.comparison.net_positive >= 1
@@ -2164,11 +2487,20 @@ class TestExecutiveComparisonNetSummary:
         tenant = "t1"
         e1 = _make_entity("net_rem_e", "policy", tenant)
         snap = _make_snapshot(tenant, [e1], [])
-        ops = [{"op_id": "op1", "operation_type": "remove_entity",
-                "source_entity_id": "net_rem_e", "entity_payload": None,
-                "authority": "test_auth", "reason": "remove",
-                "authoritative_basis": "test", "target_entity_id": None,
-                "source_relationship_id": None, "relationship_payload": None}]
+        ops = [
+            {
+                "op_id": "op1",
+                "operation_type": "remove_entity",
+                "source_entity_id": "net_rem_e",
+                "entity_payload": None,
+                "authority": "test_auth",
+                "reason": "remove",
+                "authoritative_basis": "test",
+                "target_entity_id": None,
+                "source_relationship_id": None,
+                "relationship_payload": None,
+            }
+        ]
         scenario = build_scenario(snap, "NetRemove", "PolicyChange", ops)
         result = simulate(snap, scenario)
         assert result.comparison.net_negative >= 1
@@ -2198,6 +2530,7 @@ class TestExecutiveComparisonNetSummary:
 # Group 35: Cost placeholders (Improvement 8)
 # ---------------------------------------------------------------------------
 
+
 class TestCostPlaceholders:
     def test_estimated_cost_is_none(self):
         snap = _make_snapshot("t1", [], [])
@@ -2218,6 +2551,7 @@ class TestCostPlaceholders:
 # ---------------------------------------------------------------------------
 # Group 36: Rollback metadata (Improvement 9)
 # ---------------------------------------------------------------------------
+
 
 class TestRollbackMetadata:
     def test_rollback_reference_is_none(self):
@@ -2243,11 +2577,14 @@ class TestRollbackMetadata:
 # Group 37: Constitution doc exists (Improvement 10)
 # ---------------------------------------------------------------------------
 
+
 class TestConstitutionDoc:
     def test_constitution_doc_exists(self):
         repo_root = Path(__file__).resolve().parents[1]
         constitution_path = repo_root / "docs" / "GOVERNANCE_SIMULATION_CONSTITUTION.md"
-        assert constitution_path.exists(), f"Constitution doc not found at {constitution_path}"
+        assert constitution_path.exists(), (
+            f"Constitution doc not found at {constitution_path}"
+        )
 
     def test_constitution_doc_has_content(self):
         repo_root = Path(__file__).resolve().parents[1]

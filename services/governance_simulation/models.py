@@ -276,7 +276,9 @@ class SimulationManifest:
     comparison_hash: str
     mcim_version: str
     lineage: str
-    simulation_complexity: str = dataclasses.field(default="low")  # "low" | "medium" | "high"
+    simulation_complexity: str = dataclasses.field(
+        default="low"
+    )  # "low" | "medium" | "high"
     objects_evaluated: int = dataclasses.field(default=0)
     objects_changed: int = dataclasses.field(default=0)
     objects_unaffected: int = dataclasses.field(default=0)
@@ -302,9 +304,13 @@ class ReplayPackage:
     schema_version: str
     replay_version: str
     lineage: str
-    rollback_reference: str | None = dataclasses.field(default=None)  # reserved for 18.8.3
+    rollback_reference: str | None = dataclasses.field(
+        default=None
+    )  # reserved for 18.8.3
     rollback_ready: bool = dataclasses.field(default=False)  # always False until 18.8.3
-    rollback_dependencies: tuple[str, ...] = dataclasses.field(default_factory=tuple)  # reserved
+    rollback_dependencies: tuple[str, ...] = dataclasses.field(
+        default_factory=tuple
+    )  # reserved
 
 
 @dataclass(frozen=True)
@@ -321,7 +327,7 @@ class SimulationResult:
 
 @dataclass(frozen=True)
 class SimulationRun:
-    run_id: str              # independent of scenario_id
+    run_id: str  # independent of scenario_id
     scenario_id: str
     snapshot_id: str
     snapshot_fingerprint: str

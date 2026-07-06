@@ -10,7 +10,6 @@ from services.canonical import canonical_json_bytes, utc_iso8601_z_now
 from services.governance_digital_twin.models import GovernanceDigitalTwinSnapshot
 from services.governance_simulation.diff import compute_graph_diff
 from services.governance_simulation.fingerprint import (
-    compute_comparison_hash,
     compute_scenario_fingerprint,
 )
 from services.governance_simulation.impact import analyze_impact
@@ -28,7 +27,6 @@ from services.governance_simulation.models import (
     SimulationResult,
     SimulationRun,
     SimulationScenario,
-    SimulationValidationReport,
 )
 from services.governance_simulation.overlay import apply_overlay
 from services.governance_simulation.replay import build_replay_package
@@ -112,10 +110,16 @@ def _build_executive_comparison(
     comparison_id = hashlib.sha256(comparison_id_seed.encode()).hexdigest()[:24]
 
     # Compute net summary counts
-    net_positive = sum(1 for r in sorted_rows if r.delta and r.delta.startswith("added:"))
-    net_negative = sum(1 for r in sorted_rows if r.delta and r.delta.startswith("removed:"))
+    net_positive = sum(
+        1 for r in sorted_rows if r.delta and r.delta.startswith("added:")
+    )
+    net_negative = sum(
+        1 for r in sorted_rows if r.delta and r.delta.startswith("removed:")
+    )
     neutral = sum(1 for r in sorted_rows if r.delta == "modified")
-    unknown_count = sum(1 for r in sorted_rows if r.confidence == ImpactConfidence.UNKNOWN.value)
+    unknown_count = sum(
+        1 for r in sorted_rows if r.confidence == ImpactConfidence.UNKNOWN.value
+    )
 
     comparison = ExecutiveComparison(
         comparison_id=comparison_id,
@@ -204,10 +208,14 @@ def simulate(
     validation_duration_ms = int((time.monotonic() - val_start) * 1000)
 
     # 6. Compute final fingerprint
-    final_fingerprint = _finalize_scenario_fingerprint(scenario, overlay, diff, impact_report)
+    final_fingerprint = _finalize_scenario_fingerprint(
+        scenario, overlay, diff, impact_report
+    )
 
     # 7. Update scenario with final fingerprint
-    final_scenario = dataclasses.replace(scenario, simulation_fingerprint=final_fingerprint)
+    final_scenario = dataclasses.replace(
+        scenario, simulation_fingerprint=final_fingerprint
+    )
 
     # Compute manifest metrics
     objects_evaluated = len(snapshot.entities) + len(snapshot.relationships)

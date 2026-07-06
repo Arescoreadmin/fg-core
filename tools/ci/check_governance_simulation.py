@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 
@@ -123,9 +122,18 @@ def main() -> int:
     init_text = _read(SERVICE_DIR / "__init__.py")
 
     all_service_text = (
-        models_text + overlay_text + scenario_text + simulator_text + diff_text
-        + impact_text + validator_text + replay_text + exporter_text + contract_text
-        + fingerprint_text + mcim_text
+        models_text
+        + overlay_text
+        + scenario_text
+        + simulator_text
+        + diff_text
+        + impact_text
+        + validator_text
+        + replay_text
+        + exporter_text
+        + contract_text
+        + fingerprint_text
+        + mcim_text
     )
 
     # 2. Check version constants in models.py
@@ -133,7 +141,9 @@ def main() -> int:
         if const_name not in models_text:
             failures.append(f"models.py missing version constant: {const_name}")
         if f'"{const_value}"' not in models_text:
-            failures.append(f"models.py version constant {const_name} has wrong value (expected {const_value!r})")
+            failures.append(
+                f"models.py version constant {const_name} has wrong value (expected {const_value!r})"
+            )
 
     # 3. Check MCIM registration has all 9 keys
     for key in MCIM_REQUIRED_KEYS:
@@ -143,7 +153,9 @@ def main() -> int:
     if "MCIM_REGISTRATION_SOURCE" not in mcim_text:
         failures.append("mcim_registration.py missing MCIM_REGISTRATION_SOURCE")
     if "GOVERNANCE_SIMULATION_MCIM_VERSION" not in mcim_text:
-        failures.append("mcim_registration.py missing GOVERNANCE_SIMULATION_MCIM_VERSION")
+        failures.append(
+            "mcim_registration.py missing GOVERNANCE_SIMULATION_MCIM_VERSION"
+        )
 
     # 4. Check no forbidden keys in service files
     for forbidden in FORBIDDEN_KEYS:
@@ -158,15 +170,15 @@ def main() -> int:
                 # Exporter is allowed to enumerate forbidden keys for scrubbing
                 if fname == "exporter.py":
                     continue
-                failures.append(
-                    f"{fname} contains forbidden key string: {forbidden}"
-                )
+                failures.append(f"{fname} contains forbidden key string: {forbidden}")
 
     # 5. Check SimulationValidationError is defined and is an Exception
     if "class SimulationValidationError" not in validator_text:
         failures.append("validator.py must define SimulationValidationError")
     if "Exception" not in validator_text:
-        failures.append("validator.py SimulationValidationError must inherit from Exception")
+        failures.append(
+            "validator.py SimulationValidationError must inherit from Exception"
+        )
 
     # 6. Check contract.py has all 8 method names
     for method in CONTRACT_METHODS:
@@ -187,7 +199,9 @@ def main() -> int:
     if "canonical_json_bytes" not in fingerprint_text:
         failures.append("fingerprint.py must use canonical_json_bytes")
     if "GOVERNANCE_SIMULATION_FINGERPRINT_DOMAIN" not in fingerprint_text:
-        failures.append("fingerprint.py must reference GOVERNANCE_SIMULATION_FINGERPRINT_DOMAIN")
+        failures.append(
+            "fingerprint.py must reference GOVERNANCE_SIMULATION_FINGERPRINT_DOMAIN"
+        )
 
     # 9. Check exporter uses deep_freeze
     if "deep_freeze" not in exporter_text:
@@ -197,7 +211,9 @@ def main() -> int:
 
     # 10. Check validator fails closed (raises SimulationValidationError)
     if "raise SimulationValidationError" not in validator_text:
-        failures.append("validator.py must raise SimulationValidationError on ERROR/FATAL")
+        failures.append(
+            "validator.py must raise SimulationValidationError on ERROR/FATAL"
+        )
     if "SimulationValidationSeverity" not in validator_text:
         failures.append("validator.py must use SimulationValidationSeverity")
 
@@ -206,13 +222,21 @@ def main() -> int:
         failures.append("simulator.py must call validate_simulation")
 
     # 12. Check no DB access in service files
-    db_forbidden = ["sqlalchemy", "Session(", "db.query(", "from api.db", "from services.governance_digital_twin.builder"]
+    db_forbidden = [
+        "sqlalchemy",
+        "Session(",
+        "db.query(",
+        "from api.db",
+        "from services.governance_digital_twin.builder",
+    ]
     for bad in db_forbidden:
         if bad in all_service_text:
-            failures.append(f"governance_simulation service must not use DB/SQLAlchemy: found '{bad}'")
+            failures.append(
+                f"governance_simulation service must not use DB/SQLAlchemy: found '{bad}'"
+            )
 
     # 13. Check frozen dataclasses in models
-    if 'frozen=True' not in models_text:
+    if "frozen=True" not in models_text:
         failures.append("models.py dataclasses must use frozen=True")
 
     # 14. Check __init__.py exports key symbols

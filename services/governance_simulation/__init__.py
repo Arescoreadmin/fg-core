@@ -53,7 +53,11 @@ from services.governance_simulation.models import (
     SimulationValidationReport,
     SimulationValidationSeverity,
 )
-from services.governance_simulation.overlay import OverlayError, apply_overlay, compose_overlays
+from services.governance_simulation.overlay import (
+    OverlayError,
+    apply_overlay,
+    compose_overlays,
+)
 from services.governance_simulation.replay import build_replay_package
 from services.governance_simulation.scenario import build_scenario
 from services.governance_simulation.simulator import run_simulation, simulate

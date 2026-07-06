@@ -69,9 +69,7 @@ def build_scenario(
     created_at = utc_iso8601_z_now()
 
     # scenario_id: deterministic from tenant/snapshot/name/category/time
-    scenario_id_seed = (
-        f"SCENARIO:{snapshot.tenant_id}:{snapshot.snapshot_id}:{scenario_name}:{category}:{created_at}"
-    )
+    scenario_id_seed = f"SCENARIO:{snapshot.tenant_id}:{snapshot.snapshot_id}:{scenario_name}:{category}:{created_at}"
     scenario_id = hashlib.sha256(scenario_id_seed.encode()).hexdigest()[:24]
 
     overlay_ops: list[ScenarioOverlayOperation] = []

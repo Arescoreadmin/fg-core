@@ -59,7 +59,9 @@ def _relationship_domain(rel_type: str) -> str:
     return mapping.get(rel_type, "governance")
 
 
-def _diff_id(scenario_id: str, domain: str, operation: str, object_id: str, index: int) -> str:
+def _diff_id(
+    scenario_id: str, domain: str, operation: str, object_id: str, index: int
+) -> str:
     seed = f"DIFF:{scenario_id}:{domain}:{operation}:{object_id}:{index}"
     return hashlib.sha256(seed.encode()).hexdigest()[:16]
 
@@ -93,17 +95,19 @@ def compute_graph_diff(
             entity = snap_entity_map[eid]
             domain = _entity_domain(entity.type)
             did = _diff_id(scenario_id, domain, "removed", eid, index)
-            entries.append(GraphDiffEntry(
-                diff_id=did,
-                domain=domain,
-                operation="removed",
-                entity_id=eid,
-                relationship_id=None,
-                before=dataclasses.asdict(entity),
-                after=None,
-                authority=entity.authority,
-                reason=f"entity '{eid}' removed by overlay",
-            ))
+            entries.append(
+                GraphDiffEntry(
+                    diff_id=did,
+                    domain=domain,
+                    operation="removed",
+                    entity_id=eid,
+                    relationship_id=None,
+                    before=dataclasses.asdict(entity),
+                    after=None,
+                    authority=entity.authority,
+                    reason=f"entity '{eid}' removed by overlay",
+                )
+            )
             index += 1
 
         elif not in_snap and in_derived:
@@ -111,17 +115,19 @@ def compute_graph_diff(
             entity = derived_entity_map[eid]
             domain = _entity_domain(entity.type)
             did = _diff_id(scenario_id, domain, "added", eid, index)
-            entries.append(GraphDiffEntry(
-                diff_id=did,
-                domain=domain,
-                operation="added",
-                entity_id=eid,
-                relationship_id=None,
-                before=None,
-                after=dataclasses.asdict(entity),
-                authority=entity.authority,
-                reason=f"entity '{eid}' added by overlay",
-            ))
+            entries.append(
+                GraphDiffEntry(
+                    diff_id=did,
+                    domain=domain,
+                    operation="added",
+                    entity_id=eid,
+                    relationship_id=None,
+                    before=None,
+                    after=dataclasses.asdict(entity),
+                    authority=entity.authority,
+                    reason=f"entity '{eid}' added by overlay",
+                )
+            )
             index += 1
 
         else:
@@ -133,17 +139,19 @@ def compute_graph_diff(
             if snap_dict != derived_dict:
                 domain = _entity_domain(snap_e.type)
                 did = _diff_id(scenario_id, domain, "modified", eid, index)
-                entries.append(GraphDiffEntry(
-                    diff_id=did,
-                    domain=domain,
-                    operation="modified",
-                    entity_id=eid,
-                    relationship_id=None,
-                    before=snap_dict,
-                    after=derived_dict,
-                    authority=derived_e.authority,
-                    reason=f"entity '{eid}' modified by overlay",
-                ))
+                entries.append(
+                    GraphDiffEntry(
+                        diff_id=did,
+                        domain=domain,
+                        operation="modified",
+                        entity_id=eid,
+                        relationship_id=None,
+                        before=snap_dict,
+                        after=derived_dict,
+                        authority=derived_e.authority,
+                        reason=f"entity '{eid}' modified by overlay",
+                    )
+                )
                 index += 1
 
     # --- Relationship diff ---
@@ -156,34 +164,38 @@ def compute_graph_diff(
             rel = snap_rel_map[rid]
             domain = _relationship_domain(rel.type)
             did = _diff_id(scenario_id, domain, "removed", rid, index)
-            entries.append(GraphDiffEntry(
-                diff_id=did,
-                domain=domain,
-                operation="removed",
-                entity_id=None,
-                relationship_id=rid,
-                before=dataclasses.asdict(rel),
-                after=None,
-                authority=rel.authority,
-                reason=f"relationship '{rid}' removed by overlay",
-            ))
+            entries.append(
+                GraphDiffEntry(
+                    diff_id=did,
+                    domain=domain,
+                    operation="removed",
+                    entity_id=None,
+                    relationship_id=rid,
+                    before=dataclasses.asdict(rel),
+                    after=None,
+                    authority=rel.authority,
+                    reason=f"relationship '{rid}' removed by overlay",
+                )
+            )
             index += 1
 
         elif not in_snap and in_derived:
             rel = derived_rel_map[rid]
             domain = _relationship_domain(rel.type)
             did = _diff_id(scenario_id, domain, "added", rid, index)
-            entries.append(GraphDiffEntry(
-                diff_id=did,
-                domain=domain,
-                operation="added",
-                entity_id=None,
-                relationship_id=rid,
-                before=None,
-                after=dataclasses.asdict(rel),
-                authority=rel.authority,
-                reason=f"relationship '{rid}' added by overlay",
-            ))
+            entries.append(
+                GraphDiffEntry(
+                    diff_id=did,
+                    domain=domain,
+                    operation="added",
+                    entity_id=None,
+                    relationship_id=rid,
+                    before=None,
+                    after=dataclasses.asdict(rel),
+                    authority=rel.authority,
+                    reason=f"relationship '{rid}' added by overlay",
+                )
+            )
             index += 1
 
         else:
@@ -194,17 +206,19 @@ def compute_graph_diff(
             if snap_rdict != derived_rdict:
                 domain = _relationship_domain(snap_r.type)
                 did = _diff_id(scenario_id, domain, "modified", rid, index)
-                entries.append(GraphDiffEntry(
-                    diff_id=did,
-                    domain=domain,
-                    operation="modified",
-                    entity_id=None,
-                    relationship_id=rid,
-                    before=snap_rdict,
-                    after=derived_rdict,
-                    authority=derived_r.authority,
-                    reason=f"relationship '{rid}' modified by overlay",
-                ))
+                entries.append(
+                    GraphDiffEntry(
+                        diff_id=did,
+                        domain=domain,
+                        operation="modified",
+                        entity_id=None,
+                        relationship_id=rid,
+                        before=snap_rdict,
+                        after=derived_rdict,
+                        authority=derived_r.authority,
+                        reason=f"relationship '{rid}' modified by overlay",
+                    )
+                )
                 index += 1
 
     # Sort entries by diff_id for full determinism
@@ -215,7 +229,10 @@ def compute_graph_diff(
     diff_id_master = hashlib.sha256(diff_id_master_seed.encode()).hexdigest()[:24]
 
     import dataclasses as _dc
-    diff_hash_payload = sorted([_dc.asdict(e) for e in sorted_entries], key=lambda x: x["diff_id"])
+
+    diff_hash_payload = sorted(
+        [_dc.asdict(e) for e in sorted_entries], key=lambda x: x["diff_id"]
+    )
     diff_hash = hashlib.sha256(canonical_json_bytes(diff_hash_payload)).hexdigest()
 
     return GraphDiff(

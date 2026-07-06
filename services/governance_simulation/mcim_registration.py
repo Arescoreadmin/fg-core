@@ -20,4 +20,6 @@ _MCIM_REGISTRATION_SOURCE: dict[str, str] = {
     "simulation_run": "MCIM-18.8.2-SIM-RUN",
 }
 
-MCIM_REGISTRATION_SOURCE: Mapping[str, str] = MappingProxyType(_MCIM_REGISTRATION_SOURCE)
+MCIM_REGISTRATION_SOURCE: Mapping[str, str] = MappingProxyType(
+    _MCIM_REGISTRATION_SOURCE
+)

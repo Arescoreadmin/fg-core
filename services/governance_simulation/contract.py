@@ -11,7 +11,6 @@ from services.governance_simulation.exporter import export_replay_package
 from services.governance_simulation.fingerprint import compute_scenario_fingerprint
 from services.governance_simulation.impact import analyze_impact
 from services.governance_simulation.models import (
-    ExecutiveComparison,
     GraphDiff,
     ImpactReport,
     ReplayPackage,
@@ -83,7 +82,9 @@ class GovernanceSimulationServiceContract(Protocol):
 
     def replay(self, package: ReplayPackage) -> SimulationResult: ...
 
-    def run(self, snapshot: GovernanceDigitalTwinSnapshot, scenario: SimulationScenario) -> SimulationRun: ...
+    def run(
+        self, snapshot: GovernanceDigitalTwinSnapshot, scenario: SimulationScenario
+    ) -> SimulationRun: ...
 
 
 class GovernanceSimulationService:

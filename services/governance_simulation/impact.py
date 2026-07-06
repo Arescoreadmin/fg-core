@@ -137,7 +137,9 @@ def _get_originating_authority(
     return entry.authority if entry.authority else "unknown"
 
 
-def _domains_for_entry(entry: GraphDiffEntry, snapshot: GovernanceDigitalTwinSnapshot) -> list[str]:
+def _domains_for_entry(
+    entry: GraphDiffEntry, snapshot: GovernanceDigitalTwinSnapshot
+) -> list[str]:
     """Determine which impact domains are triggered by a diff entry."""
     domains: set[str] = set()
 
@@ -219,7 +221,11 @@ def _build_impact_chains(
             current_entries = domains_with_entries[current]
             node = ImpactChainNode(
                 domain=current,
-                impacted_object_ids=tuple(sorted({oid for e in current_entries for oid in e.impacted_object_ids})),
+                impacted_object_ids=tuple(
+                    sorted(
+                        {oid for e in current_entries for oid in e.impacted_object_ids}
+                    )
+                ),
                 confidence=_weakest_confidence(current_entries),
             )
             chain_nodes.append(node)
@@ -232,14 +238,18 @@ def _build_impact_chains(
                 f"CHAIN:{scenario_id}:{root}".encode()
             ).hexdigest()[:20]
             chain_hash_payload = [dataclasses.asdict(n) for n in chain_nodes]
-            chain_hash = hashlib.sha256(canonical_json_bytes(chain_hash_payload)).hexdigest()
-            chains.append(ImpactChain(
-                chain_id=chain_id,
-                scenario_id=scenario_id,
-                origin_domain=root,
-                chain=tuple(chain_nodes),
-                chain_hash=chain_hash,
-            ))
+            chain_hash = hashlib.sha256(
+                canonical_json_bytes(chain_hash_payload)
+            ).hexdigest()
+            chains.append(
+                ImpactChain(
+                    chain_id=chain_id,
+                    scenario_id=scenario_id,
+                    origin_domain=root,
+                    chain=tuple(chain_nodes),
+                    chain_hash=chain_hash,
+                )
+            )
 
     return tuple(sorted(chains, key=lambda c: c.chain_id))
 

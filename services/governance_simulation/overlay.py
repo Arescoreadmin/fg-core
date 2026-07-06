@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
-from collections.abc import Mapping
-from typing import Any
 
 from services.canonical import canonical_json_bytes, utc_iso8601_z_now
 from services.governance_digital_twin.models import (
@@ -24,7 +22,10 @@ from services.governance_simulation.validator import SimulationValidationError
 def apply_overlay(
     snapshot: GovernanceDigitalTwinSnapshot,
     overlay: ScenarioOverlay,
-) -> tuple[tuple[GovernanceDigitalTwinEntity, ...], tuple[GovernanceDigitalTwinRelationship, ...]]:
+) -> tuple[
+    tuple[GovernanceDigitalTwinEntity, ...],
+    tuple[GovernanceDigitalTwinRelationship, ...],
+]:
     """Apply overlay operations onto snapshot entities/relationships.
 
     Returns a new (entities, relationships) tuple — the snapshot itself is never mutated.
@@ -46,7 +47,9 @@ def apply_overlay(
             try:
                 new_entity = GovernanceDigitalTwinEntity(**dict(op.entity_payload))
             except TypeError as exc:
-                raise OverlayError(f"op {op.op_id}: invalid entity_payload — {exc}") from exc
+                raise OverlayError(
+                    f"op {op.op_id}: invalid entity_payload — {exc}"
+                ) from exc
             entities_by_id[new_entity.id] = new_entity
 
         elif op_type == OverlayOperationType.remove_entity.value:
@@ -64,12 +67,16 @@ def apply_overlay(
                     f"op {op.op_id}: modify_entity target '{eid}' not found in snapshot"
                 )
             if op.entity_payload is None:
-                raise OverlayError(f"op {op.op_id}: modify_entity requires entity_payload")
+                raise OverlayError(
+                    f"op {op.op_id}: modify_entity requires entity_payload"
+                )
             existing = entities_by_id[eid]
             try:
                 updated = dataclasses.replace(existing, **dict(op.entity_payload))
             except TypeError as exc:
-                raise OverlayError(f"op {op.op_id}: invalid modify fields — {exc}") from exc
+                raise OverlayError(
+                    f"op {op.op_id}: invalid modify fields — {exc}"
+                ) from exc
             entities_by_id[eid] = updated
 
         elif op_type == OverlayOperationType.add_relationship.value:
@@ -78,7 +85,9 @@ def apply_overlay(
                     f"op {op.op_id}: add_relationship requires relationship_payload"
                 )
             try:
-                new_rel = GovernanceDigitalTwinRelationship(**dict(op.relationship_payload))
+                new_rel = GovernanceDigitalTwinRelationship(
+                    **dict(op.relationship_payload)
+                )
             except TypeError as exc:
                 raise OverlayError(
                     f"op {op.op_id}: invalid relationship_payload — {exc}"
@@ -105,7 +114,9 @@ def apply_overlay(
                 )
             existing_rel = relationships_by_id[rid]
             try:
-                updated_rel = dataclasses.replace(existing_rel, **dict(op.relationship_payload))
+                updated_rel = dataclasses.replace(
+                    existing_rel, **dict(op.relationship_payload)
+                )
             except TypeError as exc:
                 raise OverlayError(
                     f"op {op.op_id}: invalid modify_relationship fields — {exc}"

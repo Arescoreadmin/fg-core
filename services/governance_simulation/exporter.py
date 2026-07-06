@@ -9,21 +9,23 @@ from typing import Any
 from services.governance_digital_twin.immutability import deep_freeze
 from services.governance_simulation.models import ReplayPackage
 
-_FORBIDDEN_KEYS = frozenset({
-    "secret",
-    "token",
-    "password",
-    "api_key",
-    "auth_header",
-    "authorization",
-    "raw_prompt",
-    "raw_vector",
-    "embedding",
-    "provider_payload",
-    "private_key",
-    "session",
-    "cookie",
-})
+_FORBIDDEN_KEYS = frozenset(
+    {
+        "secret",
+        "token",
+        "password",
+        "api_key",
+        "auth_header",
+        "authorization",
+        "raw_prompt",
+        "raw_vector",
+        "embedding",
+        "provider_payload",
+        "private_key",
+        "session",
+        "cookie",
+    }
+)
 
 
 def _scrub_forbidden(payload: Any) -> Any:
