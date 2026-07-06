@@ -6,6 +6,35 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-06 — pr/18.8.2-governance-simulation-engine: Governance Simulation Engine
+
+**Branch:** `pr/18.8.2-governance-simulation-engine`
+
+**What was done:** PR 18.8.2 — built the deterministic Governance Simulation & Impact Analysis Engine as a pure-Python, no-DB, no-REST bounded context. Implements overlay engine (add/remove/modify entities and relationships on top of an immutable Digital Twin snapshot), deterministic graph diff, multi-domain impact analysis (11 domains: governance, control, evidence, framework, compliance, operational, executive, risk, readiness, authority, trust), executive comparison rows, SHA-256 canonical JSON fingerprinting at every layer, replay packages, replay-safe export with deep_freeze, a service contract (Protocol + concrete class), MCIM registration (9 keys), and a CI gate. The Digital Twin snapshot is never mutated — all simulation state is derived in overlays. Fail closed: validator raises SimulationValidationError on ERROR or FATAL severity. All simulation operations are deterministic and replay-safe.
+
+**Files added:**
+- `services/governance_simulation/__init__.py` — all public exports
+- `services/governance_simulation/models.py` — frozen dataclasses, enums, version constants
+- `services/governance_simulation/overlay.py` — overlay engine
+- `services/governance_simulation/scenario.py` — scenario builder
+- `services/governance_simulation/simulator.py` — main orchestrator
+- `services/governance_simulation/diff.py` — deterministic graph diff
+- `services/governance_simulation/impact.py` — deterministic impact analysis
+- `services/governance_simulation/validator.py` — simulation-specific validation (fail closed)
+- `services/governance_simulation/replay.py` — replay package builder
+- `services/governance_simulation/exporter.py` — replay-safe export
+- `services/governance_simulation/contract.py` — Protocol + concrete service class
+- `services/governance_simulation/fingerprint.py` — SHA-256 fingerprinting
+- `services/governance_simulation/mcim_registration.py` — MCIM registration (9 keys)
+- `tools/ci/check_governance_simulation.py` — CI gate (16 checks)
+- `tests/test_governance_simulation.py` — 157 test methods, 209 assert statements
+
+**Files modified:**
+- `ROADMAP.md` — PR 18.8.2 row added after PR 18.8.1
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
 ### 2026-07-06 — pr/18.8.1-governance-digital-twin-foundation: Governance Digital Twin Foundation
 
 **Branch:** `pr/18.8.1-governance-digital-twin-foundation`
