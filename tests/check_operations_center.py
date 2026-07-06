@@ -34,15 +34,20 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-COMPONENT_DIR = (
-    REPO_ROOT / "apps" / "console" / "components" / "operations-center"
-)
+COMPONENT_DIR = REPO_ROOT / "apps" / "console" / "components" / "operations-center"
 PAGE_FILE = (
     REPO_ROOT
-    / "apps" / "console" / "app" / "dashboard" / "operations-center" / "page.tsx"
+    / "apps"
+    / "console"
+    / "app"
+    / "dashboard"
+    / "operations-center"
+    / "page.tsx"
 )
 API_FILE = REPO_ROOT / "apps" / "console" / "lib" / "operationsCenterApi.ts"
-NAV_FILE = REPO_ROOT / "packages" / "navigation" / "src" / "registrations" / "console.ts"
+NAV_FILE = (
+    REPO_ROOT / "packages" / "navigation" / "src" / "registrations" / "console.ts"
+)
 SIDEBAR_FILE = REPO_ROOT / "apps" / "console" / "components" / "layout" / "Sidebar.tsx"
 WORKSPACE_NAV_FILE = REPO_ROOT / "apps" / "console" / "lib" / "workspaceNav.ts"
 
@@ -123,7 +128,9 @@ def check_component(path: Path) -> list[str]:
 
     # Check 13: widget metadata — data-mcim attribute
     if "data-mcim" not in text:
-        errors.append(f"{name}: missing data-mcim attribute — all components must declare MCIM metadata")
+        errors.append(
+            f"{name}: missing data-mcim attribute — all components must declare MCIM metadata"
+        )
 
     # Check 6 & 7 & 14: prohibited patterns
     for pattern, msg in PROHIBITED_COMPONENT_PATTERNS:
@@ -289,7 +296,9 @@ def check_workspace_nav() -> list[str]:
     """Check 16: workspaceNav.ts references operations-center."""
     errors: list[str] = []
     if not WORKSPACE_NAV_FILE.is_file():
-        return [f"missing workspaceNav file: {WORKSPACE_NAV_FILE.relative_to(REPO_ROOT)}"]
+        return [
+            f"missing workspaceNav file: {WORKSPACE_NAV_FILE.relative_to(REPO_ROOT)}"
+        ]
     try:
         text = WORKSPACE_NAV_FILE.read_text(encoding="utf-8")
     except OSError as exc:
@@ -326,7 +335,10 @@ def main() -> int:
     record("operationsCenterApi.ts", check_api_file())
 
     # Check 4: navigation registration
-    record("navigation/console.ts — operations-center registration", check_navigation_registration())
+    record(
+        "navigation/console.ts — operations-center registration",
+        check_navigation_registration(),
+    )
 
     # Check 15: sidebar
     record("Sidebar.tsx — operations-center reference", check_sidebar())
@@ -336,7 +348,9 @@ def main() -> int:
 
     # Check 2: all 10 component files exist + per-file quality checks
     if not COMPONENT_DIR.is_dir():
-        print(f"ERROR: component directory not found: {COMPONENT_DIR.relative_to(REPO_ROOT)}")
+        print(
+            f"ERROR: component directory not found: {COMPONENT_DIR.relative_to(REPO_ROOT)}"
+        )
         all_errors.append("component directory missing")
         failed += 1
     else:
@@ -353,16 +367,26 @@ def main() -> int:
             record(filename, errs)
 
     # Check 9: automation safety
-    record("AutomationSafetyCenter.tsx — riskScore + killSwitch", check_automation_safety_center())
+    record(
+        "AutomationSafetyCenter.tsx — riskScore + killSwitch",
+        check_automation_safety_center(),
+    )
 
     # Check 10: evidence freshness
-    record("EvidenceFreshnessMonitor.tsx — trustScore", check_evidence_freshness_monitor())
+    record(
+        "EvidenceFreshnessMonitor.tsx — trustScore", check_evidence_freshness_monitor()
+    )
 
     # Check 11: briefing suppression
-    record("ExecutiveOperationalBriefing.tsx — sufficientEvidence", check_executive_operational_briefing())
+    record(
+        "ExecutiveOperationalBriefing.tsx — sufficientEvidence",
+        check_executive_operational_briefing(),
+    )
 
     # Check 12: policy conflict
-    record("PolicyConflictCenter.tsx — anomalies/conflicts", check_policy_conflict_center())
+    record(
+        "PolicyConflictCenter.tsx — anomalies/conflicts", check_policy_conflict_center()
+    )
 
     print(f"\n{'=' * 60}")
     print(f"Total checks: {passed + failed}  passed: {passed}  failed: {failed}")

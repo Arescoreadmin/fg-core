@@ -6,6 +6,26 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-05 — pr/18.7-autonomous-governance-operations-center: useSearchParams Suspense Fix
+
+**Branch:** `pr/18.7-autonomous-governance-operations-center`
+
+**What was done:** PR 18.7 fix pass — resolved a Next.js production build failure introduced when the decisions deep-link feature (P2 Bug 4) added `useSearchParams()` directly inside a `'use client'` page component without a `<Suspense>` boundary. No business logic changed; only the component extraction pattern was applied.
+
+**Root cause:** Next.js App Router static prerendering requires any component that calls `useSearchParams()` to be a child of a `<Suspense>` boundary. The deep-link fix (commit `d4a10221`) placed the hook directly in `DecisionsPage`, causing the build to abort with: `useSearchParams() should be wrapped in a suspense boundary at page /dashboard/decisions`.
+
+**Fix:** Extracted the `useSearchParams` call into a dedicated `DecisionsDeepLink` child component (renders `null`), then wrapped it in `<Suspense>` inside `DecisionsPage`. Pattern matches the established pattern in `apps/console/app/login/page.tsx`.
+
+**Files modified:**
+- `apps/console/app/dashboard/decisions/page.tsx` — extracted `DecisionsDeepLink` component + added `<Suspense>` wrapper
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Validation:**
+- `cd apps/console && npm run build` — completed successfully; `/dashboard/decisions` prerendered as static (○)
+- All 10 AGOC panels remain functional; no regressions observed
+
+---
+
 ### 2026-07-05 — pr/18.6.8a-workspace-integration-hardening: Hardening & Warning Cleanup
 
 **Branch:** `pr/18.6.8a-workspace-integration-hardening`

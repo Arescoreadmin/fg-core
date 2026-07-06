@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { DecisionsTable } from '@/components/tables/DecisionsTable';
 import { getDecision, listDecisions, type DecisionOut } from '@/lib/coreApi';
@@ -9,8 +9,18 @@ import { DecisionPanel } from '@/components/decisions/DecisionPanel';
 
 const PAGE_SIZE = 10;
 
-export default function DecisionsPage() {
+// useSearchParams must live in a component wrapped by <Suspense>
+function DecisionsDeepLink({ onFound }: { onFound: (d: DecisionOut) => void }) {
   const searchParams = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get('decision');
+    if (!id) return;
+    getDecision(id).then(onFound).catch(() => {});
+  }, [searchParams, onFound]);
+  return null;
+}
+
+export default function DecisionsPage() {
   const [items, setItems] = useState<DecisionOut[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -22,13 +32,6 @@ export default function DecisionsPage() {
 
   const [detail, setDetail] = useState<DecisionOut | null>(null);
   const [error, setError] = useState('');
-
-  // Auto-select a decision when ?decision= is present (e.g. deep links from Operations Center)
-  useEffect(() => {
-    const decisionId = searchParams.get('decision');
-    if (!decisionId) return;
-    getDecision(decisionId).then(setDetail).catch(() => {});
-  }, [searchParams]);
 
   const load = useCallback(async () => {
     try {
@@ -57,6 +60,9 @@ export default function DecisionsPage() {
 
   return (
     <div className="flex flex-col">
+      <Suspense>
+        <DecisionsDeepLink onFound={setDetail} />
+      </Suspense>
       <div className="border-b border-border px-6 py-4">
         <h1 className="text-base font-semibold text-foreground">Decisions</h1>
         <p className="text-xs text-muted mt-0.5">Policy outcomes for every classified request</p>
