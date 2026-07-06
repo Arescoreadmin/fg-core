@@ -162,14 +162,18 @@ def validate_governance_digital_twin_snapshot(
     for entity in snapshot.entities:
         if entity.type == "finding":
             has_evidence = any(
-                relationship.from_entity_id == entity.id and entity_by_id.get(relationship.to_entity_id, None) and entity_by_id[relationship.to_entity_id].type == "evidence"
+                relationship.from_entity_id == entity.id
+                and relationship.to_entity_id in entity_by_id
+                and entity_by_id[relationship.to_entity_id].type == "evidence"
                 for relationship in snapshot.relationships
             )
             if not has_evidence:
                 violations.append(f"finding_missing_evidence:{entity.id}")
         if entity.type == "remediation":
             has_finding = any(
-                relationship.from_entity_id == entity.id and entity_by_id.get(relationship.to_entity_id, None) and entity_by_id[relationship.to_entity_id].type == "finding"
+                relationship.from_entity_id == entity.id
+                and relationship.to_entity_id in entity_by_id
+                and entity_by_id[relationship.to_entity_id].type == "finding"
                 for relationship in snapshot.relationships
             )
             if not has_finding:
