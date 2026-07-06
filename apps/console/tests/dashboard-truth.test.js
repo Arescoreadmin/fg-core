@@ -21,8 +21,8 @@ function read(relPath) {
 
 test('client_api_uses_bff_and_not_public_core_key', () => {
   const coreApi = read('lib/coreApi.ts');
-  // All fetch calls must go through /api/core BFF
-  assert.match(coreApi, /fetch\(`\/api\/core\$\{path\}`/);
+  // All fetch calls must go through the /api/core BFF, with absolute URLs on the server.
+  assert.match(coreApi, /fetch\(await resolveConsoleUrl\(`\/api\/core\$\{path\}`\), \{/);
   assert.doesNotMatch(coreApi, /NEXT_PUBLIC_CORE_API_KEY/);
   assert.doesNotMatch(coreApi, /NEXT_PUBLIC_CORE_API_URL/);
 });

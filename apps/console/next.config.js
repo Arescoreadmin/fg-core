@@ -1,16 +1,31 @@
+function normalizeOrigin(raw, defaultProtocol = 'https://') {
+  if (!raw) return null;
+
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const withProtocol = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed)
+    ? trimmed
+    : `${defaultProtocol}${trimmed}`;
+
+  return new URL(withProtocol).origin;
+}
+
 // Derive just the origin from NEXT_PUBLIC_API_URL so that connect-src allows
 // client-side fetches from lib/api.ts to the admin-gateway even when it is
 // served on a different host or port than the console (e.g. localhost:18001).
 function resolveApiOrigin() {
-  const raw = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:18001';
-  try {
-    return new URL(raw).origin;
-  } catch {
-    return raw.replace(/\/$/, '');
-  }
+  return normalizeOrigin(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:18001', 'http://');
 }
 
-const apiOrigin = resolveApiOrigin();
+function resolveAuth0Origin() {
+  return normalizeOrigin(process.env.AUTH0_ISSUER_BASE_URL || '');
+}
+
+function buildConnectSrc() {
+  const origins = ["'self'", resolveApiOrigin(), resolveAuth0Origin()].filter(Boolean);
+  return `connect-src ${origins.join(' ')}`;
+}
 
 const cspHeader = [
   "default-src 'none'",
@@ -19,9 +34,9 @@ const cspHeader = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",
-  // 'self' covers the /api/* proxy path; apiOrigin covers direct admin-gateway
-  // fetches from lib/api.ts (products, audit, keys pages).
-  `connect-src 'self' ${apiOrigin}`,
+  // 'self' covers the /api/* proxy path; the explicit origins cover direct
+  // admin-gateway fetches and Auth0 logout/session traffic.
+  buildConnectSrc(),
   "frame-ancestors 'none'",
 ].join('; ');
 

@@ -9,7 +9,8 @@ function read(relPath) {
 
 test('client API uses BFF /api/core and does not depend on NEXT_PUBLIC_CORE_API_KEY', () => {
   const coreApi = read('lib/coreApi.ts');
-  assert.match(coreApi, /fetch\(`\/api\/core\$\{path\}`/);
+  assert.match(coreApi, /resolveConsoleUrl/);
+  assert.match(coreApi, /fetch\(await resolveConsoleUrl\(`\/api\/core\$\{path\}`\), \{/);
   assert.doesNotMatch(coreApi, /NEXT_PUBLIC_CORE_API_KEY/);
   assert.doesNotMatch(coreApi, /NEXT_PUBLIC_CORE_API_URL/);
 });
@@ -45,12 +46,16 @@ test('forensics page shows chain verify status and proof copy fields', () => {
   assert.match(page, /responseHash/);
 });
 
-test('alignment fetch builds absolute server URL from headers or explicit base URL', () => {
+test('alignment fetch builds absolute server URL through the shared console origin helper', () => {
   const coreApi = read('lib/coreApi.ts');
-  assert.match(coreApi, /await import\('next\/headers'\)/);
-  assert.match(coreApi, /x-forwarded-host/);
-  assert.match(coreApi, /CONSOLE_BASE_URL/);
-  assert.match(coreApi, /must point to loopback in development/);
+  const consoleUrl = read('lib/consoleUrl.ts');
+  assert.match(coreApi, /resolveConsoleUrl/);
+  assert.match(coreApi, /alignment-artifact/);
+  assert.match(consoleUrl, /await import\('next\/headers'\)/);
+  assert.match(consoleUrl, /x-forwarded-host/);
+  assert.match(consoleUrl, /CONSOLE_BASE_URL/);
+  assert.match(consoleUrl, /NEXTAUTH_URL/);
+  assert.match(consoleUrl, /must point to loopback in development/);
 });
 
 test('proxy has strict route allowlist and blocks wildcard patterns', () => {

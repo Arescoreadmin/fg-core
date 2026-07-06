@@ -1,4 +1,5 @@
 import { mapHttpError } from '@/lib/errors';
+import { resolveConsoleUrl } from '@/lib/consoleUrl';
 
 export interface DecisionsQuery {
   limit?: number;
@@ -192,7 +193,7 @@ async function requestWithMeta<T>(path: string, init: RequestInit = {}, options:
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(`/api/core${path}`, {
+  const response = await fetch(await resolveConsoleUrl(`/api/core${path}`), {
     ...init,
     headers,
     cache: 'no-store',
@@ -320,32 +321,8 @@ export function deleteKey(prefix: string) {
   });
 }
 
-function isSafeDevHost(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
-}
-
-async function getServerCoreProxyUrl(): Promise<string> {
-  const explicitBase = process.env.CONSOLE_BASE_URL;
-  if (explicitBase) {
-    const parsed = new URL(explicitBase);
-    if ((process.env.NODE_ENV || 'development') === 'development' && !isSafeDevHost(parsed.hostname)) {
-      throw new Error('CONSOLE_BASE_URL must point to loopback in development.');
-    }
-    return `${parsed.toString().replace(/\/$/, '')}/api/core/alignment-artifact`;
-  }
-
-  const { headers } = await import('next/headers');
-  const headerStore = headers();
-  const host = headerStore.get('x-forwarded-host') || headerStore.get('host');
-  const proto = headerStore.get('x-forwarded-proto') || 'http';
-  if (!host) throw new Error('Unable to resolve server host for alignment artifact fetch.');
-  return `${proto}://${host}/api/core/alignment-artifact`;
-}
-
 export async function readAlignmentArtifact(): Promise<AlignmentArtifact | null> {
-  const target = typeof window === 'undefined'
-    ? await getServerCoreProxyUrl()
-    : '/api/core/alignment-artifact';
+  const target = await resolveConsoleUrl('/api/core/alignment-artifact');
   const response = await fetch(target, { cache: 'no-store' });
   if (!response.ok) return null;
   const payload = (await response.json()) as { artifact?: AlignmentArtifact | null };

@@ -11,6 +11,8 @@
  *  - evidence hashes are displayed but payloads are not echoed to the UI
  */
 
+import { resolveConsoleUrl } from '@/lib/consoleUrl';
+
 const BASE = '/api/core/field-assessment';
 
 // ---------------------------------------------------------------------------
@@ -786,7 +788,7 @@ async function request<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(await resolveConsoleUrl(`${BASE}${path}`), {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -806,7 +808,7 @@ async function request<T>(
 }
 
 async function requestBlob(path: string): Promise<Blob> {
-  const res = await fetch(`${BASE}${path}`, { cache: 'no-store' });
+  const res = await fetch(await resolveConsoleUrl(`${BASE}${path}`), { cache: 'no-store' });
   if (!res.ok) {
     let code = `HTTP_${res.status}`;
     try {
