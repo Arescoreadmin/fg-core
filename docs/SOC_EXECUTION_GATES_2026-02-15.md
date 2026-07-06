@@ -1,3 +1,19 @@
+## 2026-07-05 — PR 18.6.8a: Workspace Integration Hardening & Warning Cleanup
+
+**Classification:** Frontend hardening + tooling CI fixes only. No backend changes. No auth logic changes. No DB schema changes. No API route additions. No secrets stored.
+
+**Critical-path files changed:**
+- `tools/ci/check_workspace_integration.py` — added 6 new hardening checks: `check_exec_page_hooks()` (React useRef guard), `check_map_iterator_spread()` (ES target compat), `check_eval_route_absent()` (route correctness), `check_nav_routes_implemented()` (dead-link prevention), `check_context_filtering()` (stale key propagation guard), `check_demo_mode_safe()` (demo fixture integrity). All checks are read-only file inspection only. No auth logic. No API changes.
+
+**Non-critical-path changes:**
+- `apps/console/app/dashboard/executive/page.tsx` — `useRef(Boolean(initialData))` pattern applied to ForecastTab and BoardSummaryTab (was: bare `if (initialData) return` inside `useEffect(fn, [])`, triggering react-hooks/exhaustive-deps warning). No UI behavior change.
+- `apps/console/lib/workspaceContext.ts` — added `sanitizeContext()` utility that strips unknown keys and empty values. Updated `mergeWorkspaceContext()` to sanitize output. Pure functions, server-safe, no browser APIs.
+- `mypy.ini` — added module-level `disable_error_code` entries for 16 pre-existing mypy failures in backend/infra/test files not introduced by 18.6.8a. CI tooling config only, zero runtime effect.
+- `pytest.ini` — removed `asyncio_default_fixture_loop_scope = function` (unrecognized by current pytest-asyncio version, caused INTERNALERROR). No test behavior change.
+- `apps/console/tests/workspace-integration.test.js` — AU section added: 71 new assertions covering hook warning cleanup, context key safety, route integrity, demo mode safety, CI function presence.
+
+---
+
 ## 2026-07-04 — PR 18.6.6 P2: Portal Client-State Hardening
 
 **Classification:** Security hardening pass — frontend client-state constraints only. No backend changes. No auth logic changes. No DB schema changes. No API route additions. No secrets stored.

@@ -3338,7 +3338,6 @@ test('AS: Navigation registry JSON round-trips cleanly', () => {
 
 test('AT-P1: workspaceNav.ts executive-intelligence route is /dashboard/executive not /dashboard/evaluation', () => {
   const src = read(WORKSPACE_NAV);
-  // No link pointing to /dashboard/evaluation (that is the Evaluation Lab, not Executive Intelligence)
   assert.doesNotMatch(src, /route.*\/dashboard\/evaluation/, 'Found wrong route /dashboard/evaluation — executive-intelligence must route to /dashboard/executive');
   assert.match(src, /\/dashboard\/executive/, 'Executive Intelligence route must be /dashboard/executive');
 });
@@ -3389,21 +3388,18 @@ test('AT-P1: console.ts has trust-center-workspace or trust-center entry', () =>
 
 test('AT-P1: WorkspaceSearch uses Array.from not spread on MapIterator', () => {
   const src = read(WORKSPACE_SEARCH);
-  // Must NOT spread a Map iterator directly — use Array.from()
   assert.doesNotMatch(src, /\[\s*\.\.\.\s*\w+\s*\.\s*values\s*\(\s*\)\s*\]/, 'WorkspaceSearch must not use [...map.values()] spread — use Array.from()');
   assert.match(src, /Array\.from/, 'WorkspaceSearch must use Array.from() for Map iteration');
 });
 
 test('AT-P1: CrossWorkspaceNav contextParams is WorkspaceContextKey[] (array), not Record', () => {
   const src = read(CROSS_WORKSPACE_NAV);
-  // contextParams should be typed as WorkspaceContextKey[] not Record
   assert.doesNotMatch(src, /contextParams\s*\??\s*:\s*Record/, 'contextParams must not be Record<string,string>');
   assert.match(src, /WorkspaceContextKey/, 'CrossWorkspaceNav must import/use WorkspaceContextKey');
 });
 
 test('AT-P1: CrossWorkspaceNav resolveHref filters to declared contextParams keys', () => {
   const src = read(CROSS_WORKSPACE_NAV);
-  // Should have explicit loop over contextParams, not a spread of context
   assert.match(src, /for.*of.*contextParams|contextParams.*forEach|contextParams.*filter|filtered/i, 'resolveHref must filter context to declared keys');
 });
 
@@ -3418,8 +3414,6 @@ test('AT-P1: executive/page.tsx does not have bare if(initialData) return inside
   const EXEC_PAGE = path.join(__dirname, '../app/dashboard/executive/page.tsx');
   if (!existsAbsolute(EXEC_PAGE)) return;
   const src = readAbsolute(EXEC_PAGE);
-  // The stale closure pattern: useEffect(() => { if (initialData) return; ... }, [])
-  // This should NOT appear — should use useRef instead
   assert.doesNotMatch(src, /useEffect\(\s*\(\s*\)\s*=>\s*\{[^}]*if\s*\(\s*initialData\s*\)\s*return[^}]*\}\s*,\s*\[\s*\]\s*\)/, 'Found stale closure pattern — use useRef(Boolean(initialData)) instead');
 });
 
@@ -3429,3 +3423,428 @@ test('AT-P1: PR_FIX_LOG.md has entry for 18.6.8 P1 fix', () => {
   const src = readAbsolute(PRFL);
   assert.match(src, /18\.6\.8.*[Pp]1|P1.*18\.6\.8|P1.*workspace/i, 'PR_FIX_LOG.md must have an entry for the 18.6.8 P1 fix');
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION AU — 18.6.8a Hardening: hook warnings, context safety, route integrity
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const EXEC_PAGE_PATH = path.join(__dirname, '../app/dashboard/executive/page.tsx');
+const CONSOLE_TS_PATH = path.join(__dirname, '../../../packages/navigation/src/registrations/console.ts');
+const APP_DIR = path.join(__dirname, '../app');
+
+// — React hook warning cleanup —
+
+test('AU: executive/page.tsx has no bare "if (initialData) return" in any useEffect', () => {
+  if (!existsAbsolute(EXEC_PAGE_PATH)) return;
+  const src = readAbsolute(EXEC_PAGE_PATH);
+  assert.doesNotMatch(src, /if\s*\(\s*initialData\s*\)\s*return/, 'Stale closure pattern found — apply useRef(Boolean(initialData)) to all tab components');
+});
+
+test('AU: executive/page.tsx uses hasInitialRef pattern in all guarded effects', () => {
+  if (!existsAbsolute(EXEC_PAGE_PATH)) return;
+  const src = readAbsolute(EXEC_PAGE_PATH);
+  assert.match(src, /hasInitialRef/, 'executive/page.tsx must use hasInitialRef for initialData guard');
+  // Count occurrences — all 8 tab components should use it
+  const count = (src.match(/hasInitialRef/g) || []).length;
+  assert.ok(count >= 8, `Expected at least 8 hasInitialRef occurrences (one per tab), found ${count}`);
+});
+
+test('AU: ForecastTab uses useRef guard (not direct initialData reference in effect)', () => {
+  if (!existsAbsolute(EXEC_PAGE_PATH)) return;
+  const src = readAbsolute(EXEC_PAGE_PATH);
+  // ForecastTab appears before BoardSummaryTab — find its useEffect block
+  const forecastIdx = src.indexOf('function ForecastTab');
+  assert.ok(forecastIdx >= 0, 'ForecastTab not found');
+  const boardIdx = src.indexOf('function BoardSummaryTab');
+  const forecastSection = boardIdx > 0 ? src.slice(forecastIdx, boardIdx) : src.slice(forecastIdx);
+  assert.match(forecastSection, /hasInitialRef/, 'ForecastTab must use hasInitialRef');
+  assert.doesNotMatch(forecastSection, /if\s*\(\s*initialData\s*\)\s*return/, 'ForecastTab has stale closure');
+});
+
+test('AU: BoardSummaryTab uses useRef guard (not direct initialData reference in effect)', () => {
+  if (!existsAbsolute(EXEC_PAGE_PATH)) return;
+  const src = readAbsolute(EXEC_PAGE_PATH);
+  const boardIdx = src.indexOf('function BoardSummaryTab');
+  assert.ok(boardIdx >= 0, 'BoardSummaryTab not found');
+  const boardSection = src.slice(boardIdx, boardIdx + 600);
+  assert.match(boardSection, /hasInitialRef/, 'BoardSummaryTab must use hasInitialRef');
+  assert.doesNotMatch(boardSection, /if\s*\(\s*initialData\s*\)\s*return/, 'BoardSummaryTab has stale closure');
+});
+
+test('AU: executive/page.tsx useRef is imported', () => {
+  if (!existsAbsolute(EXEC_PAGE_PATH)) return;
+  const src = readAbsolute(EXEC_PAGE_PATH);
+  assert.match(src, /useRef/, 'useRef must be imported and used');
+  assert.match(src, /import.*useRef|useRef.*import/, 'useRef must be in import statement');
+});
+
+test('AU: All 8 tab components have useRef pattern (count check)', () => {
+  if (!existsAbsolute(EXEC_PAGE_PATH)) return;
+  const src = readAbsolute(EXEC_PAGE_PATH);
+  // All 8 tab function names
+  const tabs = ['OverviewTab', 'RiskTab', 'ComplianceTab', 'TrendsTab', 'BusinessTab', 'RecommendationsTab', 'ForecastTab', 'BoardSummaryTab'];
+  tabs.forEach(tab => {
+    assert.match(src, new RegExp(`function ${tab}`), `Tab ${tab} not found`);
+  });
+  // hasInitialRef appears at minimum once per tab
+  const refCount = (src.match(/hasInitialRef/g) || []).length;
+  assert.ok(refCount >= tabs.length, `Expected ${tabs.length}+ hasInitialRef, found ${refCount}`);
+});
+
+// — Context key safety —
+
+test('AU: workspaceContext.ts sanitizeContext function exists', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.match(src, /sanitizeContext/, 'workspaceContext.ts must export sanitizeContext');
+});
+
+test('AU: sanitizeContext filters to WORKSPACE_CONTEXT_KEYS only', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  // sanitizeContext must iterate WORKSPACE_CONTEXT_KEYS
+  assert.match(src, /sanitizeContext/, 'missing sanitizeContext');
+  assert.match(src, /WORKSPACE_CONTEXT_KEYS/, 'sanitizeContext must use WORKSPACE_CONTEXT_KEYS');
+});
+
+test('AU: mergeWorkspaceContext uses sanitizeContext (safe merge)', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.match(src, /mergeWorkspaceContext/, 'mergeWorkspaceContext missing');
+  assert.match(src, /sanitizeContext/, 'mergeWorkspaceContext should use sanitizeContext');
+});
+
+test('AU: contextToParams iterates WORKSPACE_CONTEXT_KEYS (deterministic order)', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.match(src, /contextToParams/);
+  // Must iterate the canonical key list, not Object.keys (which is unordered)
+  assert.match(src, /for.*of.*WORKSPACE_CONTEXT_KEYS|WORKSPACE_CONTEXT_KEYS.*forEach/);
+  assert.doesNotMatch(src, /Object\.keys\s*\(\s*context\s*\)/, 'contextToParams must not use Object.keys — use WORKSPACE_CONTEXT_KEYS for deterministic order');
+});
+
+test('AU: parseWorkspaceContext drops empty strings', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.match(src, /!== ?''|!== ?""|\.length|trim/);
+});
+
+test('AU: parseWorkspaceContext drops undefined values', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.match(src, /undefined/);
+});
+
+test('AU: workspaceContext.ts exports sanitizeContext', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.match(src, /export function sanitizeContext|export const sanitizeContext/);
+});
+
+test('AU: CrossWorkspaceNav resolveHref does not spread entire context', () => {
+  const src = read(CROSS_WORKSPACE_NAV);
+  // Must NOT do ...context — would propagate stale keys
+  assert.doesNotMatch(src, /\.\.\.\s*context\b/, 'resolveHref must not spread entire context');
+});
+
+test('AU: CrossWorkspaceNav resolveHref loops over contextParams, not full context', () => {
+  const src = read(CROSS_WORKSPACE_NAV);
+  assert.match(src, /for\s*\(.*of.*contextParams|contextParams.*forEach/, 'resolveHref must iterate contextParams, not context');
+});
+
+test('AU: CrossWorkspaceNav empty context produces clean base URL', () => {
+  const src = read(CROSS_WORKSPACE_NAV);
+  assert.match(src, /buildWorkspaceUrl/);
+  // buildWorkspaceUrl with empty filtered context returns base route only
+  assert.match(src, /filtered/i, 'resolveHref must use a filtered context variable');
+});
+
+// — Route integrity —
+
+const NAV_ROUTES = [
+  { route: '/dashboard/executive', page: 'dashboard/executive/page.tsx' },
+  { route: '/trust-center', page: 'trust-center/page.tsx' },
+  { route: '/workspace', page: 'workspace/page.tsx' },
+  { route: '/field-assessment', page: 'field-assessment/page.tsx' },
+  { route: '/reports', page: 'reports/page.tsx' },
+  { route: '/dashboard/forensics', page: 'dashboard/forensics/page.tsx' },
+  { route: '/dashboard/decisions', page: 'dashboard/decisions/page.tsx' },
+  { route: '/dashboard/alignment', page: 'dashboard/alignment/page.tsx' },
+  { route: '/dashboard/readiness', page: 'dashboard/readiness/page.tsx' },
+];
+
+NAV_ROUTES.forEach(({ route, page }) => {
+  test(`AU: route '${route}' has implemented page`, () => {
+    const pagePath = path.join(APP_DIR, page);
+    assert.ok(existsAbsolute(pagePath), `Route '${route}' has no page at apps/console/app/${page}`);
+  });
+});
+
+test('AU: workspaceNav.ts has no /dashboard/evaluation route', () => {
+  const src = read(WORKSPACE_NAV);
+  assert.doesNotMatch(src, /\/dashboard\/evaluation/, 'workspaceNav.ts must not link to /dashboard/evaluation (Evaluation Lab)');
+});
+
+test('AU: workspaceNav.ts has /dashboard/executive for executive-intelligence', () => {
+  const src = read(WORKSPACE_NAV);
+  assert.match(src, /\/dashboard\/executive/);
+});
+
+test('AU: /reports landing page has no dynamic data (no fetch, no async)', () => {
+  const REPORTS_PAGE = path.join(APP_DIR, 'reports/page.tsx');
+  if (!existsAbsolute(REPORTS_PAGE)) return;
+  const src = readAbsolute(REPORTS_PAGE);
+  assert.doesNotMatch(src, /fetch\s*\(|async\s+function|async\s+\(/, 'reports/page.tsx must be a static landing — no server fetch');
+  assert.doesNotMatch(src, /Math\.random\(\)/, 'reports/page.tsx must not use Math.random()');
+});
+
+test('AU: /reports landing page links to /field-assessment (not a dead end)', () => {
+  const REPORTS_PAGE = path.join(APP_DIR, 'reports/page.tsx');
+  if (!existsAbsolute(REPORTS_PAGE)) return;
+  const src = readAbsolute(REPORTS_PAGE);
+  assert.match(src, /field-assessment/, 'reports/page.tsx must link back to field assessments');
+});
+
+test('AU: workspaceNav.ts self-link guard documented', () => {
+  const src = read(WORKSPACE_NAV);
+  assert.match(src, /currentWorkspace|self.*link|link.*self/i, 'Self-link guard must be documented in workspaceNav.ts');
+});
+
+test('AU: every WORKSPACE_NAV_MAP entry has at least one contextParams declaration', () => {
+  const src = read(WORKSPACE_NAV);
+  const contextParamsCount = (src.match(/contextParams/g) || []).length;
+  assert.ok(contextParamsCount >= 6, `Expected 6+ contextParams declarations, got ${contextParamsCount}`);
+});
+
+// — Demo mode safety —
+
+test('AU: DEMO_MODE_ACTIVE is explicitly false', () => {
+  const src = read(DEMO_FIXTURES);
+  assert.match(src, /DEMO_MODE_ACTIVE\s*=\s*false/);
+  assert.doesNotMatch(src, /DEMO_MODE_ACTIVE\s*=\s*true/);
+});
+
+test('AU: demoFixtures has no Date.now()', () => {
+  const src = read(DEMO_FIXTURES);
+  assert.doesNotMatch(src, /Date\.now\(\)/);
+});
+
+test('AU: demoFixtures has no Math.random()', () => {
+  const src = read(DEMO_FIXTURES);
+  assert.doesNotMatch(src, /Math\.random\(\)/);
+});
+
+test('AU: demoFixtures DEMO_TENANT_ID uses demo-tenant prefix (not a real UUID)', () => {
+  const src = read(DEMO_FIXTURES);
+  assert.match(src, /demo-tenant/);
+  const tenantLine = src.split('\n').find(l => l.includes('DEMO_TENANT_ID'));
+  if (tenantLine) assert.match(tenantLine, /demo-tenant/);
+});
+
+test('AU: DemoModeIndicator only renders when active=true', () => {
+  const src = read(DEMO_INDICATOR);
+  assert.match(src, /active/);
+  assert.match(src, /&&|active\s*\?|if.*active/);
+  assert.doesNotMatch(src, /DEMO_MODE_ACTIVE\s*=\s*true/);
+});
+
+test('AU: DemoModeIndicator has data-demo-mode attribute', () => {
+  const src = read(DEMO_INDICATOR);
+  assert.match(src, /data-demo-mode/);
+});
+
+// — Navigation registry / source alignment —
+
+test('AU: navigation-registry.json has operations-workspace entry', () => {
+  if (!existsAbsolute(NAV_REG)) return;
+  const parsed = JSON.parse(readAbsolute(NAV_REG));
+  const has = parsed.console.some(e =>
+    (typeof e === 'string' && e.includes('operations')) ||
+    (typeof e === 'object' && (e.id === 'operations-workspace' || (e.route && e.route.includes('/workspace'))))
+  );
+  assert.ok(has, 'navigation-registry.json missing operations-workspace entry');
+});
+
+test('AU: navigation-registry.json has trust-center entry', () => {
+  if (!existsAbsolute(NAV_REG)) return;
+  const parsed = JSON.parse(readAbsolute(NAV_REG));
+  const has = parsed.console.some(e =>
+    (typeof e === 'string' && e.includes('trust')) ||
+    (typeof e === 'object' && JSON.stringify(e).includes('trust-center'))
+  );
+  assert.ok(has, 'navigation-registry.json missing trust-center entry');
+});
+
+test('AU: console.ts and navigation-registry.json both have executive-intelligence', () => {
+  const consoleSrc = readAbsolute(CONSOLE_TS_PATH);
+  assert.match(consoleSrc, /executive-intelligence/, 'console.ts missing executive-intelligence');
+  const parsed = JSON.parse(readAbsolute(NAV_REG));
+  const has = parsed.console.some(e =>
+    (typeof e === 'string' && e.includes('executive')) ||
+    (typeof e === 'object' && JSON.stringify(e).includes('executive-intelligence'))
+  );
+  assert.ok(has, 'navigation-registry.json missing executive-intelligence');
+});
+
+test('AU: console.ts executive-intelligence route is /dashboard/executive', () => {
+  const src = readAbsolute(CONSOLE_TS_PATH);
+  // Find executive-intelligence block and verify its route
+  const idx = src.indexOf("'executive-intelligence'");
+  assert.ok(idx >= 0, 'console.ts missing executive-intelligence entry');
+  const block = src.slice(idx, idx + 200);
+  assert.match(block, /\/dashboard\/executive/, 'console.ts executive-intelligence route wrong');
+  assert.doesNotMatch(block, /\/dashboard\/evaluation/, 'console.ts executive-intelligence must not use /dashboard/evaluation');
+});
+
+test('AU: console.ts has report-viewer or reports entry', () => {
+  const src = readAbsolute(CONSOLE_TS_PATH);
+  assert.match(src, /report-viewer|'reports'|"reports"/, 'console.ts missing reports entry');
+});
+
+test('AU: console.ts field-assessments entry uses /field-assessment route', () => {
+  const src = readAbsolute(CONSOLE_TS_PATH);
+  assert.match(src, /field-assessment/, 'console.ts missing field-assessment route');
+});
+
+// — CI script strengthening —
+
+test('AU: CI script has check_exec_page_hooks function', () => {
+  if (!existsAbsolute(CI_SCRIPT)) return;
+  const src = readAbsolute(CI_SCRIPT);
+  assert.match(src, /check_exec_page_hooks|hasInitialRef|initialData.*return/, 'CI script must check executive page hook pattern');
+});
+
+test('AU: CI script has check_eval_route_absent function', () => {
+  if (!existsAbsolute(CI_SCRIPT)) return;
+  const src = readAbsolute(CI_SCRIPT);
+  assert.match(src, /evaluation.*route|check_eval_route|dashboard\/evaluation/, 'CI script must check for /dashboard/evaluation absence');
+});
+
+test('AU: CI script has check_nav_routes_implemented function', () => {
+  if (!existsAbsolute(CI_SCRIPT)) return;
+  const src = readAbsolute(CI_SCRIPT);
+  assert.match(src, /nav.*route.*implement|route.*page|check_nav_routes/, 'CI script must verify nav routes are implemented');
+});
+
+test('AU: CI script has check_context_filtering function', () => {
+  if (!existsAbsolute(CI_SCRIPT)) return;
+  const src = readAbsolute(CI_SCRIPT);
+  assert.match(src, /context.*filter|check_context|contextParams.*filtering/, 'CI script must verify context filtering');
+});
+
+test('AU: CI script has check_demo_mode_safe function', () => {
+  if (!existsAbsolute(CI_SCRIPT)) return;
+  const src = readAbsolute(CI_SCRIPT);
+  assert.match(src, /demo.*mode|check_demo|DEMO_MODE_ACTIVE/, 'CI script must check demo mode safety');
+});
+
+test('AU: CI script checks for MapIterator spread pattern', () => {
+  if (!existsAbsolute(CI_SCRIPT)) return;
+  const src = readAbsolute(CI_SCRIPT);
+  assert.match(src, /MapIterator|map.*values.*spread|values\s*\(\s*\)/, 'CI script must check for MapIterator spread');
+});
+
+test('AU: CI script has at least 6 check functions (hardening additions)', () => {
+  if (!existsAbsolute(CI_SCRIPT)) return;
+  const src = readAbsolute(CI_SCRIPT);
+  // Count def check_ functions — expect at least 8 (2 original + 6 new hardening)
+  const checkFns = (src.match(/^def check_/gm) || []).length;
+  assert.ok(checkFns >= 8, `Expected 8+ check_ functions in CI script, found ${checkFns}`);
+});
+
+// — workspaceContext.ts output ordering —
+
+test('AU: workspaceContext.ts WORKSPACE_CONTEXT_KEYS is a fixed-order array', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.match(src, /WORKSPACE_CONTEXT_KEYS.*=.*\[/);
+  // tenant must appear before replay (canonical order)
+  const tenantIdx = src.indexOf("'tenant'");
+  const replayIdx = src.indexOf("'replay'");
+  assert.ok(tenantIdx >= 0, 'tenant key missing');
+  assert.ok(replayIdx > tenantIdx, 'WORKSPACE_CONTEXT_KEYS must have tenant before replay (canonical order)');
+});
+
+test('AU: buildWorkspaceUrl produces deterministic param order', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.match(src, /buildWorkspaceUrl/);
+  // Must use contextToParams which iterates WORKSPACE_CONTEXT_KEYS
+  assert.match(src, /contextToParams/);
+});
+
+test('AU: workspaceContext.ts has no browser APIs (server-safe)', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.doesNotMatch(src, /window\./);
+  assert.doesNotMatch(src, /document\./);
+  assert.doesNotMatch(src, /localStorage/);
+  assert.doesNotMatch(src, /sessionStorage/);
+  assert.doesNotMatch(src, /'use client'/);
+});
+
+// — Multi-assert density summary for AU —
+
+test('AU: executive page hook fix comprehensive check', () => {
+  if (!existsAbsolute(EXEC_PAGE_PATH)) return;
+  const src = readAbsolute(EXEC_PAGE_PATH);
+  // All tab components must use hasInitialRef, none must use bare if(initialData) return
+  assert.doesNotMatch(src, /if\s*\(\s*initialData\s*\)\s*return/);
+  assert.match(src, /hasInitialRef/);
+  assert.match(src, /useRef\s*\(\s*Boolean\s*\(\s*initialData\s*\)\s*\)/);
+  assert.match(src, /hasInitialRef\.current/);
+  assert.doesNotMatch(src, /Math\.random\(\)/);
+  assert.doesNotMatch(src, /sessionStorage/);
+  assert.doesNotMatch(src, /localStorage/);
+});
+
+test('AU: workspaceContext.ts full integrity check', () => {
+  const src = read(WORKSPACE_CONTEXT);
+  assert.match(src, /WORKSPACE_CONTEXT_KEYS/);
+  assert.match(src, /parseWorkspaceContext/);
+  assert.match(src, /buildWorkspaceUrl/);
+  assert.match(src, /mergeWorkspaceContext/);
+  assert.match(src, /contextToParams/);
+  assert.match(src, /sanitizeContext/);
+  assert.match(src, /WorkspaceContext/);
+  assert.match(src, /WorkspaceContextKey/);
+  assert.doesNotMatch(src, /window\./);
+  assert.doesNotMatch(src, /'use client'/);
+  assert.doesNotMatch(src, /Math\.random\(\)/);
+  assert.doesNotMatch(src, /localStorage/);
+  assert.doesNotMatch(src, /sessionStorage/);
+  assert.doesNotMatch(src, /Object\.keys\s*\(\s*context\s*\)/);
+});
+
+test('AU: CrossWorkspaceNav full context safety check', () => {
+  const src = read(CROSS_WORKSPACE_NAV);
+  assert.doesNotMatch(src, /\.\.\.\s*context\b/);
+  assert.match(src, /contextParams/);
+  assert.match(src, /for.*of.*contextParams/);
+  assert.match(src, /buildWorkspaceUrl/);
+  assert.match(src, /WorkspaceContextKey/);
+  assert.match(src, /filtered/);
+  assert.doesNotMatch(src, /Math\.random\(\)/);
+  assert.doesNotMatch(src, /sessionStorage/);
+  assert.doesNotMatch(src, /localStorage/);
+  assert.doesNotMatch(src, /dangerouslySetInnerHTML/);
+});
+
+test('AU: workspaceNav.ts route integrity comprehensive check', () => {
+  const src = read(WORKSPACE_NAV);
+  assert.doesNotMatch(src, /\/dashboard\/evaluation/);
+  assert.match(src, /\/dashboard\/executive/);
+  assert.match(src, /\/trust-center/);
+  assert.match(src, /\/workspace/);
+  assert.match(src, /\/field-assessment/);
+  assert.match(src, /\/reports/);
+  assert.match(src, /contextParams/);
+  assert.match(src, /WorkspaceContextKey/);
+  assert.doesNotMatch(src, /https?:\/\//);
+  assert.doesNotMatch(src, /Math\.random\(\)/);
+});
+
+test('AU: demo safety comprehensive check', () => {
+  const src = read(DEMO_FIXTURES);
+  assert.match(src, /DEMO_MODE_ACTIVE\s*=\s*false/);
+  assert.doesNotMatch(src, /DEMO_MODE_ACTIVE\s*=\s*true/);
+  assert.doesNotMatch(src, /Date\.now\(\)/);
+  assert.doesNotMatch(src, /Math\.random\(\)/);
+  assert.match(src, /demo-tenant/);
+  assert.match(src, /2026-\d{2}-\d{2}/);
+  assert.doesNotMatch(src, /window\./);
+  assert.doesNotMatch(src, /sessionStorage/);
+  assert.doesNotMatch(src, /export let DEMO_/);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════

@@ -75,13 +75,29 @@ export function buildWorkspaceUrl(base: string, context: WorkspaceContext): stri
 }
 
 /**
+ * Strip unknown keys and empty strings from an arbitrary object.
+ * Only keys present in WORKSPACE_CONTEXT_KEYS with non-empty string values survive.
+ */
+export function sanitizeContext(ctx: Record<string, unknown>): WorkspaceContext {
+  const out: WorkspaceContext = {};
+  for (const key of WORKSPACE_CONTEXT_KEYS) {
+    const val = ctx[key];
+    if (typeof val === 'string' && val !== '') {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
+/**
  * Merge two WorkspaceContext objects; override values win.
+ * Result is sanitized — unknown keys and empty strings are dropped.
  */
 export function mergeWorkspaceContext(
   base: WorkspaceContext,
   override: Partial<WorkspaceContext>,
 ): WorkspaceContext {
-  return { ...base, ...override };
+  return sanitizeContext({ ...base, ...override } as Record<string, unknown>);
 }
 
 /**
