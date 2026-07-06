@@ -9,6 +9,7 @@ import {
   Building2,
   ClipboardCheck,
   ClipboardList,
+  Command,
   Database,
   FlaskConical,
   GitBranch,
@@ -33,6 +34,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 const ICON_MAP: Record<string, LucideIcon> = {
   'executive-intelligence': Brain,
   'command-center': LayoutDashboard,
+  'operations-center': Command,
   'control-tower': Radio,
   'readiness': Activity,
   'field-assessments': ClipboardCheck,

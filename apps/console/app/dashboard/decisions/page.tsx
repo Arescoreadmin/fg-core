@@ -1,12 +1,24 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { DecisionsTable } from '@/components/tables/DecisionsTable';
 import { getDecision, listDecisions, type DecisionOut } from '@/lib/coreApi';
 import { toUserMessage } from '@/lib/errors';
 import { DecisionPanel } from '@/components/decisions/DecisionPanel';
 
 const PAGE_SIZE = 10;
+
+// useSearchParams must live in a component wrapped by <Suspense>
+function DecisionsDeepLink({ onFound }: { onFound: (d: DecisionOut) => void }) {
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get('decision');
+    if (!id) return;
+    getDecision(id).then(onFound).catch(() => {});
+  }, [searchParams, onFound]);
+  return null;
+}
 
 export default function DecisionsPage() {
   const [items, setItems] = useState<DecisionOut[]>([]);
@@ -48,6 +60,9 @@ export default function DecisionsPage() {
 
   return (
     <div className="flex flex-col">
+      <Suspense>
+        <DecisionsDeepLink onFound={setDetail} />
+      </Suspense>
       <div className="border-b border-border px-6 py-4">
         <h1 className="text-base font-semibold text-foreground">Decisions</h1>
         <p className="text-xs text-muted mt-0.5">Policy outcomes for every classified request</p>
