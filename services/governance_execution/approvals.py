@@ -75,11 +75,17 @@ def check_approval_requirements(
     plan_approvals = [a for a in approvals if a.plan_id == plan.plan_id]
 
     for req in plan.approval_requirements:
-        count = len(plan_approvals)
-        if count < req.min_approvers:
+        distinct_approvers = len(
+            {
+                a.approver_id
+                for a in plan_approvals
+                if a.approval_type == req.approval_type
+            }
+        )
+        if distinct_approvers < req.min_approvers:
             unmet.append(
                 f"Requirement {req.requirement_id} ({req.approval_type}) needs "
-                f"{req.min_approvers} approver(s), got {count}"
+                f"{req.min_approvers} distinct approver(s), got {distinct_approvers}"
             )
 
     return (len(unmet) == 0, unmet)

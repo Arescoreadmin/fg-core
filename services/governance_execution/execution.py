@@ -103,18 +103,31 @@ def advance_state(
     audit_fingerprint = compute_audit_fingerprint(audit_stub)
     audit_record = dataclasses.replace(audit_stub, fingerprint=audit_fingerprint)
 
-    updated_run = dataclasses.replace(run, state=new_state)
+    updated_run = dataclasses.replace(run, state=new_state, run_fingerprint="")
+    updated_run = dataclasses.replace(
+        updated_run, run_fingerprint=compute_run_fingerprint(updated_run)
+    )
     return updated_run, audit_record
 
 
 def complete_step(
     run: ExecutionRun,
     step_id: str,
+    *,
+    evidence_refs: tuple[str, ...],
 ) -> ExecutionRun:
-    """Mark a step as completed by adding it to executed_steps."""
-    return dataclasses.replace(
+    """Mark a step as completed. At least one evidence_ref is required per constitution rule 3."""
+    if not evidence_refs:
+        raise ExecutionValidationError(
+            f"complete_step for step '{step_id}' requires at least one evidence_ref"
+        )
+    updated = dataclasses.replace(
         run,
         executed_steps=run.executed_steps + (step_id,),
+        run_fingerprint="",
+    )
+    return dataclasses.replace(
+        updated, run_fingerprint=compute_run_fingerprint(updated)
     )
 
 
@@ -123,7 +136,11 @@ def fail_step(
     step_id: str,
 ) -> ExecutionRun:
     """Mark a step as failed by adding it to failed_steps."""
-    return dataclasses.replace(
+    updated = dataclasses.replace(
         run,
         failed_steps=run.failed_steps + (step_id,),
+        run_fingerprint="",
+    )
+    return dataclasses.replace(
+        updated, run_fingerprint=compute_run_fingerprint(updated)
     )

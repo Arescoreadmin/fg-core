@@ -70,10 +70,18 @@ def validate_execution_plan(
             violations.append("tenant_isolation")
             break
 
-    for rs in plan.rollback_plan.rollback_steps:
-        if plan.tenant_id not in plan.plan_id:
-            # rollback steps don't carry tenant_id directly — check via authority
-            pass
+    if plan.rollback_plan.tenant_id != plan.tenant_id:
+        findings.append(
+            ExecutionValidationFinding(
+                severity="FATAL",
+                code="tenant_isolation",
+                message=(
+                    f"rollback_plan.tenant_id {plan.rollback_plan.tenant_id!r} "
+                    f"does not match plan.tenant_id {plan.tenant_id!r}"
+                ),
+            )
+        )
+        violations.append("tenant_isolation")
 
     # ---- rollback_completeness (ERROR) ----
     if not plan.rollback_plan.rollback_ready:

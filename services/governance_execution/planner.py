@@ -58,7 +58,7 @@ def plan_execution(
     created_at: str = utc_iso8601_z_now()
 
     plan_id: str = _sha256_prefix(
-        f"PLAN:{tenant_id}:{scenario_id}:{plan_name}:{created_at}",
+        f"PLAN:{tenant_id}:{scenario_id}:{simulation_result.simulation_fingerprint}:{plan_name}:{authority}:{approval_type}",
         length=24,
     )
 
@@ -112,7 +112,7 @@ def plan_execution(
         rollback_steps.append(rb_step)
 
     rollback_plan = ExecutionRollbackPlan(
-        rollback_id=_sha256_prefix(f"ROLLBACK:{plan_id}:{created_at}", length=20),
+        rollback_id=_sha256_prefix(f"ROLLBACK:{plan_id}", length=20),
         plan_id=plan_id,
         tenant_id=tenant_id,
         rollback_steps=tuple(rollback_steps),

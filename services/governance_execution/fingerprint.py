@@ -84,7 +84,7 @@ def compute_plan_fingerprint(plan: ExecutionPlan) -> str:
 
 
 def compute_run_fingerprint(run: ExecutionRun) -> str:
-    """Compute SHA-256 fingerprint over stable run fields."""
+    """Compute SHA-256 fingerprint over run fields including outcome state."""
     approval_hashes = sorted(compute_approval_hash(a) for a in run.approvals)
     payload: dict[str, Any] = {
         "domain": GOVERNANCE_EXECUTION_FINGERPRINT_DOMAIN,
@@ -94,6 +94,13 @@ def compute_run_fingerprint(run: ExecutionRun) -> str:
         "simulation_id": run.simulation_id,
         "simulation_fingerprint": run.simulation_fingerprint,
         "started_at": run.started_at,
+        "state": run.state,
+        "executed_steps": sorted(run.executed_steps),
+        "skipped_steps": sorted(run.skipped_steps),
+        "failed_steps": sorted(run.failed_steps),
+        "verification_ids": sorted(run.verification_ids),
+        "measurement_ids": sorted(run.measurement_ids),
+        "rollback_reference": run.rollback_reference,
         "approval_hashes": approval_hashes,
     }
     return _sha256_hex(canonical_json_bytes(payload))

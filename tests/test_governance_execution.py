@@ -826,8 +826,9 @@ class TestApprovalInsufficient:
 
     def test_create_run_with_wrong_plan_approvals_raises(self) -> None:
         plan1 = _make_plan()
-        plan2 = _make_plan()
-        # Approval for plan2 should not satisfy plan1
+        # Different plan_name produces a different replay-stable plan_id
+        sim = _make_simulation_result()
+        plan2 = plan_execution(sim, "Different Plan Name", "test_auth")
         approval = create_approval(plan2, "u", "auth", "ok")
         with pytest.raises(ExecutionValidationError):
             create_run(plan1, (approval,))
@@ -988,15 +989,15 @@ class TestCompleteStep:
         plan = _make_plan()
         approval = create_approval(plan, "u", "auth", "ok")
         run = create_run(plan, (approval,))
-        updated = complete_step(run, "step-abc")
+        updated = complete_step(run, "step-abc", evidence_refs=("ev-1",))
         assert "step-abc" in updated.executed_steps
 
     def test_multiple_steps_completed(self) -> None:
         plan = _make_plan()
         approval = create_approval(plan, "u", "auth", "ok")
         run = create_run(plan, (approval,))
-        run = complete_step(run, "step-1")
-        run = complete_step(run, "step-2")
+        run = complete_step(run, "step-1", evidence_refs=("ev-1",))
+        run = complete_step(run, "step-2", evidence_refs=("ev-2",))
         assert "step-1" in run.executed_steps
         assert "step-2" in run.executed_steps
 
@@ -1004,7 +1005,7 @@ class TestCompleteStep:
         plan = _make_plan()
         approval = create_approval(plan, "u", "auth", "ok")
         run = create_run(plan, (approval,))
-        complete_step(run, "step-abc")
+        complete_step(run, "step-abc", evidence_refs=("ev-1",))
         assert "step-abc" not in run.executed_steps  # original frozen
 
 
@@ -1342,7 +1343,7 @@ class TestRollbackPlanning:
         plan = _make_plan()
         approval = create_approval(plan, "u", "auth", "ok")
         run = create_run(plan, (approval,))
-        run = complete_step(run, plan.steps[0].step_id)
+        run = complete_step(run, plan.steps[0].step_id, evidence_refs=("ev-1",))
         rb = plan_rollback(plan, run, authority="rollback_auth")
         assert isinstance(rb, ExecutionRollbackPlan)
 
@@ -1350,7 +1351,7 @@ class TestRollbackPlanning:
         plan = _make_plan()
         approval = create_approval(plan, "u", "auth", "ok")
         run = create_run(plan, (approval,))
-        run = complete_step(run, plan.steps[0].step_id)
+        run = complete_step(run, plan.steps[0].step_id, evidence_refs=("ev-1",))
         rb = plan_rollback(plan, run, authority="rollback_auth")
         assert rb.rollback_ready is True
 
@@ -1367,8 +1368,8 @@ class TestRollbackPlanning:
         plan = _make_plan(entries=entries)
         approval = create_approval(plan, "u", "auth", "ok")
         run = create_run(plan, (approval,))
-        run = complete_step(run, plan.steps[0].step_id)
-        run = complete_step(run, plan.steps[1].step_id)
+        run = complete_step(run, plan.steps[0].step_id, evidence_refs=("ev-1",))
+        run = complete_step(run, plan.steps[1].step_id, evidence_refs=("ev-2",))
         rb = plan_rollback(plan, run, authority="a")
         # Last executed step should be first rollback step
         assert rb.rollback_steps[0].reverses_step_id == plan.steps[1].step_id
@@ -1384,7 +1385,7 @@ class TestRollbackExecute:
         plan = _make_plan()
         approval = create_approval(plan, "u", "auth", "ok")
         run = create_run(plan, (approval,))
-        run = complete_step(run, plan.steps[0].step_id)
+        run = complete_step(run, plan.steps[0].step_id, evidence_refs=("ev-1",))
         rb = plan_rollback(plan, run, authority="rb_auth")
         updated_run, audit = execute_rollback(rb, run)
         assert updated_run.rollback_reference == rb.rollback_id
@@ -1395,7 +1396,7 @@ class TestRollbackExecute:
         plan = _make_plan()
         approval = create_approval(plan, "u", "auth", "ok")
         run = create_run(plan, (approval,))
-        run = complete_step(run, plan.steps[0].step_id)
+        run = complete_step(run, plan.steps[0].step_id, evidence_refs=("ev-1",))
         rb = plan_rollback(plan, run, authority="rb_auth")
         _, audit = execute_rollback(rb, run)
         assert isinstance(audit, ExecutionAuditRecord)
@@ -1404,7 +1405,7 @@ class TestRollbackExecute:
         plan = _make_plan()
         approval = create_approval(plan, "u", "auth", "ok")
         run = create_run(plan, (approval,))
-        run = complete_step(run, plan.steps[0].step_id)
+        run = complete_step(run, plan.steps[0].step_id, evidence_refs=("ev-1",))
         rb = plan_rollback(plan, run, authority="rb_auth")
         _, audit = execute_rollback(rb, run)
         assert audit.event_type == "rollback_initiated"
