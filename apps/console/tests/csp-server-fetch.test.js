@@ -43,9 +43,14 @@ test('server-side BFF helpers resolve absolute console URLs before fetch', () =>
   const readinessApi = read('lib/readinessApi.ts');
   const fieldAssessmentApi = read('lib/fieldAssessmentApi.ts');
 
-  assert.match(coreApi, /fetch\(await resolveConsoleUrl\(`\/api\/core\$\{path\}`\), \{/);
-  assert.match(readinessApi, /fetch\(await resolveConsoleUrl\(url\), \{ cache: 'no-store' \}\)/);
-  assert.match(fieldAssessmentApi, /fetch\(await resolveConsoleUrl\(`\$\{BASE\}\$\{path\}`\), \{/);
+  assert.match(coreApi, /const target = `\/api\/core\$\{path\}`[\s\S]*fetch\(await resolveConsoleUrl\(target\), \{/);
+  assert.match(coreApi, /resolveConsoleRequestHeaders/);
+  assert.match(coreApi, /assertConsoleApiResponse\(response, target\)/);
+  assert.match(readinessApi, /fetch\(await resolveConsoleUrl\(url\), \{/);
+  assert.match(readinessApi, /headers: await resolveConsoleRequestHeaders\(\)/);
+  assert.match(readinessApi, /assertConsoleApiResponse\(resp, url\)/);
+  assert.match(fieldAssessmentApi, /fetch\(await resolveConsoleUrl\(target\), \{/);
+  assert.match(fieldAssessmentApi, /assertConsoleApiResponse\(res, target\)/);
 });
 
 test('console URL helper keeps browser fetches relative and fails closed on the server', () => {
@@ -55,6 +60,10 @@ test('console URL helper keeps browser fetches relative and fails closed on the 
   assert.match(helper, /return path;/);
   assert.match(helper, /new URL\(path, await resolveConsoleOrigin\(\)\)\.toString\(\)/);
   assert.match(helper, /Console origin is not configured\. Set CONSOLE_BASE_URL or NEXTAUTH_URL/);
+  assert.match(helper, /resolveConsoleRequestHeaders/);
+  assert.match(helper, /'cookie'/);
+  assert.match(helper, /Server-side fetches must forward auth cookies/);
+  assert.match(helper, /returned HTML instead of an API response/);
 });
 
 test('logout uses a plain navigation anchor instead of a prefetched Next link', () => {

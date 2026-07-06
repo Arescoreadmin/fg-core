@@ -13,7 +13,7 @@
  *  - 404 = resource not found or cross-tenant isolation; UI must not disclose.
  */
 
-import { resolveConsoleUrl } from '@/lib/consoleUrl';
+import { assertConsoleApiResponse, resolveConsoleRequestHeaders, resolveConsoleUrl } from '@/lib/consoleUrl';
 
 const BFF = '/api/core';
 
@@ -27,7 +27,11 @@ export type SafeResult<T> =
 
 async function safeGet<T>(url: string): Promise<SafeResult<T>> {
   try {
-    const resp = await fetch(await resolveConsoleUrl(url), { cache: 'no-store' });
+    const resp = await fetch(await resolveConsoleUrl(url), {
+      cache: 'no-store',
+      headers: await resolveConsoleRequestHeaders(),
+    });
+    assertConsoleApiResponse(resp, url);
     if (!resp.ok) {
       let detail = `HTTP ${resp.status}`;
       try {

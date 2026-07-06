@@ -10,7 +10,7 @@ function read(relPath) {
 test('client API uses BFF /api/core and does not depend on NEXT_PUBLIC_CORE_API_KEY', () => {
   const coreApi = read('lib/coreApi.ts');
   assert.match(coreApi, /resolveConsoleUrl/);
-  assert.match(coreApi, /fetch\(await resolveConsoleUrl\(`\/api\/core\$\{path\}`\), \{/);
+  assert.match(coreApi, /const target = `\/api\/core\$\{path\}`[\s\S]*fetch\(await resolveConsoleUrl\(target\), \{/);
   assert.doesNotMatch(coreApi, /NEXT_PUBLIC_CORE_API_KEY/);
   assert.doesNotMatch(coreApi, /NEXT_PUBLIC_CORE_API_URL/);
 });

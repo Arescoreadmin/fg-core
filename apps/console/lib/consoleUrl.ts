@@ -40,6 +40,14 @@ function getConfiguredConsoleOrigin(): string | null {
   return null;
 }
 
+function isLoginUrl(url: string): boolean {
+  try {
+    return new URL(url).pathname === '/login';
+  } catch {
+    return /\/login(?:[?#]|$)/.test(url);
+  }
+}
+
 export async function resolveConsoleOrigin(): Promise<string> {
   const configuredOrigin = getConfiguredConsoleOrigin();
   if (configuredOrigin) {
@@ -70,4 +78,46 @@ export async function resolveConsoleUrl(path: string): Promise<string> {
   }
 
   return new URL(path, await resolveConsoleOrigin()).toString();
+}
+
+export async function resolveConsoleRequestHeaders(initHeaders?: HeadersInit): Promise<Headers> {
+  const headers = new Headers(initHeaders || {});
+  if (typeof window !== 'undefined') {
+    return headers;
+  }
+
+  const { headers: getHeaders } = await import('next/headers');
+  const incomingHeaders = getHeaders();
+  for (const name of [
+    'cookie',
+    'host',
+    'x-forwarded-host',
+    'x-forwarded-proto',
+    'x-forwarded-for',
+    'x-real-ip',
+    'user-agent',
+  ]) {
+    const value = incomingHeaders.get(name);
+    if (value && !headers.has(name)) {
+      headers.set(name, value);
+    }
+  }
+
+  return headers;
+}
+
+export function assertConsoleApiResponse(response: Response, path: string): void {
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+
+  if (response.redirected && isLoginUrl(response.url)) {
+    throw new Error(
+      `Console BFF request for ${path} was redirected to login. Server-side fetches must forward auth cookies.`,
+    );
+  }
+
+  if (contentType.includes('text/html')) {
+    throw new Error(
+      `Console BFF request for ${path} returned HTML instead of an API response. Check console auth cookie forwarding.`,
+    );
+  }
 }

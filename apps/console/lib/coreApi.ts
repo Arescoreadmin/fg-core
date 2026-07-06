@@ -1,5 +1,5 @@
 import { mapHttpError } from '@/lib/errors';
-import { resolveConsoleUrl } from '@/lib/consoleUrl';
+import { assertConsoleApiResponse, resolveConsoleRequestHeaders, resolveConsoleUrl } from '@/lib/consoleUrl';
 
 export interface DecisionsQuery {
   limit?: number;
@@ -188,16 +188,19 @@ async function request<T>(path: string, init: RequestInit = {}, options: Request
 }
 
 async function requestWithMeta<T>(path: string, init: RequestInit = {}, options: RequestOptions = {}): Promise<ApiResult<T>> {
-  const headers = new Headers(init.headers || {});
+  const headers = await resolveConsoleRequestHeaders(init.headers || {});
   if (!headers.has('Content-Type') && init.method && init.method !== 'GET') {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(await resolveConsoleUrl(`/api/core${path}`), {
+  const target = `/api/core${path}`;
+  const response = await fetch(await resolveConsoleUrl(target), {
     ...init,
     headers,
     cache: 'no-store',
   });
+
+  assertConsoleApiResponse(response, target);
 
   let payload: unknown = null;
   const text = await response.text();
