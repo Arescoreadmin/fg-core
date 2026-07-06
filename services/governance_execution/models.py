@@ -17,6 +17,28 @@ GOVERNANCE_EXECUTION_FINGERPRINT_DOMAIN = "FG_GOVERNANCE_EXECUTION_V1"
 GOVERNANCE_EXECUTION_MCIM_VERSION = "MCIM-18.8.3-GOVERNANCE-EXECUTION"
 
 
+class ExecutionParticipantRole(str, Enum):
+    Vendor = "Vendor"
+    MSP = "MSP"
+    Customer = "Customer"
+    Regulator = "Regulator"
+    Internal = "Internal"
+
+
+class ExecutionWindowType(str, Enum):
+    Maintenance = "Maintenance"
+    Blackout = "Blackout"
+    Emergency = "Emergency"
+    Deferred = "Deferred"
+
+
+class ExternalTicketSystem(str, Enum):
+    ServiceNow = "ServiceNow"
+    Jira = "Jira"
+    AzureDevOps = "AzureDevOps"
+    GitHubIssues = "GitHubIssues"
+
+
 class ExecutionState(str, Enum):
     Draft = "Draft"
     Validated = "Validated"
@@ -164,6 +186,101 @@ class ExecutionRollbackPlan:
 
 
 @dataclass(frozen=True)
+class ExecutionAuthorityMandate:
+    mandate_id: str
+    plan_id: str
+    tenant_id: str
+    planned_authority: str  # who planned/designed the execution
+    approving_authority: str  # who approved it
+    executing_authority: str  # who carries it out
+    verifying_authority: str  # who verifies the outcome
+
+
+@dataclass(frozen=True)
+class ExecutionParticipant:
+    participant_id: str
+    tenant_id: str  # owning tenant
+    org_type: str  # ExecutionParticipantRole value
+    org_name: str
+    org_authority: str
+    contact_ref: str
+    isolation_boundary: str  # what they can and cannot see
+
+
+@dataclass(frozen=True)
+class PolicyException:
+    exception_id: str
+    plan_id: str
+    tenant_id: str
+    policy_ref: str
+    business_justification: str
+    granted_by: str
+    granted_at: str
+    expires_at: str
+    renewal_at: str | None
+    review_at: str | None
+    review_status: str  # "pending" | "renewed" | "expired" | "revoked"
+    fingerprint: str
+
+
+@dataclass(frozen=True)
+class PolicyExceptionLedger:
+    ledger_id: str
+    plan_id: str
+    tenant_id: str
+    exceptions: tuple[PolicyException, ...]
+    ledger_hash: str
+
+
+@dataclass(frozen=True)
+class ExecutionSLATarget:
+    sla_id: str
+    plan_id: str
+    tenant_id: str
+    approval_sla_hours: int | None
+    verification_sla_hours: int | None
+    execution_sla_hours: int | None
+    remediation_sla_hours: int | None
+
+
+@dataclass(frozen=True)
+class ExecutionSLARecord:
+    record_id: str
+    plan_id: str
+    run_id: str
+    tenant_id: str
+    sla_type: str  # "approval" | "verification" | "execution" | "remediation"
+    target_hours: int
+    actual_hours: int | None
+    deadline_at: str
+    completed_at: str | None
+    breached: bool
+
+
+@dataclass(frozen=True)
+class ExecutionChangeWindow:
+    window_id: str
+    plan_id: str
+    tenant_id: str
+    window_type: str  # ExecutionWindowType value
+    window_start: str
+    window_end: str
+    authority: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class ExternalTicketReference:
+    ref_id: str
+    plan_id: str
+    tenant_id: str
+    system: str  # ExternalTicketSystem value
+    ticket_id: str
+    ticket_url: str | None
+    created_at: str
+
+
+@dataclass(frozen=True)
 class ExecutionPlan:
     plan_id: str
     tenant_id: str
@@ -186,6 +303,12 @@ class ExecutionPlan:
     schema_version: str
     plan_fingerprint: str
     lineage: str
+    authority_mandate: ExecutionAuthorityMandate | None = None
+    external_participants: tuple[ExecutionParticipant, ...] = ()
+    policy_exception_ledger: PolicyExceptionLedger | None = None
+    sla_target: ExecutionSLATarget | None = None
+    change_window: ExecutionChangeWindow | None = None
+    external_ticket_refs: tuple[ExternalTicketReference, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -226,6 +349,28 @@ class ExecutionMeasurement:
     verification_quality: str
     limitations: tuple[str, ...]
     supporting_evidence_ids: tuple[str, ...]
+    predicted_governance_delta: int | None = None
+    predicted_control_delta: int | None = None
+    predicted_evidence_delta: int | None = None
+    predicted_compliance_delta: int | None = None
+    predicted_risk_delta: int | None = None
+    predicted_trust_delta: int | None = None
+    predicted_readiness_delta: int | None = None
+    effectiveness_records: tuple[GovernanceEffectivenessRecord, ...] = ()
+
+
+@dataclass(frozen=True)
+class GovernanceEffectivenessRecord:
+    record_id: str
+    plan_id: str
+    run_id: str
+    tenant_id: str
+    domain: str
+    predicted_delta: int | None
+    actual_delta: int | None
+    variance: int | None  # actual - predicted; None if either is None
+    measured_at: str
+    confidence: str  # ExecutionOutcomeConfidence value
 
 
 @dataclass(frozen=True)
@@ -257,6 +402,20 @@ class ExecutionDecisionLedger:
 
 
 @dataclass(frozen=True)
+class ExecutionOverride:
+    override_id: str
+    plan_id: str
+    run_id: str | None
+    tenant_id: str
+    override_reason: str
+    override_authority: str
+    override_evidence_refs: tuple[str, ...]
+    override_expires_at: str | None
+    override_issued_at: str
+    fingerprint: str
+
+
+@dataclass(frozen=True)
 class ExecutionRun:
     run_id: str
     plan_id: str
@@ -275,6 +434,7 @@ class ExecutionRun:
     approvals: tuple[ExecutionApproval, ...]
     rollback_reference: str | None
     run_fingerprint: str
+    overrides: tuple[ExecutionOverride, ...] = ()
 
 
 @dataclass(frozen=True)

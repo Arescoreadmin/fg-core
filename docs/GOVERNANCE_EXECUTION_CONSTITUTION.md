@@ -126,10 +126,18 @@ system configuration outside this engine.
 
 ## Extension Points
 
-The following capabilities are reserved but not implemented in PR 18.8.3:
+The following capabilities are reserved. Schema-reserved items have models and MCIM keys defined in PR 18.8.3 but no behavioral logic.
 
-| Capability | Reserved For |
+| Capability | Status |
 |---|---|
+| Authority Separation (`ExecutionAuthorityMandate`) | Schema reserved, PR 18.8.3 |
+| Multi-Organization Execution (`ExecutionParticipant`) | Schema reserved, PR 18.8.3 |
+| Policy Exception Ledger (`PolicyExceptionLedger`) | Schema reserved, PR 18.8.3 |
+| Human Override Metadata (`ExecutionOverride`) | Schema reserved, PR 18.8.3 |
+| SLA Tracking (`ExecutionSLATarget`, `ExecutionSLARecord`) | Schema reserved, PR 18.8.3 |
+| Change Windows (`ExecutionChangeWindow`) | Schema reserved, PR 18.8.3 |
+| External Ticket References (`ExternalTicketReference`) | Schema reserved, PR 18.8.3 |
+| Governance Effectiveness (`GovernanceEffectivenessRecord`) | Schema reserved, PR 18.8.3 |
 | Adaptive Execution (dynamic step reordering) | Future PR |
 | Policy Optimization (evidence-driven policy updates) | Future PR |
 | Agent Execution (approved agent as approver) | Future PR |
@@ -137,11 +145,10 @@ The following capabilities are reserved but not implemented in PR 18.8.3:
 | Predictive Scheduling (risk-aware scheduling) | Future PR |
 | Continuous Optimization (feedback loop learning) | Future PR |
 | Multi-Agent Governance (agent swarm approval) | Requires AGI governance PR |
-| Human Override (emergency break-glass execution) | Future PR |
 | AGI Supervisory Controls | Requires dedicated AGI governance substrate |
 | Recursive Governance (execution governing execution) | Future PR |
 
-Extension points are stubs only. Implementing them in this package without a dedicated PR violates this constitution.
+Extension points are stubs only. Implementing behavioral logic for reserved schema in this package without a dedicated PR violates this constitution.
 
 ---
 
@@ -214,7 +221,7 @@ Execution must not create parallel metadata registries.
 New execution object types must be registered in `mcim_registration.py` under the established
 `MCIM-18.8.3-EXEC-*` scheme.
 
-Current MCIM registrations (PR 18.8.3):
+Current MCIM registrations (PR 18.8.3) — 23 keys total:
 - `MCIM-18.8.3-EXEC-PLAN`
 - `MCIM-18.8.3-EXEC-RUN`
 - `MCIM-18.8.3-EXEC-DECISION`
@@ -228,3 +235,13 @@ Current MCIM registrations (PR 18.8.3):
 - `MCIM-18.8.3-EXEC-AUTHORITY`
 - `MCIM-18.8.3-EXEC-ROLLBACK`
 - `MCIM-18.8.3-EXEC-AUDIT`
+- `MCIM-18.8.3-EXEC-AUTHORITY-MANDATE`
+- `MCIM-18.8.3-EXEC-PARTICIPANT`
+- `MCIM-18.8.3-EXEC-POLICY-EXCEPTION`
+- `MCIM-18.8.3-EXEC-POLICY-EXCEPTION-LEDGER`
+- `MCIM-18.8.3-EXEC-OVERRIDE`
+- `MCIM-18.8.3-EXEC-SLA-TARGET`
+- `MCIM-18.8.3-EXEC-SLA-RECORD`
+- `MCIM-18.8.3-EXEC-CHANGE-WINDOW`
+- `MCIM-18.8.3-EXEC-TICKET-REF`
+- `MCIM-18.8.3-EXEC-EFFECTIVENESS`

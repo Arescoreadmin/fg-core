@@ -11,12 +11,22 @@ from services.governance_execution.models import (
     GOVERNANCE_EXECUTION_FINGERPRINT_DOMAIN,
     ExecutionApproval,
     ExecutionAuditRecord,
+    ExecutionAuthorityMandate,
+    ExecutionChangeWindow,
     ExecutionDecisionLedger,
     ExecutionMeasurement,
+    ExecutionOverride,
+    ExecutionParticipant,
     ExecutionPlan,
     ExecutionRun,
+    ExecutionSLARecord,
+    ExecutionSLATarget,
     ExecutionStep,
     ExecutionVerification,
+    ExternalTicketReference,
+    GovernanceEffectivenessRecord,
+    PolicyException,
+    PolicyExceptionLedger,
 )
 
 
@@ -141,4 +151,64 @@ def compute_replay_fingerprint(
         "execution_fingerprint": execution_fingerprint,
         "tenant_id": tenant_id,
     }
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_authority_mandate_hash(mandate: ExecutionAuthorityMandate) -> str:
+    """Compute SHA-256 hash of an ExecutionAuthorityMandate."""
+    payload = dataclasses.asdict(mandate)
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_participant_hash(participant: ExecutionParticipant) -> str:
+    """Compute SHA-256 hash of an ExecutionParticipant."""
+    payload = dataclasses.asdict(participant)
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_policy_exception_hash(exception: PolicyException) -> str:
+    """Compute SHA-256 hash of a PolicyException."""
+    payload = dataclasses.asdict(exception)
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_policy_exception_ledger_hash(ledger: PolicyExceptionLedger) -> str:
+    """Compute SHA-256 hash of a PolicyExceptionLedger."""
+    payload = dataclasses.asdict(ledger)
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_override_hash(override: ExecutionOverride) -> str:
+    """Compute SHA-256 hash of an ExecutionOverride."""
+    payload = dataclasses.asdict(override)
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_sla_target_hash(sla_target: ExecutionSLATarget) -> str:
+    """Compute SHA-256 hash of an ExecutionSLATarget."""
+    payload = dataclasses.asdict(sla_target)
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_sla_record_hash(sla_record: ExecutionSLARecord) -> str:
+    """Compute SHA-256 hash of an ExecutionSLARecord."""
+    payload = dataclasses.asdict(sla_record)
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_change_window_hash(change_window: ExecutionChangeWindow) -> str:
+    """Compute SHA-256 hash of an ExecutionChangeWindow."""
+    payload = dataclasses.asdict(change_window)
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_ticket_reference_hash(ref: ExternalTicketReference) -> str:
+    """Compute SHA-256 hash of an ExternalTicketReference."""
+    payload = dataclasses.asdict(ref)
+    return _sha256_hex(canonical_json_bytes(payload))
+
+
+def compute_effectiveness_hash(record: GovernanceEffectivenessRecord) -> str:
+    """Compute SHA-256 hash of a GovernanceEffectivenessRecord."""
+    payload = dataclasses.asdict(record)
     return _sha256_hex(canonical_json_bytes(payload))

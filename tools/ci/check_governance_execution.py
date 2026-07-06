@@ -76,6 +76,16 @@ MCIM_REQUIRED_KEYS = [
     "execution_authority",
     "execution_rollback",
     "execution_audit",
+    "execution_authority_mandate",
+    "execution_participant",
+    "execution_policy_exception",
+    "execution_policy_exception_ledger",
+    "execution_override",
+    "execution_sla_target",
+    "execution_sla_record",
+    "execution_change_window",
+    "execution_ticket_reference",
+    "execution_effectiveness",
 ]
 
 VERSION_CONSTANTS = [
@@ -170,10 +180,25 @@ def main() -> int:
                 f"(expected {const_value!r})"
             )
 
-    # 3. Check MCIM registration has 13 keys
+    # 3. Check MCIM registration has all required keys (now 23)
     for key in MCIM_REQUIRED_KEYS:
         if f'"{key}"' not in mcim_text:
             failures.append(f"mcim_registration.py missing key: {key}")
+
+    # Import and check actual count at runtime
+    try:
+        from services.governance_execution.mcim_registration import (
+            MCIM_REGISTRATION_SOURCE,
+        )
+
+        assert len(MCIM_REGISTRATION_SOURCE) >= 23, (
+            f"MCIM_REGISTRATION_SOURCE has {len(MCIM_REGISTRATION_SOURCE)} keys, "
+            f"expected >= 23"
+        )
+    except AssertionError as exc:
+        failures.append(str(exc))
+    except ImportError:
+        pass  # covered by file existence check above
 
     if "MCIM_REGISTRATION_SOURCE" not in mcim_text:
         failures.append("mcim_registration.py missing MCIM_REGISTRATION_SOURCE")

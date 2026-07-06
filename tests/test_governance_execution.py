@@ -47,6 +47,7 @@ from services.governance_execution.models import (
     ExecutionRun,
     ExecutionValidationFinding,
     ExecutionValidationReport,
+    PolicyException,
 )
 from services.governance_execution.registry import (
     APPROVAL_TYPE_REGISTRY,
@@ -1730,7 +1731,7 @@ class TestMcimRegistration:
             "execution_rollback",
             "execution_audit",
         }
-        assert set(MCIM_REGISTRATION_SOURCE.keys()) == expected_keys
+        assert set(MCIM_REGISTRATION_SOURCE.keys()).issuperset(expected_keys)
 
     def test_execution_plan_mcim_value(self) -> None:
         assert MCIM_REGISTRATION_SOURCE["execution_plan"] == "MCIM-18.8.3-EXEC-PLAN"
@@ -2265,3 +2266,1173 @@ class TestValidationReportFields:
         report = validate_execution_plan(plan)
         with pytest.raises((TypeError, dataclasses.FrozenInstanceError)):
             report.valid = False  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# 50. ExecutionAuthorityMandate
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionAuthorityMandate:
+    def test_construction(self) -> None:
+        from services.governance_execution.models import ExecutionAuthorityMandate
+
+        mandate = ExecutionAuthorityMandate(
+            mandate_id="man-001",
+            plan_id="plan-001",
+            tenant_id="tenant-a",
+            planned_authority="planner_auth",
+            approving_authority="approver_auth",
+            executing_authority="executor_auth",
+            verifying_authority="verifier_auth",
+        )
+        assert mandate.mandate_id == "man-001"
+
+    def test_all_four_authority_fields_present(self) -> None:
+        from services.governance_execution.models import ExecutionAuthorityMandate
+
+        mandate = ExecutionAuthorityMandate(
+            mandate_id="man-002",
+            plan_id="plan-002",
+            tenant_id="tenant-b",
+            planned_authority="pa",
+            approving_authority="aa",
+            executing_authority="ea",
+            verifying_authority="va",
+        )
+        assert mandate.planned_authority == "pa"
+        assert mandate.approving_authority == "aa"
+        assert mandate.executing_authority == "ea"
+        assert mandate.verifying_authority == "va"
+
+    def test_frozen(self) -> None:
+        from services.governance_execution.models import ExecutionAuthorityMandate
+
+        mandate = ExecutionAuthorityMandate(
+            mandate_id="man-003",
+            plan_id="p",
+            tenant_id="t",
+            planned_authority="pa",
+            approving_authority="aa",
+            executing_authority="ea",
+            verifying_authority="va",
+        )
+        with pytest.raises((TypeError, dataclasses.FrozenInstanceError)):
+            mandate.mandate_id = "changed"  # type: ignore[misc]
+
+    def test_plan_authority_mandate_default_is_none(self) -> None:
+        plan = _make_plan()
+        assert plan.authority_mandate is None
+
+    def test_plan_accepts_authority_mandate(self) -> None:
+        from services.governance_execution.models import ExecutionAuthorityMandate
+
+        plan = _make_plan()
+        mandate = ExecutionAuthorityMandate(
+            mandate_id="man-set",
+            plan_id=plan.plan_id,
+            tenant_id=plan.tenant_id,
+            planned_authority="pa",
+            approving_authority="aa",
+            executing_authority="ea",
+            verifying_authority="va",
+        )
+        updated_plan = dataclasses.replace(plan, authority_mandate=mandate)
+        assert updated_plan.authority_mandate is not None
+        assert updated_plan.authority_mandate.mandate_id == "man-set"
+
+
+# ---------------------------------------------------------------------------
+# 51. ExecutionParticipant
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionParticipant:
+    def test_construction(self) -> None:
+        from services.governance_execution.models import ExecutionParticipant
+
+        p = ExecutionParticipant(
+            participant_id="part-001",
+            tenant_id="tenant-a",
+            org_type="Vendor",
+            org_name="Acme Corp",
+            org_authority="acme_auth",
+            contact_ref="contact@acme.example",
+            isolation_boundary="read-only governance data",
+        )
+        assert p.participant_id == "part-001"
+
+    def test_all_five_role_enum_values(self) -> None:
+        from services.governance_execution.models import ExecutionParticipantRole
+
+        roles = {r.value for r in ExecutionParticipantRole}
+        assert roles == {"Vendor", "MSP", "Customer", "Regulator", "Internal"}
+
+    def test_frozen(self) -> None:
+        from services.governance_execution.models import ExecutionParticipant
+
+        p = ExecutionParticipant(
+            participant_id="part-002",
+            tenant_id="t",
+            org_type="MSP",
+            org_name="MSP Co",
+            org_authority="msp_auth",
+            contact_ref="ref",
+            isolation_boundary="none",
+        )
+        with pytest.raises((TypeError, dataclasses.FrozenInstanceError)):
+            p.org_name = "changed"  # type: ignore[misc]
+
+    def test_plan_external_participants_default_empty(self) -> None:
+        plan = _make_plan()
+        assert plan.external_participants == ()
+
+    def test_plan_accepts_participants(self) -> None:
+        from services.governance_execution.models import ExecutionParticipant
+
+        plan = _make_plan()
+        p = ExecutionParticipant(
+            participant_id="part-003",
+            tenant_id=plan.tenant_id,
+            org_type="Customer",
+            org_name="Cust Corp",
+            org_authority="cust_auth",
+            contact_ref="ref",
+            isolation_boundary="plans only",
+        )
+        updated = dataclasses.replace(plan, external_participants=(p,))
+        assert len(updated.external_participants) == 1
+
+
+# ---------------------------------------------------------------------------
+# 52. PolicyException
+# ---------------------------------------------------------------------------
+
+
+class TestPolicyException:
+    def test_construction(self) -> None:
+        from services.governance_execution.models import PolicyException
+
+        exc = PolicyException(
+            exception_id="exc-001",
+            plan_id="plan-001",
+            tenant_id="tenant-a",
+            policy_ref="pol-001",
+            business_justification="critical system maintenance",
+            granted_by="ciso@example.com",
+            granted_at="2026-07-01T00:00:00Z",
+            expires_at="2026-08-01T00:00:00Z",
+            renewal_at=None,
+            review_at="2026-07-15T00:00:00Z",
+            review_status="pending",
+            fingerprint="abc123",
+        )
+        assert exc.exception_id == "exc-001"
+
+    def test_review_status_values(self) -> None:
+        from services.governance_execution.models import PolicyException
+
+        for status in ("pending", "renewed", "expired", "revoked"):
+            exc = PolicyException(
+                exception_id="exc",
+                plan_id="p",
+                tenant_id="t",
+                policy_ref="pol",
+                business_justification="bj",
+                granted_by="gb",
+                granted_at="2026-01-01T00:00:00Z",
+                expires_at="2026-12-31T00:00:00Z",
+                renewal_at=None,
+                review_at=None,
+                review_status=status,
+                fingerprint="fp",
+            )
+            assert exc.review_status == status
+
+    def test_fingerprint_field(self) -> None:
+        from services.governance_execution.models import PolicyException
+
+        exc = PolicyException(
+            exception_id="exc-fp",
+            plan_id="p",
+            tenant_id="t",
+            policy_ref="pol",
+            business_justification="bj",
+            granted_by="gb",
+            granted_at="2026-01-01T00:00:00Z",
+            expires_at="2026-12-31T00:00:00Z",
+            renewal_at=None,
+            review_at=None,
+            review_status="pending",
+            fingerprint="fp-value",
+        )
+        assert exc.fingerprint == "fp-value"
+
+    def test_frozen(self) -> None:
+        from services.governance_execution.models import PolicyException
+
+        exc = PolicyException(
+            exception_id="exc-frozen",
+            plan_id="p",
+            tenant_id="t",
+            policy_ref="pol",
+            business_justification="bj",
+            granted_by="gb",
+            granted_at="2026-01-01T00:00:00Z",
+            expires_at="2026-12-31T00:00:00Z",
+            renewal_at=None,
+            review_at=None,
+            review_status="pending",
+            fingerprint="fp",
+        )
+        with pytest.raises((TypeError, dataclasses.FrozenInstanceError)):
+            exc.review_status = "expired"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# 53. PolicyExceptionLedger
+# ---------------------------------------------------------------------------
+
+
+class TestPolicyExceptionLedger:
+    def _make_exception(self) -> PolicyException:
+        from services.governance_execution.models import PolicyException
+
+        return PolicyException(
+            exception_id="exc-l1",
+            plan_id="plan-l1",
+            tenant_id="tenant-a",
+            policy_ref="pol-l1",
+            business_justification="bj",
+            granted_by="gb",
+            granted_at="2026-01-01T00:00:00Z",
+            expires_at="2026-12-31T00:00:00Z",
+            renewal_at=None,
+            review_at=None,
+            review_status="pending",
+            fingerprint="fp-l1",
+        )
+
+    def test_construction(self) -> None:
+        from services.governance_execution.models import PolicyExceptionLedger
+
+        exc = self._make_exception()
+        ledger = PolicyExceptionLedger(
+            ledger_id="led-l1",
+            plan_id="plan-l1",
+            tenant_id="tenant-a",
+            exceptions=(exc,),
+            ledger_hash="lh-001",
+        )
+        assert ledger.ledger_id == "led-l1"
+
+    def test_exceptions_tuple(self) -> None:
+        from services.governance_execution.models import PolicyExceptionLedger
+
+        exc = self._make_exception()
+        ledger = PolicyExceptionLedger(
+            ledger_id="led-l2",
+            plan_id="plan-l1",
+            tenant_id="tenant-a",
+            exceptions=(exc,),
+            ledger_hash="lh-002",
+        )
+        assert len(ledger.exceptions) == 1
+        assert ledger.exceptions[0].exception_id == "exc-l1"
+
+    def test_ledger_hash_field(self) -> None:
+        from services.governance_execution.models import PolicyExceptionLedger
+
+        ledger = PolicyExceptionLedger(
+            ledger_id="led-l3",
+            plan_id="plan-l3",
+            tenant_id="t",
+            exceptions=(),
+            ledger_hash="hash-value",
+        )
+        assert ledger.ledger_hash == "hash-value"
+
+    def test_plan_policy_exception_ledger_default_is_none(self) -> None:
+        plan = _make_plan()
+        assert plan.policy_exception_ledger is None
+
+
+# ---------------------------------------------------------------------------
+# 54. ExecutionOverride
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionOverride:
+    def test_construction(self) -> None:
+        from services.governance_execution.models import ExecutionOverride
+
+        ov = ExecutionOverride(
+            override_id="ov-001",
+            plan_id="plan-001",
+            run_id="run-001",
+            tenant_id="tenant-a",
+            override_reason="emergency break-glass",
+            override_authority="ciso@example.com",
+            override_evidence_refs=("ev-001",),
+            override_expires_at="2026-08-01T00:00:00Z",
+            override_issued_at="2026-07-06T00:00:00Z",
+            fingerprint="fp-ov-001",
+        )
+        assert ov.override_id == "ov-001"
+
+    def test_frozen(self) -> None:
+        from services.governance_execution.models import ExecutionOverride
+
+        ov = ExecutionOverride(
+            override_id="ov-frozen",
+            plan_id="p",
+            run_id=None,
+            tenant_id="t",
+            override_reason="r",
+            override_authority="a",
+            override_evidence_refs=(),
+            override_expires_at=None,
+            override_issued_at="2026-07-06T00:00:00Z",
+            fingerprint="fp",
+        )
+        with pytest.raises((TypeError, dataclasses.FrozenInstanceError)):
+            ov.override_reason = "changed"  # type: ignore[misc]
+
+    def test_run_default_overrides_is_empty_tuple(self) -> None:
+        plan = _make_plan()
+        approval = create_approval(plan, "u", "auth", "ok")
+        run = create_run(plan, (approval,))
+        assert run.overrides == ()
+
+    def test_run_id_nullable(self) -> None:
+        from services.governance_execution.models import ExecutionOverride
+
+        ov = ExecutionOverride(
+            override_id="ov-no-run",
+            plan_id="p",
+            run_id=None,
+            tenant_id="t",
+            override_reason="pre-run override",
+            override_authority="a",
+            override_evidence_refs=(),
+            override_expires_at=None,
+            override_issued_at="2026-07-06T00:00:00Z",
+            fingerprint="fp",
+        )
+        assert ov.run_id is None
+
+
+# ---------------------------------------------------------------------------
+# 55. ExecutionSLATarget
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionSLATarget:
+    def test_construction(self) -> None:
+        from services.governance_execution.models import ExecutionSLATarget
+
+        sla = ExecutionSLATarget(
+            sla_id="sla-001",
+            plan_id="plan-001",
+            tenant_id="tenant-a",
+            approval_sla_hours=24,
+            verification_sla_hours=8,
+            execution_sla_hours=48,
+            remediation_sla_hours=72,
+        )
+        assert sla.sla_id == "sla-001"
+
+    def test_all_four_sla_fields(self) -> None:
+        from services.governance_execution.models import ExecutionSLATarget
+
+        sla = ExecutionSLATarget(
+            sla_id="sla-002",
+            plan_id="p",
+            tenant_id="t",
+            approval_sla_hours=4,
+            verification_sla_hours=2,
+            execution_sla_hours=6,
+            remediation_sla_hours=12,
+        )
+        assert sla.approval_sla_hours == 4
+        assert sla.verification_sla_hours == 2
+        assert sla.execution_sla_hours == 6
+        assert sla.remediation_sla_hours == 12
+
+    def test_nullable_sla_hours(self) -> None:
+        from services.governance_execution.models import ExecutionSLATarget
+
+        sla = ExecutionSLATarget(
+            sla_id="sla-003",
+            plan_id="p",
+            tenant_id="t",
+            approval_sla_hours=None,
+            verification_sla_hours=None,
+            execution_sla_hours=None,
+            remediation_sla_hours=None,
+        )
+        assert sla.approval_sla_hours is None
+
+    def test_plan_sla_target_default_is_none(self) -> None:
+        plan = _make_plan()
+        assert plan.sla_target is None
+
+
+# ---------------------------------------------------------------------------
+# 56. ExecutionSLARecord
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionSLARecord:
+    def test_construction(self) -> None:
+        from services.governance_execution.models import ExecutionSLARecord
+
+        rec = ExecutionSLARecord(
+            record_id="rec-sla-001",
+            plan_id="plan-001",
+            run_id="run-001",
+            tenant_id="tenant-a",
+            sla_type="approval",
+            target_hours=24,
+            actual_hours=20,
+            deadline_at="2026-07-07T00:00:00Z",
+            completed_at="2026-07-06T20:00:00Z",
+            breached=False,
+        )
+        assert rec.record_id == "rec-sla-001"
+
+    def test_sla_type_values(self) -> None:
+        from services.governance_execution.models import ExecutionSLARecord
+
+        for sla_type in ("approval", "verification", "execution", "remediation"):
+            rec = ExecutionSLARecord(
+                record_id="r",
+                plan_id="p",
+                run_id="run",
+                tenant_id="t",
+                sla_type=sla_type,
+                target_hours=8,
+                actual_hours=None,
+                deadline_at="2026-07-07T00:00:00Z",
+                completed_at=None,
+                breached=False,
+            )
+            assert rec.sla_type == sla_type
+
+    def test_breached_flag(self) -> None:
+        from services.governance_execution.models import ExecutionSLARecord
+
+        breached = ExecutionSLARecord(
+            record_id="r-b",
+            plan_id="p",
+            run_id="run",
+            tenant_id="t",
+            sla_type="execution",
+            target_hours=24,
+            actual_hours=30,
+            deadline_at="2026-07-07T00:00:00Z",
+            completed_at="2026-07-08T06:00:00Z",
+            breached=True,
+        )
+        assert breached.breached is True
+
+    def test_not_breached(self) -> None:
+        from services.governance_execution.models import ExecutionSLARecord
+
+        rec = ExecutionSLARecord(
+            record_id="r-nb",
+            plan_id="p",
+            run_id="run",
+            tenant_id="t",
+            sla_type="verification",
+            target_hours=8,
+            actual_hours=6,
+            deadline_at="2026-07-07T08:00:00Z",
+            completed_at="2026-07-07T06:00:00Z",
+            breached=False,
+        )
+        assert rec.breached is False
+
+
+# ---------------------------------------------------------------------------
+# 57. ExecutionChangeWindow
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionChangeWindow:
+    def test_construction(self) -> None:
+        from services.governance_execution.models import ExecutionChangeWindow
+
+        cw = ExecutionChangeWindow(
+            window_id="cw-001",
+            plan_id="plan-001",
+            tenant_id="tenant-a",
+            window_type="Maintenance",
+            window_start="2026-07-06T02:00:00Z",
+            window_end="2026-07-06T04:00:00Z",
+            authority="change_board",
+            reason="scheduled maintenance window",
+        )
+        assert cw.window_id == "cw-001"
+
+    def test_all_four_window_types(self) -> None:
+        from services.governance_execution.models import ExecutionWindowType
+
+        types = {wt.value for wt in ExecutionWindowType}
+        assert types == {"Maintenance", "Blackout", "Emergency", "Deferred"}
+
+    def test_frozen(self) -> None:
+        from services.governance_execution.models import ExecutionChangeWindow
+
+        cw = ExecutionChangeWindow(
+            window_id="cw-frozen",
+            plan_id="p",
+            tenant_id="t",
+            window_type="Blackout",
+            window_start="2026-07-06T00:00:00Z",
+            window_end="2026-07-07T00:00:00Z",
+            authority="a",
+            reason="r",
+        )
+        with pytest.raises((TypeError, dataclasses.FrozenInstanceError)):
+            cw.window_type = "Emergency"  # type: ignore[misc]
+
+    def test_plan_change_window_default_is_none(self) -> None:
+        plan = _make_plan()
+        assert plan.change_window is None
+
+
+# ---------------------------------------------------------------------------
+# 58. ExternalTicketReference
+# ---------------------------------------------------------------------------
+
+
+class TestExternalTicketReference:
+    def test_construction(self) -> None:
+        from services.governance_execution.models import ExternalTicketReference
+
+        ref = ExternalTicketReference(
+            ref_id="ref-001",
+            plan_id="plan-001",
+            tenant_id="tenant-a",
+            system="ServiceNow",
+            ticket_id="INC0001234",
+            ticket_url="https://example.service-now.com/INC0001234",
+            created_at="2026-07-06T00:00:00Z",
+        )
+        assert ref.ref_id == "ref-001"
+
+    def test_all_four_ticket_systems(self) -> None:
+        from services.governance_execution.models import ExternalTicketSystem
+
+        systems = {s.value for s in ExternalTicketSystem}
+        assert systems == {"ServiceNow", "Jira", "AzureDevOps", "GitHubIssues"}
+
+    def test_frozen(self) -> None:
+        from services.governance_execution.models import ExternalTicketReference
+
+        ref = ExternalTicketReference(
+            ref_id="ref-frozen",
+            plan_id="p",
+            tenant_id="t",
+            system="Jira",
+            ticket_id="PROJ-123",
+            ticket_url=None,
+            created_at="2026-07-06T00:00:00Z",
+        )
+        with pytest.raises((TypeError, dataclasses.FrozenInstanceError)):
+            ref.ticket_id = "changed"  # type: ignore[misc]
+
+    def test_plan_external_ticket_refs_default_empty(self) -> None:
+        plan = _make_plan()
+        assert plan.external_ticket_refs == ()
+
+    def test_ticket_url_nullable(self) -> None:
+        from services.governance_execution.models import ExternalTicketReference
+
+        ref = ExternalTicketReference(
+            ref_id="ref-no-url",
+            plan_id="p",
+            tenant_id="t",
+            system="AzureDevOps",
+            ticket_id="12345",
+            ticket_url=None,
+            created_at="2026-07-06T00:00:00Z",
+        )
+        assert ref.ticket_url is None
+
+
+# ---------------------------------------------------------------------------
+# 59. GovernanceEffectivenessRecord
+# ---------------------------------------------------------------------------
+
+
+class TestGovernanceEffectivenessRecord:
+    def test_construction(self) -> None:
+        from services.governance_execution.models import GovernanceEffectivenessRecord
+
+        rec = GovernanceEffectivenessRecord(
+            record_id="ger-001",
+            plan_id="plan-001",
+            run_id="run-001",
+            tenant_id="tenant-a",
+            domain="governance",
+            predicted_delta=10,
+            actual_delta=8,
+            variance=-2,
+            measured_at="2026-07-06T00:00:00Z",
+            confidence="PROVEN",
+        )
+        assert rec.record_id == "ger-001"
+
+    def test_variance_field(self) -> None:
+        from services.governance_execution.models import GovernanceEffectivenessRecord
+
+        rec = GovernanceEffectivenessRecord(
+            record_id="ger-v",
+            plan_id="p",
+            run_id="r",
+            tenant_id="t",
+            domain="compliance",
+            predicted_delta=5,
+            actual_delta=7,
+            variance=2,
+            measured_at="2026-07-06T00:00:00Z",
+            confidence="INFERRED",
+        )
+        assert rec.variance == 2
+
+    def test_variance_none_when_deltas_unknown(self) -> None:
+        from services.governance_execution.models import GovernanceEffectivenessRecord
+
+        rec = GovernanceEffectivenessRecord(
+            record_id="ger-null",
+            plan_id="p",
+            run_id="r",
+            tenant_id="t",
+            domain="risk",
+            predicted_delta=None,
+            actual_delta=None,
+            variance=None,
+            measured_at="2026-07-06T00:00:00Z",
+            confidence="UNKNOWN",
+        )
+        assert rec.variance is None
+
+    def test_effectiveness_records_default_on_measurement(self) -> None:
+        plan = _make_plan()
+        approval = create_approval(plan, "u", "auth", "ok")
+        run = create_run(plan, (approval,))
+        m = measure_outcome(run, ())
+        assert m.effectiveness_records == ()
+
+    def test_predicted_deltas_default_none_on_measurement(self) -> None:
+        plan = _make_plan()
+        approval = create_approval(plan, "u", "auth", "ok")
+        run = create_run(plan, (approval,))
+        m = measure_outcome(run, ())
+        assert m.predicted_governance_delta is None
+        assert m.predicted_risk_delta is None
+        assert m.predicted_compliance_delta is None
+
+
+# ---------------------------------------------------------------------------
+# 60. New fingerprint functions
+# ---------------------------------------------------------------------------
+
+
+class TestNewFingerprintFunctions:
+    def test_authority_mandate_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_authority_mandate_hash,
+        )
+        from services.governance_execution.models import ExecutionAuthorityMandate
+
+        mandate = ExecutionAuthorityMandate(
+            mandate_id="m",
+            plan_id="p",
+            tenant_id="t",
+            planned_authority="pa",
+            approving_authority="aa",
+            executing_authority="ea",
+            verifying_authority="va",
+        )
+        h = compute_authority_mandate_hash(mandate)
+        assert len(h) == 64
+
+    def test_authority_mandate_hash_deterministic(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_authority_mandate_hash,
+        )
+        from services.governance_execution.models import ExecutionAuthorityMandate
+
+        mandate = ExecutionAuthorityMandate(
+            mandate_id="m",
+            plan_id="p",
+            tenant_id="t",
+            planned_authority="pa",
+            approving_authority="aa",
+            executing_authority="ea",
+            verifying_authority="va",
+        )
+        assert compute_authority_mandate_hash(
+            mandate
+        ) == compute_authority_mandate_hash(mandate)
+
+    def test_authority_mandate_hash_sensitive(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_authority_mandate_hash,
+        )
+        from services.governance_execution.models import ExecutionAuthorityMandate
+
+        m1 = ExecutionAuthorityMandate(
+            mandate_id="m1",
+            plan_id="p",
+            tenant_id="t",
+            planned_authority="pa",
+            approving_authority="aa",
+            executing_authority="ea",
+            verifying_authority="va",
+        )
+        m2 = dataclasses.replace(m1, mandate_id="m2")
+        assert compute_authority_mandate_hash(m1) != compute_authority_mandate_hash(m2)
+
+    def test_participant_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import compute_participant_hash
+        from services.governance_execution.models import ExecutionParticipant
+
+        p = ExecutionParticipant(
+            participant_id="p1",
+            tenant_id="t",
+            org_type="Vendor",
+            org_name="Acme",
+            org_authority="auth",
+            contact_ref="ref",
+            isolation_boundary="none",
+        )
+        assert len(compute_participant_hash(p)) == 64
+
+    def test_participant_hash_deterministic(self) -> None:
+        from services.governance_execution.fingerprint import compute_participant_hash
+        from services.governance_execution.models import ExecutionParticipant
+
+        p = ExecutionParticipant(
+            participant_id="p1",
+            tenant_id="t",
+            org_type="Vendor",
+            org_name="Acme",
+            org_authority="auth",
+            contact_ref="ref",
+            isolation_boundary="none",
+        )
+        assert compute_participant_hash(p) == compute_participant_hash(p)
+
+    def test_policy_exception_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_policy_exception_hash,
+        )
+        from services.governance_execution.models import PolicyException
+
+        exc = PolicyException(
+            exception_id="e1",
+            plan_id="p",
+            tenant_id="t",
+            policy_ref="pol",
+            business_justification="bj",
+            granted_by="gb",
+            granted_at="2026-01-01T00:00:00Z",
+            expires_at="2026-12-31T00:00:00Z",
+            renewal_at=None,
+            review_at=None,
+            review_status="pending",
+            fingerprint="fp",
+        )
+        assert len(compute_policy_exception_hash(exc)) == 64
+
+    def test_policy_exception_hash_deterministic(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_policy_exception_hash,
+        )
+        from services.governance_execution.models import PolicyException
+
+        exc = PolicyException(
+            exception_id="e1",
+            plan_id="p",
+            tenant_id="t",
+            policy_ref="pol",
+            business_justification="bj",
+            granted_by="gb",
+            granted_at="2026-01-01T00:00:00Z",
+            expires_at="2026-12-31T00:00:00Z",
+            renewal_at=None,
+            review_at=None,
+            review_status="pending",
+            fingerprint="fp",
+        )
+        assert compute_policy_exception_hash(exc) == compute_policy_exception_hash(exc)
+
+    def test_policy_exception_hash_sensitive(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_policy_exception_hash,
+        )
+        from services.governance_execution.models import PolicyException
+
+        base = PolicyException(
+            exception_id="e1",
+            plan_id="p",
+            tenant_id="t",
+            policy_ref="pol",
+            business_justification="bj",
+            granted_by="gb",
+            granted_at="2026-01-01T00:00:00Z",
+            expires_at="2026-12-31T00:00:00Z",
+            renewal_at=None,
+            review_at=None,
+            review_status="pending",
+            fingerprint="fp",
+        )
+        changed = dataclasses.replace(base, exception_id="e2")
+        assert compute_policy_exception_hash(base) != compute_policy_exception_hash(
+            changed
+        )
+
+    def test_policy_exception_ledger_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_policy_exception_ledger_hash,
+        )
+        from services.governance_execution.models import PolicyExceptionLedger
+
+        ledger = PolicyExceptionLedger(
+            ledger_id="l1",
+            plan_id="p",
+            tenant_id="t",
+            exceptions=(),
+            ledger_hash="",
+        )
+        assert len(compute_policy_exception_ledger_hash(ledger)) == 64
+
+    def test_override_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import compute_override_hash
+        from services.governance_execution.models import ExecutionOverride
+
+        ov = ExecutionOverride(
+            override_id="ov1",
+            plan_id="p",
+            run_id=None,
+            tenant_id="t",
+            override_reason="r",
+            override_authority="a",
+            override_evidence_refs=(),
+            override_expires_at=None,
+            override_issued_at="2026-07-06T00:00:00Z",
+            fingerprint="fp",
+        )
+        assert len(compute_override_hash(ov)) == 64
+
+    def test_override_hash_deterministic(self) -> None:
+        from services.governance_execution.fingerprint import compute_override_hash
+        from services.governance_execution.models import ExecutionOverride
+
+        ov = ExecutionOverride(
+            override_id="ov1",
+            plan_id="p",
+            run_id=None,
+            tenant_id="t",
+            override_reason="r",
+            override_authority="a",
+            override_evidence_refs=(),
+            override_expires_at=None,
+            override_issued_at="2026-07-06T00:00:00Z",
+            fingerprint="fp",
+        )
+        assert compute_override_hash(ov) == compute_override_hash(ov)
+
+    def test_override_hash_sensitive(self) -> None:
+        from services.governance_execution.fingerprint import compute_override_hash
+        from services.governance_execution.models import ExecutionOverride
+
+        ov1 = ExecutionOverride(
+            override_id="ov1",
+            plan_id="p",
+            run_id=None,
+            tenant_id="t",
+            override_reason="r",
+            override_authority="a",
+            override_evidence_refs=(),
+            override_expires_at=None,
+            override_issued_at="2026-07-06T00:00:00Z",
+            fingerprint="fp",
+        )
+        ov2 = dataclasses.replace(ov1, override_id="ov2")
+        assert compute_override_hash(ov1) != compute_override_hash(ov2)
+
+    def test_sla_target_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import compute_sla_target_hash
+        from services.governance_execution.models import ExecutionSLATarget
+
+        sla = ExecutionSLATarget(
+            sla_id="s1",
+            plan_id="p",
+            tenant_id="t",
+            approval_sla_hours=24,
+            verification_sla_hours=8,
+            execution_sla_hours=48,
+            remediation_sla_hours=72,
+        )
+        assert len(compute_sla_target_hash(sla)) == 64
+
+    def test_sla_target_hash_deterministic(self) -> None:
+        from services.governance_execution.fingerprint import compute_sla_target_hash
+        from services.governance_execution.models import ExecutionSLATarget
+
+        sla = ExecutionSLATarget(
+            sla_id="s1",
+            plan_id="p",
+            tenant_id="t",
+            approval_sla_hours=24,
+            verification_sla_hours=8,
+            execution_sla_hours=48,
+            remediation_sla_hours=72,
+        )
+        assert compute_sla_target_hash(sla) == compute_sla_target_hash(sla)
+
+    def test_sla_record_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import compute_sla_record_hash
+        from services.governance_execution.models import ExecutionSLARecord
+
+        rec = ExecutionSLARecord(
+            record_id="sr1",
+            plan_id="p",
+            run_id="r",
+            tenant_id="t",
+            sla_type="approval",
+            target_hours=24,
+            actual_hours=20,
+            deadline_at="2026-07-07T00:00:00Z",
+            completed_at="2026-07-06T20:00:00Z",
+            breached=False,
+        )
+        assert len(compute_sla_record_hash(rec)) == 64
+
+    def test_sla_record_hash_deterministic(self) -> None:
+        from services.governance_execution.fingerprint import compute_sla_record_hash
+        from services.governance_execution.models import ExecutionSLARecord
+
+        rec = ExecutionSLARecord(
+            record_id="sr1",
+            plan_id="p",
+            run_id="r",
+            tenant_id="t",
+            sla_type="approval",
+            target_hours=24,
+            actual_hours=20,
+            deadline_at="2026-07-07T00:00:00Z",
+            completed_at="2026-07-06T20:00:00Z",
+            breached=False,
+        )
+        assert compute_sla_record_hash(rec) == compute_sla_record_hash(rec)
+
+    def test_change_window_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import compute_change_window_hash
+        from services.governance_execution.models import ExecutionChangeWindow
+
+        cw = ExecutionChangeWindow(
+            window_id="cw1",
+            plan_id="p",
+            tenant_id="t",
+            window_type="Maintenance",
+            window_start="2026-07-06T02:00:00Z",
+            window_end="2026-07-06T04:00:00Z",
+            authority="a",
+            reason="r",
+        )
+        assert len(compute_change_window_hash(cw)) == 64
+
+    def test_change_window_hash_deterministic(self) -> None:
+        from services.governance_execution.fingerprint import compute_change_window_hash
+        from services.governance_execution.models import ExecutionChangeWindow
+
+        cw = ExecutionChangeWindow(
+            window_id="cw1",
+            plan_id="p",
+            tenant_id="t",
+            window_type="Blackout",
+            window_start="2026-07-06T00:00:00Z",
+            window_end="2026-07-07T00:00:00Z",
+            authority="a",
+            reason="r",
+        )
+        assert compute_change_window_hash(cw) == compute_change_window_hash(cw)
+
+    def test_change_window_hash_sensitive(self) -> None:
+        from services.governance_execution.fingerprint import compute_change_window_hash
+        from services.governance_execution.models import ExecutionChangeWindow
+
+        cw1 = ExecutionChangeWindow(
+            window_id="cw1",
+            plan_id="p",
+            tenant_id="t",
+            window_type="Maintenance",
+            window_start="2026-07-06T02:00:00Z",
+            window_end="2026-07-06T04:00:00Z",
+            authority="a",
+            reason="r",
+        )
+        cw2 = dataclasses.replace(cw1, window_id="cw2")
+        assert compute_change_window_hash(cw1) != compute_change_window_hash(cw2)
+
+    def test_ticket_reference_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_ticket_reference_hash,
+        )
+        from services.governance_execution.models import ExternalTicketReference
+
+        ref = ExternalTicketReference(
+            ref_id="r1",
+            plan_id="p",
+            tenant_id="t",
+            system="ServiceNow",
+            ticket_id="INC001",
+            ticket_url=None,
+            created_at="2026-07-06T00:00:00Z",
+        )
+        assert len(compute_ticket_reference_hash(ref)) == 64
+
+    def test_ticket_reference_hash_deterministic(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_ticket_reference_hash,
+        )
+        from services.governance_execution.models import ExternalTicketReference
+
+        ref = ExternalTicketReference(
+            ref_id="r1",
+            plan_id="p",
+            tenant_id="t",
+            system="Jira",
+            ticket_id="PROJ-1",
+            ticket_url=None,
+            created_at="2026-07-06T00:00:00Z",
+        )
+        assert compute_ticket_reference_hash(ref) == compute_ticket_reference_hash(ref)
+
+    def test_ticket_reference_hash_sensitive(self) -> None:
+        from services.governance_execution.fingerprint import (
+            compute_ticket_reference_hash,
+        )
+        from services.governance_execution.models import ExternalTicketReference
+
+        r1 = ExternalTicketReference(
+            ref_id="r1",
+            plan_id="p",
+            tenant_id="t",
+            system="Jira",
+            ticket_id="PROJ-1",
+            ticket_url=None,
+            created_at="2026-07-06T00:00:00Z",
+        )
+        r2 = dataclasses.replace(r1, ref_id="r2")
+        assert compute_ticket_reference_hash(r1) != compute_ticket_reference_hash(r2)
+
+    def test_effectiveness_hash_64_chars(self) -> None:
+        from services.governance_execution.fingerprint import compute_effectiveness_hash
+        from services.governance_execution.models import GovernanceEffectivenessRecord
+
+        rec = GovernanceEffectivenessRecord(
+            record_id="ger1",
+            plan_id="p",
+            run_id="r",
+            tenant_id="t",
+            domain="governance",
+            predicted_delta=5,
+            actual_delta=4,
+            variance=-1,
+            measured_at="2026-07-06T00:00:00Z",
+            confidence="PROVEN",
+        )
+        assert len(compute_effectiveness_hash(rec)) == 64
+
+    def test_effectiveness_hash_deterministic(self) -> None:
+        from services.governance_execution.fingerprint import compute_effectiveness_hash
+        from services.governance_execution.models import GovernanceEffectivenessRecord
+
+        rec = GovernanceEffectivenessRecord(
+            record_id="ger1",
+            plan_id="p",
+            run_id="r",
+            tenant_id="t",
+            domain="governance",
+            predicted_delta=5,
+            actual_delta=4,
+            variance=-1,
+            measured_at="2026-07-06T00:00:00Z",
+            confidence="PROVEN",
+        )
+        assert compute_effectiveness_hash(rec) == compute_effectiveness_hash(rec)
+
+    def test_effectiveness_hash_sensitive(self) -> None:
+        from services.governance_execution.fingerprint import compute_effectiveness_hash
+        from services.governance_execution.models import GovernanceEffectivenessRecord
+
+        rec1 = GovernanceEffectivenessRecord(
+            record_id="ger1",
+            plan_id="p",
+            run_id="r",
+            tenant_id="t",
+            domain="governance",
+            predicted_delta=5,
+            actual_delta=4,
+            variance=-1,
+            measured_at="2026-07-06T00:00:00Z",
+            confidence="PROVEN",
+        )
+        rec2 = dataclasses.replace(rec1, record_id="ger2")
+        assert compute_effectiveness_hash(rec1) != compute_effectiveness_hash(rec2)
+
+
+# ---------------------------------------------------------------------------
+# 61. New MCIM keys
+# ---------------------------------------------------------------------------
+
+
+class TestNewMCIMKeys:
+    def test_all_10_new_keys_present(self) -> None:
+        new_keys = {
+            "execution_authority_mandate",
+            "execution_participant",
+            "execution_policy_exception",
+            "execution_policy_exception_ledger",
+            "execution_override",
+            "execution_sla_target",
+            "execution_sla_record",
+            "execution_change_window",
+            "execution_ticket_reference",
+            "execution_effectiveness",
+        }
+        for key in new_keys:
+            assert key in MCIM_REGISTRATION_SOURCE, f"Missing MCIM key: {key}"
+
+    def test_still_mapping_proxy_type(self) -> None:
+        from types import MappingProxyType
+
+        assert isinstance(MCIM_REGISTRATION_SOURCE, MappingProxyType)
+
+    def test_total_key_count_is_23(self) -> None:
+        assert len(MCIM_REGISTRATION_SOURCE) == 23
+
+    def test_new_mcim_values_correct(self) -> None:
+        assert (
+            MCIM_REGISTRATION_SOURCE["execution_authority_mandate"]
+            == "MCIM-18.8.3-EXEC-AUTHORITY-MANDATE"
+        )
+        assert (
+            MCIM_REGISTRATION_SOURCE["execution_effectiveness"]
+            == "MCIM-18.8.3-EXEC-EFFECTIVENESS"
+        )
+        assert (
+            MCIM_REGISTRATION_SOURCE["execution_sla_target"]
+            == "MCIM-18.8.3-EXEC-SLA-TARGET"
+        )
+        assert (
+            MCIM_REGISTRATION_SOURCE["execution_override"]
+            == "MCIM-18.8.3-EXEC-OVERRIDE"
+        )

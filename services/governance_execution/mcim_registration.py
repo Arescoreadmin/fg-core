@@ -21,6 +21,16 @@ _MCIM_REGISTRATION_SOURCE: dict[str, str] = {
     "execution_authority": "MCIM-18.8.3-EXEC-AUTHORITY",
     "execution_rollback": "MCIM-18.8.3-EXEC-ROLLBACK",
     "execution_audit": "MCIM-18.8.3-EXEC-AUDIT",
+    "execution_authority_mandate": "MCIM-18.8.3-EXEC-AUTHORITY-MANDATE",
+    "execution_participant": "MCIM-18.8.3-EXEC-PARTICIPANT",
+    "execution_policy_exception": "MCIM-18.8.3-EXEC-POLICY-EXCEPTION",
+    "execution_policy_exception_ledger": "MCIM-18.8.3-EXEC-POLICY-EXCEPTION-LEDGER",
+    "execution_override": "MCIM-18.8.3-EXEC-OVERRIDE",
+    "execution_sla_target": "MCIM-18.8.3-EXEC-SLA-TARGET",
+    "execution_sla_record": "MCIM-18.8.3-EXEC-SLA-RECORD",
+    "execution_change_window": "MCIM-18.8.3-EXEC-CHANGE-WINDOW",
+    "execution_ticket_reference": "MCIM-18.8.3-EXEC-TICKET-REF",
+    "execution_effectiveness": "MCIM-18.8.3-EXEC-EFFECTIVENESS",
 }
 MCIM_REGISTRATION_SOURCE: Mapping[str, str] = MappingProxyType(
     _MCIM_REGISTRATION_SOURCE
