@@ -1,3 +1,25 @@
+## 2026-07-06 — PR 18.8.1: Governance Digital Twin Foundation
+
+**Classification:** Backend service foundation + CI gate + deterministic test suite + architecture documentation. No DB schema changes. No API route additions. No OpenAPI changes. No secrets stored. Service-only foundation with replay-safe export and explicit API deferral.
+
+**Critical-path files changed:**
+- `services/governance_digital_twin/builder.py` — tenant-scoped deterministic snapshot construction over existing authorities; stable IDs; explicit-link-only extraction; completeness scoring from authority availability; replay-safe limitations instead of guessed edges.
+- `services/governance_digital_twin/fingerprint.py` — SHA-256 over canonical JSON; stable entity and relationship hashes; excludes runtime fingerprint/export shell.
+- `services/governance_digital_twin/redaction.py` — forbidden-field stripping (`secret`, `token`, `password`, `api_key`, `auth_header`, `authorization`, `raw_prompt`, `raw_vector`, `embedding`, `provider_payload`, `private_key`, `session`, `cookie`) with fail-closed validation.
+- `services/governance_digital_twin/exporter.py` — replay-safe export projection; redaction enforced before return.
+- `tools/ci/check_governance_digital_twin.py` — read-only file-inspection gate validating required service files, deterministic sorting, canonical JSON fingerprinting, redaction enforcement, tests, docs, and PR fix log entry.
+
+**Non-critical-path changes:**
+- `services/governance_digital_twin/models.py` — pure dataclasses for snapshot, entity, relationship, authority graph, and baseline state.
+- `services/governance_digital_twin/baseline.py` — deterministic comparison-baseline builder.
+- `services/governance_digital_twin/__init__.py` — bounded-context exports.
+- `tests/test_governance_digital_twin.py` — deterministic snapshot, hashing, redaction, baseline, authority-graph, ordering, missing-data, and tenant-isolation coverage.
+- `tests/tools/test_governance_digital_twin_ci.py` — subprocess verification of the CI gate PASS condition.
+- `docs/GOVERNANCE_DIGITAL_TWIN_18_8_1.md` — architecture and future handoff record.
+- `ROADMAP.md` — PR 18.8.1 roadmap row added.
+
+---
+
 ## 2026-07-05 — PR 18.6.8a: Workspace Integration Hardening & Warning Cleanup
 
 **Classification:** Frontend hardening + tooling CI fixes only. No backend changes. No auth logic changes. No DB schema changes. No API route additions. No secrets stored.

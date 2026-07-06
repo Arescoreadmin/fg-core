@@ -6,6 +6,24 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-06 — pr/18.8.1-governance-digital-twin-foundation: Governance Digital Twin Foundation
+
+**Branch:** `pr/18.8.1-governance-digital-twin-foundation`
+
+**What was done:** PR 18.8.1 — built the deterministic Governance Digital Twin foundation as a service-first bounded context. Added canonical snapshot models, deterministic tenant-scoped snapshot construction, explicit authority graph capture, replay-safe export, SHA-256 canonical JSON fingerprinting, baseline creation, a dedicated CI gate, deterministic tests, and architecture documentation. API shell was intentionally deferred to keep the PR focused on correctness, replay safety, and contract stability.
+
+**Files modified:**
+- `services/governance_digital_twin/` — new bounded context (`models.py`, `builder.py`, `fingerprint.py`, `exporter.py`, `baseline.py`, `redaction.py`, `__init__.py`)
+- `tools/ci/check_governance_digital_twin.py` — new file-inspection CI gate
+- `tests/test_governance_digital_twin.py` — deterministic snapshot, hashing, redaction, baseline, graph, ordering, tenant-isolation coverage
+- `tests/tools/test_governance_digital_twin_ci.py` — CI gate subprocess verification
+- `docs/GOVERNANCE_DIGITAL_TWIN_18_8_1.md` — architecture and handoff documentation
+- `ROADMAP.md` — PR 18.8.1 roadmap row
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC execution entry
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
 ### 2026-07-05 — pr/18.7-autonomous-governance-operations-center: useSearchParams Suspense Fix
 
 **Branch:** `pr/18.7-autonomous-governance-operations-center`
