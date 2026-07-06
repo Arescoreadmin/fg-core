@@ -6,6 +6,41 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-06 — pr/18.8.3-closed-loop-governance-execution: Closed-Loop Governance Execution Engine
+
+**Branch:** `pr/18.8.3-closed-loop-governance-execution`
+
+**What was done:** PR 18.8.3 — built the Closed-Loop Governance Execution Engine as a pure-Python, no-DB, no-LLM bounded context that consumes `SimulationResult` from PR 18.8.2 and produces governed execution plans, approval workflows, verification records, measurements, and replay packages. Implements: `planner.py` (SimulationResult → ExecutionPlan with domain-priority step ordering, 9 governance gates, rollback plan), `approvals.py` (approval workflow engine, multi-approver support), `execution.py` (14-state lifecycle state machine, audit trail), `verification.py` (PROVEN/INFERRED/UNKNOWN confidence, evidence-first), `measurement.py` (outcome quality measurement), `rollback.py` (rollback plan + execution), `replay.py` (self-contained replay package), `exporter.py` (deep-frozen, forbidden-key scrubbed export), `validator.py` (fail-closed on ERROR/FATAL, 10 invariants), `contract.py` (Protocol + concrete service), `manifest.py` (execution manifest), `fingerprint.py` (SHA-256 over canonical JSON, domain `FG_GOVERNANCE_EXECUTION_V1`), `registry.py` (state machine + approval type registries), `constitution.py` (17 permanent rules), `mcim_registration.py` (13 MCIM keys). Digital Twin and Simulation remain immutable throughout. No autonomous execution — governance orchestration records only.
+
+**Files added:**
+- `services/governance_execution/__init__.py` — all public exports
+- `services/governance_execution/models.py` — 20+ frozen dataclasses, 5 enums, 8 version constants
+- `services/governance_execution/planner.py` — SimulationResult → ExecutionPlan
+- `services/governance_execution/approvals.py` — approval workflow engine
+- `services/governance_execution/execution.py` — lifecycle state machine
+- `services/governance_execution/verification.py` — step verification engine
+- `services/governance_execution/measurement.py` — outcome measurement engine
+- `services/governance_execution/rollback.py` — rollback planning and execution
+- `services/governance_execution/replay.py` — replay package builder
+- `services/governance_execution/validator.py` — validator + ExecutionValidationError
+- `services/governance_execution/exporter.py` — deep-frozen replay-safe export
+- `services/governance_execution/contract.py` — Protocol + concrete service class
+- `services/governance_execution/manifest.py` — manifest builder
+- `services/governance_execution/fingerprint.py` — SHA-256 fingerprinting (10 functions)
+- `services/governance_execution/registry.py` — state machine + approval type registries
+- `services/governance_execution/constitution.py` — 17 permanent rules constants
+- `services/governance_execution/mcim_registration.py` — 13 MCIM keys
+- `tools/ci/check_governance_execution.py` — 16-check CI gate
+- `tests/test_governance_execution.py` — 255 tests, 254 assertions
+- `docs/GOVERNANCE_EXECUTION_CONSTITUTION.md` — permanent rules documentation
+
+**Files modified:**
+- `ROADMAP.md` — PR 18.8.3 row added
+- `docs/ai/PR_FIX_LOG.md` — this entry
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 18.8.3 SOC review entry appended
+
+---
+
 ### 2026-07-06 — pr/18.8.2-governance-simulation-engine: Governance Simulation Engine
 
 **Branch:** `pr/18.8.2-governance-simulation-engine`
