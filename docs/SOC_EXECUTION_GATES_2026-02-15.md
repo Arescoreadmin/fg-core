@@ -5587,3 +5587,18 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - `ROADMAP.md` — tracking entry added.
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic operations. No new API endpoints. No mutation surfaces. All workspace-integration components are presentational with no direct data authority. Context preservation uses URL search parameters only — no browser-authoritative state. Demo fixtures are static constants with DEMO_MODE_ACTIVE=false (off by default). The CI script is a read-only validator with no side effects.
+
+## 2026-07-06 — PR 18.8.2: Deterministic Scenario Simulation & Impact Analysis Engine
+
+**Classification:** New bounded-context service layer only. No API routes. No DB schema changes. No auth changes. No secrets. Pure-Python deterministic simulation substrate operating exclusively on immutable `GovernanceDigitalTwinSnapshot` objects.
+
+**Critical-path files changed:**
+- `tools/ci/check_governance_simulation.py` — new 16-check read-only CI gate. Validates: all 13 required service module files present; version constants defined; MCIM registration has 10 keys; no forbidden keys (`secret`, `token`, `password`, `api_key`, etc.) in service files; no DB access (`Session`, `create_engine`, `sqlalchemy`) in service layer; all dataclasses are `frozen=True`; `SimulationValidationError` is a proper `Exception` subclass; all 8 contract methods present; SHA-256 fingerprinting via `hashlib` confirmed; `deep_freeze` used in exporter; validator fail-closed behavior present; test file has ≥200 `assert` statements. Exits 0/1. No side effects, no mutations, no network calls.
+
+**Non-critical-path additions:**
+- `services/governance_simulation/` — 13 new pure-Python modules. No DB access anywhere. No API surface. No auth logic. No secrets. Frozen dataclasses only. Engine consumes immutable snapshots and produces overlays — source snapshot is never mutated. Fail-closed on ERROR/FATAL validation severity (`SimulationValidationError` raised). Tenant isolation enforced: cross-tenant overlay operations are FATAL. All fingerprints are SHA-256 over canonical JSON with explicit domain separation (`FG_GOVERNANCE_SIMULATION_V1`). No cryptographic signing — content-addressing only.
+- `tests/test_governance_simulation.py` — 218 deterministic tests, 280 assertions. No DB dependencies. No mocks.
+- `docs/GOVERNANCE_SIMULATION_CONSTITUTION.md` — 10 permanent rules governing all future simulation PRs.
+- `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md` — tracking entries added.
+
+**SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic signing operations — SHA-256 is used for content-addressing only (no key material). No new API endpoints or routes. No DB schema changes. No new external dependencies. The Digital Twin snapshot is immutable by construction (frozen dataclass). The CI gate is a read-only static analysis tool with no side effects. Tenant isolation is enforced at the FATAL severity level in the validator. The service layer has no import of `sqlalchemy`, `Session`, or `create_engine`.
