@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { DecisionsTable } from '@/components/tables/DecisionsTable';
 import { getDecision, listDecisions, type DecisionOut } from '@/lib/coreApi';
 import { toUserMessage } from '@/lib/errors';
@@ -9,6 +10,7 @@ import { DecisionPanel } from '@/components/decisions/DecisionPanel';
 const PAGE_SIZE = 10;
 
 export default function DecisionsPage() {
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<DecisionOut[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -20,6 +22,13 @@ export default function DecisionsPage() {
 
   const [detail, setDetail] = useState<DecisionOut | null>(null);
   const [error, setError] = useState('');
+
+  // Auto-select a decision when ?decision= is present (e.g. deep links from Operations Center)
+  useEffect(() => {
+    const decisionId = searchParams.get('decision');
+    if (!decisionId) return;
+    getDecision(decisionId).then(setDetail).catch(() => {});
+  }, [searchParams]);
 
   const load = useCallback(async () => {
     try {

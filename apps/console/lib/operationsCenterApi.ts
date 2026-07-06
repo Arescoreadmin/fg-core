@@ -134,8 +134,14 @@ export async function getAutomationQueue(
 ): Promise<LoadResult<AutomationQueueResult>> {
   const authority = '/ui/forensics/events';
   try {
-    const page = await getForensicsEvents({ limit, event_type: 'automation' });
-    const allEvents = page.events;
+    // Fetch broadly — no exact event_type filter because real automation events
+    // use prefixed types (automation_pending, automation_running, etc.) not the
+    // bare string 'automation'. Filter client-side by prefix instead.
+    const page = await getForensicsEvents({ limit });
+    const allEvents = page.events.filter(
+      (e) => e.event_type?.toLowerCase().startsWith('automation') ||
+             e.event_category?.toLowerCase().includes('automation'),
+    );
 
     const items: AutomationQueueItem[] = allEvents.map((e: ForensicsEvent) => ({
       id: String(e.event_id),
@@ -459,23 +465,34 @@ export async function getGovernanceSLA(
   try {
     const page = await listDecisions({ limit, offset: 0 });
 
+    // SLA thresholds derived from threat_level — due_at is not emitted by /decisions.
+    const SLA_HOURS: Record<Severity, number | null> = {
+      critical: 4, high: 24, medium: 72, low: 168, info: null,
+    };
+
     const items: SLAItem[] = page.items.map((d: DecisionOut) => {
+      const severity = normaliseSeverity(d.threat_level);
       const createdMs = d.created_at ? new Date(d.created_at).getTime() : null;
       const ageHours = createdMs
         ? Math.floor((Date.now() - createdMs) / 3_600_000)
         : null;
-      const dueAt = d.due_at ? String(d.due_at) : null;
-      const slaBreached = dueAt ? new Date(dueAt) < new Date() : false;
+      const slaHours = SLA_HOURS[severity];
+      const dueAt = (createdMs !== null && slaHours !== null)
+        ? new Date(createdMs + slaHours * 3_600_000).toISOString()
+        : null;
+      const slaBreached = (ageHours !== null && slaHours !== null)
+        ? ageHours > slaHours
+        : false;
 
       return {
         id: d.id,
         title: d.event_type ?? 'Governance Event',
-        severity: normaliseSeverity(d.threat_level ?? d.severity),
+        severity,
         dueAt,
         createdAt: d.created_at ?? null,
         ageHours,
         slaBreached,
-        owner: d.owner ? String(d.owner) : null,
+        owner: null,
       };
     });
 
@@ -695,15 +712,19 @@ export async function getOperationalBriefing(): Promise<LoadResult<OperationalBr
       });
     }
 
-    // Approval required
-    const pendingApprovals = recentDecisions.filter(
-      (d: DecisionOut) => d.workflow_state === 'pending_approval',
+    // Approval required — use high-threat unreviewed decisions as a proxy
+    // (workflow_state is not emitted by /decisions; explain_summary presence
+    //  signals the decision has been reviewed/explained)
+    const needsReview = recentDecisions.filter(
+      (d: DecisionOut) =>
+        (d.threat_level === 'critical' || d.threat_level === 'high') &&
+        !d.explain_summary,
     );
-    if (pendingApprovals.length > 0) {
+    if (needsReview.length > 0) {
       lines.push({
         category: 'approval_required',
-        label: 'Decisions awaiting approval',
-        value: `${pendingApprovals.length} items pending`,
+        label: 'High-severity decisions without explanation',
+        value: `${needsReview.length} items may require review`,
         authority: '/decisions',
       });
     }
@@ -756,26 +777,30 @@ function normaliseSeverity(raw: unknown): Severity {
 }
 
 function deriveAutomationStatus(e: ForensicsEvent): AutomationStatus {
-  if (!e.success && e.severity === 'critical') return 'blocked';
-  if (!e.success) return 'failed';
-  if (e.event_type?.includes('pending')) return 'pending';
-  if (e.event_type?.includes('scheduled')) return 'scheduled';
-  if (e.event_type?.includes('approval')) return 'approval_required';
-  if (e.event_type?.includes('running')) return 'running';
-  return 'completed';
+  const t = e.event_type?.toLowerCase() ?? '';
+  if (t.includes('blocked') || (!e.success && e.severity === 'critical')) return 'blocked';
+  if (t.includes('failed') || (!e.success && e.severity !== 'critical')) return 'failed';
+  if (t.includes('pending')) return 'pending';
+  if (t.includes('scheduled')) return 'scheduled';
+  if (t.includes('approval')) return 'approval_required';
+  if (t.includes('running')) return 'running';
+  if (e.success) return 'completed';
+  return 'failed';
 }
 
 function derivePipelineStage(d: DecisionOut): PipelineStage {
-  const state = String(d.workflow_state ?? '').toLowerCase();
-  if (state === 'archived') return 'archived';
-  if (state === 'verified') return 'verified';
-  if (state === 'executed') return 'executed';
-  if (state === 'executing') return 'executing';
-  if (state === 'approved') return 'approved';
-  if (state === 'pending_approval') return 'approval_required';
-  if (state === 'simulated') return 'simulation_completed';
-  if (state === 'policy_matched') return 'policy_matched';
-  if (state === 'evaluated') return 'evaluated';
+  // DecisionOut does not carry workflow_state. Derive stage from fields
+  // that are actually present: explain_summary, rules_triggered, pq_fallback,
+  // and threat_level — in priority order from most-complete to least-complete.
+  if (d.explain_summary) return 'verified';
+  const rules = d.rules_triggered;
+  const hasRules = Array.isArray(rules) ? rules.length > 0
+    : rules !== null && rules !== undefined && String(rules) !== '[]' && String(rules) !== '{}';
+  if (hasRules) return 'executed';
+  if (d.pq_fallback) return 'simulation_completed';
+  const tl = String(d.threat_level ?? '').toLowerCase();
+  if (tl === 'critical' || tl === 'high') return 'policy_matched';
+  if (tl === 'medium') return 'evaluated';
   return 'detected';
 }
 
