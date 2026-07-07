@@ -393,16 +393,50 @@ class TestPromotionServiceDirect:
         assert promo2.error_detail is None
 
 
+def _make_admin_client(app, tenant_id: str):
+    """Mint a key with tenant_admin role (has governance.promote) for the promote route."""
+    from sqlalchemy import text as sa_text
+    from api.auth_scopes import mint_key
+    from api.db import get_sessionmaker
+    from api.tenant_rbac import assign_role
+    from fastapi.testclient import TestClient
+
+    key = mint_key("governance:read", "governance:write", tenant_id=tenant_id)
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        key_id = db.execute(
+            sa_text(
+                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+            ),
+            {"t": tenant_id},
+        ).scalar_one()
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name="tenant_admin",
+        )
+    finally:
+        db.close()
+    return TestClient(app, headers={"X-API-Key": key})
+
+
 class TestPromotionAdminRoute:
     def test_promote_route_returns_409_for_non_delivered(self, build_app) -> None:
         from api.auth_scopes import mint_key
         from fastapi.testclient import TestClient
 
         app = build_app(auth_enabled=True)
-        key = mint_key("governance:read", "governance:write", tenant_id=_TENANT)
-        c = TestClient(app, headers={"X-API-Key": key})
+        # Assessor key creates the engagement; admin key (tenant_admin) calls promote.
+        assessor_key = mint_key(
+            "governance:read", "governance:write", tenant_id=_TENANT
+        )
+        assessor = TestClient(app, headers={"X-API-Key": assessor_key})
+        admin = _make_admin_client(app, _TENANT)
 
-        eng = c.post(
+        eng = assessor.post(
             "/field-assessment/engagements",
             json={
                 "client_name": "Retry Corp",
@@ -413,19 +447,15 @@ class TestPromotionAdminRoute:
         assert eng.status_code == 201
         eng_id = eng.json()["id"]
 
-        resp = c.post(f"/field-assessment/engagements/{eng_id}/promote")
+        resp = admin.post(f"/field-assessment/engagements/{eng_id}/promote")
         assert resp.status_code == 409
         assert resp.json()["detail"]["code"] == "ENGAGEMENT_NOT_DELIVERED"
 
     def test_promote_route_returns_404_for_unknown_engagement(self, build_app) -> None:
-        from api.auth_scopes import mint_key
-        from fastapi.testclient import TestClient
-
         app = build_app(auth_enabled=True)
-        key = mint_key("governance:read", "governance:write", tenant_id=_TENANT)
-        c = TestClient(app, headers={"X-API-Key": key})
+        admin = _make_admin_client(app, _TENANT)
 
-        resp = c.post("/field-assessment/engagements/ghost-eng/promote")
+        resp = admin.post("/field-assessment/engagements/ghost-eng/promote")
         assert resp.status_code == 404
 
 

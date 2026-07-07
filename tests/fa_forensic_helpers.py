@@ -15,6 +15,7 @@ from services.field_assessment.store import create_finding
 
 TENANT_A = "test-tenant-fa"
 TENANT_B = "tenant-other"
+TENANT_ADMIN = "test-tenant-fa-admin"
 
 ENGAGEMENT_BODY = {
     "client_name": "Forensic Corp",
@@ -51,11 +52,38 @@ class ForensicContext:
     client_a: TestClient
     client_b: TestClient
     engine: Any
+    promote_client_a: TestClient = None  # type: ignore[assignment]
+
+
+def _mint_admin_key(app: Any, tenant_id: str) -> TestClient:
+    """Mint a key with tenant_admin role (has governance.promote)."""
+    key = mint_key("governance:read", "governance:write", tenant_id=tenant_id)
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        key_id = db.execute(
+            sa_text(
+                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+            ),
+            {"t": tenant_id},
+        ).scalar_one()
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name="tenant_admin",
+        )
+    finally:
+        db.close()
+    return TestClient(app, headers={"X-API-Key": key})
 
 
 def make_context(build_app: object) -> ForensicContext:
     app = build_app(auth_enabled=True)  # type: ignore[operator]
 
+    # No DB role assigned — scope fallback unions assessor (governance:write) and
+    # qa_reviewer (governance:qa_approve) capabilities for the migration period.
     key_a = mint_key(
         "governance:read",
         "governance:write",
@@ -69,38 +97,13 @@ def make_context(build_app: object) -> ForensicContext:
         tenant_id=TENANT_B,
     )
 
-    SM = get_sessionmaker()
-
-    for tenant_id in (TENANT_A, TENANT_B):
-        db = SM()
-        try:
-            key_id = db.execute(
-                sa_text(
-                    """
-                    SELECT id
-                    FROM api_keys
-                    WHERE tenant_id = :tenant_id
-                    ORDER BY id DESC
-                    LIMIT 1
-                    """
-                ),
-                {"tenant_id": tenant_id},
-            ).scalar_one()
-
-            assign_role(
-                db,
-                tenant_id=tenant_id,
-                actor_key_prefix="pytest",
-                target_key_id=int(key_id),
-                role_name="auditor",
-            )
-        finally:
-            db.close()
+    promote_client = _mint_admin_key(app, TENANT_A)
 
     return ForensicContext(
         client_a=TestClient(app, headers={"X-API-Key": key_a}),
         client_b=TestClient(app, headers={"X-API-Key": key_b}),
         engine=get_engine(),
+        promote_client_a=promote_client,
     )
 
 

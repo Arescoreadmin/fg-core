@@ -2226,7 +2226,7 @@ def patch_finding_status_route(
     finding_id: str,
     request: Request,
     body: FindingStatusPatchRequest,
-    actor_ctx: ActorContext = Depends(require_permission("finding.create")),
+    actor_ctx: ActorContext = Depends(require_permission("finding.close")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> FindingStatusPatchResponse:
     """Mark a finding resolved, accepted, or false-positive.
@@ -7365,7 +7365,7 @@ def create_portal_grant(
     engagement_id: str,
     request: Request,
     body: CreatePortalGrantRequest = CreatePortalGrantRequest(),
-    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> CreatePortalGrantResponse:
     """Create a portal grant for client delivery access. Raw secret shown once — not stored."""
@@ -7447,7 +7447,7 @@ def revoke_portal_grant(
     engagement_id: str,
     grant_id: str,
     request: Request,
-    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> None:
     """Revoke a portal grant immediately. All active sessions for this engagement become invalid."""
@@ -7486,7 +7486,7 @@ def rotate_portal_grant(
     engagement_id: str,
     grant_id: str,
     request: Request,
-    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> RotatePortalGrantResponse:
     """Rotate a portal grant. Old secret is immediately invalid; new secret returned once."""

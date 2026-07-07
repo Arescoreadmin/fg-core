@@ -1143,6 +1143,20 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
         servers=list(cfg.servers),
         root_path="",
     )
+    # Inject the X-API-Key security scheme so generated clients know to send it.
+    # AuthGateMiddleware enforces the header at runtime; this restores it to the
+    # OpenAPI contract after require_scopes → authz_scope migration removed it.
+    _orig_openapi = app.openapi
+
+    def _openapi_with_api_key():
+        schema = _orig_openapi()
+        schema.setdefault("components", {}).setdefault("securitySchemes", {})[
+            "ApiKeyAuth"
+        ] = {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+        schema.setdefault("security", [{"ApiKeyAuth": []}])
+        return schema
+
+    app.openapi = _openapi_with_api_key  # type: ignore[method-assign]
     app.state.auth_enabled = True
     app.state.service = getattr(cfg, "service", "frostgate-core")
     app.state.env = getattr(cfg, "env", "contract")

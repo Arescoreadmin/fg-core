@@ -137,11 +137,35 @@ _TENANT_ID = "tenant-fa-test"
 
 @pytest.fixture()
 def client(build_app: object) -> TestClient:
-    """Auth-enabled client with governance:read + governance:write scopes."""
+    """Auth-enabled client with assessor-level permissions."""
+    from sqlalchemy import text as sa_text
+
     from api.auth_scopes import mint_key
+    from api.db import get_sessionmaker
+    from api.tenant_rbac import assign_role
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        key_id = db.execute(
+            sa_text(
+                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+            ),
+            {"t": _TENANT_ID},
+        ).scalar_one()
+        assign_role(
+            db,
+            tenant_id=_TENANT_ID,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name="analyst",
+        )
+    finally:
+        db.close()
+
     return TestClient(app, headers={"X-API-Key": key})
 
 
@@ -945,11 +969,14 @@ def test_operator_request_bypasses_portal_guard(client: TestClient) -> None:
 
 @pytest.fixture()
 def qa_client(build_app: object) -> TestClient:
-    """Client with auditor role mapped to qa_reviewer permissions."""
-    from sqlalchemy import text as sa_text
+    """Client with governance:write + governance:qa_approve scopes.
 
+    No DB role is assigned intentionally — the scope fallback in
+    extract_api_key_actor unions assessor (from governance:write) and
+    qa_reviewer (from governance:qa_approve) capabilities, giving both
+    assessment.create and report.qa_approve without an RBAC role assignment.
+    """
     from api.auth_scopes import mint_key
-    from api.tenant_rbac import assign_role
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
     key = mint_key(
@@ -958,34 +985,6 @@ def qa_client(build_app: object) -> TestClient:
         "governance:qa_approve",
         tenant_id=_TENANT_ID,
     )
-
-    from api.db import get_sessionmaker
-
-    SM = get_sessionmaker()
-    db = SM()
-    try:
-        key_id = db.execute(
-            sa_text(
-                """
-                SELECT id
-                FROM api_keys
-                WHERE tenant_id = :tenant_id
-                ORDER BY id DESC
-                LIMIT 1
-                """
-            ),
-            {"tenant_id": _TENANT_ID},
-        ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=_TENANT_ID,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="auditor",
-        )
-    finally:
-        db.close()
-
     return TestClient(app, headers={"X-API-Key": key})
 
 

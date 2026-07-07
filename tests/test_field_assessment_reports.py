@@ -54,14 +54,69 @@ _REPORT_BODY = {
 # ---------------------------------------------------------------------------
 
 
+def _assign_analyst(tenant_id: str) -> None:
+    """Assign analyst role (→ assessor) to the most recently minted key for tenant_id."""
+    from sqlalchemy import text as sa_text
+
+    from api.db import get_sessionmaker
+    from api.tenant_rbac import assign_role
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        key_id = db.execute(
+            sa_text(
+                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+            ),
+            {"t": tenant_id},
+        ).scalar_one()
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name="analyst",
+        )
+    finally:
+        db.close()
+
+
+def _assign_read_only(tenant_id: str) -> None:
+    """Assign read_only role (→ viewer) to the most recently minted key for tenant_id."""
+    from sqlalchemy import text as sa_text
+
+    from api.db import get_sessionmaker
+    from api.tenant_rbac import assign_role
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        key_id = db.execute(
+            sa_text(
+                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+            ),
+            {"t": tenant_id},
+        ).scalar_one()
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name="read_only",
+        )
+    finally:
+        db.close()
+
+
 @pytest.fixture()
 def client(build_app, monkeypatch):
-    """Tenant A client with governance:read + governance:write and signing key set."""
+    """Tenant A client with assessor-level permissions and signing key set."""
     from api.auth_scopes import mint_key
 
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_A)
+    _assign_analyst(_TENANT_A)
     return TestClient(app, headers={"X-API-Key": key})
 
 
@@ -73,17 +128,19 @@ def client_b(build_app, monkeypatch):
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_B)
+    _assign_analyst(_TENANT_B)
     return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
 def read_only_client(build_app, monkeypatch):
-    """Tenant A client with only governance:read (no write)."""
+    """Tenant A client with viewer-level permissions (no write)."""
     from api.auth_scopes import mint_key
 
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
     key = mint_key("governance:read", tenant_id=_TENANT_A)
+    _assign_read_only(_TENANT_A)
     return TestClient(app, headers={"X-API-Key": key})
 
 
@@ -95,6 +152,7 @@ def no_key_client(build_app, monkeypatch):
     monkeypatch.delenv("FG_REPORT_SIGNING_KEY", raising=False)
     app = build_app(auth_enabled=True)
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_A)
+    _assign_analyst(_TENANT_A)
     return TestClient(app, headers={"X-API-Key": key})
 
 
@@ -579,6 +637,7 @@ def test_get_next_version_increments(build_app, monkeypatch) -> None:
             )
         },
     )
+    _assign_analyst("t-ver-incr")
 
     eid_resp = tc.post("/field-assessment/engagements", json=_ENGAGEMENT_BODY)
     assert eid_resp.status_code == 201
@@ -624,6 +683,7 @@ def test_concurrent_report_versions_are_unique(build_app, monkeypatch) -> None:
             )
         },
     )
+    _assign_analyst("t-concurrent")
 
     eid_resp = tc.post("/field-assessment/engagements", json=_ENGAGEMENT_BODY)
     assert eid_resp.status_code == 201

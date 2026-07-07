@@ -44,7 +44,7 @@ def test_admin_promote_route_rejects_non_delivered_engagement_without_record(
     """Operator retry promotion must reject in-progress engagements without creating promotion state."""
     ctx = make_context(build_app)
     engagement = create_engagement(ctx.client_a)
-    response = ctx.client_a.post(
+    response = ctx.promote_client_a.post(
         f"/field-assessment/engagements/{engagement['id']}/promote"
     )
     assert response.status_code == 409, response.text
