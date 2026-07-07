@@ -20,6 +20,7 @@ from __future__ import annotations
 from api.actor_context import (
     ActorContext,
     ALL_PERMISSIONS,
+    CAPABILITY_REGISTRY,
     ROLE_PERMISSIONS,
     roles_to_permissions,
 )
@@ -96,6 +97,45 @@ class TestPermissionModel:
     def test_P13_roles_to_permissions_empty_list(self):
         perms = roles_to_permissions([])
         assert perms == frozenset()
+
+    def test_P14_capability_registry_covers_all_permissions(self):
+        """CAPABILITY_REGISTRY must have an entry for every permission in ALL_PERMISSIONS.
+
+        This is the sprawl guard: CI fails if a permission is added to
+        ALL_PERMISSIONS without a corresponding registry entry.
+        """
+        unregistered = ALL_PERMISSIONS - set(CAPABILITY_REGISTRY.keys())
+        assert not unregistered, (
+            f"Permissions in ALL_PERMISSIONS with no registry entry: {sorted(unregistered)}\n"
+            "Add an entry to CAPABILITY_REGISTRY in api/actor_context.py."
+        )
+
+    def test_P15_capability_registry_no_phantom_entries(self):
+        """CAPABILITY_REGISTRY must not contain entries absent from ALL_PERMISSIONS."""
+        phantom = set(CAPABILITY_REGISTRY.keys()) - ALL_PERMISSIONS
+        assert not phantom, (
+            f"CAPABILITY_REGISTRY entries not in ALL_PERMISSIONS: {sorted(phantom)}\n"
+            "Remove the entry or add the permission to ALL_PERMISSIONS."
+        )
+
+    def test_P16_capability_registry_required_fields(self):
+        """Every registry entry must have display_name, description, and a valid risk_level."""
+        valid_levels = {"low", "medium", "high", "critical"}
+        for perm, meta in CAPABILITY_REGISTRY.items():
+            assert meta.get("display_name"), f"{perm!r} missing display_name"
+            assert meta.get("description"), f"{perm!r} missing description"
+            assert meta.get("risk_level") in valid_levels, (
+                f"{perm!r} has invalid risk_level {meta.get('risk_level')!r}"
+            )
+
+    def test_P17_critical_permissions_are_governance_or_platform(self):
+        """Critical-risk capabilities must be governance decisions or platform admin only."""
+        critical = {p for p, m in CAPABILITY_REGISTRY.items() if m["risk_level"] == "critical"}
+        allowed_prefixes = ("risk.", "exception.", "governance.", "platform.")
+        for perm in critical:
+            assert perm.startswith(allowed_prefixes), (
+                f"{perm!r} is marked critical but is not a governance or platform permission"
+            )
 
 
 # ============================================================
