@@ -130,7 +130,9 @@ class TestPermissionModel:
 
     def test_P17_critical_permissions_are_governance_or_platform(self):
         """Critical-risk capabilities must be governance decisions or platform admin only."""
-        critical = {p for p, m in CAPABILITY_REGISTRY.items() if m["risk_level"] == "critical"}
+        critical = {
+            p for p, m in CAPABILITY_REGISTRY.items() if m["risk_level"] == "critical"
+        }
         allowed_prefixes = ("risk.", "exception.", "governance.", "platform.")
         for perm in critical:
             assert perm.startswith(allowed_prefixes), (
