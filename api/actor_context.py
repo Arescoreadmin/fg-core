@@ -25,7 +25,7 @@ SoD design decisions (deliberate, do not remove without compliance review):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional, TypedDict
 
 # ---------------------------------------------------------------------------
 # Permission registry — explicit enumeration, no wildcards
@@ -71,6 +71,162 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         "platform.admin",
     }
 )
+
+# ---------------------------------------------------------------------------
+# Capability registry — metadata for every permission.
+# ALL_PERMISSIONS and CAPABILITY_REGISTRY must stay in sync; a unit test
+# enforces this so CI fails before any undocumented capability can ship.
+# ---------------------------------------------------------------------------
+
+
+class _CapabilityMeta(TypedDict):
+    display_name: str
+    description: str
+    risk_level: Literal["low", "medium", "high", "critical"]
+
+
+CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
+    # Assessment lifecycle
+    "assessment.create": {
+        "display_name": "Create Assessment",
+        "description": "Start a new assessment engagement",
+        "risk_level": "medium",
+    },
+    "assessment.read": {
+        "display_name": "View Assessment",
+        "description": "Read assessment data and status",
+        "risk_level": "low",
+    },
+    # Findings
+    "finding.create": {
+        "display_name": "Create Finding",
+        "description": "Record a new finding against a control or evidence item",
+        "risk_level": "medium",
+    },
+    "finding.read": {
+        "display_name": "View Findings",
+        "description": "Read findings and their remediation status",
+        "risk_level": "low",
+    },
+    "finding.approve": {
+        "display_name": "Approve Finding",
+        "description": "Approve or reject a finding — QA sign-off only (SoD: not assessor)",
+        "risk_level": "high",
+    },
+    "finding.close": {
+        "display_name": "Close Finding",
+        "description": "Mark a finding as resolved or closed",
+        "risk_level": "high",
+    },
+    # Evidence
+    "evidence.upload": {
+        "display_name": "Upload Evidence",
+        "description": "Submit evidence artifacts to an engagement",
+        "risk_level": "medium",
+    },
+    "evidence.read": {
+        "display_name": "View Evidence",
+        "description": "Read evidence documents and metadata",
+        "risk_level": "low",
+    },
+    "evidence.review": {
+        "display_name": "Review Evidence",
+        "description": "Validate and annotate uploaded evidence",
+        "risk_level": "medium",
+    },
+    # Scans
+    "scan.trigger": {
+        "display_name": "Trigger Scan",
+        "description": "Initiate a connector scan against a target system",
+        "risk_level": "medium",
+    },
+    "scan.read": {
+        "display_name": "View Scan Results",
+        "description": "Read scan results and job status",
+        "risk_level": "low",
+    },
+    # Reports
+    "report.generate": {
+        "display_name": "Generate Report",
+        "description": "Compile a draft assessment report",
+        "risk_level": "medium",
+    },
+    "report.read": {
+        "display_name": "View Report",
+        "description": "Read assessment reports and their sections",
+        "risk_level": "low",
+    },
+    "report.qa_approve": {
+        "display_name": "QA Approve Report",
+        "description": "Apply final QA sign-off to a report (non-repudiation anchor)",
+        "risk_level": "high",
+    },
+    # Verification bundles
+    "bundle.generate": {
+        "display_name": "Generate Bundle",
+        "description": "Assemble a verification bundle from evidence (mechanical step)",
+        "risk_level": "medium",
+    },
+    "bundle.approve": {
+        "display_name": "Approve Bundle",
+        "description": "Governance sign-off on a verification bundle (SoD: not assessor)",
+        "risk_level": "high",
+    },
+    "bundle.read": {
+        "display_name": "View Bundle",
+        "description": "Read verification bundles and their contents",
+        "risk_level": "low",
+    },
+    # Governance decisions — critical; SoD: not tenant_admin, not assessor
+    "risk.accept": {
+        "display_name": "Accept Risk",
+        "description": "Record a formal risk acceptance decision",
+        "risk_level": "critical",
+    },
+    "exception.grant": {
+        "display_name": "Grant Exception",
+        "description": "Issue a compliance exception for a control",
+        "risk_level": "critical",
+    },
+    "governance.decision": {
+        "display_name": "Record Governance Decision",
+        "description": "Emit a governance event against an engagement",
+        "risk_level": "critical",
+    },
+    # Cross-boundary promotion
+    "governance.promote": {
+        "display_name": "Promote to Governance",
+        "description": "Promote an assessment deliverable to autonomous governance",
+        "risk_level": "high",
+    },
+    # Administration — SoD: separate from compliance and QA authority
+    "key.manage": {
+        "display_name": "Manage API Keys",
+        "description": "Mint, rotate, and revoke tenant API keys",
+        "risk_level": "high",
+    },
+    "user.invite": {
+        "display_name": "Invite User",
+        "description": "Send tenant membership invitations",
+        "risk_level": "medium",
+    },
+    "connector.manage": {
+        "display_name": "Manage Connectors",
+        "description": "Configure and authorize connector integrations",
+        "risk_level": "high",
+    },
+    "tenant.configure": {
+        "display_name": "Configure Tenant",
+        "description": "Modify tenant-level settings and identity configuration",
+        "risk_level": "high",
+    },
+    # Platform
+    "platform.admin": {
+        "display_name": "Platform Administration",
+        "description": "Full platform access including cross-tenant operations",
+        "risk_level": "critical",
+    },
+}
 
 # Role → permission mapping.
 # Roles are assigned in Auth0 (or via tenant_rbac.py for API keys).

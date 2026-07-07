@@ -17136,3 +17136,26 @@ Result:
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md`
 - `ROADMAP.md`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR 513 — Phase 1: Capability Registry with CI Sprawl Guard
+
+**Branch:** `feat/phase1-capability-registry`
+
+**Date:** 2026-07-07
+
+**What was done:** Added `CAPABILITY_REGISTRY` to `api/actor_context.py` — a canonical metadata map for all 26 permissions covering `display_name`, `description`, and `risk_level` (low/medium/high/critical). Added four CI guard tests (P14–P17) that fail if a permission is added without a registry entry, a registry entry has no matching permission, required fields are missing, or a critical-risk capability is not a governance/platform permission. Closes Phase 1 of `AUTHZ_COMPLIANCE_PLAN.md`.
+
+**Changes:**
+
+1. **`api/actor_context.py`** — Added `_CapabilityMeta` TypedDict and `CAPABILITY_REGISTRY` dict mapping all 26 permissions to display metadata and risk level. Added `Literal` and `TypedDict` imports.
+
+2. **`tests/test_h14_rbac.py`** — Added tests P14–P17 to the `TestPermissionModel` class: registry coverage (sprawl guard), no phantom entries, required fields validation, and critical-risk permission constraint. Also added `CAPABILITY_REGISTRY` to the import.
+
+**Why this matters:** Without a registry, new permissions can be added to `ALL_PERMISSIONS` silently with no documentation of sensitivity. The CI guard makes capability sprawl a build failure, not a code review concern.
+
+**Files modified:**
+- `api/actor_context.py`
+- `tests/test_h14_rbac.py`
+- `docs/ai/PR_FIX_LOG.md` — this entry
