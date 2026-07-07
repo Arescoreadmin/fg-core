@@ -17195,3 +17195,28 @@ Result:
 - `schemas/api/openapi.json`
 - `BLUEPRINT_STAGED.md`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR #514 — Phase 2 P1 Bug Fixes: Read enforcement, SoD hole, governance.promote gap
+
+**Branch:** `feat/phase2-backend-authority`
+
+**Date:** 2026-07-07
+
+**What was done:** Three P1 security bugs identified by Codex review bot were fixed after initial Phase 2 hardening landed.
+
+**Bug 1 — Read enforcement regression (43 GET routes unprotected):**
+The Phase 2 transformation script replaced `require_scopes` with `authz_scope` across all routes, including 43 GET handlers. `authz_scope` is a metadata-only no-op at runtime, so this removed runtime enforcement from read paths. Fixed by adding `actor_ctx: ActorContext = Depends(require_permission("X.read"))` to all 43 GET route handlers — using the appropriate read permission for each domain (`assessment.read`, `finding.read`, `evidence.read`, `scan.read`, `report.read`, `bundle.read`, `governance.decision`). Total `require_permission` call count: 87.
+
+**Bug 2 — SoD hole on `patch_finding_status_route` (finding.close vs finding.create):**
+`patch_finding_status_route` was hardened with `finding.create` capability. However, it handles terminal status transitions (`remediated`, `accepted`, `false_positive`) which require `finding.close` — a separate capability not granted to `assessor` role. This would have allowed assessors to close their own findings, violating the SoD invariant. Fixed by changing line 2238 from `require_permission("finding.create")` to `require_permission("finding.close")`. `patch_finding_remediation_route` (sets remediation hints, not terminal state) correctly remains `finding.create`.
+
+**Bug 3 — Authority gap in `transition_engagement_route` for delivered state:**
+When transitioning an engagement to `delivered` status, the handler calls `promote_engagement_to_governance()` — a cross-boundary promotion that requires `governance.promote` capability. The route was hardened with `assessment.create`, which is granted to `assessor` role. Without an inline guard, assessors could trigger governance promotion. Fixed by adding an explicit `actor_ctx.has_permission("governance.promote")` check with HTTP 403 before the `promote_engagement_to_governance()` call.
+
+**Security posture after fixes:** All 87 route handlers in `field_assessment.py` (44 mutations + 43 reads) enforce capability-level authorization. SoD invariants are intact: assessors cannot close findings or promote to governance. Every route requires a valid identity with the correct capability.
+
+**Files modified:**
+- `api/field_assessment.py` — Bug 1: 43 read routes hardened; Bug 2: `finding.close` on status patch; Bug 3: inline `governance.promote` guard
+- `docs/ai/PR_FIX_LOG.md` — this entry
