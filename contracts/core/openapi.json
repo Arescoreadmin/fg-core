@@ -75411,13 +75411,13 @@
             }
           },
           {
-            "description": "Persist alert records for this drift run",
+            "description": "Persist alert records for this drift run (requires assessment.create)",
             "in": "query",
             "name": "emit_alerts",
             "required": false,
             "schema": {
-              "default": true,
-              "description": "Persist alert records for this drift run",
+              "default": false,
+              "description": "Persist alert records for this drift run (requires assessment.create)",
               "title": "Emit Alerts",
               "type": "boolean"
             }
