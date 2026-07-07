@@ -17242,3 +17242,41 @@ Result:
 - `schemas/api/openapi.json`
 - `BLUEPRINT_STAGED.md`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR Phase-3 — Object-Level Auth: FA GET route read-capability enforcement
+
+**Branch:** `feat/phase3-fa-read-enforcement`
+
+**Date:** 2026-07-07
+
+**What was done:** Enforced read-capability authorization on all 43 FA GET route handlers in `api/field_assessment.py`. Each handler now resolves an `ActorContext` via `Depends(require_permission("X.read"))` before any DB access. Tenant isolation is sourced exclusively from `ActorContext` (via `_resolve_caller_tenant`), not from URL params or request body. Added 26 denial/smoke tests covering 7 invariant classes.
+
+**Changes:**
+
+1. **`api/field_assessment.py`** — 43 GET handlers hardened:
+   - `actor_ctx: ActorContext = Depends(require_permission("X.read"))` added before `db: Session = Depends(auth_ctx_db_session)` in every GET handler
+   - Permission mapping: `assessment.read` (24 routes — engagements, summaries, execution-state, next-actions, interview-templates, risk-acceptances, exceptions, governance-decisions, audit-events, drift-report, drift-correlation, drift-velocity, portal-grants, readiness-drift, questionnaires, remediation-roadmap, ai-vendor-governance, ai-vendor-governance-decisions), `scan.read` (6 routes — scan-results, scan-result detail, msgraph run status, scan-jobs, scan-job detail, connector-schedules), `evidence.read` (4 routes — document-analyses, observations, evidence-links, artifacts), `finding.read` (3 routes — findings list, finding detail, finding explain), `report.read` (3 routes — reports list, report detail, report export), `bundle.read` (3 routes — verification-bundle, manifest, download)
+   - `verify_engagement_report_route` already had `report.read` from Phase 2 — not duplicated (total: 44 enforced GET handlers)
+
+2. **`tests/test_phase3_fa_read_enforcement.py`** (new) — 26 tests across 7 classes:
+   - `TestViewerCanRead` — viewer (read_only→viewer fallback) can GET all FA resource types
+   - `TestViewerCannotWrite` — viewer gets 403 on create-engagement and trigger-scan mutations
+   - `TestQaReviewerSoD` — qa_reviewer can read, cannot create engagements or trigger scans
+   - `TestCrossTenantIsolation` — tenant B key gets 404 on tenant A owned resources (no capability leak)
+   - `TestLegacyScopeReadOnly` — `governance:read`-only → viewer fallback → read allowed, write denied
+   - `TestLegacyScopeWriteOnly` — `governance:write`-only → assessor fallback → read + write allowed, qa_approve denied
+   - `TestLegacyScopeQaApproveOnly` — `governance:qa_approve`-only → qa_reviewer fallback → read allowed, assessment.create denied
+
+3. **`ROADMAP.md`** — Phase 3 PR entry added; PR #513/#514/#516 entries added.
+
+4. **`docs/ai/PR_FIX_LOG.md`** — This entry.
+
+**Security posture:** Every FA GET route now enforces capability-level authorization. A key with no permissions (or only write permissions for other resources) is denied on read paths. Cross-tenant isolation is verified end-to-end: tenant B key gets 404 (not 403) on tenant A resources because the service layer filters by `tenant_id` from `ActorContext`. The `viewer` role is the minimum viable read grant; it has no mutation capability.
+
+**Files modified:**
+- `api/field_assessment.py`
+- `tests/test_phase3_fa_read_enforcement.py` (new)
+- `ROADMAP.md`
+- `docs/ai/PR_FIX_LOG.md` — this entry
