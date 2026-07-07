@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/auth';
+import { canAccessCoreApiPath } from '@/lib/consoleAccess';
 import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
 import { getTenantApiKey } from '@/lib/tenant-registry';
 
@@ -311,6 +313,12 @@ async function handle(request: NextRequest, { params }: { params: { path: string
   const requestId = getRequestId(request);
   const path = params.path || [];
   const routeGroup = path[0] || 'unknown';
+
+  const session = await auth();
+  if (!session?.user) return jsonError('Unauthorized', 401, requestId);
+  if (!canAccessCoreApiPath(path, request.method, session)) {
+    return jsonError('Forbidden for this console role', 403, requestId);
+  }
 
   const rate = await enforceRateLimit(request, requestId, routeGroup);
   if (rate) return rate;

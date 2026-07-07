@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from 'next-auth';
+import { getSessionClaims } from '@/lib/consoleAccess';
 
 const DEFAULT_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const DEFAULT_SESSION_UPDATE_AGE_SECONDS = 15 * 60;
@@ -31,6 +32,32 @@ export const authConfig = {
   providers: [],
   pages: {
     signIn: '/login',
+  },
+  callbacks: {
+    jwt({ token, user, profile }) {
+      const claims = getSessionClaims({ token, user, profile });
+      token.roles = claims.roles;
+      token.tenantId = claims.tenantId;
+      token.experienceClass = claims.experienceClass;
+      return token;
+    },
+    session({ session, token }) {
+      const roles = Array.isArray(token.roles) ? token.roles : [];
+      const tenantId = typeof token.tenantId === 'string' ? token.tenantId : null;
+      const experienceClass =
+        typeof token.experienceClass === 'string' ? token.experienceClass : 'unsupported';
+
+      session.roles = roles;
+      session.tenantId = tenantId;
+      session.experienceClass = experienceClass;
+      session.user = {
+        ...session.user,
+        roles,
+        tenantId,
+        experienceClass,
+      };
+      return session;
+    },
   },
   session: {
     strategy: 'jwt',
