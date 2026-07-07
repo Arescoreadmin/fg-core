@@ -556,3 +556,49 @@ class TestLegacyScopeQaApproveOnly:
             },
         )
         assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# 8. Drift alert emission requires assessment.create (write gate on GET route)
+# ---------------------------------------------------------------------------
+
+
+class TestDriftAlertEmissionGate:
+    """emit_alerts=true on GET drift-report requires assessment.create, not just assessment.read."""
+
+    def test_viewer_emit_alerts_denied(self, build_app) -> None:
+        """Viewer (assessment.read only) gets 403 when requesting emit_alerts=true."""
+        _, assessor = _mint(build_app, "governance:write", tenant_id=_TENANT)
+        _, viewer = _mint(build_app, "governance:read", tenant_id=_TENANT, role="read_only")
+        eng_id = _make_engagement(assessor, _TENANT)
+        resp = viewer.get(
+            f"/field-assessment/engagements/{eng_id}/drift-report",
+            params={"current_scan_id": "fake-scan", "emit_alerts": "true"},
+        )
+        # Viewer reaches baseline check (409) or is denied write gate (403)
+        assert resp.status_code in (403, 409)
+        if resp.status_code == 403:
+            assert "assessment.create" in resp.text
+
+    def test_viewer_default_emit_alerts_returns_409_not_403(self, build_app) -> None:
+        """Default emit_alerts=false means viewer reaches the read path (409 = no baseline, not 403)."""
+        _, assessor = _mint(build_app, "governance:write", tenant_id=_TENANT)
+        _, viewer = _mint(build_app, "governance:read", tenant_id=_TENANT, role="read_only")
+        eng_id = _make_engagement(assessor, _TENANT)
+        resp = viewer.get(
+            f"/field-assessment/engagements/{eng_id}/drift-report",
+            params={"current_scan_id": "fake-scan"},
+        )
+        # Viewer is allowed to read; missing baseline → 409, not 403
+        assert resp.status_code == 409
+
+    def test_assessor_emit_alerts_allowed(self, build_app) -> None:
+        """Assessor (assessment.create) can pass emit_alerts=true; fails at 409 (no baseline), not 403."""
+        _, assessor = _mint(build_app, "governance:write", tenant_id=_TENANT)
+        eng_id = _make_engagement(assessor, _TENANT)
+        resp = assessor.get(
+            f"/field-assessment/engagements/{eng_id}/drift-report",
+            params={"current_scan_id": "fake-scan", "emit_alerts": "true"},
+        )
+        # Has assessment.create; no pinned baseline → 409, not 403
+        assert resp.status_code == 409

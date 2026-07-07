@@ -6561,7 +6561,7 @@ def get_drift_report(
     request: Request,
     current_scan_id: str = Query(..., description="ID of the current FaScanResult"),
     emit_alerts: bool = Query(
-        True, description="Persist alert records for this drift run"
+        False, description="Persist alert records for this drift run (requires assessment.create)"
     ),
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
@@ -6720,6 +6720,14 @@ def get_drift_report(
 
     alerts_emitted = 0
     if emit_alerts:
+        if "assessment.create" not in actor_ctx.permissions:
+            raise HTTPException(
+                status_code=403,
+                detail=api_error(
+                    "PERMISSION_DENIED",
+                    "emitting drift alerts requires assessment.create",
+                ),
+            )
         alerts = emit_drift_alerts(
             db,
             tenant_id=tenant_id,
