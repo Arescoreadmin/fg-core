@@ -17159,3 +17159,39 @@ Result:
 - `api/actor_context.py`
 - `tests/test_h14_rbac.py`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR Phase-2 — Backend Authority: field_assessment.py route hardening
+
+**Branch:** `feat/phase2-backend-authority`
+
+**Date:** 2026-07-07
+
+**What was done:** Hardened all 40 unhardened mutation routes in `api/field_assessment.py` by replacing `require_scopes("governance:*")` with `authz_scope("governance:*")` (metadata-only, for tooling) and adding `actor_ctx: ActorContext = Depends(require_permission("X.Y"))` to each handler's function signature. Regenerated OpenAPI contracts and refreshed the contract authority hash. Resolved a pre-existing merge conflict in `api/db.py` (leftover conflict markers from a failed stash operation) and removed a dead `_dbapi_conn` assertion that was crashing the sqlite auto-migration path.
+
+**Changes:**
+
+1. **`api/field_assessment.py`** — 40 mutation routes hardened:
+   - `require_scopes` → `authz_scope` in `dependencies=[...]` for all 40 routes
+   - `actor_ctx: ActorContext = Depends(require_permission("X.Y"))` added to each handler signature
+   - Permission mapping by domain: `assessment.create` (3 routes), `scan.trigger` (12 routes), `evidence.upload` (8 routes), `finding.create` (2 routes), `governance.promote` (3 routes), `governance.decision` (2 routes), `report.generate` (1 route), `report.read` (1 route), `connector.manage` (1 route), `tenant.configure` (3 routes), `assessment.create` for questionnaires (3 routes), `assessment.create` for artifacts (1 route)
+   - 4 routes already hardened by H14 (`risk.accept`, `exception.grant`, `report.qa_approve`, `bundle.generate`) left untouched
+
+2. **`api/db.py`** — Resolved pre-existing merge conflict; removed dead `_dbapi_conn = conn._dbapi_connection` extraction and `assert isinstance(_dbapi_conn, sqlite3.Connection)` that were crashing `_auto_migrate_sqlite` (upstream version uses `conn.exec_driver_sql()` directly, not the raw dbapi connection).
+
+3. **`contracts/core/openapi.json`**, **`schemas/api/openapi.json`** — Regenerated after route changes (removing `require_scopes` removes the `X-API-Key` header declaration from OpenAPI per-route schemas).
+
+4. **`BLUEPRINT_STAGED.md`** — Updated `Contract-Authority-SHA256` to reflect regenerated contracts.
+
+5. **`docs/ai/PR_FIX_LOG.md`** — This entry.
+
+**Security posture:** Every mutation route in `field_assessment.py` now enforces capability-level authorization via `require_permission()` backed by `ActorContext`. No route in this file can be called without a valid identity with the required capability. The previous `require_scopes` checks validated API key scopes but not role-to-capability mapping.
+
+**Files modified:**
+- `api/field_assessment.py`
+- `api/db.py`
+- `contracts/core/openapi.json`
+- `schemas/api/openapi.json`
+- `BLUEPRINT_STAGED.md`
+- `docs/ai/PR_FIX_LOG.md` — this entry

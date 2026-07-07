@@ -42,7 +42,7 @@ from pydantic import (
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import authz_scope, require_scopes
+from api.auth_scopes import authz_scope
 from api.auth_dispatch import require_permission
 from api.actor_context import ActorContext
 from api.deps import auth_ctx_db_session
@@ -1106,7 +1106,7 @@ def _evidence_link_to_response(lnk: FaEvidenceLink) -> EvidenceLinkResponse:
 @router.get(
     "/engagements",
     response_model=EngagementListResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_engagements_route(
     request: Request,
@@ -1139,11 +1139,12 @@ def list_engagements_route(
     "/engagements",
     response_model=EngagementResponse,
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def create_engagement_route(
     request: Request,
     body: CreateEngagementRequest,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -1190,7 +1191,7 @@ def create_engagement_route(
 @router.get(
     "/engagements/{engagement_id}",
     response_model=EngagementResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_engagement_route(
     engagement_id: str,
@@ -1214,12 +1215,13 @@ class PatchEngagementRequest(BaseModel):
 @router.patch(
     "/engagements/{engagement_id}",
     response_model=EngagementResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def patch_engagement_route(
     engagement_id: str,
     request: Request,
     body: PatchEngagementRequest,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementResponse:
     """Shallow-merge engagement_metadata fields. Other top-level fields are immutable here."""
@@ -1260,12 +1262,13 @@ def patch_engagement_route(
 @router.patch(
     "/engagements/{engagement_id}/status",
     response_model=EngagementResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def transition_engagement_route(
     engagement_id: str,
     request: Request,
     body: TransitionEngagementRequest,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -1386,12 +1389,13 @@ def transition_engagement_route(
     "/engagements/{engagement_id}/scan-results",
     response_model=ScanResultResponse,
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def ingest_scan_result_route(
     engagement_id: str,
     request: Request,
     body: IngestScanResultRequest,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ScanResultResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -1562,7 +1566,7 @@ def ingest_scan_result_route(
 @router.get(
     "/engagements/{engagement_id}/scan-results",
     response_model=list[ScanResultSummaryResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_scan_results_route(
     engagement_id: str,
@@ -1587,7 +1591,7 @@ def list_scan_results_route(
 @router.get(
     "/engagements/{engagement_id}/scan-results/{scan_result_id}",
     response_model=ScanResultResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_scan_result_route(
     engagement_id: str,
@@ -1625,12 +1629,13 @@ def get_scan_result_route(
     "/engagements/{engagement_id}/document-analyses",
     response_model=DocumentAnalysisResponse,
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def register_document_analysis_route(
     engagement_id: str,
     request: Request,
     body: RegisterDocumentAnalysisRequest,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> DocumentAnalysisResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -1677,7 +1682,7 @@ def register_document_analysis_route(
 @router.get(
     "/engagements/{engagement_id}/document-analyses",
     response_model=list[DocumentAnalysisResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_document_analyses_route(
     engagement_id: str,
@@ -1707,12 +1712,13 @@ def list_document_analyses_route(
     "/engagements/{engagement_id}/observations",
     response_model=ObservationResponse,
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def capture_observation_route(
     engagement_id: str,
     request: Request,
     body: CaptureObservationRequest,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ObservationResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -1767,12 +1773,13 @@ class BulkObservationImportResult(BaseModel):
     "/engagements/{engagement_id}/observations/bulk",
     response_model=BulkObservationImportResult,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def bulk_import_observations_route(
     engagement_id: str,
     request: Request,
     body: list[CaptureObservationRequest],
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> BulkObservationImportResult:
     """Import multiple observations in a single call. Processes each row independently —
@@ -1855,7 +1862,7 @@ def bulk_import_observations_route(
 @router.get(
     "/engagements/{engagement_id}/observations",
     response_model=list[ObservationResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_observations_route(
     engagement_id: str,
@@ -1886,7 +1893,7 @@ def list_observations_route(
 @router.get(
     "/interview-templates",
     response_model=list[ObservationResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_interview_templates_route(
     request: Request,
@@ -1940,13 +1947,14 @@ class UpdateObservationRequest(BaseModel):
 @router.patch(
     "/engagements/{engagement_id}/observations/{observation_id}",
     response_model=ObservationResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def update_observation_route(
     engagement_id: str,
     observation_id: str,
     request: Request,
     body: UpdateObservationRequest,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ObservationResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -2039,12 +2047,13 @@ def update_observation_route(
 @router.delete(
     "/engagements/{engagement_id}/observations/{observation_id}",
     status_code=204,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def delete_observation_route(
     engagement_id: str,
     observation_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> None:
     tenant_id = _resolve_caller_tenant(request)
@@ -2124,7 +2133,7 @@ def delete_observation_route(
 @router.get(
     "/engagements/{engagement_id}/findings",
     response_model=FindingListResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_findings_route(
     engagement_id: str,
@@ -2169,7 +2178,7 @@ def list_findings_route(
 @router.get(
     "/engagements/{engagement_id}/findings/{finding_id}",
     response_model=FindingResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_finding_route(
     engagement_id: str,
@@ -2210,13 +2219,14 @@ _TERMINAL_FINDING_STATUSES: frozenset[str] = frozenset(
 @router.patch(
     "/engagements/{engagement_id}/findings/{finding_id}",
     response_model=FindingStatusPatchResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def patch_finding_status_route(
     engagement_id: str,
     finding_id: str,
     request: Request,
     body: FindingStatusPatchRequest,
+    actor_ctx: ActorContext = Depends(require_permission("finding.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> FindingStatusPatchResponse:
     """Mark a finding resolved, accepted, or false-positive.
@@ -2373,13 +2383,14 @@ def patch_finding_status_route(
 
 @router.patch(
     "/engagements/{engagement_id}/findings/{finding_id}/remediation",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def patch_finding_remediation_route(
     engagement_id: str,
     finding_id: str,
     request: Request,
     body: FindingRemediationPatchRequest,
+    actor_ctx: ActorContext = Depends(require_permission("finding.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Set remediation_hint on a finding to satisfy the readiness gate."""
@@ -2458,12 +2469,13 @@ def patch_finding_remediation_route(
     "/engagements/{engagement_id}/evidence-links",
     response_model=EvidenceLinkResponse,
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def create_evidence_link_route(
     engagement_id: str,
     request: Request,
     body: CreateEvidenceLinkRequest,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EvidenceLinkResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -2594,7 +2606,7 @@ def create_evidence_link_route(
 @router.get(
     "/engagements/{engagement_id}/evidence-links",
     response_model=list[EvidenceLinkResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_evidence_links_route(
     engagement_id: str,
@@ -2628,7 +2640,7 @@ def list_evidence_links_route(
 @router.get(
     "/engagements/{engagement_id}/summary",
     response_model=EngagementSummaryResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_engagement_summary_route(
     engagement_id: str,
@@ -2795,7 +2807,7 @@ def _evaluate_execution_state(db: Session, *, eng: Any, tenant_id: str) -> Any:
 @router.get(
     "/engagements/{engagement_id}/execution-state",
     response_model=ExecutionStateResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_engagement_execution_state_route(
     engagement_id: str,
@@ -2821,7 +2833,7 @@ def get_engagement_execution_state_route(
 @router.get(
     "/engagements/{engagement_id}/next-actions",
     response_model=PlaybookProgressResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_engagement_next_actions_route(
     engagement_id: str,
@@ -2877,12 +2889,13 @@ def get_engagement_next_actions_route(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/msgraph/import",
     response_model=ConnectorImportResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def import_msgraph_connector_run_route(
     engagement_id: str,
     request: Request,
     body: ConnectorImportRequest,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ConnectorImportResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -3212,13 +3225,14 @@ def _msgraph_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/msgraph/initiate",
     response_model=MsgraphScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_msgraph_scan(
     engagement_id: str,
     request: Request,
     body: MsgraphScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -3473,13 +3487,14 @@ def _oauth_inventory_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/oauth-inventory/initiate",
     response_model=MsgraphScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_oauth_inventory_scan(
     engagement_id: str,
     request: Request,
     body: MsgraphScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -3718,13 +3733,14 @@ def _endpoint_inventory_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/endpoint-inventory/initiate",
     response_model=MsgraphScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_endpoint_inventory_scan(
     engagement_id: str,
     request: Request,
     body: MsgraphScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -4149,13 +4165,14 @@ def _network_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/network-scan/initiate",
     response_model=NetworkScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_network_scan(
     engagement_id: str,
     request: Request,
     body: NetworkScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> NetworkScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -4417,13 +4434,14 @@ def _dns_email_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/dns-email/initiate",
     response_model=DnsEmailScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_dns_email_scan(
     engagement_id: str,
     request: Request,
     body: DnsEmailScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> DnsEmailScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -4621,13 +4639,14 @@ def _web_headers_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/web-headers/initiate",
     response_model=WebHeadersScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_web_headers_scan(
     engagement_id: str,
     request: Request,
     body: WebHeadersScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> WebHeadersScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -4915,13 +4934,14 @@ def _entra_governance_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/entra-governance/initiate",
     response_model=MsgraphScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_entra_governance_scan(
     engagement_id: str,
     request: Request,
     body: MsgraphScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -5166,13 +5186,14 @@ def _sharepoint_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/sharepoint/initiate",
     response_model=MsgraphScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_sharepoint_scan(
     engagement_id: str,
     request: Request,
     body: MsgraphScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -5417,13 +5438,14 @@ def _oauth_risk_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/oauth-risk/initiate",
     response_model=MsgraphScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_oauth_risk_scan(
     engagement_id: str,
     request: Request,
     body: MsgraphScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -5672,13 +5694,14 @@ def _ai_tool_discovery_scan_background(
 @router.post(
     "/engagements/{engagement_id}/connector-runs/ai-tool-discovery/initiate",
     response_model=MsgraphScanInitiateResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def initiate_ai_tool_discovery_scan(
     engagement_id: str,
     request: Request,
     body: MsgraphScanInitiateRequest,
     background_tasks: BackgroundTasks,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -5767,7 +5790,7 @@ def initiate_ai_tool_discovery_scan(
 @router.get(
     "/engagements/{engagement_id}/connector-runs/{run_id}/status",
     response_model=MsgraphRunStatusResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def get_msgraph_run_status(
     engagement_id: str,
@@ -5893,7 +5916,7 @@ def create_risk_acceptance_route(
 
 @router.get(
     "/engagements/{engagement_id}/risk-acceptances",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_risk_acceptances_route(
     engagement_id: str,
@@ -5920,7 +5943,7 @@ def list_risk_acceptances_route(
 
 @router.get(
     "/engagements/{engagement_id}/risk-acceptances/{acceptance_id}",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_risk_acceptance_route(
     engagement_id: str,
@@ -6012,7 +6035,7 @@ def create_governance_exception_route(
 
 @router.get(
     "/engagements/{engagement_id}/exceptions",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_governance_exceptions_route(
     engagement_id: str,
@@ -6037,7 +6060,7 @@ def list_governance_exceptions_route(
 
 @router.get(
     "/engagements/{engagement_id}/exceptions/{exception_id}",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_governance_exception_route(
     engagement_id: str,
@@ -6061,7 +6084,7 @@ def get_governance_exception_route(
 
 @router.get(
     "/engagements/{engagement_id}/governance-decisions",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_governance_decisions_route(
     engagement_id: str,
@@ -6089,7 +6112,7 @@ def list_governance_decisions_route(
 
 @router.get(
     "/engagements/{engagement_id}/governance-decisions/{decision_id}",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_governance_decision_route(
     engagement_id: str,
@@ -6116,7 +6139,7 @@ def get_governance_decision_route(
 
 @router.get(
     "/engagements/{engagement_id}/scan-jobs",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def list_scan_jobs(
     engagement_id: str,
@@ -6140,7 +6163,7 @@ def list_scan_jobs(
 
 @router.get(
     "/engagements/{engagement_id}/scan-jobs/{job_id}",
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def get_scan_job(
     engagement_id: str,
@@ -6186,13 +6209,14 @@ class PromoteConnectorAssetsResponse(BaseModel):
 @router.post(
     "/engagements/{engagement_id}/connector-runs/{run_id}/promote-assets",
     response_model=PromoteConnectorAssetsResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def promote_connector_run_assets(
     engagement_id: str,
     run_id: str,
     body: PromoteConnectorAssetsRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.promote")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> PromoteConnectorAssetsResponse:
     """Promote connector-detected candidates from a specific run to governed assets.
@@ -6318,7 +6342,7 @@ def promote_connector_run_assets(
 @router.get(
     "/engagements/{engagement_id}/audit-events",
     response_model=list[AuditEventResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_audit_events_route(
     engagement_id: str,
@@ -6377,12 +6401,13 @@ class PinBaselineResponse(BaseModel):
     "/engagements/{engagement_id}/baseline",
     response_model=PinBaselineResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def pin_baseline(
     engagement_id: str,
     body: PinBaselineBody,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> PinBaselineResponse:
     """Pin a scan result as the canonical drift baseline for this engagement.
@@ -6506,7 +6531,7 @@ class DriftReportResponse(BaseModel):
 @router.get(
     "/engagements/{engagement_id}/drift-report",
     response_model=DriftReportResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_drift_report(
     engagement_id: str,
@@ -6751,12 +6776,13 @@ class ConnectorScheduleResponse(BaseModel):
     "/engagements/{engagement_id}/connector-schedules",
     response_model=ConnectorScheduleResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def create_connector_schedule(
     engagement_id: str,
     body: ConnectorScheduleBody,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("connector.manage")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ConnectorScheduleResponse:
     """Create or update a cron schedule for a connector/engagement pair.
@@ -6813,7 +6839,7 @@ def create_connector_schedule(
 @router.get(
     "/engagements/{engagement_id}/connector-schedules",
     response_model=list[ConnectorScheduleResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_connector_schedules(
     engagement_id: str,
@@ -6862,7 +6888,7 @@ class RootCauseCandidateOut(BaseModel):
 @router.get(
     "/engagements/{engagement_id}/drift-report/correlation/{finding_id}",
     response_model=list[RootCauseCandidateOut],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_drift_correlation(
     engagement_id: str,
@@ -6927,7 +6953,7 @@ class DriftVelocityResponse(BaseModel):
 @router.get(
     "/engagements/{engagement_id}/drift-velocity",
     response_model=DriftVelocityResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_drift_velocity(
     engagement_id: str,
@@ -7333,12 +7359,13 @@ def _grant_to_response(g: PortalGrant) -> PortalGrantResponse:
     "/engagements/{engagement_id}/portal-grants",
     response_model=CreatePortalGrantResponse,
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def create_portal_grant(
     engagement_id: str,
     request: Request,
     body: CreatePortalGrantRequest = CreatePortalGrantRequest(),
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> CreatePortalGrantResponse:
     """Create a portal grant for client delivery access. Raw secret shown once — not stored."""
@@ -7390,7 +7417,7 @@ def create_portal_grant(
     "/engagements/{engagement_id}/portal-grants",
     response_model=list[PortalGrantResponse],
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_portal_grants(
     engagement_id: str,
@@ -7414,12 +7441,13 @@ def list_portal_grants(
 @router.delete(
     "/engagements/{engagement_id}/portal-grants/{grant_id}",
     status_code=204,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def revoke_portal_grant(
     engagement_id: str,
     grant_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> None:
     """Revoke a portal grant immediately. All active sessions for this engagement become invalid."""
@@ -7452,12 +7480,13 @@ def revoke_portal_grant(
     "/engagements/{engagement_id}/portal-grants/{grant_id}/rotate",
     response_model=RotatePortalGrantResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def rotate_portal_grant(
     engagement_id: str,
     grant_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> RotatePortalGrantResponse:
     """Rotate a portal grant. Old secret is immediately invalid; new secret returned once."""
@@ -7540,12 +7569,13 @@ def _promotion_to_response(p: GovernancePromotion) -> PromotionResponse:
 @router.post(
     "/engagements/{engagement_id}/promote",
     response_model=PromotionResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
     status_code=200,
 )
 def promote_engagement_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.promote")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> PromotionResponse:
     """Admin retry / status route for governance promotion.
@@ -7606,7 +7636,7 @@ def promote_engagement_route(
 @router.get(
     "/engagements/{engagement_id}/readiness-drift",
     response_model=ReadinessDriftResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_readiness_drift_route(
     engagement_id: str,
@@ -8110,12 +8140,13 @@ def _build_engagement_report_json(
 @router.post(
     "/engagements/{engagement_id}/reports",
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def create_engagement_report_route(
     engagement_id: str,
     body: CreateEngagementReportRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.generate")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
     """Generate a signed, versioned governance report for a field assessment engagement.
@@ -8250,7 +8281,7 @@ def create_engagement_report_route(
 @router.get(
     "/engagements/{engagement_id}/reports",
     response_model=EngagementReportListResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_engagement_reports_route(
     engagement_id: str,
@@ -8304,7 +8335,7 @@ def list_engagement_reports_route(
 
 @router.get(
     "/engagements/{engagement_id}/reports/{version}",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_engagement_report_route(
     engagement_id: str,
@@ -8356,7 +8387,7 @@ def get_engagement_report_route(
 
 @router.get(
     "/engagements/{engagement_id}/reports/{version}/export",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def export_engagement_report_route(
     engagement_id: str,
@@ -8543,12 +8574,13 @@ def export_engagement_report_route(
 
 @router.post(
     "/engagements/{engagement_id}/reports/{version}/verify",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def verify_engagement_report_route(
     engagement_id: str,
     version: int,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementReportVerifyResponse:
     """Verify the Ed25519 signature of a stored report version.
@@ -8620,7 +8652,7 @@ def verify_engagement_report_route(
 @router.get(
     "/engagements/{engagement_id}/findings/{finding_id}/explain",
     response_model=FindingExplanationResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_finding_explanation_route(
     engagement_id: str,
@@ -8898,12 +8930,13 @@ def _questionnaire_to_response(
 @router.post(
     "/engagements/{engagement_id}/questionnaires",
     response_model=QuestionnaireResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def create_or_get_questionnaire(
     engagement_id: str,
     request: Request,
     body: QuestionnaireInitRequest,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> QuestionnaireResponse:
     """Idempotent questionnaire initialization.
@@ -8953,7 +8986,7 @@ def create_or_get_questionnaire(
 @router.get(
     "/engagements/{engagement_id}/questionnaires/{questionnaire_id}",
     response_model=QuestionnaireResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def get_questionnaire_route(
     engagement_id: str,
@@ -8993,7 +9026,7 @@ def get_questionnaire_route(
 @router.patch(
     "/engagements/{engagement_id}/questionnaires/{questionnaire_id}/responses/{control_id}",
     response_model=UpdateResponseResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def patch_questionnaire_response(
     engagement_id: str,
@@ -9001,6 +9034,7 @@ def patch_questionnaire_response(
     control_id: str,
     request: Request,
     body: UpdateResponseRequest,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> UpdateResponseResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -9216,12 +9250,13 @@ def patch_questionnaire_response(
 @router.post(
     "/engagements/{engagement_id}/questionnaires/{questionnaire_id}/submit",
     response_model=QuestionnaireResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def submit_questionnaire_route(
     engagement_id: str,
     questionnaire_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> QuestionnaireResponse:
     """Finalize questionnaire and create evidence links to matching findings."""
@@ -9287,7 +9322,7 @@ def submit_questionnaire_route(
 @router.get(
     "/engagements/{engagement_id}/questionnaires/{questionnaire_id}/coverage",
     response_model=QuestionnaireCoverageResponse,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def get_questionnaire_coverage(
     engagement_id: str,
@@ -9321,7 +9356,7 @@ def get_questionnaire_coverage(
 @router.get(
     "/engagements/{engagement_id}/questionnaires",
     response_model=list[QuestionnaireResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_questionnaires_route(
     engagement_id: str,
@@ -9371,7 +9406,7 @@ def list_questionnaires_route(
 @router.get(
     "/engagements/{engagement_id}/remediation-roadmap",
     response_model=RemediationRoadmapResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_remediation_roadmap(
     engagement_id: str,
@@ -9556,12 +9591,13 @@ class ArtifactInternalResponse(ArtifactResponse):
     "/engagements/{engagement_id}/artifacts",
     response_model=ArtifactResponse,
     status_code=201,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def register_artifact_route(
     engagement_id: str,
     body: RegisterArtifactRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ArtifactResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -9631,7 +9667,7 @@ def register_artifact_route(
 @router.get(
     "/engagements/{engagement_id}/artifacts/{artifact_id}",
     response_model=ArtifactInternalResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_artifact_route(
     engagement_id: str,
@@ -9748,12 +9784,13 @@ class AiDataAccessMappingRunResponse(BaseModel):
     "/engagements/{engagement_id}/connector-runs/ai-data-access-mapping/run",
     response_model=AiDataAccessMappingRunResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def run_ai_data_access_mapping(
     engagement_id: str,
     request: Request,
     body: AiDataAccessMappingRunRequest,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> AiDataAccessMappingRunResponse:
     """Map AI tool permissions to data categories, sensitivity, owner, and governance readiness.
@@ -10064,7 +10101,7 @@ def generate_verification_bundle_route(
 @router.get(
     "/engagements/{engagement_id}/verification-bundle",
     response_model=VerificationBundleResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_verification_bundle_route(
     engagement_id: str,
@@ -10098,7 +10135,7 @@ def get_verification_bundle_route(
 @router.get(
     "/engagements/{engagement_id}/verification-bundle/manifest",
     response_model=VerificationBundleManifestResponse,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def get_verification_bundle_manifest_route(
     engagement_id: str,
@@ -10146,7 +10183,7 @@ def get_verification_bundle_manifest_route(
 
 @router.get(
     "/engagements/{engagement_id}/verification-bundle/download",
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def download_verification_bundle_route(
     engagement_id: str,
@@ -10465,12 +10502,13 @@ def _gov_record_to_response(
     "/engagements/{engagement_id}/connector-runs/ai-vendor-governance/run",
     response_model=AiVendorGovernanceRunResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def run_ai_vendor_governance(
     engagement_id: str,
     request: Request,
     body: AiVendorGovernanceRunRequest,
+    actor_ctx: ActorContext = Depends(require_permission("governance.promote")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> AiVendorGovernanceRunResponse:
     """Generate governance workflow records from PR3 risk evidence.
@@ -10659,7 +10697,7 @@ def run_ai_vendor_governance(
     "/engagements/{engagement_id}/ai-vendor-governance",
     response_model=AiVendorGovernanceListResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_ai_vendor_governance(
     engagement_id: str,
@@ -10753,13 +10791,14 @@ def list_ai_vendor_governance(
     "/engagements/{engagement_id}/ai-vendor-governance/{record_id}",
     response_model=AiVendorGovernanceRecordResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def patch_ai_vendor_governance(
     engagement_id: str,
     record_id: str,
     request: Request,
     body: AiVendorGovernanceUpdateRequest,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> AiVendorGovernanceRecordResponse:
     """Update mutable governance fields on a vendor governance record.
@@ -10874,13 +10913,14 @@ def patch_ai_vendor_governance(
     "/engagements/{engagement_id}/ai-vendor-governance/{record_id}/transition",
     response_model=AiVendorGovernanceRecordResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:write"))],
+    dependencies=[Depends(authz_scope("governance:write"))],
 )
 def transition_ai_vendor_governance(
     engagement_id: str,
     record_id: str,
     request: Request,
     body: AiVendorGovernanceTransitionRequest,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> AiVendorGovernanceRecordResponse:
     """Perform a workflow state transition with actor attribution and decision ledger entry.
@@ -10988,7 +11028,7 @@ def transition_ai_vendor_governance(
     "/engagements/{engagement_id}/ai-vendor-governance/decisions",
     response_model=AiVendorGovernanceDecisionListResponse,
     status_code=200,
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_ai_vendor_governance_decisions(
     engagement_id: str,
