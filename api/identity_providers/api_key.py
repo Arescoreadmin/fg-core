@@ -6,6 +6,11 @@ role via tenant_rbac.py.
 
 Legacy role names from the original 5-role model are mapped to the new
 enterprise role names so that existing key assignments continue to work.
+
+Backward-compat fallback: keys minted before RBAC roles were introduced have
+scopes (governance:write, governance:read, governance:qa_approve) but no DB role.
+_permissions_from_legacy_scopes() maps those scopes to a capability set so that
+existing service keys continue to function during the migration period.
 """
 
 from __future__ import annotations
@@ -29,6 +34,28 @@ _LEGACY_ROLE_MAP: dict[str, str] = {
     "auditor": "qa_reviewer",
     "read_only": "viewer",
 }
+
+
+def _permissions_from_legacy_scopes(scopes: set[str]) -> frozenset[str]:
+    """Derive permissions from legacy API key scopes for backward compat.
+
+    Keys created before RBAC role assignment was enforced have scopes but no
+    tenant_rbac role. This maps the three field-assessment scopes to their
+    equivalent capability sets so those keys remain functional during migration.
+
+    Uses enterprise role names (assessor, qa_reviewer, viewer) from ROLE_PERMISSIONS,
+    NOT the legacy tenant_rbac names (analyst, auditor, read_only).
+
+    This fallback is skipped once a key has an explicit DB role.
+    """
+    result: set[str] = set()
+    if "governance:write" in scopes:
+        result |= roles_to_permissions(["assessor"])
+    if "governance:qa_approve" in scopes:
+        result |= roles_to_permissions(["qa_reviewer"])
+    if not result and "governance:read" in scopes:
+        result |= roles_to_permissions(["viewer"])
+    return frozenset(result)
 
 
 def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorContext]:
@@ -57,8 +84,14 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
             )
 
     mapped_role = _LEGACY_ROLE_MAP.get(raw_role or "", raw_role)
-    roles = [mapped_role] if mapped_role else []
-    permissions = roles_to_permissions(roles)
+    if mapped_role:
+        roles = [mapped_role]
+        permissions = roles_to_permissions(roles)
+    else:
+        # No DB role: derive permissions from legacy scopes for transition period.
+        key_scopes: set[str] = getattr(auth, "scopes", set()) or set()
+        permissions = _permissions_from_legacy_scopes(key_scopes)
+        roles = []
 
     return ActorContext(
         subject=key_prefix,

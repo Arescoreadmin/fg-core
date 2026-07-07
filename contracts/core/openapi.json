@@ -49838,6 +49838,13 @@
         "title": "TimelineEventResponse",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "in": "header",
+        "name": "X-API-Key",
+        "type": "apiKey"
+      }
     }
   },
   "info": {
@@ -114844,5 +114851,10 @@
         ]
       }
     }
-  }
+  },
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ]
 }

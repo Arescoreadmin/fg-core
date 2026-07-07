@@ -6,6 +6,53 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-07 — fix/phase2-test-fixtures-and-compat (#516): Phase 2 backward-compat and test fixture repair
+
+**PR:** #516
+**Branch:** `fix/phase2-test-fixtures-and-compat`
+**Date:** 2026-07-07
+
+**What was done:** Fixed two Codex P1/P2 bugs introduced by the Phase 2 RBAC migration (#514): (1) API keys with legacy governance scopes but no DB role now derive permissions via `_permissions_from_legacy_scopes` in `extract_api_key_actor`, preserving service-key access during the migration window. (2) `X-API-Key` security scheme restored to the generated OpenAPI contract. Also repaired 4 route permission mismatches and all test fixtures that were broken by the new `require_permission` enforcement.
+
+**Changes:**
+
+1. **`api/identity_providers/api_key.py`** — Added `_permissions_from_legacy_scopes(scopes)`: maps `governance:write` → assessor, `governance:qa_approve` → qa_reviewer, `governance:read` → viewer using enterprise role names from `ROLE_PERMISSIONS`. Updated `extract_api_key_actor` to call this fallback when no DB role exists.
+
+2. **`api/main.py`** — Restored `X-API-Key` `ApiKeyAuth` security scheme to the OpenAPI contract via `build_contract_app` override (lost when `require_scopes` → `authz_scope` migration removed per-route scheme declarations).
+
+3. **`api/field_assessment.py`** — Four route permission fixes:
+   - `patch_finding_status_route`: `finding.create` → `finding.close` (terminal status transitions need close capability, not create)
+   - `create_portal_grant`, `revoke_portal_grant`, `rotate_portal_grant`: `tenant.configure` → `assessment.create` (portal grants are issued by assessors, not tenant admins)
+
+4. **Test fixtures repaired:**
+   - `tests/test_field_assessment.py` `client`: added `assign_role("analyst")` after `mint_key`
+   - `tests/test_field_assessment.py` `qa_client`: removed `assign_role("auditor")`; scope fallback now unions assessor + qa_reviewer
+   - `tests/test_field_assessment_gate_enforcement.py` `client`: removed `assign_role`; scope fallback gives assessor + qa_reviewer
+   - `tests/test_field_assessment_reports.py`: added `assign_role("analyst")`/`"read_only"` to all inline fixtures
+   - `tests/fa_forensic_helpers.py` `make_context`: removed `assign_role` (scope fallback), added `promote_client_a` with `tenant_admin` role
+   - `tests/test_fa_forensic_drift_promotion.py`: updated to use `ctx.promote_client_a` for the promote-route test
+   - `tests/test_field_assessment_promotion.py` `TestPromotionAdminRoute`: split into assessor key (creates engagement) + tenant_admin key (calls promote route)
+
+5. **`contracts/core/openapi.json`**, **`schemas/api/openapi.json`**, **`BLUEPRINT_STAGED.md`**, **`CONTRACT.md`** — Regenerated and authority hash refreshed after OpenAPI scheme addition.
+
+**Files modified:**
+- `api/identity_providers/api_key.py`
+- `api/main.py`
+- `api/field_assessment.py`
+- `tests/test_field_assessment.py`
+- `tests/test_field_assessment_gate_enforcement.py`
+- `tests/test_field_assessment_reports.py`
+- `tests/fa_forensic_helpers.py`
+- `tests/test_fa_forensic_drift_promotion.py`
+- `tests/test_field_assessment_promotion.py`
+- `contracts/core/openapi.json`
+- `schemas/api/openapi.json`
+- `BLUEPRINT_STAGED.md`
+- `CONTRACT.md`
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
 ### 2026-07-06 — pr/18.8.3-closed-loop-governance-execution: Closed-Loop Governance Execution Engine
 
 **Branch:** `pr/18.8.3-closed-loop-governance-execution`
