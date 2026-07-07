@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@/auth';
+import { canAccessConsoleRoute } from '@/lib/consoleAccess';
 import { getTenantRegistry } from '@/lib/tenant-registry';
 
 export interface TenantEntry {
@@ -8,6 +10,14 @@ export interface TenantEntry {
 }
 
 export async function GET(): Promise<NextResponse> {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!canAccessConsoleRoute('/admin/tenants', session)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const defaultId = process.env.CORE_TENANT_ID || 'default';
   const registry = await getTenantRegistry();
 

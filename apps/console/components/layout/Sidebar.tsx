@@ -25,11 +25,13 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { CONSOLE_REGISTRY } from '@fg/navigation';
 import type { NavigationGroup } from '@fg/navigation';
 import { cn } from '@/lib/cn';
 import { FrostGateShield } from '@/components/governance/FrostGateShield';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { getNavigationItemsForPrincipal } from '@/lib/consoleAccess';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   'executive-intelligence': Brain,
@@ -70,11 +72,12 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const visibleItems = getNavigationItemsForPrincipal(CONSOLE_REGISTRY.getAllItems(), session);
 
   const navGroups = GROUP_ORDER.map((groupId) => {
-    const items = CONSOLE_REGISTRY.getByGroup(groupId).filter(
-      (item) => item.visibility === 'visible',
-    );
+    const items = visibleItems.filter((item) => item.group === groupId);
     return { id: groupId, items };
   }).filter((g) => g.items.length > 0);
 
@@ -145,13 +148,13 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
       <div className="border-t border-border px-4 py-3">
         <ThemeToggle />
-        <Link
+        <a
           href="/api/auth/logout"
-          className="mb-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-muted hover:bg-surface-2 hover:text-foreground transition-colors"
+          className="mb-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
         >
           <LogOut className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           Sign out
-        </Link>
+        </a>
         <p className="text-[10px] text-muted">FrostGate v0.2.0</p>
         <p className="mt-0.5 text-[10px] text-muted/50">AI Governance Platform</p>
       </div>

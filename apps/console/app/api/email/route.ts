@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { canAccessConsoleRoute } from '@/lib/consoleAccess';
 import { sendMail } from '@/lib/mailer';
 
 const PORTAL_ORIGIN =
@@ -129,6 +130,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!canAccessConsoleRoute('/admin/tenants/[tenantId]', session)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   let body: Record<string, string>;

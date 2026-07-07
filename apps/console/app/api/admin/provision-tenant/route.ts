@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { canAccessConsoleRoute } from '@/lib/consoleAccess';
 import { upsertTenantInRegistry, isRegistryConfigured } from '@/lib/tenant-registry';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
@@ -46,6 +47,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!canAccessConsoleRoute('/admin/tenants', session)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   if (!internalToken()) {

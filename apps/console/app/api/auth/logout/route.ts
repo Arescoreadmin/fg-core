@@ -13,7 +13,7 @@ export async function GET() {
     issuer = `https://${issuer}`;
   }
   const clientId = process.env.AUTH0_CLIENT_ID ?? '';
-  const base = (process.env.NEXTAUTH_URL ?? 'https://console.frostgate.ai').replace(/\/$/, '');
+  const base = (process.env.CONSOLE_BASE_URL || process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://console.frostgate.ai').replace(/\/$/, '');
   const returnTo = encodeURIComponent(`${base}/login`);
 
   const response = NextResponse.redirect(
