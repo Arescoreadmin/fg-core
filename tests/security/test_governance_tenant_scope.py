@@ -10,8 +10,13 @@ from api.db import get_sessionmaker
 from api.db_models import PolicyChangeRequest
 
 
-def _headers(scope: str, tenant_id: str) -> dict[str, str]:
-    return {"X-API-Key": mint_key(scope, tenant_id=tenant_id)}
+def _write_headers(tenant_id: str) -> dict[str, str]:
+    return {"X-API-Key": mint_key("governance:write", tenant_id=tenant_id)}
+
+
+def _read_headers(tenant_id: str) -> dict[str, str]:
+    # GET /governance/changes requires governance:read scope at the route level.
+    return {"X-API-Key": mint_key("governance:read", tenant_id=tenant_id)}
 
 
 def test_governance_list_scoped_to_tenant(build_app, monkeypatch):
@@ -21,7 +26,7 @@ def test_governance_list_scoped_to_tenant(build_app, monkeypatch):
 
     create_a = client.post(
         "/governance/changes",
-        headers=_headers("governance:write", "tenant-a"),
+        headers=_write_headers("tenant-a"),
         json={
             "change_type": "add_rule",
             "proposed_by": "tenant-a-user",
@@ -32,7 +37,7 @@ def test_governance_list_scoped_to_tenant(build_app, monkeypatch):
 
     create_b = client.post(
         "/governance/changes",
-        headers=_headers("governance:write", "tenant-b"),
+        headers=_write_headers("tenant-b"),
         json={
             "change_type": "add_rule",
             "proposed_by": "tenant-b-user",
@@ -43,7 +48,7 @@ def test_governance_list_scoped_to_tenant(build_app, monkeypatch):
 
     listed = client.get(
         "/governance/changes",
-        headers=_headers("governance:write", "tenant-a"),
+        headers=_read_headers("tenant-a"),
     )
     assert listed.status_code == 200, listed.text
     body = listed.json()
@@ -58,7 +63,7 @@ def test_governance_create_binds_tenant(build_app, monkeypatch):
 
     created = client.post(
         "/governance/changes",
-        headers=_headers("governance:write", "tenant-a"),
+        headers=_write_headers("tenant-a"),
         json={
             "tenant_id": "tenant-b",
             "change_type": "add_rule",
@@ -88,7 +93,7 @@ def test_governance_approve_cross_tenant_404(build_app, monkeypatch):
 
     create_b = client.post(
         "/governance/changes",
-        headers=_headers("governance:write", "tenant-b"),
+        headers=_write_headers("tenant-b"),
         json={
             "change_type": "add_rule",
             "proposed_by": "tenant-b-user",
@@ -100,7 +105,7 @@ def test_governance_approve_cross_tenant_404(build_app, monkeypatch):
 
     approve_as_a = client.post(
         f"/governance/changes/{change_id}/approve",
-        headers=_headers("governance:write", "tenant-a"),
+        headers=_write_headers("tenant-a"),
         json={"approver": "security-lead"},
     )
     assert approve_as_a.status_code == 404
@@ -137,7 +142,7 @@ def test_governance_pagination_caps_and_order(build_app, monkeypatch):
 
     listed = client.get(
         "/governance/changes?limit=500&offset=0",
-        headers=_headers("governance:write", tenant),
+        headers=_read_headers(tenant),
     )
     assert listed.status_code == 200, listed.text
     body = listed.json()
@@ -147,7 +152,7 @@ def test_governance_pagination_caps_and_order(build_app, monkeypatch):
 
     tail = client.get(
         "/governance/changes?limit=10&offset=200",
-        headers=_headers("governance:write", tenant),
+        headers=_read_headers(tenant),
     )
     assert tail.status_code == 200, tail.text
     tail_body = tail.json()
