@@ -6561,7 +6561,8 @@ def get_drift_report(
     request: Request,
     current_scan_id: str = Query(..., description="ID of the current FaScanResult"),
     emit_alerts: bool = Query(
-        False, description="Persist alert records for this drift run (requires assessment.create)"
+        False,
+        description="Persist alert records for this drift run (requires assessment.create)",
     ),
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),

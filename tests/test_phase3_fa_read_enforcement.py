@@ -569,7 +569,9 @@ class TestDriftAlertEmissionGate:
     def test_viewer_emit_alerts_denied(self, build_app) -> None:
         """Viewer (assessment.read only) gets 403 when requesting emit_alerts=true."""
         _, assessor = _mint(build_app, "governance:write", tenant_id=_TENANT)
-        _, viewer = _mint(build_app, "governance:read", tenant_id=_TENANT, role="read_only")
+        _, viewer = _mint(
+            build_app, "governance:read", tenant_id=_TENANT, role="read_only"
+        )
         eng_id = _make_engagement(assessor, _TENANT)
         resp = viewer.get(
             f"/field-assessment/engagements/{eng_id}/drift-report",
@@ -583,7 +585,9 @@ class TestDriftAlertEmissionGate:
     def test_viewer_default_emit_alerts_returns_409_not_403(self, build_app) -> None:
         """Default emit_alerts=false means viewer reaches the read path (409 = no baseline, not 403)."""
         _, assessor = _mint(build_app, "governance:write", tenant_id=_TENANT)
-        _, viewer = _mint(build_app, "governance:read", tenant_id=_TENANT, role="read_only")
+        _, viewer = _mint(
+            build_app, "governance:read", tenant_id=_TENANT, role="read_only"
+        )
         eng_id = _make_engagement(assessor, _TENANT)
         resp = viewer.get(
             f"/field-assessment/engagements/{eng_id}/drift-report",
