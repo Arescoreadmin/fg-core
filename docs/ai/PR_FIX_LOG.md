@@ -17280,3 +17280,53 @@ Result:
 - `tests/test_phase3_fa_read_enforcement.py` (new)
 - `ROADMAP.md`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR #518 — Phase 4: Governance Intelligence + Orchestration Read/Write Enforcement
+
+**Branch:** `feat/phase4-gov-intel-orch-enforcement`
+
+**Date:** 2026-07-08
+
+**What was done:** Enforced read and write capability authorization on all non-health routes in `api/governance_intelligence.py` (73/74 routes) and `api/governance_orchestration.py` (34/35 routes). Added `governance.read` as a new capability to `actor_context.py`, assigned to all 5 non-platform roles. Added 22 denial/smoke tests across 8 invariant classes.
+
+**Changes:**
+
+1. **`api/actor_context.py`** — New `governance.read` capability:
+   - Added `"governance.read"` to `ALL_PERMISSIONS`
+   - Added to `CAPABILITY_REGISTRY` with `risk_level: "low"`, display name "View Governance Intelligence"
+   - Added to `viewer`, `assessor`, `qa_reviewer`, `compliance_reviewer`, `tenant_admin` role frozensets
+
+2. **`api/governance_intelligence.py`** — 73/74 routes enforced (`intelligence_health` exempt):
+   - `from api.actor_context import ActorContext` and `from api.auth_dispatch import require_permission` added
+   - `actor_ctx: ActorContext = Depends(require_permission("X.Y"))` injected before `db` in every handler
+   - Permission mapping: `governance.read` (44 GET routes), `governance.decision` (22 mutation routes), `scan.trigger` (`run_simulation`), `governance.promote` (`transition_policy`), `connector.manage` (`register_federation`, `delete_federation`), `evidence.upload` (`create_evidence_matrix`, `compute_evidence_impact`), `evidence.read` (`list_evidence_matrices`, `get_evidence_matrix`), `bundle.read` (`list_exports`), `report.generate` (`create_export`)
+
+3. **`api/governance_orchestration.py`** — 34/35 routes enforced (`governance_orchestration_health` exempt):
+   - Same imports added
+   - Permission mapping: `governance.read` (16 GET routes), `governance.decision` (13 mutation routes — triggers, policies, playbooks, workflows, reassessments, maintenance windows), `scan.trigger` (`create_simulation`, `create_change_detection`), `governance.promote` (`approve_approval`, `reject_approval`, `delegate_approval`)
+
+4. **`tests/test_phase4_gov_read_enforcement.py`** (new) — 22 tests across 8 classes:
+   - `TestViewerGovIntelRead` — viewer can read intelligence dashboard, policies, simulations
+   - `TestViewerGovOrchRead` — viewer can read orchestration dashboard, policies, workflows, approvals
+   - `TestViewerGovWriteDenied` — viewer gets 403 on create-policy (intel + orch) and create-workflow
+   - `TestViewerPromoteDenied` — viewer gets 403 on approve/reject/delegate approval routes
+   - `TestAssessorScanTrigger` — assessor passes scan.trigger gate; viewer is denied
+   - `TestComplianceReviewerGovRead` — governance_admin role can read intel + orch dashboards
+   - `TestTenantAdminGovRead` — tenant_admin can read intel + orch dashboards
+   - `TestLegacyScopeFallback` — `governance:read` → viewer fallback → read allowed, write denied; `governance:write` → assessor fallback → read + decision allowed
+
+5. **`ROADMAP.md`** — PR #517 marked merged; PR #518 row added.
+
+6. **`docs/ai/PR_FIX_LOG.md`** — This entry.
+
+**Security posture:** All governance read and write routes now enforce capability-level authorization. `governance.read` is the minimum grant for any actor accessing intelligence or orchestration data. `governance.promote` gates the three approval-action routes (approve/reject/delegate), enforcing that only `tenant_admin` or `platform_admin` can issue governance approvals. SoD invariants are preserved: `compliance_reviewer` can record governance decisions but cannot approve workflow approvals; `assessor` can trigger simulations but cannot approve or delegate.
+
+**Files modified:**
+- `api/actor_context.py`
+- `api/governance_intelligence.py`
+- `api/governance_orchestration.py`
+- `tests/test_phase4_gov_read_enforcement.py` (new)
+- `ROADMAP.md`
+- `docs/ai/PR_FIX_LOG.md` — this entry
