@@ -60,6 +60,7 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         "risk.accept",
         "exception.grant",
         "governance.decision",
+        "governance.read",
         # Cross-boundary promotion
         "governance.promote",
         # Administration — deliberately separate from compliance authority (SoD)
@@ -193,6 +194,11 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
         "description": "Emit a governance event against an engagement",
         "risk_level": "critical",
     },
+    "governance.read": {
+        "display_name": "View Governance Intelligence",
+        "description": "Read governance intelligence, orchestration, and analytics data",
+        "risk_level": "low",
+    },
     # Cross-boundary promotion
     "governance.promote": {
         "display_name": "Promote to Governance",
@@ -241,6 +247,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "scan.read",
             "report.read",
             "bundle.read",
+            "governance.read",
         }
     ),
     "assessor": frozenset(
@@ -252,6 +259,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "scan.read",
             "report.read",
             "bundle.read",
+            "governance.read",
             # assessor-only
             "assessment.create",
             "finding.create",
@@ -270,6 +278,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "scan.read",
             "report.read",
             "bundle.read",
+            "governance.read",
             # qa_reviewer-only
             "finding.approve",
             "finding.close",
@@ -287,6 +296,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "scan.read",
             "report.read",
             "bundle.read",
+            "governance.read",
             # compliance-only — separate from qa_reviewer (SoD: cannot close findings)
             "risk.accept",
             "exception.grant",
@@ -302,6 +312,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "scan.read",
             "report.read",
             "bundle.read",
+            "governance.read",
             # admin-only — does NOT inherit compliance_reviewer or qa_reviewer (SoD)
             "key.manage",
             "user.invite",

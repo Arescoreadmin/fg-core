@@ -20,6 +20,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
+from api.actor_context import ActorContext
+from api.auth_dispatch import require_permission
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine, set_tenant_context
 from services.governance_orchestration.engine import (
@@ -133,7 +135,10 @@ def governance_orchestration_health() -> HealthResponse:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=DashboardResponse,
 )
-def get_dashboard(request: Request) -> DashboardResponse:
+def get_dashboard(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> DashboardResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -150,7 +155,10 @@ def get_dashboard(request: Request) -> DashboardResponse:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=StatisticsResponse,
 )
-def get_statistics(request: Request) -> StatisticsResponse:
+def get_statistics(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> StatisticsResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -169,6 +177,7 @@ def get_statistics(request: Request) -> StatisticsResponse:
 )
 def search(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     q: str = Query(..., min_length=1, max_length=512),
 ) -> SearchResponse:
     tenant_id = require_bound_tenant(request)
@@ -189,6 +198,7 @@ def search(
 )
 def get_timeline(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     entity_type: Optional[str] = Query(default=None),
     entity_id: Optional[str] = Query(default=None),
     offset: int = Query(default=0, ge=0),
@@ -217,6 +227,7 @@ def get_timeline(
 )
 def get_history(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     entity_type: str = Query(..., min_length=1),
     entity_id: str = Query(..., min_length=1),
 ) -> HistoryResponse:
@@ -238,6 +249,7 @@ def get_history(
 )
 def get_impact_analysis(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     change_type: str = Query(..., min_length=1, max_length=64),
 ) -> ImpactAnalysisResponse:
     tenant_id = require_bound_tenant(request)
@@ -263,6 +275,7 @@ def get_impact_analysis(
 )
 def list_triggers(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     trigger_type: Optional[str] = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
@@ -286,7 +299,11 @@ def list_triggers(
     response_model=TriggerResponse,
     status_code=201,
 )
-def create_trigger(req: CreateTriggerRequest, request: Request) -> TriggerResponse:
+def create_trigger(
+    req: CreateTriggerRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+) -> TriggerResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -306,7 +323,11 @@ def create_trigger(req: CreateTriggerRequest, request: Request) -> TriggerRespon
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=TriggerResponse,
 )
-def get_trigger(trigger_id: str, request: Request) -> TriggerResponse:
+def get_trigger(
+    trigger_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> TriggerResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -330,6 +351,7 @@ def get_trigger(trigger_id: str, request: Request) -> TriggerResponse:
 )
 def list_policies(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     active: Optional[bool] = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
@@ -351,7 +373,11 @@ def list_policies(
     response_model=PolicyResponse,
     status_code=201,
 )
-def create_policy(req: CreatePolicyRequest, request: Request) -> PolicyResponse:
+def create_policy(
+    req: CreatePolicyRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+) -> PolicyResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -371,7 +397,11 @@ def create_policy(req: CreatePolicyRequest, request: Request) -> PolicyResponse:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=PolicyResponse,
 )
-def get_policy(policy_id: str, request: Request) -> PolicyResponse:
+def get_policy(
+    policy_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> PolicyResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -389,7 +419,10 @@ def get_policy(policy_id: str, request: Request) -> PolicyResponse:
     response_model=PolicyResponse,
 )
 def update_policy(
-    policy_id: str, req: UpdatePolicyRequest, request: Request
+    policy_id: str,
+    req: UpdatePolicyRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> PolicyResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -417,6 +450,7 @@ def update_policy(
 )
 def list_playbooks(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     playbook_type: Optional[str] = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
@@ -440,7 +474,11 @@ def list_playbooks(
     response_model=PlaybookResponse,
     status_code=201,
 )
-def create_playbook(req: CreatePlaybookRequest, request: Request) -> PlaybookResponse:
+def create_playbook(
+    req: CreatePlaybookRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+) -> PlaybookResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -459,7 +497,11 @@ def create_playbook(req: CreatePlaybookRequest, request: Request) -> PlaybookRes
     "/governance-orchestration/playbooks/templates/{playbook_type}",
     dependencies=[Depends(require_scopes("governance:read"))],
 )
-def get_playbook_template_route(playbook_type: str, request: Request) -> dict[str, Any]:
+def get_playbook_template_route(
+    playbook_type: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> dict[str, Any]:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -478,7 +520,11 @@ def get_playbook_template_route(playbook_type: str, request: Request) -> dict[st
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=PlaybookResponse,
 )
-def get_playbook(playbook_id: str, request: Request) -> PlaybookResponse:
+def get_playbook(
+    playbook_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> PlaybookResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -502,6 +548,7 @@ def get_playbook(playbook_id: str, request: Request) -> PlaybookResponse:
 )
 def list_workflows(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     workflow_state: Optional[str] = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
@@ -525,7 +572,11 @@ def list_workflows(
     response_model=WorkflowResponse,
     status_code=201,
 )
-def create_workflow(req: CreateWorkflowRequest, request: Request) -> WorkflowResponse:
+def create_workflow(
+    req: CreateWorkflowRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+) -> WorkflowResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -545,7 +596,11 @@ def create_workflow(req: CreateWorkflowRequest, request: Request) -> WorkflowRes
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=WorkflowResponse,
 )
-def get_workflow(workflow_id: str, request: Request) -> WorkflowResponse:
+def get_workflow(
+    workflow_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> WorkflowResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -565,6 +620,7 @@ def get_workflow(workflow_id: str, request: Request) -> WorkflowResponse:
 def advance_workflow(
     workflow_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     event: str = Query(..., min_length=1, max_length=64),
 ) -> WorkflowResponse:
     tenant_id = require_bound_tenant(request)
@@ -586,7 +642,11 @@ def advance_workflow(
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=WorkflowResponse,
 )
-def pause_workflow(workflow_id: str, request: Request) -> WorkflowResponse:
+def pause_workflow(
+    workflow_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+) -> WorkflowResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -606,7 +666,11 @@ def pause_workflow(workflow_id: str, request: Request) -> WorkflowResponse:
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=WorkflowResponse,
 )
-def cancel_workflow(workflow_id: str, request: Request) -> WorkflowResponse:
+def cancel_workflow(
+    workflow_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+) -> WorkflowResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -633,6 +697,7 @@ def cancel_workflow(workflow_id: str, request: Request) -> WorkflowResponse:
 )
 def list_reassessments(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     reassessment_state: Optional[str] = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
@@ -659,7 +724,9 @@ def list_reassessments(
     status_code=201,
 )
 def create_reassessment(
-    req: CreateReassessmentRequest, request: Request
+    req: CreateReassessmentRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> ReassessmentResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -680,7 +747,11 @@ def create_reassessment(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=ReassessmentResponse,
 )
-def get_reassessment(reassessment_id: str, request: Request) -> ReassessmentResponse:
+def get_reassessment(
+    reassessment_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> ReassessmentResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -700,6 +771,7 @@ def get_reassessment(reassessment_id: str, request: Request) -> ReassessmentResp
 def schedule_reassessment(
     reassessment_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     scheduled_at: str = Query(..., min_length=1, max_length=64),
 ) -> ReassessmentResponse:
     tenant_id = require_bound_tenant(request)
@@ -726,6 +798,7 @@ def schedule_reassessment(
 def complete_reassessment(
     reassessment_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     outcome: str = Query(..., min_length=1, max_length=1024),
 ) -> ReassessmentResponse:
     tenant_id = require_bound_tenant(request)
@@ -754,6 +827,7 @@ def complete_reassessment(
 )
 def list_simulations(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
 ) -> SimulationListResponse:
@@ -775,7 +849,9 @@ def list_simulations(
     status_code=201,
 )
 def create_simulation(
-    req: CreateSimulationRequest, request: Request
+    req: CreateSimulationRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
 ) -> SimulationResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -796,7 +872,11 @@ def create_simulation(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=SimulationResponse,
 )
-def get_simulation(simulation_id: str, request: Request) -> SimulationResponse:
+def get_simulation(
+    simulation_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> SimulationResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -820,6 +900,7 @@ def get_simulation(simulation_id: str, request: Request) -> SimulationResponse:
 )
 def list_change_detection(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     change_type: Optional[str] = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
@@ -844,7 +925,9 @@ def list_change_detection(
     status_code=201,
 )
 def create_change_detection(
-    req: CreateChangeDetectionRequest, request: Request
+    req: CreateChangeDetectionRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
 ) -> ChangeDetectionResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -872,6 +955,7 @@ def create_change_detection(
 )
 def list_maintenance_windows(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     window_state: Optional[str] = Query(default=None),
 ) -> MaintenanceWindowListResponse:
     tenant_id = require_bound_tenant(request)
@@ -892,7 +976,9 @@ def list_maintenance_windows(
     status_code=201,
 )
 def create_maintenance_window(
-    req: CreateMaintenanceWindowRequest, request: Request
+    req: CreateMaintenanceWindowRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> MaintenanceWindowResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -914,7 +1000,9 @@ def create_maintenance_window(
     response_model=MaintenanceWindowResponse,
 )
 def get_maintenance_window(
-    window_id: str, request: Request
+    window_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> MaintenanceWindowResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -933,7 +1021,9 @@ def get_maintenance_window(
     response_model=MaintenanceWindowResponse,
 )
 def open_maintenance_window(
-    window_id: str, request: Request
+    window_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> MaintenanceWindowResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -955,7 +1045,9 @@ def open_maintenance_window(
     response_model=MaintenanceWindowResponse,
 )
 def close_maintenance_window(
-    window_id: str, request: Request
+    window_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> MaintenanceWindowResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -983,6 +1075,7 @@ def close_maintenance_window(
 )
 def list_approvals(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     workflow_id: Optional[str] = Query(default=None),
     approval_state: Optional[str] = Query(default=None),
 ) -> ApprovalListResponse:
@@ -1005,7 +1098,10 @@ def list_approvals(
     response_model=ApprovalResponse,
 )
 def approve_approval(
-    approval_id: str, req: ApproveRequest, request: Request
+    approval_id: str,
+    req: ApproveRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.promote")),
 ) -> ApprovalResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1033,7 +1129,10 @@ def approve_approval(
     response_model=ApprovalResponse,
 )
 def reject_approval(
-    approval_id: str, req: ApproveRequest, request: Request
+    approval_id: str,
+    req: ApproveRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.promote")),
 ) -> ApprovalResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1060,7 +1159,10 @@ def reject_approval(
     response_model=ApprovalResponse,
 )
 def delegate_approval(
-    approval_id: str, req: ApproveRequest, request: Request
+    approval_id: str,
+    req: ApproveRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.promote")),
 ) -> ApprovalResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)

@@ -20,6 +20,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
+from api.actor_context import ActorContext
+from api.auth_dispatch import require_permission
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine, set_tenant_context
 from services.governance_intelligence.engine import GovernanceIntelligenceEngine
@@ -156,7 +158,10 @@ def intelligence_health() -> HealthResponse:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=DashboardResponse,
 )
-def get_dashboard(request: Request) -> DashboardResponse:
+def get_dashboard(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> DashboardResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -173,7 +178,10 @@ def get_dashboard(request: Request) -> DashboardResponse:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=DashboardResponse,
 )
-def get_dashboard_executive(request: Request) -> DashboardResponse:
+def get_dashboard_executive(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> DashboardResponse:
     """Executive summary variant of the intelligence dashboard."""
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -191,7 +199,10 @@ def get_dashboard_executive(request: Request) -> DashboardResponse:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=DashboardResponse,
 )
-def get_dashboard_auditor(request: Request) -> DashboardResponse:
+def get_dashboard_auditor(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> DashboardResponse:
     """Auditor workspace view of the intelligence dashboard."""
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -218,6 +229,7 @@ def list_explainability(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ExplainabilityListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -239,6 +251,7 @@ def list_explainability(
 def create_explainability(
     body: dict[str, Any],
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> ExplainabilityResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -271,6 +284,7 @@ def create_explainability(
 def get_explainability(
     decision_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ExplainabilityResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -291,6 +305,7 @@ def get_explainability(
 def export_explainability(
     decision_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> ExplainabilityResponse:
     """Export explanation — returns the same record as GET."""
     tenant_id = require_bound_tenant(request)
@@ -318,6 +333,7 @@ def list_simulations(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> SimulationListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -337,7 +353,9 @@ def list_simulations(
     status_code=201,
 )
 def create_simulation(
-    req: CreateSimulationRequest, request: Request
+    req: CreateSimulationRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> SimulationResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -358,7 +376,11 @@ def create_simulation(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=SimulationResponse,
 )
-def get_simulation(simulation_id: str, request: Request) -> SimulationResponse:
+def get_simulation(
+    simulation_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> SimulationResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -379,6 +401,7 @@ def update_simulation(
     simulation_id: str,
     req: UpdateSimulationRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> SimulationResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -403,6 +426,7 @@ def run_simulation(
     simulation_id: str,
     req: RunSimulationRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
 ) -> SimulationResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -423,7 +447,11 @@ def run_simulation(
     dependencies=[Depends(require_scopes("governance:write"))],
     status_code=204,
 )
-def delete_simulation(simulation_id: str, request: Request) -> None:
+def delete_simulation(
+    simulation_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+) -> None:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -442,7 +470,11 @@ def delete_simulation(simulation_id: str, request: Request) -> None:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=TimelineResponse,
 )
-def get_simulation_history(simulation_id: str, request: Request) -> TimelineResponse:
+def get_simulation_history(
+    simulation_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> TimelineResponse:
     """Return timeline events for this simulation."""
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -468,7 +500,11 @@ def get_simulation_history(simulation_id: str, request: Request) -> TimelineResp
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=SimulationResponse,
 )
-def archive_simulation(simulation_id: str, request: Request) -> SimulationResponse:
+def archive_simulation(
+    simulation_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+) -> SimulationResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -497,6 +533,7 @@ def list_intelligence_policies(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> IntelligencePolicyListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -516,7 +553,9 @@ def list_intelligence_policies(
     status_code=201,
 )
 def create_intelligence_policy(
-    req: CreateIntelligencePolicyRequest, request: Request
+    req: CreateIntelligencePolicyRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> IntelligencePolicyResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -538,7 +577,9 @@ def create_intelligence_policy(
     response_model=IntelligencePolicyResponse,
 )
 def get_intelligence_policy(
-    policy_id: str, request: Request
+    policy_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> IntelligencePolicyResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -560,6 +601,7 @@ def update_intelligence_policy(
     policy_id: str,
     req: UpdateIntelligencePolicyRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> IntelligencePolicyResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -584,6 +626,7 @@ def transition_policy(
     policy_id: str,
     req: PolicyTransitionRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.promote")),
 ) -> IntelligencePolicyResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -604,7 +647,11 @@ def transition_policy(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=PolicyVersionListResponse,
 )
-def get_policy_versions(policy_id: str, request: Request) -> PolicyVersionListResponse:
+def get_policy_versions(
+    policy_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> PolicyVersionListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -621,7 +668,11 @@ def get_policy_versions(policy_id: str, request: Request) -> PolicyVersionListRe
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=PolicyDiffResponse,
 )
-def get_policy_diff_by_last_two(policy_id: str, request: Request) -> PolicyDiffResponse:
+def get_policy_diff_by_last_two(
+    policy_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> PolicyDiffResponse:
     """Diff the last two versions of a policy."""
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -659,6 +710,7 @@ def get_policy_diff(
     policy_id: str = Query(..., min_length=1),
     from_version: str = Query(..., min_length=1),
     to_version: str = Query(..., min_length=1),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> PolicyDiffResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -686,6 +738,7 @@ def list_benchmarks(
     framework: Optional[str] = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> BenchmarkListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -705,7 +758,9 @@ def list_benchmarks(
     status_code=201,
 )
 def create_benchmark(
-    req: CreateBenchmarkRequest, request: Request
+    req: CreateBenchmarkRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> BenchmarkResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -726,7 +781,11 @@ def create_benchmark(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=BenchmarkResponse,
 )
-def get_benchmark(benchmark_id: str, request: Request) -> BenchmarkResponse:
+def get_benchmark(
+    benchmark_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> BenchmarkResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -743,7 +802,11 @@ def get_benchmark(benchmark_id: str, request: Request) -> BenchmarkResponse:
     dependencies=[Depends(require_scopes("governance:write"))],
     status_code=204,
 )
-def delete_benchmark(benchmark_id: str, request: Request) -> None:
+def delete_benchmark(
+    benchmark_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+) -> None:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -771,6 +834,7 @@ def list_trends(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> TrendListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -792,6 +856,7 @@ def get_trends_summary(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=10, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> TrendListResponse:
     """Trend summary across key metrics."""
     tenant_id = require_bound_tenant(request)
@@ -814,6 +879,7 @@ def get_trend(
     metric_key: str,
     request: Request,
     window_days: int = Query(default=30, ge=1, le=365),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> TrendResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -840,6 +906,7 @@ def list_forecasts(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ForecastListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -861,6 +928,7 @@ def get_forecasts_summary(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=10, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ForecastListResponse:
     """Forecast summary across key metrics."""
     tenant_id = require_bound_tenant(request)
@@ -883,6 +951,7 @@ def get_forecast(
     metric_key: str,
     request: Request,
     horizon: str = Query(default="DAYS_30"),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ForecastResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -909,6 +978,7 @@ def list_confidence(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ConfidenceListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -926,7 +996,10 @@ def list_confidence(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=ConfidenceResponse,
 )
-def get_confidence_summary(request: Request) -> ConfidenceResponse:
+def get_confidence_summary(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> ConfidenceResponse:
     """Return overall confidence across all dimensions."""
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -944,7 +1017,11 @@ def get_confidence_summary(request: Request) -> ConfidenceResponse:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=ConfidenceResponse,
 )
-def get_confidence(dimension: str, request: Request) -> ConfidenceResponse:
+def get_confidence(
+    dimension: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> ConfidenceResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -971,6 +1048,7 @@ def list_external_events(
     event_type: Optional[str] = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ExternalEventListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -992,7 +1070,9 @@ def list_external_events(
     status_code=201,
 )
 def record_external_event(
-    req: ExternalEventRequest, request: Request
+    req: ExternalEventRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> ExternalEventResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1013,7 +1093,11 @@ def record_external_event(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=ExternalEventResponse,
 )
-def get_external_event(event_id: str, request: Request) -> ExternalEventResponse:
+def get_external_event(
+    event_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> ExternalEventResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -1039,6 +1123,7 @@ def list_federation(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> FederationListResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1058,7 +1143,9 @@ def list_federation(
     status_code=201,
 )
 def register_federation(
-    req: FederationSyncRequest, request: Request
+    req: FederationSyncRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("connector.manage")),
 ) -> FederationResponse:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1079,7 +1166,11 @@ def register_federation(
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=FederationResponse,
 )
-def get_federation(federation_id: str, request: Request) -> FederationResponse:
+def get_federation(
+    federation_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> FederationResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -1096,7 +1187,11 @@ def get_federation(federation_id: str, request: Request) -> FederationResponse:
     dependencies=[Depends(require_scopes("governance:write"))],
     status_code=204,
 )
-def delete_federation(federation_id: str, request: Request) -> None:
+def delete_federation(
+    federation_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("connector.manage")),
+) -> None:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
     db_engine = get_engine()
@@ -1120,7 +1215,10 @@ def delete_federation(federation_id: str, request: Request) -> None:
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=StatisticsResponse,
 )
-def get_statistics(request: Request) -> StatisticsResponse:
+def get_statistics(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
+) -> StatisticsResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
     with Session(db_engine) as db:
@@ -1146,6 +1244,7 @@ def search(
     request: Request,
     q: str = Query(..., min_length=1, max_length=512),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> SearchResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1172,6 +1271,7 @@ def get_timeline(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> TimelineResponse:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1198,6 +1298,7 @@ def list_provenance_nodes(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1219,6 +1320,7 @@ def list_provenance_nodes(
 def create_provenance_node(
     body: CreateProvenanceNodeRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1249,6 +1351,7 @@ def create_provenance_node(
 def get_provenance_node(
     node_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1268,6 +1371,7 @@ def get_provenance_node(
 def get_provenance_ancestors(
     node_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1287,6 +1391,7 @@ def get_provenance_ancestors(
 def get_provenance_descendants(
     node_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1307,6 +1412,7 @@ def get_provenance_descendants(
 def export_provenance_graph(
     body: ExportProvenanceGraphRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1333,6 +1439,7 @@ def list_evidence_matrices(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("evidence.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1354,6 +1461,7 @@ def list_evidence_matrices(
 def create_evidence_matrix(
     body: CreateEvidenceMatrixRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1390,6 +1498,7 @@ def create_evidence_matrix(
 def get_evidence_matrix(
     matrix_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1416,6 +1525,7 @@ def list_replays(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1437,6 +1547,7 @@ def list_replays(
 def create_replay(
     body: CreateReplayRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1467,6 +1578,7 @@ def create_replay(
 def get_replay(
     replay_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1493,6 +1605,7 @@ def list_counterfactuals(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1514,6 +1627,7 @@ def list_counterfactuals(
 def create_counterfactual(
     body: CreateCounterfactualRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1542,6 +1656,7 @@ def create_counterfactual(
 def get_counterfactual(
     cf_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1568,6 +1683,7 @@ def list_quality_scores(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1589,6 +1705,7 @@ def list_quality_scores(
 def compute_quality_score(
     body: ComputeQualityScoreRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1617,6 +1734,7 @@ def compute_quality_score(
 def get_quality_score(
     entity_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1643,6 +1761,7 @@ def list_benchmark_confidence(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1664,6 +1783,7 @@ def list_benchmark_confidence(
 def compute_benchmark_confidence(
     body: ComputeBenchmarkConfidenceRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1699,6 +1819,7 @@ def compute_benchmark_confidence(
 def compute_timeline_diff(
     body: ComputeTimelineDiffRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1728,6 +1849,7 @@ def list_timeline_diffs(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1754,6 +1876,7 @@ def list_timeline_diffs(
 def compare_simulations(
     body: CompareSimulationsRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1782,6 +1905,7 @@ def list_simulation_comparisons(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1808,6 +1932,7 @@ def list_simulation_comparisons(
 def compute_evidence_impact(
     body: ComputeEvidenceImpactRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
@@ -1842,6 +1967,7 @@ def list_exports(
     request: Request,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
+    actor_ctx: ActorContext = Depends(require_permission("bundle.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
@@ -1863,6 +1989,7 @@ def list_exports(
 def create_export(
     body: CreateExportRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.generate")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     actor = _actor(request)
