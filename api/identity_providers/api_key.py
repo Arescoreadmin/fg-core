@@ -50,7 +50,11 @@ def _permissions_from_legacy_scopes(scopes: set[str]) -> frozenset[str]:
     """
     result: set[str] = set()
     if "governance:write" in scopes:
-        result |= roles_to_permissions(["assessor"])
+        # Pre-RBAC write keys had full write access across FA mutations (assessor)
+        # and governance decision routes (compliance_reviewer). Both are needed so
+        # legacy keys retain access to POST /intelligence/... and /orchestration/...
+        # mutation routes that now require governance.decision.
+        result |= roles_to_permissions(["assessor", "compliance_reviewer"])
     if "governance:qa_approve" in scopes:
         result |= roles_to_permissions(["qa_reviewer"])
     if not result and "governance:read" in scopes:

@@ -305,7 +305,7 @@ def get_explainability(
 def export_explainability(
     decision_id: str,
     request: Request,
-    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ExplainabilityResponse:
     """Export explanation — returns the same record as GET."""
     tenant_id = require_bound_tenant(request)
@@ -1412,7 +1412,7 @@ def get_provenance_descendants(
 def export_provenance_graph(
     body: ExportProvenanceGraphRequest,
     request: Request,
-    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> Any:
     tenant_id = require_bound_tenant(request)
     db_engine = get_engine()
