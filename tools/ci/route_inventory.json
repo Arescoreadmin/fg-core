@@ -12916,7 +12916,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "governance:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -19431,7 +19431,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-05T18:09:43.777995+00:00",
+  "generated_at": "2026-07-08T13:48:36.639338+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

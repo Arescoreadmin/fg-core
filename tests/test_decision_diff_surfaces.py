@@ -35,7 +35,8 @@ def test_decision_diff_exposed_in_decisions_and_feed():
     assert r2.status_code in (200, 201), r2.text
 
     # decisions list should include decision_diff (P0: tenant_id required)
-    key_dec = mint_key("decisions:read", tenant_id=test_tenant)
+    # decisions:read satisfies require_scopes; governance:read → viewer → governance.read cap
+    key_dec = mint_key("decisions:read", "governance:read", tenant_id=test_tenant)
     dl = client.get("/decisions?limit=5", headers={"X-API-Key": key_dec})
     assert dl.status_code == 200, dl.text
     data = dl.json()

@@ -16,6 +16,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from api.actor_context import ActorContext
+from api.auth_dispatch import require_permission
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
 from services.risk_governance.engine import GovernanceEngine
@@ -71,6 +73,7 @@ def create_approval(
     ra_id: str,
     body: CreateApprovalRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     notify_recipient: str | None = Query(default=None),
 ) -> ApprovalResponse:
     tenant_id = require_bound_tenant(request)
@@ -103,6 +106,7 @@ def create_approval(
 def list_approvals(
     ra_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -133,6 +137,7 @@ def get_approval(
     ra_id: str,
     approval_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ApprovalResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -161,6 +166,7 @@ def decide_approval(
     approval_id: str,
     body: ApprovalDecisionRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     notify_recipient: str | None = Query(default=None),
 ) -> ApprovalResponse:
     tenant_id = require_bound_tenant(request)
@@ -199,6 +205,7 @@ def get_approval_audit(
     ra_id: str,
     approval_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> ApprovalAuditListResponse:
@@ -231,6 +238,7 @@ def create_review(
     ra_id: str,
     body: CreateReviewRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     notify_recipient: str | None = Query(default=None),
 ) -> ReviewResponse:
     tenant_id = require_bound_tenant(request)
@@ -263,6 +271,7 @@ def create_review(
 def list_reviews(
     ra_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -293,6 +302,7 @@ def get_review(
     ra_id: str,
     review_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> ReviewResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -321,6 +331,7 @@ def complete_review(
     review_id: str,
     body: CompleteReviewRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     notify_recipient: str | None = Query(default=None),
 ) -> ReviewResponse:
     tenant_id = require_bound_tenant(request)
@@ -358,6 +369,7 @@ def complete_review(
 def list_escalations(
     ra_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     resolved: bool | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -388,6 +400,7 @@ def list_escalations(
 def create_escalation_route(
     ra_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     trigger: EscalationTrigger = Query(...),
     level: EscalationLevel = Query(...),
     notify_recipient: str | None = Query(default=None),
@@ -422,6 +435,7 @@ def create_escalation_route(
 )
 def list_policies(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     active_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -447,6 +461,7 @@ def list_policies(
 def create_policy(
     body: CreatePolicyRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> PolicyResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -470,6 +485,7 @@ def create_policy(
 def get_policy(
     policy_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> PolicyResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -493,6 +509,7 @@ def get_policy(
 )
 def governance_dashboard(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> GovernanceDashboardResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -512,6 +529,7 @@ def governance_dashboard(
 )
 def expire_overdue_approvals(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> dict:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -533,6 +551,7 @@ def expire_overdue_approvals(
 )
 def mark_overdue_reviews(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
 ) -> dict:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()

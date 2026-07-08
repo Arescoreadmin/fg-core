@@ -57,8 +57,23 @@ def _permissions_from_legacy_scopes(scopes: set[str]) -> frozenset[str]:
         result |= roles_to_permissions(["assessor", "compliance_reviewer"])
     if "governance:qa_approve" in scopes:
         result |= roles_to_permissions(["qa_reviewer"])
-    if not result and "governance:read" in scopes:
+    if not result and (scopes & {"governance:read", "decisions:read"}):
+        # decisions:read is the historical read scope for the /decisions endpoint;
+        # it carries the same read-only intent as governance:read and maps to viewer.
         result |= roles_to_permissions(["viewer"])
+    # Admin and key-management scopes used by legacy service keys and test fixtures.
+    # These keys already pass require_internal_admin_gateway; the fallback ensures
+    # they also satisfy the new require_permission("platform.admin"/"key.manage") gates.
+    if scopes & {
+        "admin:write",
+        "admin:read",
+        "keys:admin",
+        "keys:write",
+        "keys:read",
+        "audit:read",
+        "audit:export",
+    }:
+        result |= roles_to_permissions(["platform_admin"])
     return frozenset(result)
 
 

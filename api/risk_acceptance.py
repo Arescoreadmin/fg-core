@@ -16,6 +16,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from api.actor_context import ActorContext
+from api.auth_dispatch import require_permission
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
 from services.risk_acceptance.engine import RiskAcceptanceEngine
@@ -58,6 +60,7 @@ def _actor(request: Request) -> str:
 def create_risk_acceptance(
     body: CreateRiskAcceptanceRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("risk.accept")),
 ) -> RiskAcceptanceResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -83,6 +86,7 @@ def create_risk_acceptance(
 )
 def list_risk_acceptances(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     status_filter: str | None = Query(default=None, alias="status"),
     finding_id: str | None = Query(default=None),
     assessment_id: str | None = Query(default=None),
@@ -117,6 +121,7 @@ def list_risk_acceptances(
 def get_risk_acceptance(
     ra_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> RiskAcceptanceResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -142,6 +147,7 @@ def update_risk_acceptance(
     ra_id: str,
     body: UpdateRiskAcceptanceRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("risk.accept")),
 ) -> RiskAcceptanceResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -171,6 +177,7 @@ def transition_risk_acceptance(
     ra_id: str,
     body: TransitionRiskAcceptanceRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("risk.accept")),
     notify_recipient: str | None = Query(default=None),
 ) -> RiskAcceptanceResponse:
     tenant_id = require_bound_tenant(request)
@@ -205,6 +212,7 @@ def transition_risk_acceptance(
 def get_allowed_transitions(
     ra_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
 ) -> AllowedTransitionsResponse:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
@@ -229,6 +237,7 @@ def get_allowed_transitions(
 def get_risk_acceptance_audit(
     ra_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> RiskAcceptanceAuditListResponse:

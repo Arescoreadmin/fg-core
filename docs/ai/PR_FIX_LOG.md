@@ -17330,3 +17330,55 @@ Result:
 - `tests/test_phase4_gov_read_enforcement.py` (new)
 - `ROADMAP.md`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR #519 — Phase 5 P0/P1: Governance + Admin Route Enforcement
+
+**Branch:** `feat/phase5-p0p1-governance-admin-enforcement`
+
+**Date:** 2026-07-08
+
+**What was done:** Enforced read and write capability authorization on 7 high-priority files — 4 P0 governance/risk authority files and 3 P1 admin/key management files. Extended the legacy scope fallback to cover admin and key management scopes. Added 16 new enforcement tests.
+
+**Changes:**
+
+1. **`api/decisions.py`** (2 routes) — `governance.read` (both GET)
+
+2. **`api/governance.py`** (3 routes) — `governance.read` (GET), `governance.decision` (POST create + approve); conditionally mounted (`FG_GOVERNANCE_ENABLED`)
+
+3. **`api/risk_acceptance.py`** (7 routes) — `governance.read` (4 GET), `risk.accept` (POST create, PATCH update, POST transition)
+
+4. **`api/risk_governance.py`** (17 routes) — `governance.read` (9 GET: approvals, reviews, escalations, policies, dashboard), `governance.decision` (8 POST: create/decide approval, create/complete review, escalation, policy, maintenance ops)
+
+5. **`api/keys.py`** (5 routes) — `key.manage` (all: create, list, revoke, delete, rotate)
+
+6. **`api/admin.py`** (18 routes, health exempt) — `platform.admin` (12 cross-tenant ops: tenants CRUD, audit search/export, usage, config revert), `key.manage` (6 admin key routes); router-level `require_internal_admin_gateway` left intact
+
+7. **`api/admin_identity.py`** (31 routes) — `tenant.configure` (identity config, SSO readiness, governance scoring, audit summary, drift, snapshots, recommendations, forecasts, SLA, benchmarks, findings, actions), `user.invite` (invitations create/revoke/resend, approval queue, membership)
+
+8. **`api/identity_providers/api_key.py`** — Legacy scope fallback extended: `admin:write`, `admin:read`, `keys:admin`, `keys:write`, `keys:read` → `platform_admin`. Pre-RBAC admin service keys and test fixtures that used these scopes retain full access without DB role reassignment.
+
+9. **`tests/test_phase5_p0p1_enforcement.py`** (new) — 16 tests across 8 classes: viewer P0 reads, viewer governance.decision denied, viewer risk.accept denied, compliance_reviewer governance.decision, compliance_reviewer risk.accept, tenant_admin key.manage, viewer key.manage denied, legacy admin/governance scope fallbacks.
+
+10. **`tests/test_decision_diff_surfaces.py`** — Updated to mint key with both `decisions:read` (existing require_scopes gate) and `governance:read` (new require_permission gate) for `GET /decisions`.
+
+11. **`ROADMAP.md`** — PR #518 marked merged; PR #519 row added.
+
+12. **`docs/ai/PR_FIX_LOG.md`** — This entry.
+
+**Security posture:** All P0/P1 routes now enforce capability-level authorization. `risk.accept` and `exception.grant` are critical-risk capabilities gated to `compliance_reviewer`/`platform_admin` only — no assessor, no tenant_admin. Key management (`key.manage`) is gated to `tenant_admin`+, preventing viewers or assessors from minting or revoking API keys. Admin cross-tenant operations (`platform.admin`) require the highest privilege level.
+
+**Files modified:**
+- `api/decisions.py`
+- `api/governance.py`
+- `api/risk_acceptance.py`
+- `api/risk_governance.py`
+- `api/keys.py`
+- `api/admin.py`
+- `api/admin_identity.py`
+- `api/identity_providers/api_key.py`
+- `tests/test_phase5_p0p1_enforcement.py` (new)
+- `tests/test_decision_diff_surfaces.py`
+- `ROADMAP.md`
+- `docs/ai/PR_FIX_LOG.md` — this entry

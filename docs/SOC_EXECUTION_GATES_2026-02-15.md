@@ -5617,3 +5617,23 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md` — tracking entries added.
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic signing — SHA-256 content-addressing only (no key material). No new API endpoints. No DB schema changes. No new external dependencies. The execution engine records governance decisions — it does not execute infrastructure changes, run scripts, or provision resources. Tenant isolation enforced at FATAL severity. The CI gate is a read-only static analysis tool.
+
+## 2026-07-08 — PR #519: Phase 5 P0/P1 Governance + Admin Route Enforcement
+
+**Classification:** Authorization hardening. No new routes. No DB schema changes. No new secrets. No cryptographic operations.
+
+**Critical-path files changed:**
+- `tools/ci/route_inventory.json` — regenerated after `GET /governance/changes` scope corrected from `governance:write` to `governance:read` (P2 bot fix: read endpoint was gated behind write scope, blocking viewer-role access).
+- `tools/ci/plane_registry_snapshot.json` — generated_at timestamp updated during inventory regeneration (content unchanged).
+- `tools/ci/topology.sha256` — updated to reflect new plane registry snapshot timestamp.
+
+**Auth changes (bounded, additive only):**
+- `api/governance.py` — removed router-level `require_scopes("governance:write")` blanket dependency; replaced with per-route guards (`governance:read` on GET, `governance:write` on POST routes). No new scopes introduced.
+- `api/identity_providers/api_key.py` — legacy scope fallback extended to include `audit:read`, `audit:export` → `platform_admin`, and `admin:write/read`, `keys:admin/write/read` → `platform_admin`. These additions restore access that pre-RBAC admin and audit service keys had before Phase 5 added `require_permission()` gates on those routes.
+
+**Non-critical-path additions:**
+- `api/decisions.py`, `api/risk_acceptance.py`, `api/risk_governance.py`, `api/keys.py`, `api/admin.py`, `api/admin_identity.py` — `require_permission()` injected (83 total). No route paths changed. No scope strings removed. Additive enforcement layer only.
+- `tests/test_phase5_p0p1_enforcement.py` — 16 new enforcement tests.
+- `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md` — tracking entries.
+
+**SOC review outcome:** approved. The route inventory change reflects a security improvement (read endpoint no longer requires write scope). The legacy fallback extensions restore pre-existing access for audit and admin service keys — they do not grant new privileges beyond what those keys previously had. No middleware, OPA, session, or CI workflow files were modified. No secrets stored or accessed. No new external dependencies.

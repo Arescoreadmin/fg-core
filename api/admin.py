@@ -32,6 +32,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from api.actor_context import ActorContext
+from api.auth_dispatch import require_permission
 from api.auth_scopes import (
     _validate_tenant_id,
     bind_tenant_id,
@@ -537,6 +539,7 @@ def _audit_meta(
 async def get_tenant_usage(
     tenant_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
 ) -> TenantUsageResponse:
     """Get usage statistics for a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -597,6 +600,7 @@ async def update_tenant_quota(
     tenant_id: str,
     update: TenantQuotaUpdate,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
 ) -> Dict[str, Any]:
     """Update custom quota for a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -644,6 +648,7 @@ async def update_tenant_tier(
     tenant_id: str,
     update: TenantTierUpdate,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
 ) -> Dict[str, Any]:
     """Update subscription tier for a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -700,6 +705,7 @@ async def update_tenant_tier(
 async def suspend_tenant(
     tenant_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
 ) -> Dict[str, Any]:
     """Suspend a tenant (block all requests)."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -751,6 +757,7 @@ async def suspend_tenant(
 async def activate_tenant(
     tenant_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
 ) -> Dict[str, Any]:
     """Activate a suspended tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -822,6 +829,7 @@ class TenantRecord(BaseModel):
 async def create_tenant(
     req: TenantCreateRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
 ) -> TenantRecord:
     """Provision a new tenant.
 
@@ -911,6 +919,7 @@ async def create_tenant(
 )
 async def list_tenants(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
     include_revoked: bool = Query(default=False),
 ) -> Dict[str, Any]:
     """List all provisioned tenants."""
@@ -946,6 +955,7 @@ async def list_tenants(
 async def get_tenant(
     tenant_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
 ) -> TenantRecord:
     """Get a single tenant by ID."""
     if not _TENANT_ID_RE.fullmatch(tenant_id):
@@ -998,6 +1008,7 @@ async def get_tenant(
 )
 async def admin_list_keys(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
     include_disabled: bool = Query(default=False),
 ) -> ListKeysResponse:
@@ -1020,6 +1031,7 @@ async def admin_list_keys(
 )
 async def search_audit_events(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
     tenant_id: Optional[str] = Query(None, description="Tenant filter"),
     action: Optional[str] = Query(None, description="Filter by action"),
     actor: Optional[str] = Query(None, description="Filter by actor"),
@@ -1146,6 +1158,7 @@ class AuditExportRequest(BaseModel):
 async def export_audit_events(
     request: Request,
     payload: AuditExportRequest,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
 ) -> StreamingResponse:
     """Export audit events as NDJSON or CSV with tenant scoping enforced."""
     # Enforce tenant binding:
@@ -1283,6 +1296,7 @@ async def export_audit_events(
 async def admin_create_key(
     req: AdminCreateKeyRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
 ) -> CreateKeyResponse:
     """Create a new API key via admin."""
     bound_tenant = bind_tenant_id(
@@ -1328,6 +1342,7 @@ async def admin_create_key(
 async def admin_revoke_key(
     key_prefix: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> RevokeKeyResponse:
     """Revoke an API key by prefix."""
@@ -1365,6 +1380,7 @@ async def admin_rotate_key(
     key_prefix: str,
     req: AdminRotateKeyRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
 ) -> RotateKeyResponse:
     """Rotate an API key by prefix."""
     try:
@@ -1413,6 +1429,7 @@ async def admin_rotate_key(
 )
 async def get_key_rotation_status(
     key_prefix: str,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
 ) -> KeyRotationStatusResponse:
     """Get rotation status for an API key."""
     try:
@@ -1443,7 +1460,9 @@ async def get_key_rotation_status(
     response_model=List[KeyRotationStatusResponse],
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-async def get_keys_needing_rotation() -> List[KeyRotationStatusResponse]:
+async def get_keys_needing_rotation(
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
+) -> List[KeyRotationStatusResponse]:
     """Get all keys that need rotation."""
     try:
         from api.key_rotation import get_rotation_manager
@@ -1574,6 +1593,7 @@ async def get_system_health() -> SystemHealthResponse:
     dependencies=[Depends(require_scopes("admin:read"))],
 )
 async def get_all_usage(
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
     period: Optional[str] = Query(None, description="Period in YYYY-MM-DD format"),
 ) -> Dict[str, Any]:
     """Get usage for all tenants (admin endpoint)."""
@@ -1612,6 +1632,7 @@ async def get_all_usage(
 async def revert_config_change(
     change_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
 ) -> ConfigMutationRevertResponse:
     """Revert a previously recorded config mutation."""
     _require_elevated_config_scope(request)

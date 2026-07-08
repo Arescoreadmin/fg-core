@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api.actor_context import ActorContext
+from api.auth_dispatch import require_permission
 from api.auth_scopes import require_bound_tenant, require_scopes, verify_api_key
 from api.config.startup_validation import compliance_module_enabled
 from api.deps import tenant_db_required
@@ -106,14 +108,18 @@ router = APIRouter(
     tags=["governance"],
     dependencies=[
         Depends(verify_api_key),
-        Depends(require_scopes("governance:write")),  # INV-005: Scope required
     ],
 )
 
 
-@router.get("/changes", response_model=List[PolicyChangeResponse])
+@router.get(
+    "/changes",
+    response_model=List[PolicyChangeResponse],
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
 def list_changes(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     db: Session = Depends(tenant_db_required),
     limit: int = Query(50, ge=1),
     offset: int = Query(0, ge=0),
@@ -150,10 +156,15 @@ def list_changes(
         )
 
 
-@router.post("/changes", response_model=PolicyChangeResponse)
+@router.post(
+    "/changes",
+    response_model=PolicyChangeResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
 def create_change(
     req: PolicyChangeCreate,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     db: Session = Depends(tenant_db_required),
 ) -> PolicyChangeResponse:
     """
@@ -214,11 +225,16 @@ def create_change(
         )
 
 
-@router.post("/changes/{change_id}/approve", response_model=PolicyChangeResponse)
+@router.post(
+    "/changes/{change_id}/approve",
+    response_model=PolicyChangeResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
 def approve_change(
     change_id: str,
     req: PolicyApprovalRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     db: Session = Depends(tenant_db_required),
 ) -> PolicyChangeResponse:
     """
