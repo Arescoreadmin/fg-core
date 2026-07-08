@@ -464,7 +464,7 @@ def seed_bundle_catalog(db: Session) -> None:
                     "seeder.missing_dep_target cap=%s requires=%s", cap_key, req_key
                 )
                 continue
-            existing_dep = (
+            existing = (
                 db.query(CapabilityDependency)
                 .filter(
                     CapabilityDependency.capability_id == cap_row.id,
@@ -472,7 +472,7 @@ def seed_bundle_catalog(db: Session) -> None:
                 )
                 .first()
             )
-            if existing_dep is None:
+            if existing is None:
                 db.add(
                     CapabilityDependency(
                         capability_id=cap_row.id,
@@ -490,7 +490,7 @@ def seed_bundle_catalog(db: Session) -> None:
         if cap_row is None:
             continue
         for meter_key in meter_keys:
-            existing_meter = (
+            existing = (
                 db.query(CapabilityMeterMapping)
                 .filter(
                     CapabilityMeterMapping.capability_id == cap_row.id,
@@ -498,7 +498,7 @@ def seed_bundle_catalog(db: Session) -> None:
                 )
                 .first()
             )
-            if existing_meter is None:
+            if existing is None:
                 db.add(
                     CapabilityMeterMapping(
                         id=str(uuid.uuid4()),

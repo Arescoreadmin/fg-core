@@ -5103,7 +5103,7 @@ Additional non-critical-path changes: `services/identity_resolver/versioning.py`
 **Classification:** Additive commercial control plane. No auth/session paths changed. New capability resolution step inserted between existing explicit-grant and tier-fallback checks. Fully backward-compatible: existing `TenantEntitlement` rows and tier defaults continue to resolve identically.
 
 **Critical-path files changed (tools/ci/ — route inventory regenerated):**
-- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated due to 5 new admin routes for bundle management
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256`, `contract_routes.json` — regenerated due to 5 new admin routes for bundle management
 
 **SOC review outcome:** approved. No auth, session, middleware, or OPA policy files changed. The `tools/ci/` files triggered SOC-HIGH-002 solely because the route inventory was regenerated.
 
@@ -5119,6 +5119,20 @@ New capability resolution step 3 in `check_capability()`: queries `tenant_bundle
 No cross-tenant data access. Cache keys are scoped to `tenant_id`. `invalidate_cache(tenant_id)` called synchronously on any mutation.
 
 Additional non-critical-path changes: `migrations/postgres/0118_capability_bundles.sql` (6 new tables), `api/db_models.py` (6 new ORM models), `services/capability_bundles/` (new package: resolver + seeder), `api/entitlements.py` (27 new capability key strings, resolution step 3), `tests/security/test_capability_framework.py` (16 security tests CAP-1–CAP-16).
+
+## 2026-07-08 — P1.2 cherry-pick fixups: contract re-sync and model registration
+
+**Classification:** CI artifact regeneration and ORM registration restore. No logic, auth, or new schema changes.
+
+**Critical-path files changed:**
+- `tools/ci/contract_routes.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated from the full 970-route app. The cherry-pick conflict resolution had committed an older P1.2-era `contract_routes.json` (524 routes); this re-sync restores the correct route count.
+
+**Non-critical-path change:**
+- `api/db_models.py` — `api.db_models_subscriptions` and `api.db_models_billing` registration imports restored. These ensure P1.4/P1.5 ORM models are included in `Base.metadata` for standalone `init_db()` calls that do not go through `api.main`.
+
+**SOC review outcome:** approved. Purely a restoration. No auth, session, middleware, OPA, or security files changed. No new routes, scopes, capabilities, or DB tables introduced. Contract route count returning to 970 is a restoration after cherry-pick conflict resolution erroneously committed the older contract artifact.
+
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
 
 ## 2026-06-17 — P1.3: Capability Enforcement Engine
 

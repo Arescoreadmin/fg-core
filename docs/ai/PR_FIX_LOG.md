@@ -16161,6 +16161,20 @@ Resolution order in `check_capability()` (fully backward-compatible):
 
 ---
 
+### 2026-07-08 — P1.2 clean cherry-pick onto Phase 5 HEAD
+
+**Branch:** `feat/p1-2-capability-bundles`
+
+**Purpose:** Cherry-pick of 8 P1.2 commits (7cb57b93–5fec19f3) onto Phase 5 RBAC enforcement HEAD (1625a109). Regenerated route inventory and contract authority markers to incorporate Phase 3–5 routes added after the original P1.2 branch was cut. All 16 CAP tests pass. No logic changes vs original P1.2 — merge conflicts resolved by keeping Phase 5 additions and layering P1.2 changes on top.
+
+**Files changed vs original P1.2 branch:**
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256`, `contract_routes.json` — regenerated to include Phase 3–5 routes
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` — regenerated (P1.2 versions accepted during cherry-pick then superseded by regen)
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` — authority SHA256 updated to match regenerated contract
+- `services/capability_bundles/seeder.py` — ruff format reformatted 1 line
+
+---
+
 ### 2026-06-17 — P1.3: Capability Enforcement Engine
 
 **Branch:** `feat/p1-3-capability-enforcement`

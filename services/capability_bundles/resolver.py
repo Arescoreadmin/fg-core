@@ -95,21 +95,11 @@ def resolve_tenant_capabilities(db: Session, tenant_id: str) -> frozenset[str]:
     """
     cached = _get_cached(tenant_id)
     if cached is not None:
-        try:
-            from api.observability.metrics import CAPABILITY_CACHE_HITS_TOTAL
-
-            CAPABILITY_CACHE_HITS_TOTAL.inc()
-        except Exception:
-            pass
         return cached
 
-    try:
-        from api.observability.metrics import CAPABILITY_CACHE_MISSES_TOTAL
-
-        CAPABILITY_CACHE_MISSES_TOTAL.inc()
-    except Exception:
-        pass
-
+    # Postgres uses TRUE/FALSE; SQLite uses 1/0.  The ORM layer handles this
+    # for model queries but raw SQL needs an explicit param.  We use 1 here —
+    # Postgres coerces 1 → true for boolean columns, so this is portable.
     try:
         now_iso = _utcnow_iso()
 
