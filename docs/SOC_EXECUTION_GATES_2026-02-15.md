@@ -5103,7 +5103,7 @@ Additional non-critical-path changes: `services/identity_resolver/versioning.py`
 **Classification:** Additive commercial control plane. No auth/session paths changed. New capability resolution step inserted between existing explicit-grant and tier-fallback checks. Fully backward-compatible: existing `TenantEntitlement` rows and tier defaults continue to resolve identically.
 
 **Critical-path files changed (tools/ci/ — route inventory regenerated):**
-- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated due to 5 new admin routes for bundle management
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256`, `contract_routes.json` — regenerated due to 5 new admin routes for bundle management
 
 **SOC review outcome:** approved. No auth, session, middleware, or OPA policy files changed. The `tools/ci/` files triggered SOC-HIGH-002 solely because the route inventory was regenerated.
 

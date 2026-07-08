@@ -120,44 +120,224 @@ BUNDLE_CATALOG: dict[str, dict] = {
 
 _CAP_META: dict[str, dict] = {
     # portal.*
-    "portal.access":      {"name": "Portal Access",      "category": "portal",     "billing_category": "portal",     "launch_stage": "ga",   "visibility": "public"},
-    "portal.remediation": {"name": "Portal Remediation", "category": "portal",     "billing_category": "portal",     "launch_stage": "ga",   "visibility": "public"},
-    "portal.ai":          {"name": "Portal AI",          "category": "portal",     "billing_category": "ai",         "launch_stage": "ga",   "visibility": "public"},
-    "portal.rag":         {"name": "Portal RAG",         "category": "portal",     "billing_category": "ai",         "launch_stage": "beta", "visibility": "public"},
+    "portal.access": {
+        "name": "Portal Access",
+        "category": "portal",
+        "billing_category": "portal",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "portal.remediation": {
+        "name": "Portal Remediation",
+        "category": "portal",
+        "billing_category": "portal",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "portal.ai": {
+        "name": "Portal AI",
+        "category": "portal",
+        "billing_category": "ai",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "portal.rag": {
+        "name": "Portal RAG",
+        "category": "portal",
+        "billing_category": "ai",
+        "launch_stage": "beta",
+        "visibility": "public",
+    },
     # ai.*
-    "ai.workspace":            {"name": "AI Workspace",            "category": "ai", "billing_category": "ai", "launch_stage": "ga",   "visibility": "public"},
-    "ai.chat":                 {"name": "AI Chat",                 "category": "ai", "billing_category": "ai", "launch_stage": "ga",   "visibility": "public"},
-    "ai.rag":                  {"name": "AI RAG",                  "category": "ai", "billing_category": "ai", "launch_stage": "ga",   "visibility": "public"},
-    "ai.document_ingestion":   {"name": "AI Document Ingestion",   "category": "ai", "billing_category": "ai", "launch_stage": "ga",   "visibility": "public"},
-    "ai.agent_builder":        {"name": "AI Agent Builder",        "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
-    "ai.multi_agent":          {"name": "AI Multi-Agent",          "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
-    "ai.private_models":       {"name": "AI Private Models",       "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "hidden"},
-    "ai.fine_tuning":          {"name": "AI Fine Tuning",          "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "hidden"},
-    "ai.governance":           {"name": "AI Governance",           "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
-    "ai.compliance_assistant": {"name": "AI Compliance Assistant", "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
-    "ai.executive_advisor":    {"name": "AI Executive Advisor",    "category": "ai", "billing_category": "ai", "launch_stage": "beta", "visibility": "public"},
+    "ai.workspace": {
+        "name": "AI Workspace",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "ai.chat": {
+        "name": "AI Chat",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "ai.rag": {
+        "name": "AI RAG",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "ai.document_ingestion": {
+        "name": "AI Document Ingestion",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "ai.agent_builder": {
+        "name": "AI Agent Builder",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "beta",
+        "visibility": "public",
+    },
+    "ai.multi_agent": {
+        "name": "AI Multi-Agent",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "beta",
+        "visibility": "public",
+    },
+    "ai.private_models": {
+        "name": "AI Private Models",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "beta",
+        "visibility": "hidden",
+    },
+    "ai.fine_tuning": {
+        "name": "AI Fine Tuning",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "beta",
+        "visibility": "hidden",
+    },
+    "ai.governance": {
+        "name": "AI Governance",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "beta",
+        "visibility": "public",
+    },
+    "ai.compliance_assistant": {
+        "name": "AI Compliance Assistant",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "beta",
+        "visibility": "public",
+    },
+    "ai.executive_advisor": {
+        "name": "AI Executive Advisor",
+        "category": "ai",
+        "billing_category": "ai",
+        "launch_stage": "beta",
+        "visibility": "public",
+    },
     # api.*
-    "api.access": {"name": "API Access", "category": "api", "billing_category": "api", "launch_stage": "ga", "visibility": "public"},
+    "api.access": {
+        "name": "API Access",
+        "category": "api",
+        "billing_category": "api",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
     # identity.*
-    "identity.sso":  {"name": "Identity SSO",  "category": "identity", "billing_category": "identity", "launch_stage": "ga", "visibility": "public"},
-    "identity.scim": {"name": "Identity SCIM", "category": "identity", "billing_category": "identity", "launch_stage": "ga", "visibility": "public"},
+    "identity.sso": {
+        "name": "Identity SSO",
+        "category": "identity",
+        "billing_category": "identity",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "identity.scim": {
+        "name": "Identity SCIM",
+        "category": "identity",
+        "billing_category": "identity",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
     # reports.*
-    "reports.executive":  {"name": "Executive Reports",  "category": "reports", "billing_category": "reports", "launch_stage": "ga", "visibility": "public"},
-    "reports.regulatory": {"name": "Regulatory Reports", "category": "reports", "billing_category": "reports", "launch_stage": "ga", "visibility": "public"},
+    "reports.executive": {
+        "name": "Executive Reports",
+        "category": "reports",
+        "billing_category": "reports",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "reports.regulatory": {
+        "name": "Regulatory Reports",
+        "category": "reports",
+        "billing_category": "reports",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
     # tenant.*
-    "tenant.multi_region": {"name": "Tenant Multi-Region", "category": "tenant", "billing_category": "tenant", "launch_stage": "beta", "visibility": "public"},
+    "tenant.multi_region": {
+        "name": "Tenant Multi-Region",
+        "category": "tenant",
+        "billing_category": "tenant",
+        "launch_stage": "beta",
+        "visibility": "public",
+    },
     # msp.*
-    "msp.multi_tenant": {"name": "MSP Multi-Tenant", "category": "msp", "billing_category": "msp", "launch_stage": "ga", "visibility": "public"},
-    "msp.white_label":  {"name": "MSP White Label",  "category": "msp", "billing_category": "msp", "launch_stage": "ga", "visibility": "public"},
+    "msp.multi_tenant": {
+        "name": "MSP Multi-Tenant",
+        "category": "msp",
+        "billing_category": "msp",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "msp.white_label": {
+        "name": "MSP White Label",
+        "category": "msp",
+        "billing_category": "msp",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
     # government.*
-    "government.fedramp":      {"name": "Government FedRAMP",      "category": "government", "billing_category": "government", "launch_stage": "ga",   "visibility": "public"},
-    "government.cjis":         {"name": "Government CJIS",         "category": "government", "billing_category": "government", "launch_stage": "ga",   "visibility": "public"},
-    "government.itar":         {"name": "Government ITAR",         "category": "government", "billing_category": "government", "launch_stage": "beta", "visibility": "hidden"},
-    "government.airgap":       {"name": "Government Air Gap",      "category": "government", "billing_category": "government", "launch_stage": "beta", "visibility": "hidden"},
-    "government.private_llm":  {"name": "Government Private LLM",  "category": "government", "billing_category": "government", "launch_stage": "beta", "visibility": "hidden"},
+    "government.fedramp": {
+        "name": "Government FedRAMP",
+        "category": "government",
+        "billing_category": "government",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "government.cjis": {
+        "name": "Government CJIS",
+        "category": "government",
+        "billing_category": "government",
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "government.itar": {
+        "name": "Government ITAR",
+        "category": "government",
+        "billing_category": "government",
+        "launch_stage": "beta",
+        "visibility": "hidden",
+    },
+    "government.airgap": {
+        "name": "Government Air Gap",
+        "category": "government",
+        "billing_category": "government",
+        "launch_stage": "beta",
+        "visibility": "hidden",
+    },
+    "government.private_llm": {
+        "name": "Government Private LLM",
+        "category": "government",
+        "billing_category": "government",
+        "launch_stage": "beta",
+        "visibility": "hidden",
+    },
     # audit.*
-    "audit.view":   {"name": "Audit View",   "category": "audit", "billing_category": None, "launch_stage": "ga", "visibility": "public"},
-    "audit.export": {"name": "Audit Export", "category": "audit", "billing_category": None, "launch_stage": "ga", "visibility": "public"},
+    "audit.view": {
+        "name": "Audit View",
+        "category": "audit",
+        "billing_category": None,
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
+    "audit.export": {
+        "name": "Audit Export",
+        "category": "audit",
+        "billing_category": None,
+        "launch_stage": "ga",
+        "visibility": "public",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -165,16 +345,16 @@ _CAP_META: dict[str, dict] = {
 # ---------------------------------------------------------------------------
 
 _CAP_DEPENDENCIES: dict[str, list[str]] = {
-    "portal.ai":               ["ai.workspace"],
-    "portal.rag":              ["ai.rag"],
-    "ai.rag":                  ["ai.workspace"],
-    "ai.document_ingestion":   ["ai.workspace"],
-    "ai.agent_builder":        ["ai.workspace"],
-    "ai.multi_agent":          ["ai.agent_builder"],
-    "ai.governance":           ["ai.workspace"],
+    "portal.ai": ["ai.workspace"],
+    "portal.rag": ["ai.rag"],
+    "ai.rag": ["ai.workspace"],
+    "ai.document_ingestion": ["ai.workspace"],
+    "ai.agent_builder": ["ai.workspace"],
+    "ai.multi_agent": ["ai.agent_builder"],
+    "ai.governance": ["ai.workspace"],
     "ai.compliance_assistant": ["ai.workspace"],
-    "ai.executive_advisor":    ["ai.workspace"],
-    "identity.scim":           ["identity.sso"],
+    "ai.executive_advisor": ["ai.workspace"],
+    "identity.scim": ["identity.sso"],
 }
 
 # ---------------------------------------------------------------------------
@@ -182,15 +362,15 @@ _CAP_DEPENDENCIES: dict[str, list[str]] = {
 # ---------------------------------------------------------------------------
 
 _CAP_METERS: dict[str, list[str]] = {
-    "ai.chat":                 ["token_meter"],
-    "ai.rag":                  ["token_meter"],
-    "ai.document_ingestion":   ["document_meter"],
-    "ai.agent_builder":        ["token_meter"],
-    "ai.multi_agent":          ["token_meter"],
-    "ai.fine_tuning":          ["token_meter"],
+    "ai.chat": ["token_meter"],
+    "ai.rag": ["token_meter"],
+    "ai.document_ingestion": ["document_meter"],
+    "ai.agent_builder": ["token_meter"],
+    "ai.multi_agent": ["token_meter"],
+    "ai.fine_tuning": ["token_meter"],
     "ai.compliance_assistant": ["token_meter"],
-    "ai.executive_advisor":    ["token_meter"],
-    "ai.governance":           ["token_meter"],
+    "ai.executive_advisor": ["token_meter"],
+    "ai.governance": ["token_meter"],
 }
 
 
@@ -275,10 +455,14 @@ def seed_bundle_catalog(db: Session) -> None:
             continue
         for req_key in requires_keys:
             req_row = (
-                db.query(Capability).filter(Capability.capability_key == req_key).first()
+                db.query(Capability)
+                .filter(Capability.capability_key == req_key)
+                .first()
             )
             if req_row is None:
-                log.warning("seeder.missing_dep_target cap=%s requires=%s", cap_key, req_key)
+                log.warning(
+                    "seeder.missing_dep_target cap=%s requires=%s", cap_key, req_key
+                )
                 continue
             existing = (
                 db.query(CapabilityDependency)
