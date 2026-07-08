@@ -108,12 +108,15 @@ router = APIRouter(
     tags=["governance"],
     dependencies=[
         Depends(verify_api_key),
-        Depends(require_scopes("governance:write")),  # INV-005: Scope required
     ],
 )
 
 
-@router.get("/changes", response_model=List[PolicyChangeResponse])
+@router.get(
+    "/changes",
+    response_model=List[PolicyChangeResponse],
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
 def list_changes(
     request: Request,
     actor_ctx: ActorContext = Depends(require_permission("governance.read")),
@@ -153,7 +156,11 @@ def list_changes(
         )
 
 
-@router.post("/changes", response_model=PolicyChangeResponse)
+@router.post(
+    "/changes",
+    response_model=PolicyChangeResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
 def create_change(
     req: PolicyChangeCreate,
     request: Request,
@@ -218,7 +225,11 @@ def create_change(
         )
 
 
-@router.post("/changes/{change_id}/approve", response_model=PolicyChangeResponse)
+@router.post(
+    "/changes/{change_id}/approve",
+    response_model=PolicyChangeResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
 def approve_change(
     change_id: str,
     req: PolicyApprovalRequest,
