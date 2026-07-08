@@ -18,6 +18,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from api.actor_context import ActorContext
+from api.auth_dispatch import require_permission
 from api.auth_scopes import bind_tenant_id, require_scopes
 from api.entitlements import require_capability
 from api.db import get_sessionmaker, set_tenant_context
@@ -466,7 +468,11 @@ def _serialize_invitation(inv: TenantInvitation) -> dict[str, Any]:
         Depends(require_capability("identity.sso")),
     ],
 )
-def get_config(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_config(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -519,7 +525,10 @@ def get_config(request: Request, tenant_id: str) -> dict[str, Any]:
     ],
 )
 def upsert_config(
-    request: Request, tenant_id: str, body: ConfigUpsertBody
+    request: Request,
+    tenant_id: str,
+    body: ConfigUpsertBody,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
 ) -> dict[str, Any]:
     if body.identity_mode not in IDENTITY_MODES:
         raise HTTPException(
@@ -624,7 +633,11 @@ def upsert_config(
         Depends(require_capability("identity.sso")),
     ],
 )
-def get_readiness(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_readiness(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -755,7 +768,11 @@ def get_readiness(request: Request, tenant_id: str) -> dict[str, Any]:
     "/tenants/{tenant_id}/invitations",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def list_invitations(request: Request, tenant_id: str) -> dict[str, Any]:
+def list_invitations(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("user.invite")),
+) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -778,7 +795,10 @@ def list_invitations(request: Request, tenant_id: str) -> dict[str, Any]:
     dependencies=[Depends(require_scopes("admin:write"))],
 )
 def create_invitation(
-    request: Request, tenant_id: str, body: InviteCreateBody
+    request: Request,
+    tenant_id: str,
+    body: InviteCreateBody,
+    actor_ctx: ActorContext = Depends(require_permission("user.invite")),
 ) -> dict[str, Any]:
     if body.identity_type not in IDENTITY_TYPES:
         raise HTTPException(
@@ -835,7 +855,11 @@ def create_invitation(
     "/invitations/{invitation_id}/revoke",
     dependencies=[Depends(require_scopes("admin:write"))],
 )
-def revoke_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
+def revoke_invitation(
+    request: Request,
+    invitation_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("user.invite")),
+) -> dict[str, Any]:
     db = get_sessionmaker()()
     try:
         inv = (
@@ -876,7 +900,11 @@ def revoke_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
     "/invitations/{invitation_id}/resend",
     dependencies=[Depends(require_scopes("admin:write"))],
 )
-def resend_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
+def resend_invitation(
+    request: Request,
+    invitation_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("user.invite")),
+) -> dict[str, Any]:
     """Mark a pending/failed invitation as resent (re-open to pending)."""
     db = get_sessionmaker()()
     try:
@@ -920,7 +948,11 @@ def resend_invitation(request: Request, invitation_id: str) -> dict[str, Any]:
     "/tenants/{tenant_id}/audit-summary",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_audit_summary(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_audit_summary(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -960,7 +992,11 @@ def get_audit_summary(request: Request, tenant_id: str) -> dict[str, Any]:
     "/tenants/{tenant_id}/governance-score",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_governance_score(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_governance_score(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -1202,7 +1238,11 @@ def get_governance_score(request: Request, tenant_id: str) -> dict[str, Any]:
 @router.get(
     "/tenants/{tenant_id}/drift", dependencies=[Depends(require_scopes("admin:read"))]
 )
-def get_drift(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_drift(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     """Detect identity configuration drift: stale invitations, unverified domains, mismatched providers."""
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
@@ -1394,7 +1434,12 @@ def get_drift(request: Request, tenant_id: str) -> dict[str, Any]:
     "/tenants/{tenant_id}/timeline",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_timeline(request: Request, tenant_id: str, limit: int = 50) -> dict[str, Any]:
+def get_timeline(
+    request: Request,
+    tenant_id: str,
+    limit: int = 50,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     if limit < 1 or limit > 500:
         raise HTTPException(status_code=422, detail={"code": "LIMIT_INVALID"})
     bind_tenant_id(request, tenant_id)
@@ -1441,7 +1486,11 @@ def get_timeline(request: Request, tenant_id: str, limit: int = 50) -> dict[str,
     "/tenants/{tenant_id}/readiness-history",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_readiness_history(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_readiness_history(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     """Derive readiness transitions from audit events."""
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
@@ -1483,7 +1532,11 @@ def get_readiness_history(request: Request, tenant_id: str) -> dict[str, Any]:
 @router.get(
     "/tenants/{tenant_id}/risk", dependencies=[Depends(require_scopes("admin:read"))]
 )
-def get_risk(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_risk(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     """Compute an identity risk profile for the tenant."""
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
@@ -1725,7 +1778,11 @@ def get_risk(request: Request, tenant_id: str) -> dict[str, Any]:
     "/tenants/{tenant_id}/identity-types",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_identity_types(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_identity_types(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     """Distribution and risk posture of identities by type (human/service/agent/system/workload)."""
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
@@ -1788,6 +1845,7 @@ def get_provenance(
     tenant_id: str,
     email: str | None = None,
     user_id: str | None = None,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
 ) -> dict[str, Any]:
     """Reconstruct identity provenance for a user from the audit event and invitation chain."""
     if not email and not user_id:
@@ -1884,7 +1942,11 @@ def get_provenance(
     "/tenants/{tenant_id}/policy-violations",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_policy_violations(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_policy_violations(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -2066,7 +2128,10 @@ def _admin_db_by_invitation(invitation_id: str) -> Session | None:
     dependencies=[Depends(require_scopes("admin:write"))],
 )
 def request_approval(
-    request: Request, invitation_id: str, body: ApprovalActionBody
+    request: Request,
+    invitation_id: str,
+    body: ApprovalActionBody,
+    actor_ctx: ActorContext = Depends(require_permission("user.invite")),
 ) -> dict[str, Any]:
     db = _admin_db_by_invitation(invitation_id)
     if db is None:
@@ -2106,7 +2171,10 @@ def request_approval(
     dependencies=[Depends(require_scopes("admin:write"))],
 )
 def approve_invitation(
-    request: Request, invitation_id: str, body: ApprovalActionBody
+    request: Request,
+    invitation_id: str,
+    body: ApprovalActionBody,
+    actor_ctx: ActorContext = Depends(require_permission("user.invite")),
 ) -> dict[str, Any]:
     db = _admin_db_by_invitation(invitation_id)
     if db is None:
@@ -2163,7 +2231,10 @@ def approve_invitation(
     dependencies=[Depends(require_scopes("admin:write"))],
 )
 def reject_approval(
-    request: Request, invitation_id: str, body: ApprovalActionBody
+    request: Request,
+    invitation_id: str,
+    body: ApprovalActionBody,
+    actor_ctx: ActorContext = Depends(require_permission("user.invite")),
 ) -> dict[str, Any]:
     db = _admin_db_by_invitation(invitation_id)
     if db is None:
@@ -2216,7 +2287,11 @@ def reject_approval(
     "/tenants/{tenant_id}/approval-queue",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_approval_queue(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_approval_queue(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("user.invite")),
+) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -2350,7 +2425,11 @@ def _compute_score_for_snapshot(
     "/tenants/{tenant_id}/governance-snapshots",
     dependencies=[Depends(require_scopes("admin:write"))],
 )
-def take_governance_snapshot(request: Request, tenant_id: str) -> dict[str, Any]:
+def take_governance_snapshot(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -2396,7 +2475,10 @@ def take_governance_snapshot(request: Request, tenant_id: str) -> dict[str, Any]
     dependencies=[Depends(require_scopes("admin:read"))],
 )
 def get_governance_snapshots(
-    request: Request, tenant_id: str, days: int = 90
+    request: Request,
+    tenant_id: str,
+    days: int = 90,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
 ) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
@@ -2454,7 +2536,11 @@ def get_governance_snapshots(
     "/tenants/{tenant_id}/recommendations",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_recommendations(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_recommendations(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -2519,7 +2605,10 @@ def _grade(pct: float) -> str:
     dependencies=[Depends(require_scopes("admin:read"))],
 )
 def get_governance_trend(
-    request: Request, tenant_id: str, snapshots: int = 5
+    request: Request,
+    tenant_id: str,
+    snapshots: int = 5,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
 ) -> dict[str, Any]:
     """Diff last N snapshots to explain why the score changed."""
     bind_tenant_id(request, tenant_id)
@@ -2630,7 +2719,10 @@ def get_governance_trend(
     dependencies=[Depends(require_scopes("admin:read"))],
 )
 def get_governance_forecast(
-    request: Request, tenant_id: str, days: int = 30
+    request: Request,
+    tenant_id: str,
+    days: int = 30,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
 ) -> dict[str, Any]:
     """Linear trend projection of governance score N days forward."""
     bind_tenant_id(request, tenant_id)
@@ -2743,7 +2835,11 @@ def get_governance_forecast(
     "/tenants/{tenant_id}/governance-sla",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_governance_sla(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_governance_sla(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     """Operational SLA tracking: how long each open governance issue has been open."""
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
@@ -2910,7 +3006,11 @@ def get_governance_sla(request: Request, tenant_id: str) -> dict[str, Any]:
     "/tenants/{tenant_id}/governance-benchmark",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_governance_benchmark(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_governance_benchmark(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     """Anonymized percentile position vs all participating tenants."""
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
@@ -2994,7 +3094,11 @@ def get_governance_benchmark(request: Request, tenant_id: str) -> dict[str, Any]
     "/tenants/{tenant_id}/governance-findings",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_governance_findings(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_governance_findings(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     """Unified governance findings aggregating violations + risk + drift + evidence."""
     bind_tenant_id(request, tenant_id)
     db = _admin_db(tenant_id)
@@ -3266,7 +3370,10 @@ def _latest_action_for_dimension(
     status_code=201,
 )
 def create_governance_action(
-    request: Request, tenant_id: str, body: GovernanceActionBody
+    request: Request,
+    tenant_id: str,
+    body: GovernanceActionBody,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
 ) -> dict[str, Any]:
     """Record a governance decision on a recommendation dimension.
 
@@ -3390,6 +3497,7 @@ def list_governance_actions(
     dimension: str | None = None,
     state: str | None = None,
     limit: int = 100,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
 ) -> dict[str, Any]:
     """Return the full governance actions ledger for a tenant.
 
@@ -3451,7 +3559,11 @@ def list_governance_actions(
     "/tenants/{tenant_id}/governance-action-summary",
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-def get_governance_action_summary(request: Request, tenant_id: str) -> dict[str, Any]:
+def get_governance_action_summary(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+) -> dict[str, Any]:
     """Return the latest governance decision per dimension — the current posture view.
 
     Answers: what governance decisions were made, and where does each dimension stand?

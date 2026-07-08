@@ -18,6 +18,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
+from api.actor_context import ActorContext
+from api.auth_dispatch import require_permission
 from api.auth_scopes import (
     bind_tenant_id,
     require_bound_tenant,
@@ -147,7 +149,11 @@ class RevokeKeyResponse(BaseModel):
 
 
 @router.post("", response_model=CreateKeyResponse)
-def create_key(req: CreateKeyRequest, request: Request) -> CreateKeyResponse:
+def create_key(
+    req: CreateKeyRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
+) -> CreateKeyResponse:
     """
     Create a new API key.
 
@@ -209,6 +215,7 @@ def create_key(req: CreateKeyRequest, request: Request) -> CreateKeyResponse:
 @router.get("", response_model=ListKeysResponse)
 def get_keys(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
     include_disabled: bool = Query(default=False),
 ) -> ListKeysResponse:
@@ -242,6 +249,7 @@ def get_keys(
 def revoke_key(
     req: RevokeKeyRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> RevokeKeyResponse:
     """
@@ -283,6 +291,7 @@ def revoke_key(
 def delete_key(
     prefix: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
     _tenant_id: str = Depends(require_bound_tenant),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> RevokeKeyResponse:
@@ -339,6 +348,7 @@ class RotateKeyResponse(BaseModel):
 def rotate_key(
     req: RotateKeyRequest,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> RotateKeyResponse:
     """

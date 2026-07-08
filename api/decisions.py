@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from api.actor_context import ActorContext
+from api.auth_dispatch import require_permission
 from api.auth_scopes import redact_detail, require_bound_tenant, require_scopes
 from api.deps import tenant_db_required
 from api.db_models import DecisionRecord
@@ -107,6 +109,7 @@ class DecisionsPage(BaseModel):
 )
 def list_decisions(
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     db: Session = Depends(tenant_db_required),
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0, le=200000),
@@ -196,6 +199,7 @@ def list_decisions(
 def get_decision(
     decision_id: int,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("governance.read")),
     db: Session = Depends(tenant_db_required),
     include_raw: bool = Query(True, description="Include request/response JSON blobs"),
     tenant_id: Optional[str] = Query(None, min_length=1),
