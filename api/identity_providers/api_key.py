@@ -71,6 +71,20 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
     key_prefix: str = getattr(auth, "key_prefix", None) or ""
     key_db_id: Optional[int] = getattr(auth, "key_db_id", None)
 
+    # The global service-account key (FG_API_KEY env var) carries no DB row or
+    # scopes, so no fallback fires without this explicit check. Treat it as
+    # platform_admin — it already bypasses scope guards in auth_gate middleware.
+    if getattr(auth, "reason", None) == "global_key":
+        return ActorContext(
+            subject=key_prefix or "global_key",
+            email="",
+            name="",
+            permissions=roles_to_permissions(["platform_admin"]),
+            roles=["platform_admin"],
+            auth_source="api_key",
+            tenant_id=tenant_id or None,
+        )
+
     raw_role: Optional[str] = None
     if key_db_id is not None and tenant_id:
         try:
