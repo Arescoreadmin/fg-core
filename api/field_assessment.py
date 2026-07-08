@@ -1113,6 +1113,7 @@ def list_engagements_route(
     status_filter: str | None = Query(None, alias="status"),
     limit: int = Query(50, ge=1, le=100),
     cursor: str | None = Query(None),
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementListResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -1196,6 +1197,7 @@ def create_engagement_route(
 def get_engagement_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -1573,6 +1575,7 @@ def list_scan_results_route(
     request: Request,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    actor_ctx: ActorContext = Depends(require_permission("scan.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ScanResultSummaryResponse]:
     tenant_id = _resolve_caller_tenant(request)
@@ -1597,6 +1600,7 @@ def get_scan_result_route(
     engagement_id: str,
     scan_result_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ScanResultResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -1688,6 +1692,7 @@ def list_document_analyses_route(
     engagement_id: str,
     request: Request,
     limit: int = Query(50, ge=1, le=100),
+    actor_ctx: ActorContext = Depends(require_permission("evidence.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[DocumentAnalysisResponse]:
     tenant_id = _resolve_caller_tenant(request)
@@ -1870,6 +1875,7 @@ def list_observations_route(
     observation_type: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    actor_ctx: ActorContext = Depends(require_permission("evidence.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ObservationResponse]:
     tenant_id = _resolve_caller_tenant(request)
@@ -1900,6 +1906,7 @@ def list_interview_templates_route(
     interview_role: str | None = Query(None),
     assessment_type: str | None = Query(None),
     limit: int = Query(20, ge=1, le=50),
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ObservationResponse]:
     """Return recent interview observations across the tenant's engagements.
@@ -2142,6 +2149,7 @@ def list_findings_route(
     finding_status: str | None = Query(None, alias="status"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    actor_ctx: ActorContext = Depends(require_permission("finding.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> FindingListResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -2184,6 +2192,7 @@ def get_finding_route(
     engagement_id: str,
     finding_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("finding.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> FindingResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -2613,6 +2622,7 @@ def list_evidence_links_route(
     request: Request,
     source_entity_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
+    actor_ctx: ActorContext = Depends(require_permission("evidence.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[EvidenceLinkResponse]:
     tenant_id = _resolve_caller_tenant(request)
@@ -2645,6 +2655,7 @@ def list_evidence_links_route(
 def get_engagement_summary_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementSummaryResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -2812,6 +2823,7 @@ def _evaluate_execution_state(db: Session, *, eng: Any, tenant_id: str) -> Any:
 def get_engagement_execution_state_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ExecutionStateResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -2838,6 +2850,7 @@ def get_engagement_execution_state_route(
 def get_engagement_next_actions_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> PlaybookProgressResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -5796,6 +5809,7 @@ def get_msgraph_run_status(
     engagement_id: str,
     run_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphRunStatusResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -5922,6 +5936,7 @@ def list_risk_acceptances_route(
     engagement_id: str,
     request: Request,
     status: str | None = None,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     tenant_id = _resolve_caller_tenant(request)
@@ -5949,6 +5964,7 @@ def get_risk_acceptance_route(
     engagement_id: str,
     acceptance_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     tenant_id = _resolve_caller_tenant(request)
@@ -6041,6 +6057,7 @@ def list_governance_exceptions_route(
     engagement_id: str,
     request: Request,
     status: str | None = None,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     tenant_id = _resolve_caller_tenant(request)
@@ -6066,6 +6083,7 @@ def get_governance_exception_route(
     engagement_id: str,
     exception_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     tenant_id = _resolve_caller_tenant(request)
@@ -6090,6 +6108,7 @@ def list_governance_decisions_route(
     engagement_id: str,
     request: Request,
     decision_type: str | None = None,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     tenant_id = _resolve_caller_tenant(request)
@@ -6118,6 +6137,7 @@ def get_governance_decision_route(
     engagement_id: str,
     decision_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     tenant_id = _resolve_caller_tenant(request)
@@ -6145,6 +6165,7 @@ def list_scan_jobs(
     engagement_id: str,
     request: Request,
     status: str | None = None,
+    actor_ctx: ActorContext = Depends(require_permission("scan.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """List scan jobs for an engagement.  Supports optional ?status= filter."""
@@ -6169,6 +6190,7 @@ def get_scan_job(
     engagement_id: str,
     job_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Get a single scan job by ID.  Tenant-isolated: returns 404 for cross-tenant IDs."""
@@ -6349,6 +6371,7 @@ def list_audit_events_route(
     request: Request,
     limit: int = Query(100, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[AuditEventResponse]:
     tenant_id = _resolve_caller_tenant(request)
@@ -6538,8 +6561,10 @@ def get_drift_report(
     request: Request,
     current_scan_id: str = Query(..., description="ID of the current FaScanResult"),
     emit_alerts: bool = Query(
-        True, description="Persist alert records for this drift run"
+        False,
+        description="Persist alert records for this drift run (requires assessment.create)",
     ),
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> DriftReportResponse:
     """Compute drift between the pinned baseline and a specified current scan.
@@ -6696,6 +6721,14 @@ def get_drift_report(
 
     alerts_emitted = 0
     if emit_alerts:
+        if "assessment.create" not in actor_ctx.permissions:
+            raise HTTPException(
+                status_code=403,
+                detail=api_error(
+                    "PERMISSION_DENIED",
+                    "emitting drift alerts requires assessment.create",
+                ),
+            )
         alerts = emit_drift_alerts(
             db,
             tenant_id=tenant_id,
@@ -6844,6 +6877,7 @@ def create_connector_schedule(
 def list_connector_schedules(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ConnectorScheduleResponse]:
     """List all connector schedules for an engagement."""
@@ -6900,6 +6934,7 @@ def get_drift_correlation(
     current_collected_at: str = Query(
         ..., description="collected_at of the current scan (ISO 8601)"
     ),
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[RootCauseCandidateOut]:
     """Return graph edges that correlate with a finding across a drift window.
@@ -6959,6 +6994,7 @@ def get_drift_velocity(
     engagement_id: str,
     request: Request,
     n_scans: int = Query(10, ge=2, le=50, description="Max scan history to analyze"),
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> DriftVelocityResponse:
     """Compute drift velocity metrics over the last n_scans scan results.
@@ -7422,6 +7458,7 @@ def create_portal_grant(
 def list_portal_grants(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[PortalGrantResponse]:
     """List portal grants for an engagement (no secrets exposed)."""
@@ -7641,6 +7678,7 @@ def promote_engagement_route(
 def get_readiness_drift_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ReadinessDriftResponse:
     """Return cross-engagement readiness drift for an engagement.
@@ -8288,6 +8326,7 @@ def list_engagement_reports_route(
     request: Request,
     limit: int = Query(100, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    actor_ctx: ActorContext = Depends(require_permission("report.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementReportListResponse:
     """List report version summaries for a field assessment engagement.
@@ -8341,6 +8380,7 @@ def get_engagement_report_route(
     engagement_id: str,
     version: int,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
     """Return the full report document for a specific version.
@@ -8394,6 +8434,7 @@ def export_engagement_report_route(
     version: int,
     request: Request,
     format: str = Query("json", pattern="^(json|pdf)$"),
+    actor_ctx: ActorContext = Depends(require_permission("report.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> Any:
     """Export a report version as JSON or PDF.
@@ -8658,6 +8699,7 @@ def get_finding_explanation_route(
     engagement_id: str,
     finding_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("finding.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> FindingExplanationResponse:
     """Plain-language explanation for a normalized finding.
@@ -8992,6 +9034,7 @@ def get_questionnaire_route(
     engagement_id: str,
     questionnaire_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> QuestionnaireResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -9328,6 +9371,7 @@ def get_questionnaire_coverage(
     engagement_id: str,
     questionnaire_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> QuestionnaireCoverageResponse:
     tenant_id = _resolve_caller_tenant(request)
@@ -9361,6 +9405,7 @@ def get_questionnaire_coverage(
 def list_questionnaires_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[QuestionnaireResponse]:
     """List all questionnaires for an engagement with per-control evidence fusion.
@@ -9411,6 +9456,7 @@ def list_questionnaires_route(
 def get_remediation_roadmap(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> RemediationRoadmapResponse:
     """Phased remediation roadmap with compliance delta preview.
@@ -9673,6 +9719,7 @@ def get_artifact_route(
     engagement_id: str,
     artifact_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("evidence.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ArtifactInternalResponse:
     """Retrieve artifact metadata including storage_key for the BFF proxy.
@@ -10106,6 +10153,7 @@ def generate_verification_bundle_route(
 def get_verification_bundle_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("bundle.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> VerificationBundleResponse:
     """Retrieve the latest verification bundle for an engagement."""
@@ -10140,6 +10188,7 @@ def get_verification_bundle_route(
 def get_verification_bundle_manifest_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("bundle.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> VerificationBundleManifestResponse:
     """Retrieve the manifest from the latest verification bundle."""
@@ -10188,6 +10237,7 @@ def get_verification_bundle_manifest_route(
 def download_verification_bundle_route(
     engagement_id: str,
     request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("bundle.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> Response:
     """Download the offline verification package as a ZIP archive.
@@ -10707,6 +10757,7 @@ def list_ai_vendor_governance(
     risk_score: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> AiVendorGovernanceListResponse:
     """List governance records for an engagement with optional filters."""
@@ -11035,6 +11086,7 @@ def list_ai_vendor_governance_decisions(
     request: Request,
     limit: int = 50,
     offset: int = 0,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> AiVendorGovernanceDecisionListResponse:
     """Read-only paginated governance decision ledger."""

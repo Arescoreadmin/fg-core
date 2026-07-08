@@ -274,6 +274,11 @@ When a PR merges:
 
 ---
 
-*Last updated: 2026-07-06 (PR 18.8.1 — Governance Digital Twin Foundation: deterministic service-first bounded context `services/governance_digital_twin/`, canonical snapshot model, explicit authority graph, replay-safe export, SHA-256 canonical JSON fingerprinting, baseline creation, CI gate `tools/ci/check_governance_digital_twin.py`, deterministic tests, architecture doc `docs/GOVERNANCE_DIGITAL_TWIN_18_8_1.md`. API shell intentionally deferred. Enterprise-grade and replay-safe.)*
+| — | PR #513 — Phase 1: Capability Registry CI Sprawl Guard | ✅ merged (#513) 2026-07-07 | `CAPABILITY_REGISTRY` in `api/actor_context.py` extended to 6 read + all existing write/governance capabilities. CI sprawl guard (`ALL_PERMISSIONS` and `ROLE_PERMISSIONS` must stay in sync with `CAPABILITY_REGISTRY`). Unit test enforces sync at every CI run. |
+| — | PR #514 — Phase 2: FA Mutation Route Hardening | ✅ merged (#514) 2026-07-07 | All 40 mutation routes in `api/field_assessment.py` hardened with `require_permission("X.Y")` via `ActorContext`. `require_scopes` calls replaced with `authz_scope` (metadata-only). Regenerated OpenAPI contracts. |
+| — | PR #516 — Phase 2: Post-Migration Fixes | ✅ merged (#516) 2026-07-07 | Backward-compat scope fallback (`governance:write`→assessor, `governance:qa_approve`→qa_reviewer, `governance:read`→viewer); 3 portal-grant routes changed from `tenant.configure`→`assessment.create`; `patch_finding_status_route` changed from `finding.create`→`finding.close`; all test fixtures repaired (89 failures → 0). |
+| — | PR Phase-3: FA GET Route Read-Capability Enforcement | 🔄 open (feat/phase3-fa-read-enforcement) | All 43 FA GET route handlers now enforce read capabilities via `require_permission("X.read")` (`assessment.read`, `scan.read`, `evidence.read`, `finding.read`, `report.read`, `bundle.read`). Tenant resolution from `ActorContext` only. 26 denial/smoke tests across 7 classes (viewer, qa_reviewer SoD, cross-tenant isolation, legacy scope fallback). No schema or migration changes. |
+
+*Last updated: 2026-07-07 (PR Phase-3 — FA GET route read-capability enforcement: 43 GET handlers hardened; 6 read capabilities enforced; 26 new denial tests; no schema changes.)*
 
 
