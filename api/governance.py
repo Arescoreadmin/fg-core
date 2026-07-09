@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 
 from api.actor_context import ActorContext
 from api.auth_dispatch import require_permission
-from api.auth_scopes import require_bound_tenant, require_scopes, verify_api_key
+from api.auth_scopes import (
+    authz_scope,
+    require_bound_tenant,
+    require_scopes,
+    verify_api_key,
+)
 from api.config.startup_validation import compliance_module_enabled
 from api.deps import tenant_db_required
 from api.db_models import PolicyChangeRequest as PolicyChangeRequestModel
@@ -115,7 +120,7 @@ router = APIRouter(
 @router.get(
     "/changes",
     response_model=List[PolicyChangeResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_changes(
     request: Request,

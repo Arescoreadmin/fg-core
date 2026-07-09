@@ -6,6 +6,39 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-09 — fix/pr-01a-permission-regressions: incorrect permission mappings from phase-5 capability enforcement
+
+**Branch:** `fix/pr-01a-permission-regressions`
+**Date:** 2026-07-09
+
+**Triggering guards:** `pr-fix-log-guard` (api/ files changed)
+
+**Root cause:** Phase-5 capability enforcement added permission checks to three routes but mapped the wrong permissions, and used `authz_scope` (a no-op metadata decorator) where `require_scopes` (real enforcement) was intended — and vice versa:
+
+- **`api/field_assessment.py` PATCH remediation route (line 2402):** Used `require_permission("finding.create")` — but the operation creates a `finding_closed` governance decision, not a finding. `compliance_reviewer` (the role held by `governance_admin` keys after the RBAC migration) has `governance.decision` but not `finding.create`. Corrected to `require_permission("governance.decision")`.
+- **`api/field_assessment.py` GET questionnaires route (line 9403):** Used `authz_scope("governance:read")` (no-op) — test expected `governance:write`-only keys to receive 403. Since `authz_scope` is metadata-only, the scope was never enforced. Corrected to `require_scopes("governance:read")` (real enforcement). Also added `require_scopes` to the `field_assessment.py` import.
+- **`api/governance.py` GET /governance/changes route (line 118):** Used `require_scopes("governance:read")` (real enforcement) — test key carries `governance:write` only, but already holds `governance.read` permission via `compliance_reviewer` role. The literal scope check was redundant (access is enforced by `require_permission("governance.read")` on the same route) and broke `governance:write`-only test clients. Corrected to `authz_scope("governance:read")` (metadata only). Also added `authz_scope` to the `governance.py` import, triggering a ruff reformat of the import block.
+
+**Side effect — stale merge-conflict artefacts in `api/db.py`:** Stash `fix/timeline-authority-review-items` had been partially applied, injecting two lines (`_dbapi_conn = conn._dbapi_connection` and `assert isinstance(...)`) outside the conflict markers. These lines caused an `AssertionError` in `_auto_migrate_sqlite()` under non-SQLite engines and were not present at HEAD. Resolved by restoring db.py to HEAD state.
+
+**Contract update:** Adding `require_scopes("governance:read")` to the questionnaire list route exposed the `X-API-Key` header as an OpenAPI parameter on that route (FastAPI introspects scope-enforcement dependencies). Updated `contracts/core/openapi.json`, `BLUEPRINT_STAGED.md`, and `CONTRACT.md` authority SHA-256 markers accordingly.
+
+**Corrected permission mappings:**
+
+| Route | Before | After | Reason |
+|---|---|---|---|
+| `PATCH /findings/{id}/remediation` | `require_permission("finding.create")` | `require_permission("governance.decision")` | Operation creates a governance closure decision, not a finding |
+| `GET .../questionnaires` | `authz_scope("governance:read")` | `require_scopes("governance:read")` | Scope must be enforced; `authz_scope` is metadata-only |
+| `GET /governance/changes` | `require_scopes("governance:read")` | `authz_scope("governance:read")` | `require_permission("governance.read")` already enforces; literal scope check blocked write-scoped clients |
+
+**Files changed:** `api/field_assessment.py`, `api/governance.py`, `contracts/core/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` (db.py restored to HEAD — net-zero change)
+
+**Tests:** 21 targeted regression tests pass. `fg-fast` 398 passed, 2 skipped. `fg-security` 1154 passed, 1 skipped.
+
+**No CI guard weakened. No `NO_FIX_LOG_REQUIRED` marker used.**
+
+---
+
 ### 2026-07-09 — feat/pr-01a-identity-governance: P2 bot review — subject isolation, admin secret fallback, timeline redaction
 
 **Branch:** `feat/pr-01a-identity-governance`

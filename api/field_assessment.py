@@ -42,7 +42,7 @@ from pydantic import (
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import authz_scope
+from api.auth_scopes import authz_scope, require_scopes
 from api.auth_dispatch import require_permission
 from api.actor_context import ActorContext
 from api.deps import auth_ctx_db_session
@@ -2399,7 +2399,7 @@ def patch_finding_remediation_route(
     finding_id: str,
     request: Request,
     body: FindingRemediationPatchRequest,
-    actor_ctx: ActorContext = Depends(require_permission("finding.create")),
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Set remediation_hint on a finding to satisfy the readiness gate."""
@@ -9400,7 +9400,7 @@ def get_questionnaire_coverage(
 @router.get(
     "/engagements/{engagement_id}/questionnaires",
     response_model=list[QuestionnaireResponse],
-    dependencies=[Depends(authz_scope("governance:read"))],
+    dependencies=[Depends(require_scopes("governance:read"))],
 )
 def list_questionnaires_route(
     engagement_id: str,
