@@ -68,11 +68,12 @@ class LegacySessionMigrator:
 
     def __init__(self, auditor: Optional[IdentityAuditor] = None) -> None:
         self._auditor = auditor or get_identity_auditor()
-        self._portal_secret = (os.getenv("PORTAL_PASSWORD") or "").encode()
-        self._session_secret = (os.getenv("FG_SESSION_SECRET") or "").encode()
-        self._admin_secret = os.getenv("ADMIN_SESSION_SECRET") or self._session_secret
-        if isinstance(self._admin_secret, str):
-            self._admin_secret = self._admin_secret.encode()
+        self._portal_secret: bytes = (os.getenv("PORTAL_PASSWORD") or "").encode()
+        self._session_secret: bytes = (os.getenv("FG_SESSION_SECRET") or "").encode()
+        admin_raw = (os.getenv("ADMIN_SESSION_SECRET") or "").strip()
+        self._admin_secret: bytes = (
+            admin_raw.encode() if admin_raw else self._session_secret
+        )
 
     def migrate(
         self,

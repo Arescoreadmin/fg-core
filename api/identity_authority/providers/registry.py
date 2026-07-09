@@ -84,7 +84,7 @@ class IdentityProviderRegistry:
             GenericOIDCProvider,
         )
 
-        candidates = [
+        candidates: list[IdentityProviderProtocol] = [
             Auth0OIDCProvider(),
             EntraOIDCProvider(),
             GoogleOIDCProvider(),

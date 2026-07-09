@@ -152,27 +152,68 @@ class IdentityAuditor:
                 tenant_id=tenant_id,
                 provider=provider,
                 correlation_id=correlation_id,
-                details=safe_details,
+                details=dict(safe_details),
             )
 
         return event_id
 
     def _persist(self, **kwargs: object) -> None:
-        """Persist to SecurityAuditLog via the DB factory."""
+        """Persist to SecurityAuditLog via the DB factory.
+
+        Adapts the identity-authority event shape to the core SecurityAuditor
+        AuditEvent dataclass (event_type + tenant_id + request_id + details).
+        """
         try:
-            from api.security_audit import get_auditor as _get_core_auditor
+            from api.security_audit import (
+                AuditEvent,
+                EventType,
+                Severity,
+                get_auditor as _get_core_auditor,
+            )
 
             auditor = _get_core_auditor()
-            auditor.log_event(
-                action=str(kwargs.get("event_type", "")),
-                actor_id=str(kwargs.get("subject") or "system"),
-                tenant_id=str(kwargs.get("tenant_id") or ""),
-                resource_type="identity",
-                resource_id=str(kwargs.get("event_id", "")),
-                scope=str(kwargs.get("provider") or "identity_authority"),
-                request_id=str(kwargs.get("correlation_id") or ""),
-                details=kwargs.get("details", {}),
+            identity_event_type = kwargs.get("event_type")
+            event_type_value = (
+                identity_event_type.value
+                if isinstance(identity_event_type, IdentityEventType)
+                else str(identity_event_type or "")
             )
+
+            details_val = kwargs.get("details")
+            details_dict: dict[str, object] = (
+                dict(details_val) if isinstance(details_val, dict) else {}
+            )
+            # Preserve identity-authority chain metadata alongside the payload
+            details_dict.setdefault("identity_event_type", event_type_value)
+            details_dict.setdefault(
+                "identity_event_id", str(kwargs.get("event_id") or "")
+            )
+            details_dict.setdefault(
+                "identity_event_hash", str(kwargs.get("event_hash") or "")
+            )
+            details_dict.setdefault(
+                "identity_prev_hash", str(kwargs.get("prev_hash") or "")
+            )
+            details_dict.setdefault(
+                "identity_subject", str(kwargs.get("subject") or "")
+            )
+            details_dict.setdefault(
+                "identity_provider", str(kwargs.get("provider") or "")
+            )
+
+            tenant_val = kwargs.get("tenant_id")
+            correlation_val = kwargs.get("correlation_id")
+
+            event = AuditEvent(
+                event_type=EventType.ADMIN_ACTION,
+                success=True,
+                severity=Severity.INFO,
+                tenant_id=str(tenant_val) if tenant_val else None,
+                request_id=str(correlation_val) if correlation_val else None,
+                reason=event_type_value,
+                details=details_dict,
+            )
+            auditor.log_event(event)
         except Exception as exc:
             log.warning(
                 "identity_auditor.persist_failed",

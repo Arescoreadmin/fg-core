@@ -19,7 +19,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 log = logging.getLogger("frostgate.identity_authority.session")
 
@@ -91,7 +91,10 @@ class _RevocationStore:
     def __init__(self) -> None:
         self._mem: dict[str, float] = {}  # session_id → revoked_at_monotonic
         self._lock = threading.Lock()
-        self._redis: Optional[object] = None
+        # Typed as Any because redis-py's type stubs vary by version and the
+        # optional import path makes precise typing brittle. Concrete methods
+        # used (setex, exists) are wrapped in try/except.
+        self._redis: Any = None
         self._connect_redis()
 
     def _connect_redis(self) -> None:
@@ -110,10 +113,10 @@ class _RevocationStore:
             )
 
     def revoke(self, session_id: str, ttl_seconds: int = SESSION_TTL_SECONDS) -> None:
-        if self._redis:
+        if self._redis is not None:
             try:
                 key = f"fg:session:revoked:{session_id}"
-                self._redis.setex(key, ttl_seconds, "1")  # type: ignore[union-attr]
+                self._redis.setex(key, ttl_seconds, "1")
                 return
             except Exception as exc:
                 log.warning(
@@ -126,10 +129,10 @@ class _RevocationStore:
             self._mem = {k: v for k, v in self._mem.items() if v > cutoff}
 
     def is_revoked(self, session_id: str) -> bool:
-        if self._redis:
+        if self._redis is not None:
             try:
                 key = f"fg:session:revoked:{session_id}"
-                return bool(self._redis.exists(key))  # type: ignore[union-attr]
+                return bool(self._redis.exists(key))
             except Exception as exc:
                 log.warning(
                     "session_authority.redis_check_failed", extra={"exc": str(exc)}
