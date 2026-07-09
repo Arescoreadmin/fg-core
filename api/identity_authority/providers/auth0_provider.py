@@ -51,7 +51,9 @@ def _audience() -> str:
 
 
 def _namespace() -> str:
-    return (os.getenv("FG_AUTH0_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    return (
+        (os.getenv("FG_AUTH0_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    )
 
 
 def _fetch_jwks(domain: str) -> dict:
@@ -231,8 +233,8 @@ class Auth0OIDCProvider:
             auth_time=auth_time,
             amr=amr,
             acr=claims.get("acr"),
-            pkce_used=True,   # Auth0 always uses PKCE in our flow
-            nonce_verified=False,   # not tracked in access token flow
+            pkce_used=True,  # Auth0 always uses PKCE in our flow
+            nonce_verified=False,  # not tracked in access token flow
         )
 
         provider_obj = IdentityProvider(
@@ -250,7 +252,7 @@ class Auth0OIDCProvider:
             tenant_binding = TenantBinding(
                 tenant_id=tenant_id or "",
                 organization_id=None,
-                membership_id=None,   # resolved later by TenantResolver
+                membership_id=None,  # resolved later by TenantResolver
                 roles=frozenset(roles),
                 permissions=perms,
             )

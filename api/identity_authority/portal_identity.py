@@ -23,7 +23,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from api.identity_authority.audit import IdentityEventType, get_identity_auditor
+from api.identity_authority.audit import get_identity_auditor
 from api.identity_authority.models import (
     AuthenticationContext,
     AuthorizationContext,
@@ -77,7 +77,9 @@ class PortalIdentityBridge:
             # Only handle portal sessions (not console admin sessions)
             if session_ctx.identity_type not in ("human", "machine"):
                 return None
-            return self._build_from_session_context(session_ctx, db=db, correlation_id=correlation_id)
+            return self._build_from_session_context(
+                session_ctx, db=db, correlation_id=correlation_id
+            )
         except (SessionInvalidError, ValueError):
             pass  # Not a unified session — try legacy
         except (SessionExpiredError, SessionRevokedError) as exc:
@@ -85,14 +87,20 @@ class PortalIdentityBridge:
 
         # Try legacy portal HMAC format
         if _PORTAL_PASSWORD:
-            from api.identity_authority.migration import get_legacy_migrator, LegacyMigrationError
+            from api.identity_authority.migration import (
+                get_legacy_migrator,
+                LegacyMigrationError,
+            )
+
             try:
                 migrator = get_legacy_migrator()
                 payload = migrator.migrate(session_token, correlation_id=correlation_id)
-                return self._build_from_legacy_payload(payload, db=db, correlation_id=correlation_id)
+                return self._build_from_legacy_payload(
+                    payload, db=db, correlation_id=correlation_id
+                )
             except LegacyMigrationError:
                 pass  # Not a legacy token either
-            except ValueError as exc:
+            except ValueError:
                 raise  # Expired / invalid legacy token
 
         return None
@@ -108,6 +116,7 @@ class PortalIdentityBridge:
         if not _PORTAL_PASSWORD:
             return False
         import hmac as _hmac
+
         return _hmac.compare_digest(_PORTAL_PASSWORD.encode(), password.encode())
 
     # ------------------------------------------------------------------
@@ -126,12 +135,11 @@ class PortalIdentityBridge:
 
         roles = ["viewer"]
         if db is not None and session_ctx.tenant_id:
-            roles = self._lookup_portal_roles(session_ctx.subject, session_ctx.tenant_id, db)
+            roles = self._lookup_portal_roles(
+                session_ctx.subject, session_ctx.tenant_id, db
+            )
 
         perms = roles_to_permissions(roles)
-        from datetime import datetime, timezone
-
-        now = datetime.now(tz=timezone.utc)
         provider = IdentityProvider(
             name="portal_session",
             issuer="frostgate.portal",
@@ -146,13 +154,17 @@ class PortalIdentityBridge:
             pkce_used=False,
             nonce_verified=False,
         )
-        binding = TenantBinding(
-            tenant_id=session_ctx.tenant_id or "",
-            organization_id=None,
-            membership_id=None,
-            roles=frozenset(roles),
-            permissions=perms,
-        ) if session_ctx.tenant_id else None
+        binding = (
+            TenantBinding(
+                tenant_id=session_ctx.tenant_id or "",
+                organization_id=None,
+                membership_id=None,
+                roles=frozenset(roles),
+                permissions=perms,
+            )
+            if session_ctx.tenant_id
+            else None
+        )
 
         identity = CanonicalIdentity(
             subject=session_ctx.subject,

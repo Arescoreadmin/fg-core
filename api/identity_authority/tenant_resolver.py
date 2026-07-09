@@ -14,7 +14,10 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from api.identity_authority.models import CanonicalIdentity, TenantBinding
-from api.identity_authority.metrics import TENANT_RESOLUTION_LATENCY, TENANT_RESOLUTION_TOTAL
+from api.identity_authority.metrics import (
+    TENANT_RESOLUTION_LATENCY,
+    TENANT_RESOLUTION_TOTAL,
+)
 
 log = logging.getLogger("frostgate.identity_authority.tenant_resolver")
 
@@ -137,7 +140,10 @@ class TenantResolver:
         # For machine identities (API keys), accept the hint directly
         if identity.identity_type in ("machine", "service"):
             from api.actor_context import roles_to_permissions
-            roles = list(identity.tenant_binding.roles) if identity.tenant_binding else []
+
+            roles = (
+                list(identity.tenant_binding.roles) if identity.tenant_binding else []
+            )
             perms = roles_to_permissions(roles)
             return TenantBinding(
                 tenant_id=tenant_id,

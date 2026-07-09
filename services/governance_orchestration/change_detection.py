@@ -13,7 +13,9 @@ from services.governance_orchestration.repository import (
 )
 
 
-def detect_changes(db: Any, tenant_id: str, context: dict[str, Any]) -> list[dict[str, Any]]:
+def detect_changes(
+    db: Any, tenant_id: str, context: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Detect changes from a context dict.
 
     The context is expected to be produced by the engine (which collects
@@ -108,7 +110,9 @@ def assess_change_significance(change: dict[str, Any]) -> str:
     return ImpactLevel.NONE.value
 
 
-def record_change_event(db: Any, tenant_id: str, change: dict[str, Any]) -> dict[str, Any]:
+def record_change_event(
+    db: Any, tenant_id: str, change: dict[str, Any]
+) -> dict[str, Any]:
     """Persist a detected change. Returns the persisted change dict."""
     repo = GovernanceOrchestrationRepository(db, tenant_id)
     row = repo.create_change_detection(

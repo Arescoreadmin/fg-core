@@ -27,12 +27,12 @@ log = logging.getLogger("frostgate.identity_authority.session")
 # Configuration
 # ---------------------------------------------------------------------------
 
-SESSION_TTL_SECONDS: int = int(os.getenv("FG_SESSION_TTL_SECONDS", "28800"))   # 8 hours
+SESSION_TTL_SECONDS: int = int(os.getenv("FG_SESSION_TTL_SECONDS", "28800"))  # 8 hours
 IDLE_TIMEOUT_SECONDS: int = int(os.getenv("FG_SESSION_IDLE_TIMEOUT", "3600"))  # 1 hour
-REFRESH_WINDOW_SECONDS: int = 1800   # refresh in last 30 min of absolute TTL
+REFRESH_WINDOW_SECONDS: int = 1800  # refresh in last 30 min of absolute TTL
 MAX_CONCURRENT_SESSIONS: int = int(os.getenv("FG_MAX_CONCURRENT_SESSIONS", "5"))
 
-_SESSION_VERSION = "v2"   # bump on incompatible changes
+_SESSION_VERSION = "v2"  # bump on incompatible changes
 
 
 # ---------------------------------------------------------------------------
@@ -44,8 +44,8 @@ _SESSION_VERSION = "v2"   # bump on incompatible changes
 class SessionToken:
     """Issued session token."""
 
-    token: str          # HMAC-SHA256 signed session blob
-    session_id: str     # stable session identifier
+    token: str  # HMAC-SHA256 signed session blob
+    session_id: str  # stable session identifier
     expires_at: datetime
     issued_at: datetime
 
@@ -116,7 +116,9 @@ class _RevocationStore:
                 self._redis.setex(key, ttl_seconds, "1")  # type: ignore[union-attr]
                 return
             except Exception as exc:
-                log.warning("session_authority.redis_revoke_failed", extra={"exc": str(exc)})
+                log.warning(
+                    "session_authority.redis_revoke_failed", extra={"exc": str(exc)}
+                )
         with self._lock:
             self._mem[session_id] = time.monotonic()
             # Prune old entries (TTL-based cleanup)
@@ -129,7 +131,9 @@ class _RevocationStore:
                 key = f"fg:session:revoked:{session_id}"
                 return bool(self._redis.exists(key))  # type: ignore[union-attr]
             except Exception as exc:
-                log.warning("session_authority.redis_check_failed", extra={"exc": str(exc)})
+                log.warning(
+                    "session_authority.redis_check_failed", extra={"exc": str(exc)}
+                )
         with self._lock:
             if session_id not in self._mem:
                 return False
@@ -301,7 +305,7 @@ class SessionAuthority:
         Returns a new token only if within the last REFRESH_WINDOW_SECONDS of TTL.
         Always revokes the old token to prevent replay.
         """
-        ctx = self.validate_session(token)   # raises if invalid/expired/revoked
+        ctx = self.validate_session(token)  # raises if invalid/expired/revoked
 
         now = int(time.time())
         exp_ts = int(ctx.expires_at.timestamp())

@@ -62,7 +62,9 @@ def compute_governance_score_delta(
     if not isinstance(current, dict) or not isinstance(projected, dict):
         return 0.0
     try:
-        return round(float(projected.get("score", 0)) - float(current.get("score", 0)), 2)
+        return round(
+            float(projected.get("score", 0)) - float(current.get("score", 0)), 2
+        )
     except (TypeError, ValueError):
         return 0.0
 

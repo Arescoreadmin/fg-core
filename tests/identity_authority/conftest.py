@@ -6,11 +6,8 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import time
 from datetime import datetime, timezone
-from typing import Optional
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,6 +15,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Environment setup
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _clear_ia_singletons():
@@ -44,6 +42,7 @@ def _clear_ia_singletons():
 # JWKS / key fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def rsa_key_pair():
     """Generate a session-scoped RSA key pair for JWT signing in tests."""
@@ -65,15 +64,20 @@ def rsa_key_pair():
 def mock_jwks_response(rsa_key_pair):
     """Build a mock JWKS response from the RSA public key."""
     try:
-        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-        import base64 as b64
-
         _, public_key = rsa_key_pair
-        pub_numbers = public_key.public_key().public_numbers() if hasattr(public_key, "public_key") else public_key.public_numbers()
+        pub_numbers = (
+            public_key.public_key().public_numbers()
+            if hasattr(public_key, "public_key")
+            else public_key.public_numbers()
+        )
 
         def _int_to_base64url(n: int) -> str:
             length = (n.bit_length() + 7) // 8
-            return base64.urlsafe_b64encode(n.to_bytes(length, "big")).rstrip(b"=").decode()
+            return (
+                base64.urlsafe_b64encode(n.to_bytes(length, "big"))
+                .rstrip(b"=")
+                .decode()
+            )
 
         return {
             "keys": [
@@ -97,8 +101,15 @@ def _make_jwt(claims: dict, private_key, kid: str = "test-key-1") -> str:
         import jwt as pyjwt
 
         header = {"alg": "RS256", "kid": kid}
-        from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, NoEncryption
-        pem = private_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding,
+            PrivateFormat,
+            NoEncryption,
+        )
+
+        pem = private_key.private_bytes(
+            Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
+        )
         return pyjwt.encode(claims, pem, algorithm="RS256", headers=header)
     except ImportError:
         pytest.skip("PyJWT or cryptography not available")
@@ -107,6 +118,7 @@ def _make_jwt(claims: dict, private_key, kid: str = "test-key-1") -> str:
 # ---------------------------------------------------------------------------
 # Session token fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def session_secret() -> bytes:
@@ -118,6 +130,7 @@ def session_authority(session_secret, monkeypatch):
     monkeypatch.setenv("FG_SESSION_SECRET", session_secret.decode())
     monkeypatch.delenv("FG_REDIS_URL", raising=False)
     from api.identity_authority.session_authority import SessionAuthority
+
     return SessionAuthority()
 
 
@@ -137,6 +150,7 @@ def valid_session_token(session_authority):
 # ---------------------------------------------------------------------------
 # Legacy token helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_legacy_token(payload: dict, secret: str) -> str:
     raw = json.dumps(payload, separators=(",", ":"), sort_keys=True)
@@ -165,9 +179,9 @@ def legacy_portal_token():
 # CanonicalIdentity fixture
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def canonical_identity():
-    from datetime import datetime, timezone
     from api.identity_authority.models import (
         AuthenticationContext,
         CanonicalIdentity,

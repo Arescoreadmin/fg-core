@@ -52,9 +52,7 @@ def get_active_window(db: Any, tenant_id: str) -> Optional[dict[str, Any]]:
     return None
 
 
-def open_maintenance_window(
-    db: Any, tenant_id: str, window_id: str
-) -> dict[str, Any]:
+def open_maintenance_window(db: Any, tenant_id: str, window_id: str) -> dict[str, Any]:
     repo = GovernanceOrchestrationRepository(db, tenant_id)
     row = repo.get_maintenance_window(window_id)
     if row is None:
@@ -71,9 +69,7 @@ def open_maintenance_window(
     return _to_dict(row)
 
 
-def close_maintenance_window(
-    db: Any, tenant_id: str, window_id: str
-) -> dict[str, Any]:
+def close_maintenance_window(db: Any, tenant_id: str, window_id: str) -> dict[str, Any]:
     repo = GovernanceOrchestrationRepository(db, tenant_id)
     row = repo.get_maintenance_window(window_id)
     if row is None:

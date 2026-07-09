@@ -67,8 +67,12 @@ def export_replay_safe_snapshot(
         "redaction_profile": snapshot.redaction_profile,
         "entity_summaries": entity_summaries,
         "relationship_summaries": relationship_summaries,
-        "manifest": asdict(snapshot.manifest) if snapshot.manifest is not None else None,
-        "validation_report": asdict(snapshot.validation_report) if snapshot.validation_report is not None else None,
+        "manifest": asdict(snapshot.manifest)
+        if snapshot.manifest is not None
+        else None,
+        "validation_report": asdict(snapshot.validation_report)
+        if snapshot.validation_report is not None
+        else None,
         "completeness": dict(snapshot.completeness),
         "state_extensions": asdict(snapshot.state_extensions),
         "future_references": asdict(snapshot.future_references),

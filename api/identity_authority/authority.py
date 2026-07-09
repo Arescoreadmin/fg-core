@@ -105,7 +105,10 @@ class IdentityAuthority:
                 tenant_id=ctx.tenant_id,
                 provider=identity.provider.name,
                 correlation_id=cid,
-                details={"identity_type": identity.identity_type, "mfa": identity.auth_context.mfa_verified},
+                details={
+                    "identity_type": identity.identity_type,
+                    "mfa": identity.auth_context.mfa_verified,
+                },
             )
 
             return ctx
@@ -120,7 +123,9 @@ class IdentityAuthority:
             )
             raise
         except IdentityProviderError as exc:
-            AUTH_FAILED_TOTAL.labels(provider=exc.provider, reason="provider_error").inc()
+            AUTH_FAILED_TOTAL.labels(
+                provider=exc.provider, reason="provider_error"
+            ).inc()
             self._auditor.emit(
                 IdentityEventType.AUTH_PROVIDER_ERROR,
                 provider=exc.provider,
@@ -210,7 +215,10 @@ class IdentityAuthority:
             tenant_id=ctx.tenant_id,
             provider=identity.provider.name,
             correlation_id=ctx.correlation_id,
-            details={"sid": token.session_id, "mfa": identity.auth_context.mfa_verified},
+            details={
+                "sid": token.session_id,
+                "mfa": identity.auth_context.mfa_verified,
+            },
         )
 
         return token.token
@@ -274,9 +282,7 @@ class IdentityAuthority:
 
         permissions = binding.permissions if binding else frozenset()
         capabilities = (
-            identity.subscription.capabilities
-            if identity.subscription
-            else frozenset()
+            identity.subscription.capabilities if identity.subscription else frozenset()
         )
 
         if binding:
@@ -294,7 +300,9 @@ class IdentityAuthority:
             )
 
         return AuthorizationContext(
-            identity=identity if binding is None else _identity_with_binding(identity, binding),
+            identity=identity
+            if binding is None
+            else _identity_with_binding(identity, binding),
             permissions=permissions,
             capabilities=capabilities,
             tenant_id=binding.tenant_id if binding else None,

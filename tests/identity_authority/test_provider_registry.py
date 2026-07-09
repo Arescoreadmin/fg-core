@@ -15,7 +15,6 @@ from api.identity_authority.providers.registry import IdentityProviderRegistry
 
 def _make_provider(name: str, *, configured: bool = True, raises=None):
     from api.identity_authority.models import IdentityProvider
-    from datetime import datetime, timezone
 
     provider = MagicMock()
     provider.provider_name = name
@@ -24,13 +23,17 @@ def _make_provider(name: str, *, configured: bool = True, raises=None):
         provider.validate_token.side_effect = raises
     else:
         identity = MagicMock()
-        identity.provider = IdentityProvider(name=name, issuer="https://example.com/", subject="sub")
+        identity.provider = IdentityProvider(
+            name=name, issuer="https://example.com/", subject="sub"
+        )
         provider.validate_token.return_value = identity
     return provider
 
 
 def test_resolve_jwt_tries_each_provider_in_order(monkeypatch):
-    p1 = _make_provider("auth0", raises=IdentityValidationError("bad", "INVALID", "auth0"))
+    p1 = _make_provider(
+        "auth0", raises=IdentityValidationError("bad", "INVALID", "auth0")
+    )
     p2 = _make_provider("entra")
 
     registry = IdentityProviderRegistry.__new__(IdentityProviderRegistry)
@@ -55,8 +58,12 @@ def test_resolve_jwt_stops_on_provider_error():
 
 
 def test_resolve_jwt_all_rejected_raises():
-    p1 = _make_provider("auth0", raises=IdentityValidationError("bad", "INVALID", "auth0"))
-    p2 = _make_provider("entra", raises=IdentityValidationError("bad", "INVALID", "entra"))
+    p1 = _make_provider(
+        "auth0", raises=IdentityValidationError("bad", "INVALID", "auth0")
+    )
+    p2 = _make_provider(
+        "entra", raises=IdentityValidationError("bad", "INVALID", "entra")
+    )
 
     registry = IdentityProviderRegistry.__new__(IdentityProviderRegistry)
     registry._providers = [p1, p2]
@@ -115,7 +122,6 @@ def test_build_chain_skips_unconfigured(monkeypatch):
 def test_provider_error_skipped_when_issuer_does_not_match():
     """An IdentityProviderError from Auth0 should not block an Entra token."""
     from api.identity_authority.providers.registry import IdentityProviderRegistry
-    from api.identity_authority.models import IdentityProvider
 
     auth0_provider = _make_provider(
         "auth0",
@@ -124,13 +130,23 @@ def test_provider_error_skipped_when_issuer_does_not_match():
     auth0_provider.get_issuer.return_value = "https://my-tenant.auth0.com/"
 
     entra_provider = _make_provider("entra")
-    entra_provider.get_issuer.return_value = "https://login.microsoftonline.com/tid/v2.0"
+    entra_provider.get_issuer.return_value = (
+        "https://login.microsoftonline.com/tid/v2.0"
+    )
 
     # Fake an Entra token (iss = login.microsoftonline.com)
-    import base64, json
-    payload = base64.urlsafe_b64encode(
-        json.dumps({"iss": "https://login.microsoftonline.com/abc-123/v2.0"}).encode()
-    ).decode().rstrip("=")
+    import base64
+    import json
+
+    payload = (
+        base64.urlsafe_b64encode(
+            json.dumps(
+                {"iss": "https://login.microsoftonline.com/abc-123/v2.0"}
+            ).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
     entra_token = f"header.{payload}.sig"
 
     registry = IdentityProviderRegistry.__new__(IdentityProviderRegistry)
@@ -151,10 +167,16 @@ def test_provider_error_propagated_when_issuer_matches():
     )
     auth0_provider.get_issuer.return_value = "https://my-tenant.auth0.com/"
 
-    import base64, json
-    payload = base64.urlsafe_b64encode(
-        json.dumps({"iss": "https://my-tenant.auth0.com/"}).encode()
-    ).decode().rstrip("=")
+    import base64
+    import json
+
+    payload = (
+        base64.urlsafe_b64encode(
+            json.dumps({"iss": "https://my-tenant.auth0.com/"}).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
     auth0_token = f"header.{payload}.sig"
 
     registry = IdentityProviderRegistry.__new__(IdentityProviderRegistry)

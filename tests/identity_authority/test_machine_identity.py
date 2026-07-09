@@ -6,7 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.identity_authority.machine_identity import MachineIdentityAuthority, MachineIdentityRecord
+from api.identity_authority.machine_identity import (
+    MachineIdentityAuthority,
+    MachineIdentityRecord,
+)
 
 
 @pytest.fixture
@@ -46,7 +49,9 @@ def test_authenticate_api_key_success(machine_auth):
 def test_authenticate_api_key_not_found_raises(machine_auth):
     with patch.object(machine_auth, "_load_key_record", return_value=None):
         with pytest.raises(ValueError, match="not found"):
-            machine_auth.authenticate_api_key("fg_live_missing", "secret", db=MagicMock())
+            machine_auth.authenticate_api_key(
+                "fg_live_missing", "secret", db=MagicMock()
+            )
 
 
 def test_authenticate_api_key_inactive_raises(machine_auth):
@@ -61,7 +66,9 @@ def test_authenticate_api_key_bad_secret_raises(machine_auth):
     with patch.object(machine_auth, "_load_key_record", return_value=record):
         with patch.object(machine_auth, "_verify_secret", return_value=False):
             with pytest.raises(ValueError, match="invalid"):
-                machine_auth.authenticate_api_key("fg_live_001", "wrong", db=MagicMock())
+                machine_auth.authenticate_api_key(
+                    "fg_live_001", "wrong", db=MagicMock()
+                )
 
 
 def test_verify_secret_no_hash_raises(machine_auth):

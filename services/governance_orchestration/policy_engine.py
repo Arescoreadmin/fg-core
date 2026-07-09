@@ -29,7 +29,9 @@ _ALLOWED_ACTIONS = {
 }
 
 
-def evaluate_policy(policy_data: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+def evaluate_policy(
+    policy_data: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
     """Deterministic policy evaluation.
 
     Returns a dict with the shape:

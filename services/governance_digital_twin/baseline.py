@@ -19,7 +19,9 @@ def create_comparison_baseline(
     purpose: str,
 ) -> GovernanceDigitalTwinBaseline:
     entity_counts = Counter(entity.type for entity in snapshot.entities)
-    relationship_counts = Counter(relationship.type for relationship in snapshot.relationships)
+    relationship_counts = Counter(
+        relationship.type for relationship in snapshot.relationships
+    )
     authority_counts = Counter(entity.authority for entity in snapshot.entities)
     for relationship in snapshot.relationships:
         authority_counts[relationship.authority] += 1

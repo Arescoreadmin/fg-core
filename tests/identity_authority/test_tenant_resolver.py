@@ -19,7 +19,13 @@ def mock_db():
     return MagicMock()
 
 
-def _make_identity(*, subject="auth0|test", provider="auth0", issuer="https://test.auth0.com/", tenant_binding=None):
+def _make_identity(
+    *,
+    subject="auth0|test",
+    provider="auth0",
+    issuer="https://test.auth0.com/",
+    tenant_binding=None,
+):
     from datetime import datetime, timezone
     from api.identity_authority.models import (
         AuthenticationContext,
@@ -53,13 +59,17 @@ def _make_identity(*, subject="auth0|test", provider="auth0", issuer="https://te
 
 def test_resolve_returns_none_when_no_membership(resolver, mock_db):
     identity = _make_identity()
-    with patch("api.identity_authority.tenant_resolver.TenantResolver._resolve_by_membership", return_value=None):
+    with patch(
+        "api.identity_authority.tenant_resolver.TenantResolver._resolve_by_membership",
+        return_value=None,
+    ):
         result = resolver.resolve(identity, mock_db)
     assert result is None
 
 
 def test_resolve_returns_binding_from_membership(resolver, mock_db, canonical_identity):
     from api.identity_authority.models import TenantBinding
+
     expected_binding = TenantBinding(
         tenant_id="tenant-123",
         organization_id=None,
@@ -67,7 +77,9 @@ def test_resolve_returns_binding_from_membership(resolver, mock_db, canonical_id
         roles=frozenset(["assessor"]),
         permissions=frozenset(),
     )
-    with patch.object(resolver, "_resolve_by_membership", return_value=expected_binding):
+    with patch.object(
+        resolver, "_resolve_by_membership", return_value=expected_binding
+    ):
         result = resolver.resolve(canonical_identity, mock_db)
     assert result is not None
     assert result.tenant_id == "tenant-123"
@@ -86,7 +98,9 @@ def test_resolve_falls_through_to_hint(resolver, mock_db):
     )
     with patch.object(resolver, "_resolve_by_membership", return_value=None):
         with patch.object(resolver, "_resolve_by_hint", return_value=hint_binding):
-            result = resolver.resolve(identity, mock_db, tenant_id_hint="tenant-from-hint")
+            result = resolver.resolve(
+                identity, mock_db, tenant_id_hint="tenant-from-hint"
+            )
 
     assert result is not None
     assert result.tenant_id == "tenant-from-hint"
@@ -134,7 +148,6 @@ def test_resolve_membership_import_error_returns_none(resolver, mock_db):
 
 def test_metrics_recorded_on_resolve(resolver, mock_db, canonical_identity):
     from api.identity_authority.models import TenantBinding
-    from api.identity_authority import metrics
 
     binding = TenantBinding(
         tenant_id="tenant-123",

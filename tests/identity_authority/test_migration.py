@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import json
 import time
 
 import pytest
@@ -18,6 +14,7 @@ def migrator(monkeypatch):
     monkeypatch.setenv("PORTAL_PASSWORD", "test-portal-password")
     monkeypatch.setenv("FG_SESSION_SECRET", "test-fg-secret-32-bytes-exactly!!")
     from api.identity_authority.migration import LegacySessionMigrator
+
     return LegacySessionMigrator()
 
 

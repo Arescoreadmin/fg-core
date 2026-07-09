@@ -308,10 +308,7 @@ def _canonical_identity_ref(
         str(part).strip() for part in canonical_identity_seed if str(part).strip()
     )
     if normalized_seed:
-        return (
-            f"canonical:{entity_type.value}:{authority}:"
-            + "|".join(normalized_seed)
-        )
+        return f"canonical:{entity_type.value}:{authority}:" + "|".join(normalized_seed)
 
     for key in (
         "control_id",
@@ -1185,7 +1182,8 @@ def build_governance_digital_twin_snapshot(
                     "report_ref": row.report_ref,
                     "quality_grade": row.quality_grade,
                     "report_version": row.report_version,
-                    "report_key": row.report_ref or f"{row.assessment_id}:{row.report_version}",
+                    "report_key": row.report_ref
+                    or f"{row.assessment_id}:{row.report_version}",
                 },
                 canonical_identity_seed=(
                     str(row.report_ref or ""),
@@ -1301,7 +1299,9 @@ def build_governance_digital_twin_snapshot(
                 },
                 canonical_identity_seed=(
                     str(row.name or ""),
-                    str(context.get("decision_id") if isinstance(context, dict) else ""),
+                    str(
+                        context.get("decision_id") if isinstance(context, dict) else ""
+                    ),
                     str(row.playbook_id or ""),
                     str(row.trigger_id or ""),
                 ),
@@ -2104,27 +2104,29 @@ def build_governance_digital_twin_snapshot(
     completeness_score = int(
         round((len(available_core_authorities) / len(expected_core_authorities)) * 100)
     )
-    completeness = deep_freeze({
-        "score": completeness_score,
-        "method": "available_core_authorities_ratio_v2",
-        "coverage": {
-            "expected_core_authority_count": len(expected_core_authorities),
-            "available_core_authority_count": len(available_core_authorities),
-            "entity_count": len(sorted_entities),
-            "relationship_count": len(sorted_relationships),
-        },
-        "expected_core_authorities": list(expected_core_authorities),
-        "available_core_authorities": list(available_core_authorities),
-        "missing_authorities": list(missing_authorities),
-        "missing_sources": list(unavailable_sources),
-        "partial_state": bool(
-            missing_authorities or unavailable_sources or limitations
-        ),
-        "unavailable_sources": list(unavailable_sources),
-        "confidence_in_completeness": max(
-            0, completeness_score - (10 * len(unavailable_sources))
-        ),
-    })
+    completeness = deep_freeze(
+        {
+            "score": completeness_score,
+            "method": "available_core_authorities_ratio_v2",
+            "coverage": {
+                "expected_core_authority_count": len(expected_core_authorities),
+                "available_core_authority_count": len(available_core_authorities),
+                "entity_count": len(sorted_entities),
+                "relationship_count": len(sorted_relationships),
+            },
+            "expected_core_authorities": list(expected_core_authorities),
+            "available_core_authorities": list(available_core_authorities),
+            "missing_authorities": list(missing_authorities),
+            "missing_sources": list(unavailable_sources),
+            "partial_state": bool(
+                missing_authorities or unavailable_sources or limitations
+            ),
+            "unavailable_sources": list(unavailable_sources),
+            "confidence_in_completeness": max(
+                0, completeness_score - (10 * len(unavailable_sources))
+            ),
+        }
+    )
 
     preliminary_snapshot = GovernanceDigitalTwinSnapshot(
         snapshot_id="",

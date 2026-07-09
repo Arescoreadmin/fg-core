@@ -120,9 +120,7 @@ FORBIDDEN_PATTERNS = [
 
 # Regexes
 _CLASS_RE = re.compile(r"^\s*class\s+(\w+)", re.MULTILINE)
-_FUNC_OR_CLASS_RE = re.compile(
-    r"^\s*(?:class|def|async\s+def)\s+(\w+)", re.MULTILINE
-)
+_FUNC_OR_CLASS_RE = re.compile(r"^\s*(?:class|def|async\s+def)\s+(\w+)", re.MULTILINE)
 _ROUTE_STR_RE = re.compile(r'@router\.\w+\(\s*["\']([^"\']+)["\']', re.MULTILINE)
 
 
@@ -327,9 +325,7 @@ def main() -> int:
             )
 
     if failures:
-        print(
-            f"\nGovernance Orchestration Gate: FAILED ({len(failures)} violation(s))"
-        )
+        print(f"\nGovernance Orchestration Gate: FAILED ({len(failures)} violation(s))")
         for f in failures:
             print(f"  x  {f}")
         return 1

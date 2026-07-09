@@ -54,7 +54,9 @@ def get_authorization_context(
     if bearer.lower().startswith("bearer "):
         token = bearer.split(" ", 1)[1].strip()
         if token:
-            return _resolve_jwt(token, tenant_id_hint=tenant_hint, correlation_id=cid, db=db)
+            return _resolve_jwt(
+                token, tenant_id_hint=tenant_hint, correlation_id=cid, db=db
+            )
 
     api_key_ctx = _resolve_api_key(request, db=db, correlation_id=cid)
     if api_key_ctx is not None:
@@ -72,7 +74,9 @@ def require_permission_v2(*required_perms: str):
     Usage:
         ctx: AuthorizationContext = Depends(require_permission_v2("risk.accept"))
     """
-    perms_needed: frozenset[str] = frozenset(p.strip() for p in required_perms if p.strip())
+    perms_needed: frozenset[str] = frozenset(
+        p.strip() for p in required_perms if p.strip()
+    )
 
     def _dep(
         ctx: AuthorizationContext = Depends(get_authorization_context),
@@ -135,7 +139,9 @@ def _dev_bypass_context(request: Request) -> AuthorizationContext:
     )
 
     now = datetime.now(tz=timezone.utc)
-    provider = IdentityProvider(name="dev_bypass", issuer="frostgate.local", subject="dev_bypass")
+    provider = IdentityProvider(
+        name="dev_bypass", issuer="frostgate.local", subject="dev_bypass"
+    )
     auth_ctx = AuthenticationContext(
         mfa_verified=True,
         mfa_method=None,

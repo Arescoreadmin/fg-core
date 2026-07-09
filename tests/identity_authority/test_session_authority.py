@@ -12,6 +12,7 @@ def authority(monkeypatch):
     monkeypatch.setenv("FG_SESSION_SECRET", "test-secret-32-bytes-exactly!!!!")
     monkeypatch.delenv("FG_REDIS_URL", raising=False)
     from api.identity_authority.session_authority import SessionAuthority
+
     return SessionAuthority()
 
 
@@ -44,7 +45,9 @@ def test_session_contains_mfa_flag(authority):
 def test_revoke_session(authority):
     from api.identity_authority.session_authority import SessionRevokedError
 
-    token = authority.create_session(subject="user|rev", email="r@r.com", tenant_id=None)
+    token = authority.create_session(
+        subject="user|rev", email="r@r.com", tenant_id=None
+    )
     authority.revoke_session(token.session_id)
 
     with pytest.raises(SessionRevokedError):
@@ -75,7 +78,11 @@ def test_expired_session_raises(authority, monkeypatch):
     now_plus = int(time.time()) + 999999
     monkeypatch.setattr(
         "api.identity_authority.session_authority.time",
-        type("_t", (), {"time": staticmethod(lambda: now_plus), "monotonic": time.monotonic})(),
+        type(
+            "_t",
+            (),
+            {"time": staticmethod(lambda: now_plus), "monotonic": time.monotonic},
+        )(),
     )
     with pytest.raises(SessionExpiredError):
         authority.validate_session(token.token)
@@ -84,28 +91,27 @@ def test_expired_session_raises(authority, monkeypatch):
 def test_refresh_session_revokes_old(authority, monkeypatch):
     from api.identity_authority.session_authority import (
         SessionRevokedError,
-        REFRESH_WINDOW_SECONDS,
-        SESSION_TTL_SECONDS,
     )
 
     # Create a session with a very short absolute TTL so we can enter the refresh window
     # without also exceeding the idle timeout.
     import api.identity_authority.session_authority as _sa_mod
 
-    original_ttl = _sa_mod.SESSION_TTL_SECONDS
-    original_idle = _sa_mod.IDLE_TIMEOUT_SECONDS
-    original_refresh = _sa_mod.REFRESH_WINDOW_SECONDS
     monkeypatch.setattr(_sa_mod, "SESSION_TTL_SECONDS", 3600)
     monkeypatch.setattr(_sa_mod, "IDLE_TIMEOUT_SECONDS", 3600)
     monkeypatch.setattr(_sa_mod, "REFRESH_WINDOW_SECONDS", 1800)
 
     token = authority.create_session(subject="u", email="u@u.com", tenant_id=None)
     # Move into the refresh window (last 30 min of a 1h TTL)
-    offset = 3600 - 1800 + 60   # 1861 seconds: just inside the refresh window
+    offset = 3600 - 1800 + 60  # 1861 seconds: just inside the refresh window
     now_plus = int(time.time()) + offset
     monkeypatch.setattr(
         "api.identity_authority.session_authority.time",
-        type("_t", (), {"time": staticmethod(lambda: now_plus), "monotonic": time.monotonic})(),
+        type(
+            "_t",
+            (),
+            {"time": staticmethod(lambda: now_plus), "monotonic": time.monotonic},
+        )(),
     )
     new_token = authority.refresh_session(token.token)
     assert new_token.token != token.token

@@ -62,7 +62,9 @@ def _client_id() -> str:
 
 
 def _namespace() -> str:
-    return (os.getenv("FG_ENTRA_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    return (
+        (os.getenv("FG_ENTRA_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    )
 
 
 def _allowed_tenants() -> frozenset[str]:
@@ -139,13 +141,13 @@ def _mfa_method_from_amr(amr: list[str]) -> Optional[str]:
     if "fido2" in amr or "fido" in amr:
         return "webauthn"
     if "ngcmfa" in amr:
-        return "webauthn"   # Windows Hello / NGC is FIDO2-based
+        return "webauthn"  # Windows Hello / NGC is FIDO2-based
     if "otp" in amr or "totp" in amr:
         return "totp"
     if "sms" in amr:
         return "sms"
     if "rsa" in amr:
-        return "totp"   # RSA SecurID — treat as TOTP equivalent
+        return "totp"  # RSA SecurID — treat as TOTP equivalent
     return None
 
 
@@ -261,16 +263,21 @@ class EntraOIDCProvider:
         elif configured_tenant != "common":
             expected_issuer = _issuer_for_tid(configured_tenant)
         else:
-            expected_issuer = None   # will be validated from claims
+            expected_issuer = None  # will be validated from claims
 
         # --- Step 5: Fetch JWKS and locate key ---
         # Use configured_tenant for JWKS URL (or effective_tenant for multi-tenant)
-        jwks_tenant = effective_tenant if configured_tenant == "common" else configured_tenant
+        jwks_tenant = (
+            effective_tenant if configured_tenant == "common" else configured_tenant
+        )
         jwks = _load_jwks(jwks_tenant)
         public_key = _key_for_kid(jwks, kid, alg)
 
         if public_key is None:
-            log.info("entra.jwks_kid_miss_refreshing", extra={"kid": kid, "tenant": jwks_tenant})
+            log.info(
+                "entra.jwks_kid_miss_refreshing",
+                extra={"kid": kid, "tenant": jwks_tenant},
+            )
             jwks = _load_jwks(jwks_tenant, force_refresh=True)
             public_key = _key_for_kid(jwks, kid, alg)
 
@@ -343,7 +350,7 @@ class EntraOIDCProvider:
         roles_raw = (
             claims.get(f"{namespace}/roles")
             or claims.get("roles")
-            or claims.get("wids")    # Entra directory role IDs (fallback)
+            or claims.get("wids")  # Entra directory role IDs (fallback)
             or []
         )
         roles = [str(r) for r in roles_raw if r]
@@ -352,7 +359,7 @@ class EntraOIDCProvider:
         claim_tenant_id: Optional[str] = (
             claims.get(f"{namespace}/tenant_id")
             or claims.get("tenant_id")
-            or resolved_tid   # fall back to Azure tenant ID as hint
+            or resolved_tid  # fall back to Azure tenant ID as hint
             or None
         )
 
@@ -383,7 +390,7 @@ class EntraOIDCProvider:
             auth_time=auth_time,
             amr=amr,
             acr=claims.get("acr"),
-            pkce_used=True,   # Entra PKCE is enforced in our flow
+            pkce_used=True,  # Entra PKCE is enforced in our flow
             nonce_verified=bool(claims.get("nonce")),
         )
 
@@ -402,7 +409,7 @@ class EntraOIDCProvider:
             tenant_binding = TenantBinding(
                 tenant_id=claim_tenant_id or "",
                 organization_id=None,
-                membership_id=None,   # resolved later by TenantResolver
+                membership_id=None,  # resolved later by TenantResolver
                 roles=frozenset(roles),
                 permissions=perms,
             )

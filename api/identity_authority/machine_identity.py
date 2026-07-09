@@ -10,17 +10,18 @@ They never go through OIDC and have no session TTL.
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
-import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from api.identity_authority.audit import IdentityAuditor, IdentityEventType, get_identity_auditor
+from api.identity_authority.audit import (
+    IdentityAuditor,
+    IdentityEventType,
+    get_identity_auditor,
+)
 from api.identity_authority.metrics import AUTH_FAILED_TOTAL, AUTH_SUCCESS_TOTAL
 from api.identity_authority.models import (
     AuthenticationContext,
@@ -70,8 +71,6 @@ class MachineIdentityAuthority:
         Raises:
             ValueError: key not found, inactive, or secret mismatch
         """
-        t0 = time.monotonic()
-
         if db is None:
             raise ValueError("database session required for API key authentication")
 
@@ -125,7 +124,6 @@ class MachineIdentityAuthority:
         key_prefix = getattr(auth_state, "key_prefix", None)
         tenant_id = getattr(auth_state, "tenant_id", None)
         roles = getattr(auth_state, "roles", [])
-        scopes = getattr(auth_state, "scopes", [])
 
         if not key_id:
             return None
@@ -184,7 +182,11 @@ class MachineIdentityAuthority:
         the legacy SHA-256 hash path for keys minted before key_lookup existed.
         """
         from api.db_models import ApiKey
-        from api.auth_scopes.helpers import _key_lookup_hash, _get_key_pepper, _sha256_hex
+        from api.auth_scopes.helpers import (
+            _key_lookup_hash,
+            _get_key_pepper,
+            _sha256_hex,
+        )
 
         row = None
 
@@ -218,7 +220,9 @@ class MachineIdentityAuthority:
                     .first()
                 )
             except Exception as exc:
-                log.warning("machine_identity.legacy_lookup_error", extra={"exc": str(exc)})
+                log.warning(
+                    "machine_identity.legacy_lookup_error", extra={"exc": str(exc)}
+                )
 
         if row is None:
             return None
@@ -246,11 +250,13 @@ class MachineIdentityAuthority:
                 f"API key {key_prefix!r} has no stored hash — cannot verify secret"
             )
         from api.auth_scopes.helpers import verify_key
+
         return verify_key(secret, record.key_hash, record.hash_alg)
 
     def _touch_last_used(self, key_prefix: str, db: Session) -> None:
         try:
             from api.db_models import ApiKey
+
             db.query(ApiKey).filter(ApiKey.prefix == key_prefix).update(
                 {"last_used_at": datetime.now(tz=timezone.utc)}
             )

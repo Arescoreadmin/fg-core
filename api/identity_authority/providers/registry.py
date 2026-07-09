@@ -80,7 +80,9 @@ class IdentityProviderRegistry:
         from api.identity_authority.providers.auth0_provider import Auth0OIDCProvider
         from api.identity_authority.providers.entra_provider import EntraOIDCProvider
         from api.identity_authority.providers.google_provider import GoogleOIDCProvider
-        from api.identity_authority.providers.generic_oidc_provider import GenericOIDCProvider
+        from api.identity_authority.providers.generic_oidc_provider import (
+            GenericOIDCProvider,
+        )
 
         candidates = [
             Auth0OIDCProvider(),
@@ -99,7 +101,9 @@ class IdentityProviderRegistry:
         if not self._providers:
             log.warning(
                 "identity_authority.no_jwt_providers_configured",
-                extra={"hint": "set FG_AUTH0_DOMAIN, FG_ENTRA_TENANT_ID, or FG_OIDC_ISSUER"},
+                extra={
+                    "hint": "set FG_AUTH0_DOMAIN, FG_ENTRA_TENANT_ID, or FG_OIDC_ISSUER"
+                },
             )
 
     def resolve_jwt(self, token: str) -> CanonicalIdentity:
@@ -147,7 +151,7 @@ class IdentityProviderRegistry:
                 continue
 
         raise IdentityValidationError(
-            f"all configured providers rejected the token",
+            "all configured providers rejected the token",
             code="ALL_PROVIDERS_REJECTED",
             provider="registry",
         ) from last_exc

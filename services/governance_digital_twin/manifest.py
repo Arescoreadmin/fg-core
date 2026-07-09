@@ -15,14 +15,20 @@ from services.governance_digital_twin.models import (
 )
 
 
-def build_snapshot_manifest(snapshot: GovernanceDigitalTwinSnapshot) -> GovernanceDigitalTwinManifest:
+def build_snapshot_manifest(
+    snapshot: GovernanceDigitalTwinSnapshot,
+) -> GovernanceDigitalTwinManifest:
     entity_counts = Counter(entity.type for entity in snapshot.entities)
-    relationship_counts = Counter(relationship.type for relationship in snapshot.relationships)
+    relationship_counts = Counter(
+        relationship.type for relationship in snapshot.relationships
+    )
     authority_counts = Counter(entity.authority for entity in snapshot.entities)
     for relationship in snapshot.relationships:
         authority_counts[relationship.authority] += 1
 
-    baseline_reference = snapshot.baselines[0].baseline_id if snapshot.baselines else None
+    baseline_reference = (
+        snapshot.baselines[0].baseline_id if snapshot.baselines else None
+    )
     return GovernanceDigitalTwinManifest(
         manifest_schema_version=GOVERNANCE_DIGITAL_TWIN_MANIFEST_SCHEMA_VERSION,
         snapshot_version=snapshot.snapshot_version,

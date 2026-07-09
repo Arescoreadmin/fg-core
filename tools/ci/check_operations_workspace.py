@@ -160,7 +160,7 @@ def check_file(path: Path) -> list[str]:
     # aria-expanded must not co-occur with role="complementary"
     if _ARIA_EXPANDED_RE.search(text) and _ROLE_COMPLEMENTARY_RE.search(text):
         errors.append(
-            f"{name}: aria-expanded found alongside role=\"complementary\" — "
+            f'{name}: aria-expanded found alongside role="complementary" — '
             "operations-workspace panels must not use aria-expanded on complementary regions"
         )
 
@@ -172,7 +172,9 @@ def check_file(path: Path) -> list[str]:
     # Per-component specific checks
     if name == "ExportPanel.tsx":
         if not _PROVENANCE_RE.search(text):
-            errors.append(f"{name}: missing provenanceMetadata — ExportPanel must include provenance")
+            errors.append(
+                f"{name}: missing provenanceMetadata — ExportPanel must include provenance"
+            )
 
     if name == "DecisionLedger.tsx":
         if _POST_RE.search(text):
@@ -183,9 +185,13 @@ def check_file(path: Path) -> list[str]:
 
     if name == "CommandPalette.tsx":
         if not _DIALOG_RE.search(text):
-            errors.append(f'{name}: missing role="dialog" — CommandPalette must be a dialog')
+            errors.append(
+                f'{name}: missing role="dialog" — CommandPalette must be a dialog'
+            )
         if not _ARIA_MODAL_RE.search(text):
-            errors.append(f"{name}: missing aria-modal — CommandPalette must declare aria-modal")
+            errors.append(
+                f"{name}: missing aria-modal — CommandPalette must declare aria-modal"
+            )
 
     return errors
 
@@ -221,7 +227,9 @@ def main() -> int:
 
     # Check component files
     if not COMPONENT_DIR.is_dir():
-        print(f"ERROR: operations-workspace component directory not found: {COMPONENT_DIR}")
+        print(
+            f"ERROR: operations-workspace component directory not found: {COMPONENT_DIR}"
+        )
         return 1
 
     component_files = sorted(COMPONENT_DIR.glob("*.tsx"))

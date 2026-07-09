@@ -20,11 +20,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
-from api.identity_authority.audit import IdentityAuditor, IdentityEventType, get_identity_auditor
+from api.identity_authority.audit import (
+    IdentityAuditor,
+    IdentityEventType,
+    get_identity_auditor,
+)
 from api.identity_authority.metrics import LEGACY_MIGRATION_TOTAL
 from api.identity_authority.models import (
     AuthenticationContext,
-    AuthorizationContext,
     CanonicalIdentity,
     IdentityProvider,
     TenantBinding,
@@ -44,7 +47,7 @@ class LegacySessionPayload:
     issued_at: int
     expires_at: int
     session_id: Optional[str]
-    legacy_format: str   # "portal_v1" | "admin_gw_v1"
+    legacy_format: str  # "portal_v1" | "admin_gw_v1"
 
 
 class LegacyMigrationError(Exception):
@@ -67,7 +70,7 @@ class LegacySessionMigrator:
         self._auditor = auditor or get_identity_auditor()
         self._portal_secret = (os.getenv("PORTAL_PASSWORD") or "").encode()
         self._session_secret = (os.getenv("FG_SESSION_SECRET") or "").encode()
-        self._admin_secret = (os.getenv("ADMIN_SESSION_SECRET") or self._session_secret)
+        self._admin_secret = os.getenv("ADMIN_SESSION_SECRET") or self._session_secret
         if isinstance(self._admin_secret, str):
             self._admin_secret = self._admin_secret.encode()
 
@@ -101,7 +104,9 @@ class LegacySessionMigrator:
             correlation_id=correlation_id,
             details={"reason": "unknown_format"},
         )
-        raise LegacyMigrationError("unrecognised legacy token format", code="UNKNOWN_FORMAT")
+        raise LegacyMigrationError(
+            "unrecognised legacy token format", code="UNKNOWN_FORMAT"
+        )
 
     def build_identity_from_legacy(
         self, payload: LegacySessionPayload
@@ -111,7 +116,6 @@ class LegacySessionMigrator:
 
         perms = roles_to_permissions(payload.roles)
 
-        now = datetime.now(tz=timezone.utc)
         issued_at = datetime.fromtimestamp(payload.issued_at, tz=timezone.utc)
         expires_at = datetime.fromtimestamp(payload.expires_at, tz=timezone.utc)
 
@@ -127,7 +131,9 @@ class LegacySessionMigrator:
             else None
         )
 
-        provider_name = "portal_legacy" if payload.legacy_format == "portal_v1" else "admin_legacy"
+        provider_name = (
+            "portal_legacy" if payload.legacy_format == "portal_v1" else "admin_legacy"
+        )
         provider = IdentityProvider(
             name=provider_name,
             issuer="frostgate.internal.legacy",

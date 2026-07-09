@@ -13,10 +13,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import secrets
 import threading
-import time
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
@@ -115,8 +113,13 @@ class IdentityAuditor:
 
         with self._lock:
             event_hash = _sha256(
-                self._prev_hash, event_id, ts, event_type.value,
-                subject or "", tenant_id or "", details_str,
+                self._prev_hash,
+                event_id,
+                ts,
+                event_type.value,
+                subject or "",
+                tenant_id or "",
+                details_str,
             )
             prev = self._prev_hash
             self._prev_hash = event_hash
@@ -180,8 +183,18 @@ class IdentityAuditor:
 def _sanitize(details: dict) -> dict:
     """Strip any secrets from audit detail dicts."""
     _REDACTED_KEYS = frozenset(
-        {"token", "secret", "password", "key", "access_token", "refresh_token",
-         "id_token", "client_secret", "authorization", "cookie"}
+        {
+            "token",
+            "secret",
+            "password",
+            "key",
+            "access_token",
+            "refresh_token",
+            "id_token",
+            "client_secret",
+            "authorization",
+            "cookie",
+        }
     )
     return {
         k: "[REDACTED]" if k.lower() in _REDACTED_KEYS else v

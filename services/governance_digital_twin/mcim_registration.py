@@ -18,4 +18,6 @@ _MCIM_REGISTRATION_SOURCE = {
     "validator": "MCIM-18.8.1-GDT-VALIDATOR",
 }
 
-MCIM_REGISTRATION_SOURCE: Mapping[str, str] = MappingProxyType(_MCIM_REGISTRATION_SOURCE)
+MCIM_REGISTRATION_SOURCE: Mapping[str, str] = MappingProxyType(
+    _MCIM_REGISTRATION_SOURCE
+)

@@ -61,7 +61,9 @@ def _audience() -> str:
 
 
 def _namespace() -> str:
-    return (os.getenv("FG_OIDC_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    return (
+        (os.getenv("FG_OIDC_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    )
 
 
 def _fetch_discovery(issuer: str) -> dict:
@@ -277,14 +279,8 @@ class GenericOIDCProvider:
                 "jwt missing sub claim", code="MISSING_SUB", provider="generic_oidc"
             )
 
-        email: str = (
-            claims.get("email") or claims.get("preferred_username") or ""
-        )
-        name: str = (
-            claims.get("name")
-            or claims.get("preferred_username")
-            or ""
-        )
+        email: str = claims.get("email") or claims.get("preferred_username") or ""
+        name: str = claims.get("name") or claims.get("preferred_username") or ""
         email_verified: bool = bool(claims.get("email_verified", False))
 
         namespace = _namespace()

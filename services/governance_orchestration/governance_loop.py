@@ -53,7 +53,9 @@ def evaluate_governance_state(
         "evidence_sufficiency": evidence,
         "control_health": control,
         "posture": posture,
-        "next_evaluation_hint": "24h" if state == GovernanceOrchestrationState.IDLE.value else "1h",
+        "next_evaluation_hint": "24h"
+        if state == GovernanceOrchestrationState.IDLE.value
+        else "1h",
     }
 
 

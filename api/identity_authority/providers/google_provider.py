@@ -51,7 +51,9 @@ def _client_id() -> str:
 
 
 def _namespace() -> str:
-    return (os.getenv("FG_GOOGLE_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    return (
+        (os.getenv("FG_GOOGLE_NAMESPACE") or "https://frostgate.ai").strip().rstrip("/")
+    )
 
 
 def _allowed_domains() -> frozenset[str]:
@@ -92,7 +94,9 @@ def _rsa_key_for_kid(jwks: dict, kid: str) -> Optional[object]:
             try:
                 return RSAAlgorithm.from_jwk(json.dumps(key_data))
             except Exception as exc:
-                log.warning("google.jwk_parse_failed", extra={"kid": kid, "exc": str(exc)})
+                log.warning(
+                    "google.jwk_parse_failed", extra={"kid": kid, "exc": str(exc)}
+                )
     return None
 
 
@@ -207,7 +211,7 @@ class GoogleOIDCProvider:
         email_verified: bool = bool(claims.get("email_verified", False))
 
         # Google Workspace hosted domain restriction
-        hd: Optional[str] = claims.get("hd")   # hosted domain
+        hd: Optional[str] = claims.get("hd")  # hosted domain
         allowed_domains = _allowed_domains()
         if allowed_domains:
             token_domain = (hd or "").lower()

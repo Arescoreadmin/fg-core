@@ -26,22 +26,16 @@ def validate_tenant_id(tenant_id: str) -> None:
 
 def validate_limit_offset(limit: int, offset: int) -> None:
     if not isinstance(limit, int) or limit < 1 or limit > 500:
-        raise GovernanceOrchestrationValidationError(
-            "limit must be between 1 and 500"
-        )
+        raise GovernanceOrchestrationValidationError("limit must be between 1 and 500")
     if not isinstance(offset, int) or offset < 0:
         raise GovernanceOrchestrationValidationError("offset must be >= 0")
 
 
 def validate_search_query(query: str) -> None:
     if not isinstance(query, str) or not query.strip():
-        raise GovernanceOrchestrationValidationError(
-            "query must be a non-empty string"
-        )
+        raise GovernanceOrchestrationValidationError("query must be a non-empty string")
     if len(query) > 512:
-        raise GovernanceOrchestrationValidationError(
-            "query must be <= 512 characters"
-        )
+        raise GovernanceOrchestrationValidationError("query must be <= 512 characters")
 
 
 def validate_policy_risk_level(risk_level: str) -> None:
@@ -70,9 +64,7 @@ def validate_workflow_state(state: str) -> None:
 
 def validate_confidence(confidence: float) -> None:
     if not isinstance(confidence, (int, float)):
-        raise GovernanceOrchestrationValidationError(
-            "confidence must be numeric"
-        )
+        raise GovernanceOrchestrationValidationError("confidence must be numeric")
     if confidence < 0.0 or confidence > 1.0:
         raise GovernanceOrchestrationValidationError(
             "confidence must be between 0.0 and 1.0"

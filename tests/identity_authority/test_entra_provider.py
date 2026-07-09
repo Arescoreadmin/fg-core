@@ -66,6 +66,7 @@ def test_mfa_detection_from_amr(entra_provider):
     non_mfa_amr = {"pwd", "kmsi", "sso"}
 
     from api.identity_authority.providers.entra_provider import _ENTRA_MFA_AMR_VALUES
+
     for v in mfa_amr_values:
         assert v in _ENTRA_MFA_AMR_VALUES, f"{v!r} should be MFA AMR"
     for v in non_mfa_amr:
@@ -88,6 +89,7 @@ def test_require_mfa_env(monkeypatch):
     monkeypatch.setenv("FG_ENTRA_CLIENT_ID", "cid")
     monkeypatch.setenv("FG_ENTRA_REQUIRE_MFA", "1")
     from api.identity_authority.providers.entra_provider import _require_mfa
+
     assert _require_mfa() is True
 
 
@@ -96,4 +98,5 @@ def test_require_mfa_default_false(monkeypatch):
     monkeypatch.setenv("FG_ENTRA_CLIENT_ID", "cid")
     monkeypatch.delenv("FG_ENTRA_REQUIRE_MFA", raising=False)
     from api.identity_authority.providers.entra_provider import _require_mfa
+
     assert _require_mfa() is False

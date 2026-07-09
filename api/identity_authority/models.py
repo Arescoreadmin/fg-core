@@ -15,7 +15,7 @@ from typing import Literal, Optional
 class IdentityProvider:
     """Identifies which IdP authenticated this identity."""
 
-    name: str   # "auth0" | "entra" | "google" | "okta" | "api_key" | "machine" | "agent"
+    name: str  # "auth0" | "entra" | "google" | "okta" | "api_key" | "machine" | "agent"
     issuer: str
     subject: str
 
@@ -25,10 +25,10 @@ class AuthenticationContext:
     """Authentication strength and method metadata."""
 
     mfa_verified: bool
-    mfa_method: Optional[str]   # "totp" | "webauthn" | "sms" | None
+    mfa_method: Optional[str]  # "totp" | "webauthn" | "sms" | None
     auth_time: datetime
-    amr: list[str]              # Authentication Method References from OIDC
-    acr: Optional[str]          # Authentication Context Class Reference
+    amr: list[str]  # Authentication Method References from OIDC
+    acr: Optional[str]  # Authentication Context Class Reference
     pkce_used: bool
     nonce_verified: bool
 
@@ -48,7 +48,7 @@ class TenantBinding:
 class IdentitySubscription:
     """Subscription tier and licensed features for this identity's tenant."""
 
-    tier: str   # "free" | "starter" | "pro" | "enterprise" | "internal"
+    tier: str  # "free" | "starter" | "pro" | "enterprise" | "internal"
     capabilities: frozenset[str]
     licensed_features: frozenset[str]
 
@@ -62,7 +62,7 @@ class CanonicalIdentity:
     """
 
     # Core identity
-    subject: str            # provider's stable subject identifier
+    subject: str  # provider's stable subject identifier
     email: str
     name: str
     email_verified: bool
@@ -110,7 +110,9 @@ class CanonicalIdentity:
             roles=roles,
             auth_source=auth_source,
             tenant_id=self.tenant_binding.tenant_id if self.tenant_binding else None,
-            membership_id=self.tenant_binding.membership_id if self.tenant_binding else None,
+            membership_id=self.tenant_binding.membership_id
+            if self.tenant_binding
+            else None,
         )
 
 
@@ -128,7 +130,7 @@ class AuthorizationContext:
     organization_id: Optional[str]
     # Session metadata
     session_id: str
-    session_risk_score: float   # 0.0-1.0, always 0.0 for now
+    session_risk_score: float  # 0.0-1.0, always 0.0 for now
     # Request tracing
     correlation_id: str
 
@@ -179,6 +181,6 @@ class IdentityClaims:
     provider: str
     iat: int
     exp: int
-    jti: str            # JWT ID for replay prevention
+    jti: str  # JWT ID for replay prevention
     session_id: str
     correlation_id: str

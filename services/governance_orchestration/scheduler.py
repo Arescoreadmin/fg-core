@@ -88,9 +88,7 @@ def get_overdue_approvals(db: Any, tenant_id: str) -> list[dict[str, Any]]:
     return overdue
 
 
-def get_expiring_maintenance_windows(
-    db: Any, tenant_id: str
-) -> list[dict[str, Any]]:
+def get_expiring_maintenance_windows(db: Any, tenant_id: str) -> list[dict[str, Any]]:
     """Return maintenance windows whose ``ends_at`` is within the next 24h."""
     repo = GovernanceOrchestrationRepository(db, tenant_id)
     rows = repo.list_maintenance_windows(

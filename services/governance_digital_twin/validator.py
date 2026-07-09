@@ -124,7 +124,10 @@ def validate_governance_digital_twin_snapshot(
     relationship_ids = [relationship.id for relationship in snapshot.relationships]
     entity_by_id = {entity.id: entity for entity in snapshot.entities}
     entity_hashes = [compute_entity_hash(entity) for entity in snapshot.entities]
-    relationship_hashes = [compute_relationship_hash(relationship) for relationship in snapshot.relationships]
+    relationship_hashes = [
+        compute_relationship_hash(relationship)
+        for relationship in snapshot.relationships
+    ]
 
     if any(entity.tenant_scope != snapshot.tenant_id for entity in snapshot.entities):
         violations.append("tenant_isolation")
@@ -132,11 +135,16 @@ def validate_governance_digital_twin_snapshot(
         violations.append("duplicate_entity_ids")
     if len(relationship_ids) != len(set(relationship_ids)):
         violations.append("duplicate_relationship_ids")
-    if len(entity_hashes) != len(set(entity_hashes)) or len(relationship_hashes) != len(set(relationship_hashes)):
+    if len(entity_hashes) != len(set(entity_hashes)) or len(relationship_hashes) != len(
+        set(relationship_hashes)
+    ):
         violations.append("duplicate_hashes")
 
     for relationship in snapshot.relationships:
-        if relationship.from_entity_id not in entity_by_id or relationship.to_entity_id not in entity_by_id:
+        if (
+            relationship.from_entity_id not in entity_by_id
+            or relationship.to_entity_id not in entity_by_id
+        ):
             violations.append(f"orphan_relationship:{relationship.id}")
         if relationship.from_entity_id == relationship.to_entity_id:
             violations.append(f"self_loop_relationship:{relationship.id}")
@@ -153,10 +161,16 @@ def validate_governance_digital_twin_snapshot(
 
     rel_targets: dict[tuple[str, str], set[str]] = defaultdict(set)
     for relationship in snapshot.relationships:
-        rel_targets[(relationship.type, relationship.from_entity_id)].add(relationship.to_entity_id)
+        rel_targets[(relationship.type, relationship.from_entity_id)].add(
+            relationship.to_entity_id
+        )
     for (rel_type, from_entity_id), targets in rel_targets.items():
         spec = RELATIONSHIP_REGISTRY.get(rel_type)
-        if spec and spec.max_targets_per_source is not None and len(targets) > spec.max_targets_per_source:
+        if (
+            spec
+            and spec.max_targets_per_source is not None
+            and len(targets) > spec.max_targets_per_source
+        ):
             violations.append(f"invalid_cardinality:{rel_type}:{from_entity_id}")
 
     for entity in snapshot.entities:
@@ -252,6 +266,9 @@ def validate_governance_digital_twin_snapshot(
         violations=tuple(sorted(set(violations))),
         findings=tuple(findings),
         highest_severity=highest_severity,
-        hash_uniqueness=(len(entity_hashes) == len(set(entity_hashes)) and len(relationship_hashes) == len(set(relationship_hashes))),
+        hash_uniqueness=(
+            len(entity_hashes) == len(set(entity_hashes))
+            and len(relationship_hashes) == len(set(relationship_hashes))
+        ),
         replay_integrity=replay_integrity,
     )

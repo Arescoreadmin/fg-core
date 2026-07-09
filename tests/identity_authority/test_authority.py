@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from api.identity_authority.audit import IdentityAuditor
 from api.identity_authority.authority import IdentityAuthority
-from api.identity_authority.models import AuthorizationContext, TenantBinding
+from api.identity_authority.models import AuthorizationContext
 from api.identity_authority.providers.base import (
     IdentityProviderError,
     IdentityValidationError,
@@ -48,7 +48,9 @@ def authority(mock_registry, mock_session, mock_resolver, mock_auditor):
     )
 
 
-def test_authenticate_jwt_success(authority, mock_registry, mock_resolver, mock_auditor, canonical_identity):
+def test_authenticate_jwt_success(
+    authority, mock_registry, mock_resolver, mock_auditor, canonical_identity
+):
     mock_registry.resolve_jwt.return_value = canonical_identity
     mock_resolver.resolve.return_value = canonical_identity.tenant_binding
 
@@ -59,8 +61,12 @@ def test_authenticate_jwt_success(authority, mock_registry, mock_resolver, mock_
     mock_auditor.emit.assert_called()
 
 
-def test_authenticate_jwt_validation_failure_raises(authority, mock_registry, mock_auditor):
-    mock_registry.resolve_jwt.side_effect = IdentityValidationError("bad token", "INVALID", "auth0")
+def test_authenticate_jwt_validation_failure_raises(
+    authority, mock_registry, mock_auditor
+):
+    mock_registry.resolve_jwt.side_effect = IdentityValidationError(
+        "bad token", "INVALID", "auth0"
+    )
 
     with pytest.raises(IdentityValidationError):
         authority.authenticate_jwt("bad.token")
@@ -77,7 +83,9 @@ def test_authenticate_jwt_provider_error_raises(authority, mock_registry, mock_a
     mock_auditor.emit.assert_called()
 
 
-def test_authenticate_jwt_no_db_skips_resolver(authority, mock_registry, mock_resolver, canonical_identity):
+def test_authenticate_jwt_no_db_skips_resolver(
+    authority, mock_registry, mock_resolver, canonical_identity
+):
     mock_registry.resolve_jwt.return_value = canonical_identity
 
     ctx = authority.authenticate_jwt("token", db=None)

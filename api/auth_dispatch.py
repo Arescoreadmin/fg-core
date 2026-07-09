@@ -65,7 +65,9 @@ def _auth_disabled(request: Request) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _try_jwt_actor(request: Request, conn: Optional[Session] = None) -> Optional[ActorContext]:
+def _try_jwt_actor(
+    request: Request, conn: Optional[Session] = None
+) -> Optional[ActorContext]:
     """Attempt to resolve an ActorContext from a Bearer JWT."""
     bearer = (request.headers.get("Authorization") or "").strip()
     if not bearer.lower().startswith("bearer "):
