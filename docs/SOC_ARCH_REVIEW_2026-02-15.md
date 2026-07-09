@@ -1,3 +1,26 @@
+## 2026-07-09 — PR-01 follow-up: P1/P2 bot review fixes (secret verification, DB session, issuer-aware errors)
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH (security fixes to `api/auth_dispatch.py` and `api/identity_authority/machine_identity.py` — both on the authentication critical path; `api/identity_authority/providers/registry.py` availability fix; all changes are corrections to bugs introduced in the initial FIAP commit)
+
+**Changes:**
+- `api/identity_authority/machine_identity.py` — `_load_key_record()` rewritten: now queries `api.db_models.ApiKey` (the actual DB model; `TenantApiKey` referenced in the initial commit does not exist). Fast path: `key_lookup` HMAC indexed query (argon2id+pepper). Fallback: legacy SHA-256 column query for pre-argon2 keys. Record now carries `key_hash` and `hash_alg` fields. `_verify_secret()` rewritten: raises `ValueError` if `record.key_hash` is None; delegates to `verify_key(secret, record.key_hash, record.hash_alg)` from `api/auth_scopes/helpers.py` — enforces argon2id (primary) or SHA-256 (legacy) verification. Initial stub unconditionally returned `True`, bypassing verification entirely.
+- `api/auth_dispatch.py` — `_try_jwt_actor(request)` signature extended to `_try_jwt_actor(request, conn: Optional[Session] = None)`. `authenticate_jwt()` call now passes `db=conn`. `get_actor_context()` updated to call `_try_jwt_actor(request, conn)`. Previously `db=None` caused `TenantResolver.resolve()` to be silently skipped on every FIAP JWT auth.
+- `api/identity_authority/providers/registry.py` — added `_peek_issuer(token)` (base64-decode JWT payload without signature verification), `_host(url)` (extract lowercase hostname), `_token_matches_provider(token, provider)` (compare token `iss` hostname to provider issuer). `resolve_jwt()` now continues past `IdentityProviderError` when `_token_matches_provider()` returns False. Previously any `IdentityProviderError` from any provider would propagate immediately, preventing subsequent providers from running.
+
+**Security posture:**
+- **P1 (secret verification):** eliminates a complete bypass of API key HMAC secret verification on the direct `authenticate_api_key()` path. The middleware path (`authenticate_api_key_from_state`) reads pre-validated state set by the existing API key middleware and was never affected.
+- **P1 (DB session):** ensures JWT-authenticated requests correctly resolve tenant membership via `TenantResolver`. Without the DB session, a JWT actor could succeed authentication but have no tenant binding — silently operating without a resolved `tenant_id` on the FIAP path.
+- **P2 (issuer-aware errors):** provider chain availability improvement. A JWKS outage at Auth0 no longer blocks Entra or Google tokens. The failing provider is skipped only when the token's `iss` hostname does not match the provider's issuer hostname. When they match (the token belongs to that provider), the error still propagates immediately.
+- **Safe default in `_token_matches_provider`:** if either `iss` or provider issuer cannot be parsed, the function returns `True` (stop-on-error). Undetermined issuer matches default to the conservative behavior.
+- **No new routes, no schema changes, no middleware changes, no OPA changes, no CI guards weakened.**
+
+**Validation:**
+- `.venv/bin/pytest tests/identity_authority/ -q`: 68 passed, 0 failed (4 new tests added for the two new behaviors)
+
+**SOC review outcome:** approved. Both P1 fixes are security-critical corrections to the initial FIAP implementation. The secret verification bypass was only reachable via the direct `authenticate_api_key()` path (not the middleware path used in production API key auth); however, any future caller of the direct path would have been vulnerable. The DB session fix is a correctness fix that also has security implications (tenant binding resolution). The P2 fix is an availability improvement with the conservative safe-default when issuer cannot be determined.
+
+---
+
 ## 2026-07-09 — PR-01: FrostGate Identity Authority Platform (FIAP)
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH (authentication dispatch boundary changed; `api/auth_dispatch.py` extended with flag-gated FIAP path; new `api/identity_authority/` package introduces provider registry, unified session authority, machine identity, tenant resolver, legacy migration bridge, hash-chained identity audit, and Prometheus metrics; Entra ID provider fully implemented replacing `NotImplementedError` stub; all changes contained behind `FG_IDENTITY_AUTHORITY_ENABLED=1` flag — legacy Auth0 path is the unchanged default; no new DB migrations; no new API routes; no OPA policy changes; no middleware changes; 64 tests added)

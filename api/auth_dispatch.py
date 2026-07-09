@@ -65,7 +65,7 @@ def _auth_disabled(request: Request) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _try_jwt_actor(request: Request) -> Optional[ActorContext]:
+def _try_jwt_actor(request: Request, conn: Optional[Session] = None) -> Optional[ActorContext]:
     """Attempt to resolve an ActorContext from a Bearer JWT."""
     bearer = (request.headers.get("Authorization") or "").strip()
     if not bearer.lower().startswith("bearer "):
@@ -86,7 +86,7 @@ def _try_jwt_actor(request: Request) -> Optional[ActorContext]:
             tenant_hint = request.headers.get("X-Tenant-Id") or None
             cid = request.headers.get("X-Correlation-Id") or None
             ctx = get_identity_authority().authenticate_jwt(
-                token, tenant_id_hint=tenant_hint, correlation_id=cid
+                token, tenant_id_hint=tenant_hint, correlation_id=cid, db=conn
             )
             return ctx.to_actor_context()
         except IdentityValidationError as exc:
@@ -248,7 +248,7 @@ def get_actor_context(
     # JWT path takes priority when a Bearer token is present
     bearer = (request.headers.get("Authorization") or "").strip()
     if bearer.lower().startswith("bearer "):
-        actor = _try_jwt_actor(request)
+        actor = _try_jwt_actor(request, conn)
         if actor:
             # Bind membership_id and enforce deactivation for Auth0 JWT actors
             if actor.auth_source == "oidc_auth0":

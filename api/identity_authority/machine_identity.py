@@ -42,6 +42,8 @@ class MachineIdentityRecord:
     roles: frozenset[str]
     scopes: frozenset[str]
     is_active: bool
+    key_hash: Optional[str] = None
+    hash_alg: Optional[str] = None
     created_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
 
@@ -73,7 +75,7 @@ class MachineIdentityAuthority:
         if db is None:
             raise ValueError("database session required for API key authentication")
 
-        record = self._load_key_record(key_id, db)
+        record = self._load_key_record(key_id, key_secret, db)
         if record is None:
             AUTH_FAILED_TOTAL.labels(provider="api_key", reason="not_found").inc()
             self._auditor.emit(
@@ -102,7 +104,7 @@ class MachineIdentityAuthority:
 
         AUTH_SUCCESS_TOTAL.labels(provider="api_key", identity_type="machine").inc()
 
-        self._touch_last_used(key_id, db)
+        self._touch_last_used(record.key_prefix, db)
 
         return self._build_identity(record)
 
@@ -174,59 +176,84 @@ class MachineIdentityAuthority:
     # ------------------------------------------------------------------
 
     def _load_key_record(
-        self, key_id: str, db: Session
+        self, key_prefix: str, key_secret: str, db: Session
     ) -> Optional[MachineIdentityRecord]:
-        try:
-            from admin_gateway.identity.models import TenantApiKey
+        """Look up an ApiKey by prefix + key_lookup hash, then verify secret.
 
+        Uses the fast HMAC lookup path (key_lookup column) and falls back to
+        the legacy SHA-256 hash path for keys minted before key_lookup existed.
+        """
+        from api.db_models import ApiKey
+        from api.auth_scopes.helpers import _key_lookup_hash, _get_key_pepper, _sha256_hex
+
+        row = None
+
+        # Fast path: prefix + pepper-HMAC lookup (O(1) indexed query)
+        try:
+            pepper = _get_key_pepper()
+            lookup = _key_lookup_hash(key_secret, pepper)
             row = (
-                db.query(TenantApiKey)
-                .filter(TenantApiKey.key_id == key_id)
+                db.query(ApiKey)
+                .filter(
+                    ApiKey.prefix == key_prefix,
+                    ApiKey.key_lookup == lookup,
+                    ApiKey.enabled.is_(True),
+                )
                 .first()
             )
-            if row is None:
-                return None
-
-            return MachineIdentityRecord(
-                key_id=str(row.key_id),
-                key_prefix=str(getattr(row, "key_prefix", key_id[:8])),
-                tenant_id=str(row.tenant_id),
-                roles=frozenset(getattr(row, "roles", []) or []),
-                scopes=frozenset(getattr(row, "scopes", []) or []),
-                is_active=bool(getattr(row, "active", True)),
-                created_at=getattr(row, "created_at", None),
-                last_used_at=getattr(row, "last_used_at", None),
-            )
-        except ImportError:
-            log.debug("machine_identity.admin_gateway_not_available")
-            return None
         except Exception as exc:
-            log.warning("machine_identity.load_key_error", extra={"exc": str(exc)})
+            log.warning("machine_identity.lookup_error", extra={"exc": str(exc)})
+
+        # Fallback: legacy SHA-256 lookup (pre-argon2 keys without key_lookup)
+        if row is None:
+            try:
+                legacy_hash = _sha256_hex(key_secret)
+                row = (
+                    db.query(ApiKey)
+                    .filter(
+                        ApiKey.prefix == key_prefix,
+                        ApiKey.key_hash == legacy_hash,
+                        ApiKey.enabled.is_(True),
+                    )
+                    .first()
+                )
+            except Exception as exc:
+                log.warning("machine_identity.legacy_lookup_error", extra={"exc": str(exc)})
+
+        if row is None:
             return None
+
+        scopes = frozenset(filter(None, (row.scopes_csv or "").split(",")))
+        return MachineIdentityRecord(
+            key_id=str(row.id),
+            key_prefix=str(row.prefix),
+            tenant_id=str(row.tenant_id or ""),
+            roles=frozenset(),
+            scopes=scopes,
+            is_active=bool(row.enabled),
+            key_hash=row.key_hash,
+            hash_alg=row.hash_alg,
+            created_at=row.created_at,
+            last_used_at=row.last_used_at,
+        )
 
     def _verify_secret(
-        self, key_id: str, secret: str, record: MachineIdentityRecord
+        self, key_prefix: str, secret: str, record: MachineIdentityRecord
     ) -> bool:
-        """Delegated to the existing API key middleware — always passes here.
+        """Verify the raw secret against the stored argon2id or SHA-256 hash."""
+        if not record.key_hash:
+            raise ValueError(
+                f"API key {key_prefix!r} has no stored hash — cannot verify secret"
+            )
+        from api.auth_scopes.helpers import verify_key
+        return verify_key(secret, record.key_hash, record.hash_alg)
 
-        Full HMAC verification happens in the API key middleware before the
-        request reaches the identity authority. This method exists as an
-        extension point for direct key authentication (e.g., webhook callers).
-        """
-        # The middleware sets request.state.auth after verifying the secret.
-        # When called via authenticate_api_key_from_state, the secret is
-        # already verified. When called directly, we trust the DB record
-        # exists and is active as sufficient validation in this sprint.
-        # TODO: implement HMAC check against stored hashed_secret for direct-path callers.
-        return True
-
-    def _touch_last_used(self, key_id: str, db: Session) -> None:
+    def _touch_last_used(self, key_prefix: str, db: Session) -> None:
         try:
-            from admin_gateway.identity.models import TenantApiKey
-
-            db.query(TenantApiKey).filter(
-                TenantApiKey.key_id == key_id
-            ).update({"last_used_at": datetime.now(tz=timezone.utc)})
+            from api.db_models import ApiKey
+            db.query(ApiKey).filter(ApiKey.prefix == key_prefix).update(
+                {"last_used_at": datetime.now(tz=timezone.utc)}
+            )
         except Exception:
             pass  # last_used_at update is best-effort
 

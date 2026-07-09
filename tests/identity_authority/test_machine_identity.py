@@ -28,12 +28,13 @@ def _make_record(**kwargs) -> MachineIdentityRecord:
 
 
 def test_authenticate_api_key_success(machine_auth):
-    record = _make_record()
+    record = _make_record(key_hash="$argon2id$v=19$...", hash_alg="argon2id")
     with patch.object(machine_auth, "_load_key_record", return_value=record):
-        with patch.object(machine_auth, "_touch_last_used"):
-            identity = machine_auth.authenticate_api_key(
-                "key-id-001", "secret", db=MagicMock()
-            )
+        with patch.object(machine_auth, "_verify_secret", return_value=True):
+            with patch.object(machine_auth, "_touch_last_used"):
+                identity = machine_auth.authenticate_api_key(
+                    "fg_live_001", "secret", db=MagicMock()
+                )
 
     assert identity.subject == "fg_live_001"
     assert identity.identity_type == "machine"
@@ -45,14 +46,28 @@ def test_authenticate_api_key_success(machine_auth):
 def test_authenticate_api_key_not_found_raises(machine_auth):
     with patch.object(machine_auth, "_load_key_record", return_value=None):
         with pytest.raises(ValueError, match="not found"):
-            machine_auth.authenticate_api_key("missing", "secret", db=MagicMock())
+            machine_auth.authenticate_api_key("fg_live_missing", "secret", db=MagicMock())
 
 
 def test_authenticate_api_key_inactive_raises(machine_auth):
     record = _make_record(is_active=False)
     with patch.object(machine_auth, "_load_key_record", return_value=record):
         with pytest.raises(ValueError, match="inactive"):
-            machine_auth.authenticate_api_key("key-id-001", "secret", db=MagicMock())
+            machine_auth.authenticate_api_key("fg_live_001", "secret", db=MagicMock())
+
+
+def test_authenticate_api_key_bad_secret_raises(machine_auth):
+    record = _make_record(key_hash="$argon2id$v=19$...", hash_alg="argon2id")
+    with patch.object(machine_auth, "_load_key_record", return_value=record):
+        with patch.object(machine_auth, "_verify_secret", return_value=False):
+            with pytest.raises(ValueError, match="invalid"):
+                machine_auth.authenticate_api_key("fg_live_001", "wrong", db=MagicMock())
+
+
+def test_verify_secret_no_hash_raises(machine_auth):
+    record = _make_record(key_hash=None, hash_alg=None)
+    with pytest.raises(ValueError, match="no stored hash"):
+        machine_auth._verify_secret("fg_live_001", "secret", record)
 
 
 def test_authenticate_api_key_no_db_raises(machine_auth):

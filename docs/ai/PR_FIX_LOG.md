@@ -6,6 +6,46 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-09 — feat/pr-01-identity-authority: P1/P2 bot review fixes (secret verification, DB session, issuer-aware provider errors)
+
+**Branch:** `feat/pr-01-identity-authority`
+**Date:** 2026-07-09
+
+**Triggering guards:** `pr-fix-log-guard` (`api/auth_dispatch.py` and `api/identity_authority/machine_identity.py` changed), `soc-review-sync` (`api/auth_dispatch.py` matches `api/auth` CRITICAL_PREFIX)
+
+**Root cause:** Three issues flagged by PR review bot (two P1, one P2):
+- **P1 — `_verify_secret()` always returned `True`:** `_load_key_record()` referenced `TenantApiKey` (nonexistent model); returned a record with `key_hash=None`; `_verify_secret()` had a stub that bypassed hash verification entirely. Result: any secret would succeed against any key_id.
+- **P1 — DB session not passed to FIAP JWT auth:** `_try_jwt_actor(request)` did not accept the `conn` session available in `get_actor_context()`. `authenticate_jwt()` received `db=None`, causing `TenantResolver.resolve()` to be skipped silently — JWT auth worked but tenant binding was not resolved from DB.
+- **P2 — `IdentityProviderError` stopped all subsequent providers:** An JWKS outage on Auth0 would raise `IdentityProviderError` and immediately propagate, blocking Entra/Google tokens from ever reaching their providers.
+
+**High-risk files changed:**
+- `api/auth_dispatch.py` — threaded `conn` session into `_try_jwt_actor()` → `authenticate_jwt(db=conn)`
+- `api/identity_authority/machine_identity.py` — rewrote `_load_key_record()` to query `ApiKey` (real model in `api/db_models.py`) with `key_lookup` HMAC fast path + legacy SHA-256 fallback; rewrote `_verify_secret()` to call `verify_key()` from `api/auth_scopes/helpers.py`
+- `api/identity_authority/providers/registry.py` — added `_peek_issuer()`, `_host()`, `_token_matches_provider()` helpers; `resolve_jwt()` now continues past `IdentityProviderError` when the token's `iss` hostname does not match the failing provider's issuer hostname
+
+**Auth behavior change:**
+- Before: `_verify_secret()` was a no-op stub (always `True`); any secret was accepted for any API key on the direct DB path
+- After: `_verify_secret()` raises `ValueError` if `key_hash` is None; delegates to `verify_key(secret, record.key_hash, record.hash_alg)` which enforces argon2id (primary) or SHA-256 (legacy) comparison
+- Before: `_try_jwt_actor()` called `authenticate_jwt(token, ..., db=None)` — tenant resolver skipped
+- After: `_try_jwt_actor(request, conn)` calls `authenticate_jwt(token, ..., db=conn)` — tenant resolver runs fully
+- Before: `IdentityProviderError` from any provider stopped the chain immediately (503)
+- After: `IdentityProviderError` propagates only when `_token_matches_provider()` returns True (token issuer hostname matches the failing provider); otherwise logs warning and continues to next provider
+
+**Security impact:**
+- P1 fix eliminates a complete bypass of API key secret verification on the direct authentication path. The middleware path (`authenticate_api_key_from_state`) was unaffected — it reads pre-validated state from middleware.
+- P1 fix ensures JWT-authenticated requests correctly resolve tenant membership. Previously a JWT actor could authenticate but have no tenant binding resolved from DB.
+- P2 fix improves availability: a JWKS outage at Auth0 no longer prevents Entra or Google users from authenticating.
+- No CI guard weakened. No `NO_FIX_LOG_REQUIRED` marker used.
+
+**Tests added/updated:**
+- `tests/identity_authority/test_machine_identity.py`: `test_authenticate_api_key_success` updated (record now carries `key_hash`/`hash_alg`; `_verify_secret` patched separately); `test_authenticate_api_key_bad_secret_raises` added; `test_verify_secret_no_hash_raises` added
+- `tests/identity_authority/test_provider_registry.py`: `test_provider_error_skipped_when_issuer_does_not_match` added; `test_provider_error_propagated_when_issuer_matches` added
+
+**Validation performed:**
+- `.venv/bin/pytest tests/identity_authority/ -q`: 68 passed, 0 failed
+
+---
+
 ### 2026-07-09 — feat/pr-01-identity-authority: Enterprise Identity Authority Platform (FIAP) CI Guard Repair
 
 **Branch:** `feat/pr-01-identity-authority`

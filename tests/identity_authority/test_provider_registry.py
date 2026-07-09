@@ -112,6 +112,58 @@ def test_build_chain_skips_unconfigured(monkeypatch):
     assert len(registry) == 0
 
 
+def test_provider_error_skipped_when_issuer_does_not_match():
+    """An IdentityProviderError from Auth0 should not block an Entra token."""
+    from api.identity_authority.providers.registry import IdentityProviderRegistry
+    from api.identity_authority.models import IdentityProvider
+
+    auth0_provider = _make_provider(
+        "auth0",
+        raises=IdentityProviderError("JWKS fetch failed", "auth0"),
+    )
+    auth0_provider.get_issuer.return_value = "https://my-tenant.auth0.com/"
+
+    entra_provider = _make_provider("entra")
+    entra_provider.get_issuer.return_value = "https://login.microsoftonline.com/tid/v2.0"
+
+    # Fake an Entra token (iss = login.microsoftonline.com)
+    import base64, json
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"iss": "https://login.microsoftonline.com/abc-123/v2.0"}).encode()
+    ).decode().rstrip("=")
+    entra_token = f"header.{payload}.sig"
+
+    registry = IdentityProviderRegistry.__new__(IdentityProviderRegistry)
+    registry._providers = [auth0_provider, entra_provider]
+
+    result = registry.resolve_jwt(entra_token)
+    entra_provider.validate_token.assert_called_once_with(entra_token)
+    assert result.provider.name == "entra"
+
+
+def test_provider_error_propagated_when_issuer_matches():
+    """An IdentityProviderError propagates when the token's iss matches that provider."""
+    from api.identity_authority.providers.registry import IdentityProviderRegistry
+
+    auth0_provider = _make_provider(
+        "auth0",
+        raises=IdentityProviderError("JWKS fetch failed", "auth0"),
+    )
+    auth0_provider.get_issuer.return_value = "https://my-tenant.auth0.com/"
+
+    import base64, json
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"iss": "https://my-tenant.auth0.com/"}).encode()
+    ).decode().rstrip("=")
+    auth0_token = f"header.{payload}.sig"
+
+    registry = IdentityProviderRegistry.__new__(IdentityProviderRegistry)
+    registry._providers = [auth0_provider]
+
+    with pytest.raises(IdentityProviderError):
+        registry.resolve_jwt(auth0_token)
+
+
 def test_build_chain_includes_auth0_when_configured(monkeypatch):
     monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
     monkeypatch.delenv("FG_ENTRA_TENANT_ID", raising=False)

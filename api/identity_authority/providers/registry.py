@@ -6,8 +6,11 @@ Providers are tried in order on every JWT authentication request.
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 from typing import Optional
+from urllib.parse import urlparse
 
 from api.identity_authority.models import CanonicalIdentity
 from api.identity_authority.providers.base import (
@@ -17,6 +20,43 @@ from api.identity_authority.providers.base import (
 )
 
 log = logging.getLogger("frostgate.identity_authority.registry")
+
+
+def _peek_issuer(token: str) -> Optional[str]:
+    """Extract the iss claim from a JWT without verifying the signature."""
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return None
+        padding = 4 - (len(parts[1]) % 4)
+        raw = base64.urlsafe_b64decode(parts[1] + "=" * padding)
+        return json.loads(raw).get("iss")
+    except Exception:
+        return None
+
+
+def _host(url: Optional[str]) -> Optional[str]:
+    """Return the lowercase hostname from a URL, or None."""
+    if not url:
+        return None
+    try:
+        return urlparse(url).netloc.lower() or None
+    except Exception:
+        return None
+
+
+def _token_matches_provider(token: str, provider: IdentityProviderProtocol) -> bool:
+    """Return True if the token's iss hostname matches this provider's issuer hostname.
+
+    Used to decide whether an IdentityProviderError from this provider should
+    propagate (the token is for this provider and it's unavailable) or be skipped
+    (the token belongs to a different provider; the error is irrelevant).
+    """
+    token_host = _host(_peek_issuer(token))
+    provider_host = _host(provider.get_issuer())
+    if not token_host or not provider_host:
+        return True  # cannot determine; default to stop-on-error (safe)
+    return token_host == provider_host
 
 
 class IdentityProviderRegistry:
@@ -92,9 +132,19 @@ class IdentityProviderRegistry:
                 )
                 last_exc = exc
                 continue
-            except IdentityProviderError:
-                # Provider is misconfigured or unreachable — propagate immediately
-                raise
+            except IdentityProviderError as exc:
+                if _token_matches_provider(token, provider):
+                    # Token's issuer matches this provider — it's unavailable for its
+                    # own tokens. Propagate immediately; trying other providers won't help.
+                    raise
+                # Token's issuer doesn't match this provider (e.g., Auth0 JWKS down
+                # while validating an Entra token). Log and continue to next provider.
+                log.warning(
+                    "identity_authority.provider_error_skipped",
+                    extra={"provider": provider.provider_name, "reason": str(exc)},
+                )
+                last_exc = exc
+                continue
 
         raise IdentityValidationError(
             f"all configured providers rejected the token",
