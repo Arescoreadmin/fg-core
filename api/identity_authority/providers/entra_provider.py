@@ -223,7 +223,7 @@ class EntraOIDCProvider:
             unverified_claims = jwt.decode(
                 token,
                 options={"verify_signature": False},
-                algorithms=_SUPPORTED_ALGORITHMS,
+                algorithms=sorted(_SUPPORTED_ALGORITHMS),
             )
         except Exception as exc:
             raise IdentityValidationError(

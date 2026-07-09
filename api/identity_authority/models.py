@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
+
+if TYPE_CHECKING:
+    from api.actor_context import ActorContext
 
 
 @dataclass(frozen=True)
@@ -80,7 +83,7 @@ class CanonicalIdentity:
     issued_at: datetime
     expires_at: datetime
 
-    def to_actor_context(self) -> "ActorContext":  # noqa: F821
+    def to_actor_context(self) -> "ActorContext":
         """Convert to ActorContext for backwards compatibility with existing routes."""
         from api.actor_context import ActorContext, roles_to_permissions
 
@@ -158,7 +161,7 @@ class AuthorizationContext:
                 return r
         return next(iter(roles), None)
 
-    def to_actor_context(self) -> "ActorContext":  # noqa: F821
+    def to_actor_context(self) -> "ActorContext":
         """Convert to ActorContext for backwards compatibility with existing routes."""
         return self.identity.to_actor_context()
 

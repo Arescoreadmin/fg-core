@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,8 +18,8 @@ def machine_auth():
     return MachineIdentityAuthority()
 
 
-def _make_record(**kwargs) -> MachineIdentityRecord:
-    defaults = dict(
+def _make_record(**kwargs: Any) -> MachineIdentityRecord:
+    defaults: dict[str, Any] = dict(
         key_id="key-id-001",
         key_prefix="fg_live_001",
         tenant_id="tenant-123",
