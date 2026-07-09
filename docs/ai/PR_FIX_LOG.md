@@ -6,6 +6,33 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-09 — feat/pr-01a-identity-governance: P2 bot review — subject isolation, admin secret fallback, timeline redaction
+
+**Branch:** `feat/pr-01a-identity-governance`
+**Date:** 2026-07-09
+
+**Triggering guards:** `pr-fix-log-guard` (api/identity_governance/ and api/identity_authority/ files changed)
+
+**Root cause:** Four P2 issues flagged by PR review bot on PR-01a:
+
+- **P2 — `graph.py` device filter missing subject check:** `export_snapshot()` filtered devices by `tenant_id` only. A caller passing tenant-wide device iterables would include every device in the tenant in one subject's graph, leaking other users' device IDs and trust states. Added `d.subject == subject` to the predicate.
+- **P2 — `digital_twin.py` timeline and device filters missing subject check:** Same class of issue in two places — device records and timeline events were filtered by `tenant_id` only, so passing tenant-scoped iterables (e.g. from `IdentityTimeline.query(tenant_id)` with no subject arg) would include other subjects' events in the snapshot. Added `dev.subject == subject` and `e.subject == subject` to both predicates.
+- **P2 — `migration.py` empty `ADMIN_SESSION_SECRET` not falling back:** The mypy fix narrowed `_admin_secret` using `isinstance(admin_raw, str)` — but `os.getenv()` always returns `str | None`, so a present-but-empty env var (`ADMIN_SESSION_SECRET=""`) would produce `b""` instead of falling back to `FG_SESSION_SECRET`. Fixed by stripping and treating blank strings as unset.
+- **P2 — `timeline.py` redaction uses exact key matching:** `_REDACTED_KEYS` exact-matched `"key"` but missed compound names like `api_key`, `private_key`, `session_token`. Replaced `_REDACTED_KEYS` frozenset + `k.lower() in _REDACTED_KEYS` with `_REDACTED_SUBSTRINGS` tuple + `_is_secret_key(k)` substring check. Also added `credential`, `private`, `session` to the redacted substring list.
+
+**Security impact:**
+- Graph and digital twin subject isolation: closes same-tenant cross-user data leakage in two export paths. The leakage was only possible if callers passed tenant-scoped iterables rather than subject-scoped ones; the fixes make both paths safe regardless of caller filtering discipline.
+- Timeline redaction: `api_key`, `private_key`, `session_token`, and similar compound names are now redacted before storage in immutable timeline events.
+- Migration admin secret: deployments with `ADMIN_SESSION_SECRET` accidentally set to empty string now correctly fall back to `FG_SESSION_SECRET` rather than accepting no admin-gateway sessions via that path.
+
+**Files changed:** `api/identity_governance/graph.py`, `api/identity_governance/digital_twin.py`, `api/identity_governance/timeline.py`, `api/identity_authority/migration.py`
+
+**Tests:** 151 passed (all identity_governance + migration tests). No test intent changed.
+
+**No CI guard weakened. No `NO_FIX_LOG_REQUIRED` marker used.**
+
+---
+
 ### 2026-07-09 — feat/pr-01a-identity-governance: PR-01 mypy repair + Identity Governance foundation
 
 **Branch:** `feat/pr-01a-identity-governance`

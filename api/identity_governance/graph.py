@@ -68,8 +68,10 @@ class IdentityGraphExporter:
         roles_list = sorted(set(roles or []))
         perms_list = sorted(set(permissions or []))
         devices_list = list(devices or [])
-        # Guarantee tenant isolation for devices.
-        devices_list = [d for d in devices_list if d.tenant_id == tenant_id]
+        # Guarantee tenant + subject isolation for devices.
+        devices_list = [
+            d for d in devices_list if d.tenant_id == tenant_id and d.subject == subject
+        ]
 
         nodes = self._build_nodes(
             subject=subject,

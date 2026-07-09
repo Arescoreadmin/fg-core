@@ -91,14 +91,20 @@ class IdentityDigitalTwinExporter:
                 }
             )
             for d in sorted(
-                (dev for dev in (devices or []) if dev.tenant_id == tenant_id),
+                (
+                    dev
+                    for dev in (devices or [])
+                    if dev.tenant_id == tenant_id and dev.subject == subject
+                ),
                 key=lambda x: x.device_id,
             )
         )
 
-        # Timeline: filter to tenant, cap at 20 most recent.
+        # Timeline: filter to subject + tenant, cap at 20 most recent.
         timeline_filtered = [
-            e for e in (recent_timeline_events or []) if e.tenant_id == tenant_id
+            e
+            for e in (recent_timeline_events or [])
+            if e.tenant_id == tenant_id and e.subject == subject
         ]
         timeline_t = tuple(timeline_filtered[-20:])
 

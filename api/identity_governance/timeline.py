@@ -29,20 +29,23 @@ def _sha256(*parts: str) -> str:
     return h.hexdigest()
 
 
-_REDACTED_KEYS = frozenset(
-    {
-        "token",
-        "secret",
-        "password",
-        "key",
-        "access_token",
-        "refresh_token",
-        "id_token",
-        "client_secret",
-        "authorization",
-        "cookie",
-    }
+_REDACTED_SUBSTRINGS = (
+    "token",
+    "secret",
+    "password",
+    "key",
+    "authorization",
+    "cookie",
+    "credential",
+    "private",
+    "session",
 )
+
+
+def _is_secret_key(k: str) -> bool:
+    """Return True if the key name contains any secret-shaped substring."""
+    lower = k.lower()
+    return any(sub in lower for sub in _REDACTED_SUBSTRINGS)
 
 
 def _sanitize_details(details: dict[str, object]) -> tuple[tuple[str, str], ...]:
@@ -50,7 +53,7 @@ def _sanitize_details(details: dict[str, object]) -> tuple[tuple[str, str], ...]
     items: list[tuple[str, str]] = []
     for k in sorted(details.keys()):
         v = details[k]
-        if k.lower() in _REDACTED_KEYS:
+        if _is_secret_key(k):
             items.append((k, "[REDACTED]"))
         else:
             items.append((k, str(v)))

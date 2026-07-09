@@ -70,9 +70,9 @@ class LegacySessionMigrator:
         self._auditor = auditor or get_identity_auditor()
         self._portal_secret: bytes = (os.getenv("PORTAL_PASSWORD") or "").encode()
         self._session_secret: bytes = (os.getenv("FG_SESSION_SECRET") or "").encode()
-        admin_raw = os.getenv("ADMIN_SESSION_SECRET")
+        admin_raw = (os.getenv("ADMIN_SESSION_SECRET") or "").strip()
         self._admin_secret: bytes = (
-            admin_raw.encode() if isinstance(admin_raw, str) else self._session_secret
+            admin_raw.encode() if admin_raw else self._session_secret
         )
 
     def migrate(
