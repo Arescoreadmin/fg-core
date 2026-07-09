@@ -6,7 +6,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from services.governance_digital_twin.models import GovernanceDigitalTwinRelationshipType
+from services.governance_digital_twin.models import (
+    GovernanceDigitalTwinRelationshipType,
+)
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,8 @@ _RELATIONSHIP_SPECS = {
     ),
 }
 
-RELATIONSHIP_REGISTRY: Mapping[str, GovernanceDigitalTwinRelationshipSpec] = MappingProxyType(_RELATIONSHIP_SPECS)
+RELATIONSHIP_REGISTRY: Mapping[str, GovernanceDigitalTwinRelationshipSpec] = (
+    MappingProxyType(_RELATIONSHIP_SPECS)
+)
 
 __all__ = ["GovernanceDigitalTwinRelationshipSpec", "RELATIONSHIP_REGISTRY"]

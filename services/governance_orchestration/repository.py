@@ -471,7 +471,9 @@ class GovernanceOrchestrationRepository:
             q = q.filter(GovOrchApproval.workflow_id == workflow_id)
         if approval_state is not None:
             q = q.filter(GovOrchApproval.approval_state == approval_state)
-        return q.order_by(GovOrchApproval.stage.asc(), GovOrchApproval.created_at.asc()).all()
+        return q.order_by(
+            GovOrchApproval.stage.asc(), GovOrchApproval.created_at.asc()
+        ).all()
 
     def update_approval(self, row: GovOrchApproval) -> GovOrchApproval:
         row.updated_at = _now()

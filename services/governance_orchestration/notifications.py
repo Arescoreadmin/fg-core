@@ -37,9 +37,7 @@ def notify_policy_violation(tenant_id: str, policy_id: str, violation: str) -> N
         pass
 
 
-def notify_approval_requested(
-    tenant_id: str, workflow_id: str, actor_id: str
-) -> None:
+def notify_approval_requested(tenant_id: str, workflow_id: str, actor_id: str) -> None:
     try:
         _log.debug(
             "governance_orchestration.notify_approval_requested tenant=%s workflow=%s actor=%s",

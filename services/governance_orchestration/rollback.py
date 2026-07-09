@@ -21,9 +21,7 @@ def initiate_rollback(
     repo = GovernanceOrchestrationRepository(db, tenant_id)
     workflow = repo.get_workflow(workflow_id)
     if workflow is None:
-        raise GovernanceOrchestrationNotFound(
-            f"Workflow {workflow_id!r} not found"
-        )
+        raise GovernanceOrchestrationNotFound(f"Workflow {workflow_id!r} not found")
     if workflow.workflow_state == WorkflowState.COMPLETED.value:
         raise GovernanceOrchestrationWorkflowError(
             "Cannot roll back completed workflow"
@@ -65,9 +63,7 @@ def execute_rollback_step(
     }
 
 
-def complete_rollback(
-    db: Any, tenant_id: str, rollback_id: str
-) -> dict[str, Any]:
+def complete_rollback(db: Any, tenant_id: str, rollback_id: str) -> dict[str, Any]:
     repo = GovernanceOrchestrationRepository(db, tenant_id)
     repo.append_timeline(
         entity_type="rollback",

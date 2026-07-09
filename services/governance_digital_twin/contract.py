@@ -55,7 +55,9 @@ class GovernanceDigitalTwinServiceContract(Protocol):
 
     def fingerprint(self, snapshot: GovernanceDigitalTwinSnapshot) -> str: ...
 
-    def export(self, snapshot: GovernanceDigitalTwinSnapshot) -> Mapping[str, object]: ...
+    def export(
+        self, snapshot: GovernanceDigitalTwinSnapshot
+    ) -> Mapping[str, object]: ...
 
     def baseline(
         self,

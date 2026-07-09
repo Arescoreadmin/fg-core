@@ -281,9 +281,7 @@ class GovernanceOrchestrationEngine:
         validate_policy_risk_level(req.risk_level)
         errors = validate_policy_schema(req.policy_data or {})
         if errors:
-            raise GovernanceOrchestrationValidationError(
-                "; ".join(errors)
-            )
+            raise GovernanceOrchestrationValidationError("; ".join(errors))
         row = self._repo.create_policy(
             name=req.name,
             description=req.description,
@@ -502,14 +500,10 @@ class GovernanceOrchestrationEngine:
         )
         return self.get_workflow(workflow_id)
 
-    def pause_workflow(
-        self, workflow_id: str, *, actor_id: str
-    ) -> WorkflowResponse:
+    def pause_workflow(self, workflow_id: str, *, actor_id: str) -> WorkflowResponse:
         return self.advance_workflow(workflow_id, "pause", actor_id=actor_id)
 
-    def cancel_workflow(
-        self, workflow_id: str, *, actor_id: str
-    ) -> WorkflowResponse:
+    def cancel_workflow(self, workflow_id: str, *, actor_id: str) -> WorkflowResponse:
         return self.advance_workflow(workflow_id, "cancel", actor_id=actor_id)
 
     # ------------------------------------------------------------------
@@ -746,10 +740,9 @@ class GovernanceOrchestrationEngine:
     ) -> ApprovalResponse:
         row = self._repo.get_approval(approval_id)
         if row is None:
-            raise GovernanceOrchestrationNotFound(
-                f"Approval {approval_id!r} not found"
-            )
+            raise GovernanceOrchestrationNotFound(f"Approval {approval_id!r} not found")
         from services.governance_orchestration.models import ACTIVE_APPROVAL_STATES
+
         if row.approval_state not in {s.value for s in ACTIVE_APPROVAL_STATES}:
             raise GovernanceOrchestrationApprovalError(
                 f"Approval {approval_id!r} is not in an active state "
@@ -805,9 +798,7 @@ class GovernanceOrchestrationEngine:
         )
         return _window_to_response(row)
 
-    def get_maintenance_window(
-        self, window_id: str
-    ) -> MaintenanceWindowResponse:
+    def get_maintenance_window(self, window_id: str) -> MaintenanceWindowResponse:
         row = self._repo.get_maintenance_window(window_id)
         if row is None:
             raise GovernanceOrchestrationNotFound(
@@ -924,9 +915,7 @@ class GovernanceOrchestrationEngine:
             limit=limit,
         )
 
-    def get_history(
-        self, entity_type: str, entity_id: str
-    ) -> HistoryResponse:
+    def get_history(self, entity_type: str, entity_id: str) -> HistoryResponse:
         rows, total = self._repo.list_timeline(
             entity_type=entity_type,
             entity_id=entity_id,
@@ -962,7 +951,9 @@ class GovernanceOrchestrationEngine:
             tenant_id=self._tenant_id,
             active_policies=sum(1 for p in policies if p.active),
             active_workflows=sum(
-                1 for w in workflows_active if w.workflow_state in {"RUNNING", "WAITING_APPROVAL"}
+                1
+                for w in workflows_active
+                if w.workflow_state in {"RUNNING", "WAITING_APPROVAL"}
             ),
             pending_reassessments=len(pending_reassess),
             pending_approvals=len(approvals),
@@ -1049,9 +1040,7 @@ class GovernanceOrchestrationEngine:
     def evaluate_governance_loop(
         self, context: Optional[dict[str, Any]] = None
     ) -> dict[str, Any]:
-        return _gov_loop.evaluate_governance_state(
-            self._db, self._tenant_id, context
-        )
+        return _gov_loop.evaluate_governance_state(self._db, self._tenant_id, context)
 
     def compute_evidence_sufficiency(
         self, tenant_id: str | None = None, assessment_id: str | None = None

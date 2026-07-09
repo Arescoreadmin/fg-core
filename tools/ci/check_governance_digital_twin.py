@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 
@@ -147,14 +146,21 @@ def main() -> int:
         "GOVERNANCE_DIGITAL_TWIN_FINGERPRINT_DOMAIN" not in fingerprint_text
         or "FG_GOVERNANCE_DIGITAL_TWIN_V1" not in models_text
     ):
-        failures.append("fingerprint.py must include explicit fingerprint domain separation")
+        failures.append(
+            "fingerprint.py must include explicit fingerprint domain separation"
+        )
 
     if "sorted(" not in builder_text or ".order_by(" not in builder_text:
         failures.append("builder.py must enforce deterministic sorting")
     if "GOVERNANCE_DIGITAL_TWIN_BUILDER_VERSION" not in builder_text:
         failures.append("builder.py must pin builder version into snapshot state")
-    if "canonical_identity_seed" not in builder_text or "_canonical_identity_ref" not in builder_text:
-        failures.append("builder.py must derive canonical entity ids from stable identity seeds")
+    if (
+        "canonical_identity_seed" not in builder_text
+        or "_canonical_identity_ref" not in builder_text
+    ):
+        failures.append(
+            "builder.py must derive canonical entity ids from stable identity seeds"
+        )
     if "validate_governance_digital_twin_snapshot" not in builder_text:
         failures.append("builder.py must call validator")
     if "build_snapshot_manifest" not in builder_text:
@@ -167,7 +173,10 @@ def main() -> int:
         failures.append("exporter.py must enforce replay-safe redaction")
     if "manifest" not in exporter_text:
         failures.append("exporter.py must project the snapshot manifest")
-    if "deep_freeze" not in exporter_text or "return deep_freeze(redacted)" not in exporter_text:
+    if (
+        "deep_freeze" not in exporter_text
+        or "return deep_freeze(redacted)" not in exporter_text
+    ):
         failures.append("exporter.py must return deeply immutable replay-safe exports")
 
     for forbidden in FORBIDDEN_KEYS:
@@ -197,15 +206,31 @@ def main() -> int:
 
     if "FrozenDict" not in immutability_text or "deep_freeze" not in immutability_text:
         failures.append("immutability.py must define FrozenDict and deep_freeze")
-    if "RELATIONSHIP_REGISTRY" not in relationship_registry_text or "max_targets_per_source" not in relationship_registry_text:
-        failures.append("relationship_registry.py must define the extensible relationship registry")
-    if "GovernanceDigitalTwinValidationSeverity" not in validator_text or "highest_severity" not in validator_text:
+    if (
+        "RELATIONSHIP_REGISTRY" not in relationship_registry_text
+        or "max_targets_per_source" not in relationship_registry_text
+    ):
+        failures.append(
+            "relationship_registry.py must define the extensible relationship registry"
+        )
+    if (
+        "GovernanceDigitalTwinValidationSeverity" not in validator_text
+        or "highest_severity" not in validator_text
+    ):
         failures.append("validator.py must expose structured severity findings")
 
-    if "source of truth" not in mcim_text.lower() or "MCIM_COMPONENT_REGISTRY" not in mcim_text:
+    if (
+        "source of truth" not in mcim_text.lower()
+        or "MCIM_COMPONENT_REGISTRY" not in mcim_text
+    ):
         failures.append("mcim.py must consume MCIM registration as the source of truth")
-    if "MCIM_REGISTRATION_SOURCE" not in mcim_registration_text or "MCIM-18.8.1-GDT" not in mcim_registration_text:
-        failures.append("mcim_registration.py must define Governance Digital Twin MCIM registrations")
+    if (
+        "MCIM_REGISTRATION_SOURCE" not in mcim_registration_text
+        or "MCIM-18.8.1-GDT" not in mcim_registration_text
+    ):
+        failures.append(
+            "mcim_registration.py must define Governance Digital Twin MCIM registrations"
+        )
 
     if not TEST_FILE.exists():
         failures.append("tests/test_governance_digital_twin.py missing")

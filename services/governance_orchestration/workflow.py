@@ -46,20 +46,28 @@ _VALID_EVENTS: dict[WorkflowState, dict[str, WorkflowState]] = {
 class WorkflowCoordinator:
     """Coordinates lifecycle events on governance workflows."""
 
-    def start_workflow(self, db: Any, tenant_id: str, workflow_id: str) -> dict[str, Any]:
+    def start_workflow(
+        self, db: Any, tenant_id: str, workflow_id: str
+    ) -> dict[str, Any]:
         return self._transition(db, tenant_id, workflow_id, "start")
 
     def advance_workflow(
         self, db: Any, tenant_id: str, workflow_id: str, event: str
     ) -> dict[str, Any]:
         if not isinstance(event, str) or not event.strip():
-            raise GovernanceOrchestrationWorkflowError("event must be a non-empty string")
+            raise GovernanceOrchestrationWorkflowError(
+                "event must be a non-empty string"
+            )
         return self._transition(db, tenant_id, workflow_id, event.strip())
 
-    def pause_workflow(self, db: Any, tenant_id: str, workflow_id: str) -> dict[str, Any]:
+    def pause_workflow(
+        self, db: Any, tenant_id: str, workflow_id: str
+    ) -> dict[str, Any]:
         return self._transition(db, tenant_id, workflow_id, "pause")
 
-    def cancel_workflow(self, db: Any, tenant_id: str, workflow_id: str) -> dict[str, Any]:
+    def cancel_workflow(
+        self, db: Any, tenant_id: str, workflow_id: str
+    ) -> dict[str, Any]:
         return self._transition(db, tenant_id, workflow_id, "cancel")
 
     def get_workflow_summary(
@@ -107,7 +115,12 @@ class WorkflowCoordinator:
                 f"Event {event!r} not valid from state {current.value!r}"
             )
         row.workflow_state = target.value
-        if target in {WorkflowState.COMPLETED, WorkflowState.FAILED, WorkflowState.CANCELLED, WorkflowState.ROLLED_BACK}:
+        if target in {
+            WorkflowState.COMPLETED,
+            WorkflowState.FAILED,
+            WorkflowState.CANCELLED,
+            WorkflowState.ROLLED_BACK,
+        }:
             row.completed_at = utc_iso8601_z_now()
         repo.update_workflow(row)
         return {

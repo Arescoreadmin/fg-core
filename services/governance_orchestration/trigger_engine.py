@@ -13,7 +13,9 @@ from services.governance_orchestration.repository import (
 )
 
 
-def evaluate_triggers(db: Any, tenant_id: str, context: dict[str, Any]) -> list[dict[str, Any]]:
+def evaluate_triggers(
+    db: Any, tenant_id: str, context: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Evaluate trigger conditions for a tenant given a context dict.
 
     Deterministic. Returns a list of trigger dicts (not persisted).
@@ -113,9 +115,7 @@ def record_trigger(
     }
 
 
-def is_trigger_active_for_tenant(
-    db: Any, tenant_id: str, trigger_type: str
-) -> bool:
+def is_trigger_active_for_tenant(db: Any, tenant_id: str, trigger_type: str) -> bool:
     """Return True if any active maintenance window suppresses this trigger.
 
     A trigger is 'suppressed' while a maintenance window is ACTIVE for the

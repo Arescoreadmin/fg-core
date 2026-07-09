@@ -14,9 +14,7 @@ def compute_orchestration_statistics(db: Any, tenant_id: str) -> dict[str, Any]:
     policies, total_policies = repo.list_policies(offset=0, limit=500)
     playbooks, total_playbooks = repo.list_playbooks(offset=0, limit=500)
     workflows, total_workflows = repo.list_workflows(offset=0, limit=500)
-    reassessments, total_reassessments = repo.list_reassessments(
-        offset=0, limit=500
-    )
+    reassessments, total_reassessments = repo.list_reassessments(offset=0, limit=500)
     triggers, total_triggers = repo.list_triggers(offset=0, limit=500)
     approvals = repo.list_approvals()
 
@@ -63,9 +61,7 @@ def compute_reassessment_velocity(db: Any, tenant_id: str) -> dict[str, Any]:
     return {
         "total": total,
         "completed": len(completed),
-        "in_progress": sum(
-            1 for r in rows if r.reassessment_state == "IN_PROGRESS"
-        ),
+        "in_progress": sum(1 for r in rows if r.reassessment_state == "IN_PROGRESS"),
         "scheduled": sum(1 for r in rows if r.reassessment_state == "SCHEDULED"),
     }
 

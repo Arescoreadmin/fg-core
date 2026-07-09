@@ -6,6 +6,115 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-09 — feat/pr-01-identity-authority: P1/P2 bot review fixes (secret verification, DB session, issuer-aware provider errors)
+
+**Branch:** `feat/pr-01-identity-authority`
+**Date:** 2026-07-09
+
+**Triggering guards:** `pr-fix-log-guard` (`api/auth_dispatch.py` and `api/identity_authority/machine_identity.py` changed), `soc-review-sync` (`api/auth_dispatch.py` matches `api/auth` CRITICAL_PREFIX)
+
+**Root cause:** Three issues flagged by PR review bot (two P1, one P2):
+- **P1 — `_verify_secret()` always returned `True`:** `_load_key_record()` referenced `TenantApiKey` (nonexistent model); returned a record with `key_hash=None`; `_verify_secret()` had a stub that bypassed hash verification entirely. Result: any secret would succeed against any key_id.
+- **P1 — DB session not passed to FIAP JWT auth:** `_try_jwt_actor(request)` did not accept the `conn` session available in `get_actor_context()`. `authenticate_jwt()` received `db=None`, causing `TenantResolver.resolve()` to be skipped silently — JWT auth worked but tenant binding was not resolved from DB.
+- **P2 — `IdentityProviderError` stopped all subsequent providers:** An JWKS outage on Auth0 would raise `IdentityProviderError` and immediately propagate, blocking Entra/Google tokens from ever reaching their providers.
+
+**High-risk files changed:**
+- `api/auth_dispatch.py` — threaded `conn` session into `_try_jwt_actor()` → `authenticate_jwt(db=conn)`
+- `api/identity_authority/machine_identity.py` — rewrote `_load_key_record()` to query `ApiKey` (real model in `api/db_models.py`) with `key_lookup` HMAC fast path + legacy SHA-256 fallback; rewrote `_verify_secret()` to call `verify_key()` from `api/auth_scopes/helpers.py`
+- `api/identity_authority/providers/registry.py` — added `_peek_issuer()`, `_host()`, `_token_matches_provider()` helpers; `resolve_jwt()` now continues past `IdentityProviderError` when the token's `iss` hostname does not match the failing provider's issuer hostname
+
+**Auth behavior change:**
+- Before: `_verify_secret()` was a no-op stub (always `True`); any secret was accepted for any API key on the direct DB path
+- After: `_verify_secret()` raises `ValueError` if `key_hash` is None; delegates to `verify_key(secret, record.key_hash, record.hash_alg)` which enforces argon2id (primary) or SHA-256 (legacy) comparison
+- Before: `_try_jwt_actor()` called `authenticate_jwt(token, ..., db=None)` — tenant resolver skipped
+- After: `_try_jwt_actor(request, conn)` calls `authenticate_jwt(token, ..., db=conn)` — tenant resolver runs fully
+- Before: `IdentityProviderError` from any provider stopped the chain immediately (503)
+- After: `IdentityProviderError` propagates only when `_token_matches_provider()` returns True (token issuer hostname matches the failing provider); otherwise logs warning and continues to next provider
+
+**Security impact:**
+- P1 fix eliminates a complete bypass of API key secret verification on the direct authentication path. The middleware path (`authenticate_api_key_from_state`) was unaffected — it reads pre-validated state from middleware.
+- P1 fix ensures JWT-authenticated requests correctly resolve tenant membership. Previously a JWT actor could authenticate but have no tenant binding resolved from DB.
+- P2 fix improves availability: a JWKS outage at Auth0 no longer prevents Entra or Google users from authenticating.
+- No CI guard weakened. No `NO_FIX_LOG_REQUIRED` marker used.
+
+**Tests added/updated:**
+- `tests/identity_authority/test_machine_identity.py`: `test_authenticate_api_key_success` updated (record now carries `key_hash`/`hash_alg`; `_verify_secret` patched separately); `test_authenticate_api_key_bad_secret_raises` added; `test_verify_secret_no_hash_raises` added
+- `tests/identity_authority/test_provider_registry.py`: `test_provider_error_skipped_when_issuer_does_not_match` added; `test_provider_error_propagated_when_issuer_matches` added
+
+**Validation performed:**
+- `.venv/bin/pytest tests/identity_authority/ -q`: 68 passed, 0 failed
+
+---
+
+### 2026-07-09 — feat/pr-01-identity-authority: Enterprise Identity Authority Platform (FIAP) CI Guard Repair
+
+**Branch:** `feat/pr-01-identity-authority`
+**Commit:** `952404e8`
+**Date:** 2026-07-09
+
+**Triggering guards:** `pr-fix-log-guard` (PR_FIX_LOG not updated), `soc-review-sync` (auth boundary changed without SOC doc update)
+
+**Root cause:** PR-01 introduced a new `api/identity_authority/` package and modified `api/auth_dispatch.py`. Both paths match high-risk CI path prefixes (`api/`), and `api/auth_dispatch.py` specifically matches the `api/auth` CRITICAL_PREFIX in `check_soc_review_sync.py`. Neither `docs/ai/PR_FIX_LOG.md` nor the SOC review docs were updated in the initial commit — this entry and the SOC arch review entry (added to `docs/SOC_ARCH_REVIEW_2026-02-15.md` in the same fix commit) resolve both failures.
+
+**High-risk files changed:**
+- `api/auth_dispatch.py` — authentication dispatch entry point
+- `api/identity_authority/__init__.py`, `audit.py`, `authority.py`, `integration.py`, `machine_identity.py`, `metrics.py`, `migration.py`, `models.py`, `portal_identity.py`, `session_authority.py`, `tenant_resolver.py`
+- `api/identity_authority/providers/` — auth0, entra, google, generic OIDC, registry, base
+- `api/identity_providers/entra.py` — previously raised `NotImplementedError`
+
+**Why these files changed:** PR-01 unifies three separate, incompatible identity implementations (console NextAuth+Auth0, portal HMAC shared secret, API Auth0-only) into a single canonical `IdentityAuthority`. The Entra ID provider stub — which raised `NotImplementedError` and blocked all M365/Entra customers from authenticating — is fully implemented. `api/auth_dispatch.py` was extended with a flag-gated FIAP path; the legacy Auth0 path is preserved unchanged as the default.
+
+**Auth behavior before PR-01:**
+- JWT authentication: Auth0 only (`FG_AUTH0_DOMAIN`); Entra raised `NotImplementedError`
+- Portal: single `PORTAL_PASSWORD` shared secret; no per-user identity
+- No unified session management, no cross-surface revocation, no provider abstraction
+
+**Auth behavior after PR-01 (flag off, `FG_IDENTITY_AUTHORITY_ENABLED=0`, default):**
+- Identical to before. No behavior change. All existing routes unaffected.
+
+**Auth behavior after PR-01 (flag on, `FG_IDENTITY_AUTHORITY_ENABLED=1`):**
+- JWT auth routes through `IdentityAuthority.authenticate_jwt()` → `IdentityProviderRegistry` → ordered provider chain (Auth0 → Entra → Google → Generic OIDC)
+- Full Entra ID RS256/ES256 validation with multi-tenant support and MFA enforcement
+- Unified HMAC-SHA256 session management with Redis-backed revocation
+- Hash-chained identity audit log persisted to `SecurityAuditLog`
+- `CanonicalIdentity.to_actor_context()` converts to `ActorContext` for all 74 existing routes — zero breaking changes
+
+**Feature flag containment:** `FG_IDENTITY_AUTHORITY_ENABLED` defaults to `0`. The FIAP path in `auth_dispatch.py` is entirely behind this flag. The legacy Auth0-only path is the unchanged default until an operator explicitly enables FIAP and verifies the new provider chain.
+
+**Migration / backward compatibility:**
+- All existing `require_permission()` + `get_actor_context()` dependencies continue to work unchanged
+- `api/identity_providers/entra.py` now delegates to `EntraOIDCProvider` instead of raising; it remains importable at the same path
+- `LegacySessionMigrator` bridges old portal HMAC tokens (`PORTAL_PASSWORD`) to unified sessions during migration window
+- `PortalIdentityBridge` validates unified or legacy sessions transparently
+
+**Security impact:**
+- Entra ID cross-tenant escalation is explicitly prevented: `_resolve_by_hint` validates any `tenant_id_hint` must match the identity's existing `tenant_binding.tenant_id`; mismatches are denied with a warning audit event
+- Session revocation is cryptographically enforced: HMAC-signed tokens + Redis revocation store; revoked sessions are rejected on every request
+- `_sanitize()` strips tokens, secrets, passwords, cookies from all audit detail dicts before logging or persistence
+- MFA enforcement: `FG_ENTRA_REQUIRE_MFA=1` rejects Entra tokens without recognized MFA AMR claims (`mfa`, `ngcmfa`, `fido2`, `fido`, `rsa`)
+- No CI guard was weakened. No `NO_FIX_LOG_REQUIRED` marker was used. No guard bypass was added. `api/auth_dispatch.py` remains classified as a critical file.
+
+**Tests added:** 64 tests across 8 files in `tests/identity_authority/` — session lifecycle (create, validate, revoke, refresh, expiry), legacy migration (portal v1, admin_gw format, expired/wrong-secret/unknown-format), tenant resolution (membership lookup, cross-tenant hint denial, import-error graceful return), provider registry (ordering, stop-on-error, all-rejected, no-providers, env detection), authority integration (JWT success/failure, no-DB path, session issuance, logout, backwards compat), machine identity (API key success/not-found/inactive, from-state path, permission expansion), Entra provider (is_configured, JWKS URI, malformed token, MFA AMR classification, multi-tenant mode, FG_ENTRA_REQUIRE_MFA).
+
+**Validation performed:**
+- `.venv/bin/pytest tests/identity_authority/ -q`: 64 passed, 0 failed
+- `make soc-review-sync` (local, no GITHUB_BASE_REF): OK
+- `make soc-manifest-verify`: OK (all P0s mitigated)
+- `python tools/ci/guard_pr_fix_log.py --base origin/main --head HEAD`: blocked before this fix, passes after
+
+**Remaining risks:**
+- `_verify_secret()` in `machine_identity.py` is a stub for the direct API key authentication path (not the middleware path). The middleware-backed `authenticate_api_key_from_state()` path — which is the production path — is fully validated. Direct `authenticate_api_key()` should add HMAC check against `hashed_secret` before the next sprint enables direct-path callers.
+- `session_risk_score` is always `0.0` in this release. Behavioral risk scoring (device change, geo anomaly, concurrent session spike) is deferred.
+- The portal shared-secret model (`PORTAL_PASSWORD`) is still the primary portal auth path in production until the portal is migrated to per-user OIDC sessions. `PortalIdentityBridge` provides the migration path but the portal Next.js layer has not yet been updated to use it.
+
+**Confirmation:** No enforcement was weakened. No guard was bypassed. No override marker was used. `api/auth_dispatch.py` remains in the high-risk classification.
+
+**Files modified in this fix commit:**
+- `docs/ai/PR_FIX_LOG.md` — this entry
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — SOC review entry for auth boundary change
+
+---
+
 ### 2026-07-07 — fix/phase2-test-fixtures-and-compat (#516): Phase 2 backward-compat and test fixture repair
 
 **PR:** #516

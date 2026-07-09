@@ -50,11 +50,20 @@ def compute_snapshot_fingerprint(snapshot: GovernanceDigitalTwinSnapshot) -> str
         key=lambda item: item["baseline_id"],
     )
     entities = sorted(
-        ({"entity_id": entity.id, "entity_hash": compute_entity_hash(entity)} for entity in snapshot.entities),
+        (
+            {"entity_id": entity.id, "entity_hash": compute_entity_hash(entity)}
+            for entity in snapshot.entities
+        ),
         key=lambda item: item["entity_id"],
     )
     relationships = sorted(
-        ({"relationship_id": relationship.id, "relationship_hash": compute_relationship_hash(relationship)} for relationship in snapshot.relationships),
+        (
+            {
+                "relationship_id": relationship.id,
+                "relationship_hash": compute_relationship_hash(relationship),
+            }
+            for relationship in snapshot.relationships
+        ),
         key=lambda item: item["relationship_id"],
     )
     payload = {
@@ -88,5 +97,7 @@ def compute_snapshot_fingerprint(snapshot: GovernanceDigitalTwinSnapshot) -> str
     return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
 
 
-def compute_baseline_reference_id(reference: GovernanceDigitalTwinBaselineReference) -> str:
+def compute_baseline_reference_id(
+    reference: GovernanceDigitalTwinBaselineReference,
+) -> str:
     return compute_metadata_hash(asdict(reference))
