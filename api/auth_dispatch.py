@@ -74,10 +74,48 @@ def _try_jwt_actor(request: Request) -> Optional[ActorContext]:
     if not token:
         return None
 
-    # Auth0 provider — active when FG_AUTH0_DOMAIN is configured
-    try:
-        import os
+    # FIAP path — active when FG_IDENTITY_AUTHORITY_ENABLED=1
+    if os.getenv("FG_IDENTITY_AUTHORITY_ENABLED", "0").strip() == "1":
+        try:
+            from api.identity_authority.providers.base import (
+                IdentityProviderError,
+                IdentityValidationError,
+            )
+            from api.identity_authority.authority import get_identity_authority
 
+            tenant_hint = request.headers.get("X-Tenant-Id") or None
+            cid = request.headers.get("X-Correlation-Id") or None
+            ctx = get_identity_authority().authenticate_jwt(
+                token, tenant_id_hint=tenant_hint, correlation_id=cid
+            )
+            return ctx.to_actor_context()
+        except IdentityValidationError as exc:
+            log.warning(
+                "auth_dispatch.jwt_validation_failed",
+                extra={"provider": exc.provider, "reason": exc.code},
+            )
+            raise HTTPException(
+                status_code=401,
+                detail={"code": "INVALID_JWT", "reason": exc.code},
+            )
+        except IdentityProviderError as exc:
+            log.error(
+                "auth_dispatch.provider_error",
+                extra={"provider": exc.provider, "reason": str(exc)},
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "PROVIDER_UNAVAILABLE"},
+            )
+        except Exception as exc:
+            log.exception("auth_dispatch.jwt_unexpected_error", extra={"exc": str(exc)})
+            raise HTTPException(
+                status_code=401,
+                detail={"code": "AUTH_ERROR", "reason": "JWT validation error"},
+            )
+
+    # Auth0 provider — active when FG_AUTH0_DOMAIN is configured (legacy path)
+    try:
         if (os.getenv("FG_AUTH0_DOMAIN") or "").strip():
             from api.identity_providers.auth0 import validate_auth0_token
 
