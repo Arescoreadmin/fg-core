@@ -243,3 +243,13 @@ class TestComputeReplayVersion:
         a = compute_replay_version("user-1")
         b = compute_replay_version("user-2")
         assert a != b
+
+    def test_int_and_str_one_hash_differently(self) -> None:
+        # str(1) == str("1") under the old coercion — must be distinct
+        assert compute_replay_version(1) != compute_replay_version("1")
+
+    def test_dict_insertion_order_independent(self) -> None:
+        # Two dicts with the same contents but different insertion order must hash identically
+        a = compute_replay_version({"x": 1, "y": 2})
+        b = compute_replay_version({"y": 2, "x": 1})
+        assert a == b

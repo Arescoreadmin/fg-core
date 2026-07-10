@@ -104,12 +104,11 @@ def compute_replay_version(*parts: object) -> str:
     """Return SHA-256 hex[:16] of canonical JSON of input parts.
 
     Identical inputs always produce identical output (stable across calls).
+    Types are preserved: int 1 and str "1" hash differently. Dict inputs are
+    canonicalized by sorted key order regardless of insertion order.
     """
-    payload = json.dumps(
-        [str(p) for p in parts],
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    serializable = [_to_serializable(p) for p in parts]
+    payload = json.dumps(serializable, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
