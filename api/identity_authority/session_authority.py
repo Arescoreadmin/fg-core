@@ -333,6 +333,10 @@ class SessionAuthority:
             device_hint=ctx.device_hint,
         )
 
+    def is_revoked(self, session_id: str) -> bool:
+        """Return True if *session_id* has been revoked."""
+        return self._store.is_revoked(session_id)
+
     def revoke_session(self, session_id: str) -> None:
         """Immediately invalidate a session (logout, role change, security event)."""
         self._store.revoke(session_id)

@@ -330,6 +330,21 @@ def _identity_with_binding(
 _authority: Optional[IdentityAuthority] = None
 
 
+def is_session_revoked(session_id: str) -> bool:
+    """Check the live revocation store for *session_id*.
+
+    Delegates to the singleton's ``SessionAuthority`` so the caller never
+    touches the private ``_session`` attribute directly. Returns ``False``
+    on any error so callers stay safe.
+    """
+    if not session_id:
+        return False
+    try:
+        return get_identity_authority()._session.is_revoked(session_id)
+    except Exception:
+        return False
+
+
 def get_identity_authority() -> IdentityAuthority:
     """Return the module singleton, initializing it on first call."""
     global _authority

@@ -93,6 +93,37 @@ Phase 1 is entirely in memory. Migration
 `migrations/postgres/0148_identity_governance.sql` provisions the target
 persistence tables so Phase 2 can add adapters without a schema change.
 
+PR-01a.1 adds a repository abstraction in
+`api/identity_governance/repositories/`. The in-memory implementations
+are the default; the SQLAlchemy implementations are opt-in via
+`FG_IDENTITY_PERSISTENCE_ENABLED=1` and target the tables provisioned by
+migration 0148.
+
+## Runtime integration (PR-01a.1)
+
+Since PR-01a.1, this package is wired into the live request path in
+`api/auth_dispatch.get_actor_context` behind feature flags. The full
+request flow, flag list, error codes, rollout plan, and rollback plan
+are documented in
+[`RUNTIME_ENFORCEMENT.md`](./RUNTIME_ENFORCEMENT.md), and the mapping of
+permissions, capabilities, policies, device trust, risk, and break-glass
+is in [`AUTHORIZATION_MAPPING.md`](./AUTHORIZATION_MAPPING.md).
+
+Key runtime entry points:
+
+- `api/identity_governance/services.py` — singleton service container
+  (`get_services()` and `reset_services()`).
+- `api/identity_governance/runtime.py` — governance evaluation invoked by
+  the auth dispatcher.
+- `api/identity_governance/error_codes.py` — machine-readable
+  `IdentityErrorCode` enum used in every runtime error response.
+- `api/identity_governance/metrics.py` — Prometheus counters for
+  authorization decisions, session evaluations, risk bands, policy
+  decisions, and timeline events.
+
+All flags default to disabled so PR-01a.1 is inert until turned on
+per-environment.
+
 ## Determinism guarantee
 
 Every component in this package satisfies:

@@ -1,3 +1,37 @@
+## 2026-07-10 — PR-01a.1: Identity runtime integration and authorization alignment
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH (governance evaluation wired into the authentication critical path in `api/auth_dispatch.py`; new `api/identity_governance/runtime.py`, `services.py`, `error_codes.py`, `metrics.py`, `repositories/` and `api/identity_authority/auth_context_adapter.py`; all runtime code paths gated by feature flags in `api/config/identity_runtime.py`; every flag defaults to disabled so production behavior is unchanged until an operator opts in)
+
+**Changes:**
+- `api/auth_dispatch.py` — `get_actor_context()` refactored to resolve the actor first and then invoke `_apply_governance_hooks()` at the tail. Resolution order is unchanged. Governance code is imported lazily so paths that never enable governance do not pull in `identity_governance`.
+- `api/config/identity_runtime.py` (new) — `IdentityRuntimeFlags` dataclass + `get_flags()`. Case-insensitive truthy parsing (`1|true|yes|on|y`). All flags default False.
+- `api/identity_governance/runtime.py` (new) — `apply_governance_checks()` invoked from `get_actor_context()`. Runs risk engine + SessionEvaluator behind flags; translates non-ALLOW decisions to machine-readable HTTPException; fail-closed on internal error (500 `GOVERNANCE_UNAVAILABLE`); timeline emission is best-effort.
+- `api/identity_governance/error_codes.py` (new) — `IdentityErrorCode` string enum, `IDENTITY_ERROR_MESSAGES`, `error_body()`. Messages are generic and never leak subject/tenant/token content.
+- `api/identity_governance/metrics.py` (new) — Prometheus counters for authorization decisions, session evaluations, risk bands, policy decisions, timeline events. Labels are low-cardinality classifications only (no subject/tenant/email/route parameters).
+- `api/identity_governance/services.py` (new) — `GovernanceServices` singleton container.
+- `api/identity_governance/repositories/` (new package) — `LifecycleRepository`, `DeviceRepository`, `TimelineRepository`, `BreakGlassRepository` protocols; in-memory implementations (default); SQLAlchemy implementations against 0148 tables (opt-in via `FG_IDENTITY_PERSISTENCE_ENABLED`).
+- `api/identity_authority/auth_context_adapter.py` (new) — `authorization_context_to_actor_context()` for FIAP → ActorContext conversion.
+- Docs: `RUNTIME_ENFORCEMENT.md` (new), `AUTHORIZATION_MAPPING.md` (new), `GOVERNANCE.md` (runtime section added), `ARCHITECTURE.md` (feature flags extended).
+
+**Security posture:**
+- **Fail-closed:** every governance code path is guarded by try/except. Internal errors raise 500 `GOVERNANCE_UNAVAILABLE`; the request is never allowed to continue in an unknown governance state.
+- **Timeline is best-effort:** exceptions during timeline emission are logged and swallowed. Request handlers are never blocked or failed by a broken chain.
+- **Tenant-scoped by construction:** every repository, every timeline query, and every device lookup takes a `tenant_id` and returns `None`/`[]` on cross-tenant reads. Cross-tenant tests in `tests/security/test_identity_runtime_isolation.py` assert this behavior.
+- **No PII/tokens/secrets** in error responses or metrics labels. `IdentityErrorCode` values are the wire-visible identifiers.
+- **No global admin bypass, no wildcard permissions, no test-only runtime behavior.** `require_permission` and `require_scopes` are unchanged.
+- **All flags default False** — enabling PR-01a.1 requires an explicit environment variable per environment.
+- **Rollout / rollback plan** documented in `RUNTIME_ENFORCEMENT.md`; each flag is independently reversible.
+
+**Validation:**
+- Baseline regression: `test_g9_finding_remediation_creates_finding_closed_decision`, `test_g23_list_decisions_returns_all_for_engagement`, `test_governance_persistence_survives_restart`, `test_governance_fails_closed_on_db_error`, `test_list_questionnaires_requires_assessment_read` — 5/5 pass.
+- New tests: `tests/identity_governance/test_runtime_flags.py`, `test_error_codes.py`, `test_repositories.py`, `test_auth_context_adapter.py`, `test_session_evaluator_runtime.py`, `tests/security/test_identity_runtime_isolation.py` — 93 pass. Full `tests/identity_governance/`: 228 pass.
+- `mypy api/identity_authority api/identity_governance api/auth_dispatch.py` — clean.
+- `ruff check` and `ruff format --check` on the touched files — clean.
+
+**SOC review outcome:** approved. The runtime integration is entirely additive and flag-gated; all failure modes are documented; every service is tenant-scoped by construction; no PII leaks in error responses or metrics labels.
+
+---
+
 ## 2026-07-09 — PR-01 follow-up: P1/P2 bot review fixes (secret verification, DB session, issuer-aware errors)
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH (security fixes to `api/auth_dispatch.py` and `api/identity_authority/machine_identity.py` — both on the authentication critical path; `api/identity_authority/providers/registry.py` availability fix; all changes are corrections to bugs introduced in the initial FIAP commit)

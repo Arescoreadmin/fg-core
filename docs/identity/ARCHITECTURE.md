@@ -212,3 +212,24 @@ with existing `require_permission()` checks.
 | `FG_MAX_CONCURRENT_SESSIONS` | `5` | Max sessions per user (advisory) |
 | `FG_ENTRA_REQUIRE_MFA` | `0` | Enforce MFA for Entra tokens |
 | `FG_ENTRA_ALLOWED_TENANTS` | (any) | Comma-separated allowed Entra tenant IDs |
+| `FG_SESSION_EVALUATOR_ENABLED` | `0` | Run continuous session evaluation in `get_actor_context()` |
+| `FG_DEVICE_TRUST_ENFORCEMENT_ENABLED` | `0` | Enforce device trust registry |
+| `FG_RISK_ENGINE_ENABLED` | `0` | Compute and record identity risk score |
+| `FG_CONDITIONAL_ACCESS_ENABLED` | `0` | Consult conditional access policy engine |
+| `FG_BREAK_GLASS_RUNTIME_ENABLED` | `0` | Consult break-glass authority at runtime |
+| `FG_IDENTITY_TIMELINE_ENABLED` | `0` | Best-effort timeline event emission from auth paths |
+| `FG_IDENTITY_PERSISTENCE_ENABLED` | `0` | Use DB-backed governance repositories (0148 tables) |
+
+## Runtime governance integration (PR-01a.1)
+
+Governance evaluation is wired at the tail of `get_actor_context()` behind
+the flags above. See:
+
+- [`RUNTIME_ENFORCEMENT.md`](./RUNTIME_ENFORCEMENT.md) for the request
+  flow, order of evaluation, failure modes, rollout plan, and rollback
+  plan.
+- [`AUTHORIZATION_MAPPING.md`](./AUTHORIZATION_MAPPING.md) for how
+  permissions, capabilities, policies, ownership, step-up, device trust,
+  risk, and break-glass combine.
+- [`GOVERNANCE.md`](./GOVERNANCE.md) for the underlying stateless
+  services.
