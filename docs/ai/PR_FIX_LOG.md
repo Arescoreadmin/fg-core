@@ -6,6 +6,43 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-10 — feat/pr-01a1-identity-runtime-integration: fix real session state and persistence flag (bot P1/P2)
+
+**Branch:** `feat/pr-01a1-identity-runtime-integration`
+**Date:** 2026-07-10
+
+**Triggering guards:** bot review comments P1 + P2 on PR #523
+
+**P1 — Feed real session state into the SessionEvaluator** (`api/identity_governance/runtime.py`, `api/identity_authority/authority.py`, `api/identity_authority/session_authority.py`):
+
+`_run_governance()` was building `SessionEvaluationContext` with hardcoded values (`session_expires_at=now+8h`, `session_revoked=False`, `device=None`), meaning the evaluator's expiry, revocation, and device-trust checks could never fire at runtime.
+
+Fixed by:
+- Adding `_extract_jwt_expiry(request)` to `runtime.py` — base64-decodes the already-validated Bearer JWT payload to read the `exp` claim (no signature re-check needed; token already verified by IdentityAuthority).
+- Reading `session_expires_at` from `request.state` first, then falling back to `_extract_jwt_expiry()`, then to `now + _DEFAULT_SESSION_TTL` (generous 8h fallback so sessions without explicit expiry tracking still pass).
+- Adding `is_session_revoked(session_id)` public helper to `authority.py` — delegates to the singleton's `SessionAuthority` so runtime.py never touches private attributes.
+- Adding `is_revoked(session_id)` to `SessionAuthority` — delegates to `self._store.is_revoked()`, making the revocation check type-safe and publicly accessible.
+- Reading `session_revoked` from `request.state` first, then calling `is_session_revoked()` when not already revoked.
+- Reading `device` from `request.state.device_record` (None when no middleware has set it).
+
+**P2 — Honor the persistence flag when building services** (`api/identity_governance/services.py`):
+
+`_build_services()` always built in-memory repositories regardless of `FG_IDENTITY_PERSISTENCE_ENABLED`. The flag existed in the config module but was never consumed.
+
+Fixed by:
+- Adding `lifecycle_repo`, `device_repo`, `timeline_repo`, `break_glass_repo` fields to the `GovernanceServices` dataclass.
+- Adding `_build_memory_repos()` helper returning a tuple of the four in-memory implementations.
+- Adding `_build_db_repos()` helper that imports `get_sessionmaker()` from `api/db` and constructs `DbLifecycleRepository`, `DbDeviceRepository`, `DbTimelineRepository`, `DbBreakGlassRepository` — all four take the session factory, not a live session.
+- `_build_services()` now branches on `flags.FG_IDENTITY_PERSISTENCE_ENABLED`: calls `_build_db_repos()` when True, falls back to `_build_memory_repos()` with a warning log if the DB is unavailable.
+
+**Validation:**
+
+- `tests/identity_governance/` + `tests/identity_authority/` — 296/296 pass.
+- `mypy api/identity_authority api/identity_governance` — clean.
+- `ruff check` all four changed files — clean.
+
+---
+
 ### 2026-07-10 — feat/pr-01a1-identity-runtime-integration: wire FIAP + Identity Governance into live request path
 
 **Branch:** `feat/pr-01a1-identity-runtime-integration`

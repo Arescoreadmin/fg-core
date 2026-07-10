@@ -22,6 +22,8 @@ Design principles:
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -57,6 +59,33 @@ _DEFAULT_SESSION_TTL = timedelta(hours=8)
 
 def _now() -> datetime:
     return datetime.now(tz=timezone.utc)
+
+
+def _extract_jwt_expiry(request: Request) -> Optional[datetime]:
+    """Parse the exp claim from the already-validated Bearer token.
+
+    The token has been verified by IdentityAuthority or Auth0 before this
+    point, so we only need to decode the payload — no signature check needed.
+    Returns None on any parse error.
+    """
+    try:
+        bearer = (request.headers.get("Authorization") or "").strip()
+        if not bearer.lower().startswith("bearer "):
+            return None
+        token = bearer[7:]
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        payload_b64 = parts[1]
+        # Add padding if needed
+        payload_b64 += "=" * (4 - len(payload_b64) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload_b64))
+        exp = claims.get("exp")
+        if exp is None:
+            return None
+        return datetime.fromtimestamp(float(exp), tz=timezone.utc)
+    except Exception:
+        return None
 
 
 def _tenant_requires_mfa(_actor: ActorContext) -> bool:
@@ -228,22 +257,50 @@ def _run_governance(
 
     # 2) Session evaluator — orchestrates lifecycle/session/device/mfa/risk.
     if flags.FG_SESSION_EVALUATOR_ENABLED and risk_score is not None:
-        session_id = ""
-        # Session id may be attached to request state by upstream auth middleware.
-        if request is not None:
-            state = getattr(request, "state", None)
-            session_id = getattr(state, "session_id", "") if state else ""
+        state = getattr(request, "state", None) if request is not None else None
+
+        # -- session_id --
+        session_id = (getattr(state, "session_id", "") or "") if state else ""
         if not session_id:
             session_id = actor.membership_id or actor.subject
+
+        # -- session_expires_at --
+        # Prefer an expiry already attached by upstream middleware / JWT decode.
+        # Fall back to parsing the raw JWT exp claim (safe — token already verified).
+        # Last resort: use a generous default so the expiry check never fires for
+        # sessions whose lifetime is not yet tracked.
+        session_expires_at: Optional[datetime] = (
+            getattr(state, "session_expires_at", None) if state else None
+        )
+        if session_expires_at is None and request is not None:
+            session_expires_at = _extract_jwt_expiry(request)
+        if session_expires_at is None:
+            session_expires_at = now + _DEFAULT_SESSION_TTL
+
+        # -- session_revoked --
+        # Check the live revocation store via the SessionAuthority singleton.
+        session_revoked: bool = bool(
+            getattr(state, "session_revoked", False) if state else False
+        )
+        if not session_revoked and session_id:
+            try:
+                from api.identity_authority.authority import is_session_revoked
+                session_revoked = is_session_revoked(session_id)
+            except Exception:
+                pass
+
+        # -- device --
+        # Prefer a DeviceRecord already attached by upstream middleware.
+        device = getattr(state, "device_record", None) if state else None
 
         eval_ctx = SessionEvaluationContext(
             subject=actor.subject,
             tenant_id=actor.tenant_id or "",
             session_id=session_id,
             identity_state=lifecycle_state,
-            session_expires_at=now + _DEFAULT_SESSION_TTL,
-            session_revoked=False,
-            device=None,
+            session_expires_at=session_expires_at,
+            session_revoked=session_revoked,
+            device=device,
             mfa_verified=False,
             tenant_requires_mfa=_tenant_requires_mfa(actor),
             risk_score=risk_score,
