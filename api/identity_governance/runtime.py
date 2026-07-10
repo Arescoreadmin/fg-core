@@ -285,6 +285,7 @@ def _run_governance(
         if not session_revoked and session_id:
             try:
                 from api.identity_authority.authority import is_session_revoked
+
                 session_revoked = is_session_revoked(session_id)
             except Exception:
                 pass
