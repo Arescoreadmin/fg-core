@@ -73,6 +73,22 @@ from api.identity_governance.services import (
 )
 from api.identity_governance.session_evaluation import SessionEvaluator
 from api.identity_governance.timeline import IdentityTimeline
+from api.identity_governance.snapshots import (
+    DigitalTwinSnapshot as CanonicalDigitalTwinSnapshot,
+    GraphSnapshot,
+    IdentitySnapshot,
+    PolicySnapshot,
+    RiskSnapshot as CanonicalRiskSnapshot,
+    SnapshotMeta,
+    fingerprint_snapshot,
+    serialize_snapshot,
+    deserialize_snapshot,
+    compute_replay_version,
+    get_snapshot_registry,
+    SecretValidator,
+    SnapshotValidationError,
+    SnapshotComparisonEngine,
+)
 
 __all__ = [
     "ADMIN_LEVEL_ORDER",
@@ -120,4 +136,19 @@ __all__ = [
     "error_body",
     "get_services",
     "reset_services",
+    # Canonical snapshot contract (snapshots sub-package)
+    "CanonicalDigitalTwinSnapshot",
+    "CanonicalRiskSnapshot",
+    "GraphSnapshot",
+    "IdentitySnapshot",
+    "PolicySnapshot",
+    "SnapshotMeta",
+    "fingerprint_snapshot",
+    "serialize_snapshot",
+    "deserialize_snapshot",
+    "compute_replay_version",
+    "get_snapshot_registry",
+    "SecretValidator",
+    "SnapshotValidationError",
+    "SnapshotComparisonEngine",
 ]
