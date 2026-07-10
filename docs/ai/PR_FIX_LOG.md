@@ -6,6 +6,71 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-10 — feat/pr-01a1-identity-runtime-integration: wire FIAP + Identity Governance into live request path
+
+**Branch:** `feat/pr-01a1-identity-runtime-integration`
+**Date:** 2026-07-10
+
+**Triggering guards:** `pr-fix-log-guard` (api/ files changed)
+
+**Change:** PR-01a.1 wires the Identity Authority Platform (PR-01) and the Identity Governance foundation (PR-01a) into the live FastAPI request path — all behind feature flags that default to disabled. No production behavior changes until an operator explicitly turns a flag on.
+
+**Files added:**
+
+- `api/config/identity_runtime.py` — feature flag module (`IdentityRuntimeFlags`, `get_flags()`), truthy env parsing (`1|true|yes|on|y`, case-insensitive), all flags default False.
+- `api/identity_governance/error_codes.py` — `IdentityErrorCode` string enum with generic user-facing messages, `error_body()` helper.
+- `api/identity_governance/metrics.py` — Prometheus counters (`identity_authorization_decisions_total`, `identity_session_evaluations_total`, `identity_risk_band_total`, `identity_policy_decisions_total`, `identity_timeline_events_total`) — low-cardinality labels only.
+- `api/identity_governance/services.py` — `GovernanceServices` singleton container, `get_services()`, `reset_services()` (test-only).
+- `api/identity_governance/runtime.py` — `apply_governance_checks()` invoked from `get_actor_context()`; runs risk engine + SessionEvaluator behind flags, translates non-ALLOW decisions to machine-readable HTTPException, fail-closed on internal error.
+- `api/identity_governance/repositories/__init__.py` — repository package.
+- `api/identity_governance/repositories/base.py` — `LifecycleRepository`, `DeviceRepository`, `TimelineRepository`, `BreakGlassRepository` protocols.
+- `api/identity_governance/repositories/memory.py` — in-memory implementations (default backend).
+- `api/identity_governance/repositories/db.py` — SQLAlchemy implementations targeting 0148 tables, opt-in via `FG_IDENTITY_PERSISTENCE_ENABLED`.
+- `api/identity_authority/auth_context_adapter.py` — `authorization_context_to_actor_context()`; maps FIAP `AuthorizationContext` to `ActorContext` (subject/email/name/permissions/roles/tenant/membership/auth_source).
+
+**Files modified:**
+
+- `api/auth_dispatch.py` — `get_actor_context()` calls `_apply_governance_hooks()` at the tail; resolution logic unchanged; imports of governance code are lazy.
+- `api/identity_governance/__init__.py` — exports `GovernanceServices`, `get_services`, `reset_services`, `IdentityErrorCode`, `IDENTITY_ERROR_MESSAGES`, `error_body`.
+- `docs/identity/GOVERNANCE.md` — runtime integration section pointing at RUNTIME_ENFORCEMENT.md and AUTHORIZATION_MAPPING.md.
+- `docs/identity/ARCHITECTURE.md` — feature flags table extended with PR-01a.1 flags; runtime integration link.
+
+**Files added (docs):**
+
+- `docs/identity/RUNTIME_ENFORCEMENT.md` — request flow (ASCII), order of evaluation, failure modes, rollout plan, rollback plan, observability.
+- `docs/identity/AUTHORIZATION_MAPPING.md` — permission vs capability vs policy vs ownership; read/write inheritance; SoD invariants; step-up; device trust fallback; risk thresholds; break-glass constraints.
+
+**Files added (tests):**
+
+- `tests/identity_governance/test_runtime_flags.py` — defaults False, truthy/falsy env parsing, immutability.
+- `tests/identity_governance/test_error_codes.py` — unique codes, message safety, expected codes present.
+- `tests/identity_governance/test_repositories.py` — in-memory CRUD, cross-tenant isolation, DB round-trip via SQLite, fail-closed on session error.
+- `tests/identity_governance/test_auth_context_adapter.py` — subject/email/name/permissions/roles/tenant/membership/provider mapping.
+- `tests/identity_governance/test_session_evaluator_runtime.py` — deny for suspended/disabled/expired/revoked/device-revoked; step-up for compromised device / missing MFA; deny for critical risk; allow returns actor unchanged; flag-off is no-op; anonymous/dev-bypass skipped; internal error → 500 `GOVERNANCE_UNAVAILABLE`.
+- `tests/security/test_identity_runtime_isolation.py` — cross-tenant timeline/device/break-glass isolation; break-glass cannot resurrect DELETED identity; break-glass reason required.
+
+**Absolute rules honoured:**
+
+- `require_permission`, `require_scopes`, tenant checks unchanged.
+- No global admin bypass; no wildcards.
+- No test-only runtime behavior.
+- No `noqa`/`type: ignore` used to hide checks.
+- All flags default to False; production behavior unchanged until flag is set.
+- Timeline emission is best-effort; never blocks the request.
+- All new services tenant-scoped; cross-tenant reads/writes rejected by construction.
+- No PII, secrets, tokens, or tenant IDs in error responses or metrics labels.
+
+**Validation:**
+
+- Baseline regression tests still pass (5/5).
+- New tests: 93/93 pass; full `tests/identity_governance/` suite: 228/228 pass; `tests/security/test_identity_runtime_isolation.py`: 9/9 pass.
+- `mypy api/identity_authority api/identity_governance api/auth_dispatch.py` — clean.
+- `ruff check` and `ruff format --check` — clean.
+
+**Contract update:** none. No route changes, no permission/capability changes, no schema changes (0148 already provisioned in PR-01a).
+
+---
+
 ### 2026-07-09 — fix/pr-01a-permission-regressions: incorrect permission mappings from phase-5 capability enforcement
 
 **Branch:** `fix/pr-01a-permission-regressions`

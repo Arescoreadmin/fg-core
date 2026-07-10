@@ -235,6 +235,11 @@ def get_actor_context(
       2. Bearer JWT (Auth0 when FG_AUTH0_DOMAIN is set)
       3. API key context from request.state.auth
       4. Anonymous context with no permissions
+
+    After resolution, the identity governance runtime (session evaluator,
+    risk engine, timeline emission) runs behind feature flags — see
+    ``api/config/identity_runtime.py``. All flags default to disabled so
+    this is a no-op unless explicitly turned on.
     """
     if _auth_disabled(request):
         return ActorContext(
@@ -247,6 +252,8 @@ def get_actor_context(
             tenant_id=None,
         )
 
+    resolved: Optional[ActorContext] = None
+
     # JWT path takes priority when a Bearer token is present
     bearer = (request.headers.get("Authorization") or "").strip()
     if bearer.lower().startswith("bearer "):
@@ -255,23 +262,42 @@ def get_actor_context(
             # Bind membership_id and enforce deactivation for Auth0 JWT actors
             if actor.auth_source == "oidc_auth0":
                 actor = _bind_membership(actor, conn)
-            return actor
+            resolved = actor
         # _try_jwt_actor raises HTTPException on invalid token; if it returns
         # None the bearer was empty — fall through to API key auth
 
-    actor = _try_api_key_actor(request, conn)
-    if actor:
-        return actor
+    if resolved is None:
+        actor = _try_api_key_actor(request, conn)
+        if actor:
+            resolved = actor
 
-    return ActorContext(
-        subject="anonymous",
-        email="",
-        name="",
-        permissions=frozenset(),
-        roles=[],
-        auth_source="none",
-        tenant_id=None,
-    )
+    if resolved is None:
+        resolved = ActorContext(
+            subject="anonymous",
+            email="",
+            name="",
+            permissions=frozenset(),
+            roles=[],
+            auth_source="none",
+            tenant_id=None,
+        )
+
+    return _apply_governance_hooks(resolved, request)
+
+
+def _apply_governance_hooks(actor: ActorContext, request: Request) -> ActorContext:
+    """Delegate to the identity governance runtime.
+
+    Isolated in its own helper so unit tests can patch it and so the
+    request-resolution logic above stays legible. Governance code is
+    imported lazily to avoid pulling identity_governance into request
+    modules that never enable it.
+    """
+    try:
+        from api.identity_governance.runtime import apply_governance_checks
+    except ImportError:  # pragma: no cover — package is present in-tree
+        return actor
+    return apply_governance_checks(actor, request)
 
 
 def require_permission(*required_perms: str):
