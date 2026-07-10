@@ -458,14 +458,18 @@ def test_list_questionnaires_tenant_isolation(client: TestClient) -> None:
     assert resp.json() == []
 
 
-def test_list_questionnaires_requires_governance_read(build_app: object) -> None:
-    """Endpoint rejects callers without governance:read scope."""
+def test_list_questionnaires_requires_assessment_read(build_app: object) -> None:
+    """Endpoint rejects callers without assessment.read permission.
+
+    governance:write keys map to assessor+compliance_reviewer (both carry assessment.read)
+    so they are permitted. Only keys with no governance-mapped role get 403.
+    """
     from api.auth_scopes import mint_key
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
-    key_write_only = mint_key("governance:write", tenant_id=_TENANT_ID)
-    tc = TestClient(app, headers={"X-API-Key": key_write_only})
-    eng_resp = tc.post(
+    full_key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
+    full_tc = TestClient(app, headers={"X-API-Key": full_key})
+    eng_resp = full_tc.post(
         "/field-assessment/engagements",
         json={
             "client_name": "Scope Test",
@@ -474,7 +478,11 @@ def test_list_questionnaires_requires_governance_read(build_app: object) -> None
         },
     )
     assert eng_resp.status_code == 201
-    resp = tc.get(
+
+    # billing:read has no governance-scope mapping → empty permissions → no assessment.read
+    no_access_key = mint_key("billing:read", tenant_id=_TENANT_ID)
+    restricted_tc = TestClient(app, headers={"X-API-Key": no_access_key})
+    resp = restricted_tc.get(
         f"/field-assessment/engagements/{eng_resp.json()['id']}/questionnaires"
     )
     assert resp.status_code == 403

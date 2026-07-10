@@ -42,7 +42,7 @@ from pydantic import (
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import authz_scope, require_scopes
+from api.auth_scopes import authz_scope
 from api.auth_dispatch import require_permission
 from api.actor_context import ActorContext
 from api.deps import auth_ctx_db_session
@@ -9400,7 +9400,7 @@ def get_questionnaire_coverage(
 @router.get(
     "/engagements/{engagement_id}/questionnaires",
     response_model=list[QuestionnaireResponse],
-    dependencies=[Depends(require_scopes("governance:read"))],
+    dependencies=[Depends(authz_scope("governance:read"))],
 )
 def list_questionnaires_route(
     engagement_id: str,
