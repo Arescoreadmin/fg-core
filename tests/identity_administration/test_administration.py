@@ -220,3 +220,87 @@ class TestGetIdentity:
         records, total = admin_svc.list_identities(TENANT, limit=2, offset=0)
         assert len(records) == 2
         assert total == 3
+
+
+class TestCompleteInvitationAcceptance:
+    def test_transitions_identity_to_accepted(
+        self, admin_svc: IdentityAdministrationService
+    ) -> None:
+        identity, _, raw_token = admin_svc.invite_user(TENANT, EMAIL, ACTOR)
+        assert identity.lifecycle_state == IdentityLifecycleState.INVITED
+
+        admin_svc.complete_invitation_acceptance(
+            tenant_id=TENANT,
+            email=EMAIL,
+            accepted_by=identity.subject,
+        )
+        record = admin_svc.get_identity(TENANT, identity.subject)
+        assert record is not None
+        assert record.lifecycle_state == IdentityLifecycleState.ACCEPTED
+
+    def test_noop_when_identity_already_accepted(
+        self, admin_svc: IdentityAdministrationService
+    ) -> None:
+        identity, _, _ = admin_svc.invite_user(TENANT, EMAIL, ACTOR)
+        admin_svc.complete_invitation_acceptance(TENANT, EMAIL, identity.subject)
+        # Second call must not raise
+        admin_svc.complete_invitation_acceptance(TENANT, EMAIL, identity.subject)
+        record = admin_svc.get_identity(TENANT, identity.subject)
+        assert record is not None
+        assert record.lifecycle_state == IdentityLifecycleState.ACCEPTED
+
+    def test_noop_when_email_has_no_identity(
+        self, admin_svc: IdentityAdministrationService
+    ) -> None:
+        # Must not raise even if there's no matching identity record.
+        admin_svc.complete_invitation_acceptance(
+            TENANT, "ghost@example.com", "some-subject"
+        )
+
+
+class TestDeleteIdentity:
+    def test_delete_invited_user_reaches_deleted_state(
+        self, admin_svc: IdentityAdministrationService
+    ) -> None:
+        identity, _, _ = admin_svc.invite_user(TENANT, EMAIL, ACTOR)
+        assert identity.lifecycle_state == IdentityLifecycleState.INVITED
+
+        admin_svc.delete_identity(TENANT, identity.subject, ACTOR)
+
+        record = admin_svc.get_identity(TENANT, identity.subject)
+        assert record is not None
+        assert record.lifecycle_state == IdentityLifecycleState.DELETED
+
+    def test_delete_active_user_reaches_deleted_state(
+        self, admin_svc: IdentityAdministrationService
+    ) -> None:
+        from dataclasses import replace
+        from datetime import datetime, timezone
+
+        identity, _, _ = admin_svc.invite_user(TENANT, EMAIL, ACTOR)
+        active = replace(
+            identity,
+            lifecycle_state=IdentityLifecycleState.ACTIVE,
+            updated_at=datetime.now(tz=timezone.utc),
+        )
+        admin_svc._repo.update(active)
+
+        admin_svc.delete_identity(TENANT, identity.subject, ACTOR)
+
+        record = admin_svc.get_identity(TENANT, identity.subject)
+        assert record is not None
+        assert record.lifecycle_state == IdentityLifecycleState.DELETED
+
+    def test_delete_idempotent_when_already_deleted(
+        self, admin_svc: IdentityAdministrationService
+    ) -> None:
+        identity, _, _ = admin_svc.invite_user(TENANT, EMAIL, ACTOR)
+        admin_svc.delete_identity(TENANT, identity.subject, ACTOR)
+        # Second call must not raise
+        admin_svc.delete_identity(TENANT, identity.subject, ACTOR)
+
+    def test_delete_missing_subject_raises_value_error(
+        self, admin_svc: IdentityAdministrationService
+    ) -> None:
+        with pytest.raises(ValueError, match="not found"):
+            admin_svc.delete_identity(TENANT, "no-such-subject", ACTOR)

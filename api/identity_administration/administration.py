@@ -41,6 +41,24 @@ from api.identity_governance.snapshots import (
 
 log = logging.getLogger("frostgate.identity_administration")
 
+# States that have a valid direct edge to DISABLED in VALID_TRANSITIONS.
+# INVITATION_OPENED and PROVISIONED are the two exceptions; delete_identity
+# routes through an intermediate state for those.
+_STATES_DIRECT_TO_DISABLED: frozenset[IdentityLifecycleState] = frozenset(
+    {
+        IdentityLifecycleState.CREATED,
+        IdentityLifecycleState.INVITED,
+        IdentityLifecycleState.INVITATION_SENT,
+        IdentityLifecycleState.ACCEPTED,
+        IdentityLifecycleState.ACTIVE,
+        IdentityLifecycleState.PASSWORD_RESET_PENDING,
+        IdentityLifecycleState.MFA_ENROLLMENT_REQUIRED,
+        IdentityLifecycleState.VERIFIED,
+        IdentityLifecycleState.SUSPENDED,
+        IdentityLifecycleState.LOCKED,
+    }
+)
+
 
 def _build_identity_snapshot(
     record: IdentityRecord,
@@ -478,6 +496,87 @@ class IdentityAdministrationService:
         records = self._repo.list_for_tenant(tenant_id, limit=limit, offset=offset)
         total = self._repo.count_for_tenant(tenant_id)
         return records, total
+
+    def complete_invitation_acceptance(
+        self,
+        tenant_id: str,
+        email: str,
+        accepted_by: str,
+        *,
+        correlation_id: Optional[str] = None,
+    ) -> None:
+        """Transition the identity tied to an accepted invitation to ACCEPTED.
+
+        Called after InvitationService.accept_invitation() succeeds. Best-effort:
+        never raises, so a state-machine edge case cannot roll back the accepted token.
+        """
+        record = self._repo.get_by_email(tenant_id, email)
+        if record is None or record.lifecycle_state == IdentityLifecycleState.ACCEPTED:
+            return
+        try:
+            self.transition_lifecycle(
+                tenant_id=tenant_id,
+                subject=record.subject,
+                target_state=IdentityLifecycleState.ACCEPTED,
+                actor=accepted_by,
+                reason="invitation accepted",
+                correlation_id=correlation_id,
+            )
+        except ValueError:
+            # State machine blocked (e.g. identity was manually moved to
+            # INVITATION_SENT after invite). The token is already persisted as
+            # ACCEPTED; don't block the HTTP response.
+            log.warning(
+                "identity_administration.invitation_lifecycle_transition_failed",
+                extra={"tenant_id": tenant_id, "email": email},
+            )
+
+    def delete_identity(
+        self,
+        tenant_id: str,
+        subject: str,
+        actor: str,
+        reason: str = "admin soft-delete",
+    ) -> None:
+        """Soft-delete an identity, walking through required intermediate states.
+
+        DELETED is only reachable from DISABLED or ARCHIVED. This method
+        transitions through DISABLED first when needed, handling the two states
+        (INVITATION_OPENED, PROVISIONED) that have no direct edge to DISABLED.
+        """
+        record = self.get_identity(tenant_id, subject)
+        if record is None:
+            raise ValueError(f"Identity not found: {subject!r}")
+
+        state = record.lifecycle_state
+        if state == IdentityLifecycleState.DELETED:
+            return
+
+        if state == IdentityLifecycleState.ARCHIVED:
+            self.transition_lifecycle(
+                tenant_id, subject, IdentityLifecycleState.DELETED, actor, reason
+            )
+            return
+
+        if state != IdentityLifecycleState.DISABLED:
+            if state not in _STATES_DIRECT_TO_DISABLED:
+                # INVITATION_OPENED → INVITATION_SENT → DISABLED
+                # PROVISIONED       → ACTIVE          → DISABLED
+                intermediate = (
+                    IdentityLifecycleState.INVITATION_SENT
+                    if state == IdentityLifecycleState.INVITATION_OPENED
+                    else IdentityLifecycleState.ACTIVE
+                )
+                self.transition_lifecycle(
+                    tenant_id, subject, intermediate, actor, reason
+                )
+            self.transition_lifecycle(
+                tenant_id, subject, IdentityLifecycleState.DISABLED, actor, reason
+            )
+
+        self.transition_lifecycle(
+            tenant_id, subject, IdentityLifecycleState.DELETED, actor, reason
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers

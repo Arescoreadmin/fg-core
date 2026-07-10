@@ -328,19 +328,16 @@ def delete_user(
 ) -> None:
     tenant_id = _require_tenant(actor)
     svc = get_admin_services()
-    record = svc.administration_service.get_identity(tenant_id, subject)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Identity not found")
     try:
-        svc.administration_service.transition_lifecycle(
+        svc.administration_service.delete_identity(
             tenant_id=tenant_id,
             subject=subject,
-            target_state=LifecycleState.DELETED,
             actor=actor.subject,
             reason="admin soft-delete",
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        status = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc))
 
 
 @router.get("/users/{subject}/timeline")
@@ -398,6 +395,17 @@ def update_device_trust(
 ) -> DeviceResponse:
     tenant_id = _require_tenant(actor)
     svc = get_admin_services()
+    gov = svc.administration_service._gov()
+
+    # Verify device exists and belongs to subject before mutating.
+    pre_device = gov.device_registry.get_device(device_id, tenant_id)
+    if pre_device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if pre_device.subject != subject:
+        raise HTTPException(
+            status_code=403, detail="Device does not belong to this user"
+        )
+
     if body.action == "revoke":
         svc.administration_service.revoke_device(
             tenant_id=tenant_id,
@@ -417,7 +425,6 @@ def update_device_trust(
         raise HTTPException(
             status_code=422, detail=f"Unknown device action: {body.action!r}"
         )
-    gov = svc.administration_service._gov()
     device = gov.device_registry.get_device(device_id, tenant_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")

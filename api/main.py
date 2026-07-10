@@ -1278,7 +1278,9 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(billing_v2_router)
 
     # PR-02: Customer Identity Lifecycle & Administration — deliberate API surface addition
-    from api.identity_administration.routes import router as identity_admin_router_contract
+    from api.identity_administration.routes import (
+        router as identity_admin_router_contract,
+    )
 
     app.include_router(identity_admin_router_contract)
 

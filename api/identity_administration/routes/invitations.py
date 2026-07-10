@@ -62,6 +62,14 @@ def accept_invitation(body: AcceptInvitationRequest) -> AcceptInvitationResponse
     except InvitationError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
+    # Transition the linked IdentityRecord to ACCEPTED (best-effort — the
+    # invitation token is already persisted as accepted regardless).
+    svc.administration_service.complete_invitation_acceptance(
+        tenant_id=invitation.tenant_id,
+        email=invitation.email,
+        accepted_by=body.accepted_by,
+    )
+
     return AcceptInvitationResponse(
         invitation_id=invitation.invitation_id,
         tenant_id=invitation.tenant_id,
