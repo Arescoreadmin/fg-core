@@ -7,6 +7,7 @@ or elevate deleted identities.
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import datetime, timezone
 
 import pytest
@@ -27,7 +28,7 @@ NOW = datetime(2026, 7, 9, 12, 0, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
-def _reset() -> None:
+def _reset() -> Generator[None, None, None]:
     reset_services()
     yield
     reset_services()
