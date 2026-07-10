@@ -6,6 +6,45 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-10 — feat/pr-01b-governance-snapshot-contract: implement canonical snapshot contract
+
+**Branch:** `feat/pr-01b-governance-snapshot-contract`
+**Date:** 2026-07-10
+
+**What shipped:**
+
+Created `api/identity_governance/snapshots/` as the canonical governance snapshot contract package for FrostGate. Every future subsystem snapshot must use this contract.
+
+**Files created:**
+- `api/identity_governance/snapshots/__init__.py` — package exports
+- `api/identity_governance/snapshots/meta.py` — `SnapshotMeta` frozen dataclass (12-field envelope)
+- `api/identity_governance/snapshots/types.py` — 5 canonical snapshot types (`IdentitySnapshot`, `RiskSnapshot`, `GraphSnapshot`, `PolicySnapshot`, `DigitalTwinSnapshot`) each with `meta: SnapshotMeta` first field
+- `api/identity_governance/snapshots/serializer.py` — `serialize_snapshot` (canonical JSON, sorted keys), `deserialize_snapshot` (type-hint-driven reconstruction), `fingerprint_snapshot` (SHA-256 of data fields, meta excluded), `compute_replay_version` (16-char hex of inputs)
+- `api/identity_governance/snapshots/registry.py` — `SnapshotRegistry` + `get_snapshot_registry()` singleton pre-populated with all 5 types
+- `api/identity_governance/snapshots/comparison.py` — `SnapshotComparisonEngine` producing sorted `SnapshotDiff`, raises `SnapshotVersionError` on schema mismatch, emits `SnapshotSourceVersionWarning` on source mismatch
+- `api/identity_governance/snapshots/validator.py` — `SecretValidator` + `SnapshotValidationError`; walks serialized snapshot detecting secret key names and secret-shaped values (JWT, Bearer, sk-, Basic)
+- `docs/governance/SNAPSHOT_CONTRACT.md` — contract reference documentation
+
+**Tests created (38 tests):**
+- `tests/identity_governance/snapshots/test_meta.py`
+- `tests/identity_governance/snapshots/test_types.py`
+- `tests/identity_governance/snapshots/test_serializer.py`
+- `tests/identity_governance/snapshots/test_registry.py`
+- `tests/identity_governance/snapshots/test_comparison.py`
+- `tests/identity_governance/snapshots/test_validator.py`
+
+**Modified:**
+- `api/identity_governance/__init__.py` — added snapshot sub-package exports (canonical types as `CanonicalDigitalTwinSnapshot`/`CanonicalRiskSnapshot` to avoid shadowing legacy models)
+
+**Contract guarantees:**
+- Deterministic serialization: identical inputs → byte-for-byte identical JSON
+- Fingerprint excludes `meta.generated_at` so re-generated snapshots of same data match
+- Secret detection catches JWT tokens, API keys, Bearer/Basic auth headers, and common secret field names
+- `fingerprint` / `event_hash` / `previous_hash` keys exempted from secret detection (they are hashes)
+- Round-trip: `deserialize_snapshot(serialize_snapshot(snap), cls) == snap` for all types
+
+---
+
 ### 2026-07-10 — feat/pr-01a1-identity-runtime-integration: fix real session state and persistence flag (bot P1/P2)
 
 **Branch:** `feat/pr-01a1-identity-runtime-integration`
