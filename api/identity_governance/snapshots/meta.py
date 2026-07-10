@@ -1,4 +1,5 @@
 """api/identity_governance/snapshots/meta.py — Canonical SnapshotMeta envelope."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

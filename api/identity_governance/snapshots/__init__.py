@@ -2,6 +2,7 @@
 
 Every future FrostGate subsystem snapshot must use this contract.
 """
+
 from api.identity_governance.snapshots.meta import SnapshotMeta
 from api.identity_governance.snapshots.types import (
     DigitalTwinSnapshot,

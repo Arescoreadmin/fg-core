@@ -1,4 +1,5 @@
 """api/identity_governance/snapshots/comparison.py — Deterministic snapshot comparison."""
+
 from __future__ import annotations
 
 import dataclasses

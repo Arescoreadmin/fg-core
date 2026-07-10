@@ -1,4 +1,5 @@
 """tests/identity_governance/snapshots/test_meta.py — SnapshotMeta tests."""
+
 from __future__ import annotations
 
 import dataclasses

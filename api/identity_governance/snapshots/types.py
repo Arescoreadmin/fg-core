@@ -1,4 +1,5 @@
 """api/identity_governance/snapshots/types.py — Canonical governance snapshot types."""
+
 from __future__ import annotations
 
 import hashlib

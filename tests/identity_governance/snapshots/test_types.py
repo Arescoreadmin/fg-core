@@ -1,4 +1,5 @@
 """tests/identity_governance/snapshots/test_types.py — Canonical snapshot type tests."""
+
 from __future__ import annotations
 
 import dataclasses

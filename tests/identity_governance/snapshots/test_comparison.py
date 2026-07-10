@@ -1,4 +1,5 @@
 """tests/identity_governance/snapshots/test_comparison.py — Comparison engine tests."""
+
 from __future__ import annotations
 
 import warnings

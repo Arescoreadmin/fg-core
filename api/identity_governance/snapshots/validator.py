@@ -1,4 +1,5 @@
 """api/identity_governance/snapshots/validator.py — Secret detection validator."""
+
 from __future__ import annotations
 
 import re
@@ -11,53 +12,57 @@ from api.identity_governance.snapshots.serializer import _to_serializable
 # Patterns
 # ---------------------------------------------------------------------------
 
-_SECRET_KEY_PATTERNS: frozenset[str] = frozenset({
-    "password",
-    "passwd",
-    "token",
-    "secret",
-    "api_key",
-    "apikey",
-    "private_key",
-    "privatekey",
-    "refresh_token",
-    "refreshtoken",
-    "session_cookie",
-    "sessioncookie",
-    "device_fingerprint",
-    "devicefingerprint",
-    "raw_jwt",
-    "rawjwt",
-    "authorization",
-    "cookie",
-    "credential",
-    "credentials",
-    "access_token",
-    "accesstoken",
-    "client_secret",
-    "clientsecret",
-})
+_SECRET_KEY_PATTERNS: frozenset[str] = frozenset(
+    {
+        "password",
+        "passwd",
+        "token",
+        "secret",
+        "api_key",
+        "apikey",
+        "private_key",
+        "privatekey",
+        "refresh_token",
+        "refreshtoken",
+        "session_cookie",
+        "sessioncookie",
+        "device_fingerprint",
+        "devicefingerprint",
+        "raw_jwt",
+        "rawjwt",
+        "authorization",
+        "cookie",
+        "credential",
+        "credentials",
+        "access_token",
+        "accesstoken",
+        "client_secret",
+        "clientsecret",
+    }
+)
 
-_SECRET_VALUE_PATTERNS: frozenset[str] = frozenset({
-    "eyj",          # JWT prefix (base64 "ey...")
-    "sk-",          # API key prefix
-    "bearer ",      # Bearer token
-    "basic ",       # Basic auth
-})
+_SECRET_VALUE_PATTERNS: frozenset[str] = frozenset(
+    {
+        "eyj",  # JWT prefix (base64 "ey...")
+        "sk-",  # API key prefix
+        "bearer ",  # Bearer token
+        "basic ",  # Basic auth
+    }
+)
 
 # Known-safe keys that hold hashes, not secrets
-_SAFE_KEYS: frozenset[str] = frozenset({
-    "fingerprint",
-    "event_hash",
-    "previous_hash",
-    "fingerprint_hash",
-    "user_agent_hash",
-})
+_SAFE_KEYS: frozenset[str] = frozenset(
+    {
+        "fingerprint",
+        "event_hash",
+        "previous_hash",
+        "fingerprint_hash",
+        "user_agent_hash",
+    }
+)
 
 # JWT pattern: 3 base64url segments separated by dots, minimum 50 chars total
-_JWT_RE = re.compile(
-    r"^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$"
-)
+_JWT_RE = re.compile(r"^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$")
 
 
 def _normalize_key(key: str) -> str:

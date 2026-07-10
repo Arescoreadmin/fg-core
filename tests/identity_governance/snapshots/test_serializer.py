@@ -1,4 +1,5 @@
 """tests/identity_governance/snapshots/test_serializer.py — Serializer tests."""
+
 from __future__ import annotations
 
 import json
@@ -45,13 +46,17 @@ def _identity_snap(
     roles: tuple[str, ...] = ("admin",),
     ts: datetime | None = None,
 ) -> IdentitySnapshot:
-    meta = _meta() if ts is None else SnapshotMeta(
-        tenant_id="tenant-a",
-        generated_at=ts,
-        fingerprint=_FP,
-        schema_version="identity/1.0",
-        replay_version="deadbeef12345678",
-        source_version="identity/1.0.0",
+    meta = (
+        _meta()
+        if ts is None
+        else SnapshotMeta(
+            tenant_id="tenant-a",
+            generated_at=ts,
+            fingerprint=_FP,
+            schema_version="identity/1.0",
+            replay_version="deadbeef12345678",
+            source_version="identity/1.0.0",
+        )
     )
     return IdentitySnapshot(
         meta=meta,
@@ -95,7 +100,9 @@ class TestSerializeSnapshot:
         snap = _identity_snap()
         raw = serialize_snapshot(snap)
         parsed = json.loads(raw)
-        assert parsed["lifecycle_state"] == "ACTIVE"  # not "IdentityLifecycleState.ACTIVE"
+        assert (
+            parsed["lifecycle_state"] == "ACTIVE"
+        )  # not "IdentityLifecycleState.ACTIVE"
 
     def test_no_extra_whitespace(self) -> None:
         snap = _identity_snap()

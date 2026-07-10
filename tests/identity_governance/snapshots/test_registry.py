@@ -1,4 +1,5 @@
 """tests/identity_governance/snapshots/test_registry.py — SnapshotRegistry tests."""
+
 from __future__ import annotations
 
 import pytest
@@ -136,5 +137,11 @@ class TestRegisteredTypes:
     def test_returns_all_types(self) -> None:
         reg = get_snapshot_registry()
         types = reg.registered_types()
-        for cls in [IdentitySnapshot, RiskSnapshot, GraphSnapshot, PolicySnapshot, DigitalTwinSnapshot]:
+        for cls in [
+            IdentitySnapshot,
+            RiskSnapshot,
+            GraphSnapshot,
+            PolicySnapshot,
+            DigitalTwinSnapshot,
+        ]:
             assert cls in types

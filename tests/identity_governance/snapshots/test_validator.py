@@ -1,4 +1,5 @@
 """tests/identity_governance/snapshots/test_validator.py — SecretValidator tests."""
+
 from __future__ import annotations
 
 import dataclasses

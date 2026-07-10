@@ -1,4 +1,5 @@
 """api/identity_governance/snapshots/serializer.py — Canonical snapshot serialization."""
+
 from __future__ import annotations
 
 import dataclasses
