@@ -6,6 +6,32 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-10 — fix/pr-01b1-identity-governance-typing: strict mypy repair for identity governance tests
+
+**Branch:** `fix/pr-01b1-identity-governance-typing`
+**Date:** 2026-07-10
+
+**Triggering guards:** `codex_gates.sh` mypy step (18 errors in 3 files)
+
+**Root cause:** Tests were runtime-correct but statically imprecise. Three independent issues:
+
+1. **Generator fixture annotated as `-> None`** (`tests/security/test_identity_runtime_isolation.py:30`): The `_reset` fixture yields (teardown), so its return type is `Generator[None, None, None]`, not `None`. Added `from collections.abc import Generator` and corrected the annotation. No behavior change.
+
+2. **Optional return values accessed without narrowing** (`tests/identity_governance/test_repositories.py:179, 247`): `repo.get()` returns `DeviceRecord | None` and `BreakGlassRequest | None`. Tests accessed `.trust_state` and `.status` directly without checking for `None`, which mypy correctly flagged. Added explicit `assert fetched is not None` before each attribute access. No behavior change; the assertions would have raised `AttributeError` at runtime anyway.
+
+3. **Untyped dict spread into frozen dataclass constructor + `str` indexing on `detail`** (`tests/identity_governance/test_session_evaluator_runtime.py`):
+   - `_base_context(**overrides)` built a `dict[str, object]` and spread it into `SessionEvaluationContext(**data)`, which mypy cannot verify. Replaced with direct constructor in `_base_context()` and `dataclasses.replace()` at each call site that needed field overrides. No behavior change; the existing runtime behavior was already correct.
+   - `excinfo.value.detail["code"]` — FastAPI's `HTTPException.detail` is typed as `str` in the installed stubs, so string-indexing it with `["code"]` is a mypy error. Added a private `_error_code()` helper that narrows `detail` to `dict` via `assert isinstance(detail, dict)` before indexing. This actually strengthens the assertions (the runtime now also verifies `detail` is a dict, not just a str). Applied across all 9 occurrences.
+
+**Files changed:** 3 test files only. No production code modified.
+
+**mypy before:** 18 errors in 3 files  
+**mypy after:** 0 errors
+
+**No runtime behavior changes. No assertions weakened. No `type: ignore` or broad `Any` added.**
+
+---
+
 ### 2026-07-10 — feat/pr-01b-governance-snapshot-contract: implement canonical snapshot contract
 
 **Branch:** `feat/pr-01b-governance-snapshot-contract`

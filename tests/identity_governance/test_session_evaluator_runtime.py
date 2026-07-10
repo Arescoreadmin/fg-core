@@ -10,6 +10,7 @@ explicitly checks flag-off behavior.
 
 from __future__ import annotations
 
+from dataclasses import replace as dc_replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -93,6 +94,15 @@ def _stub_session_result(
     )
 
 
+def _error_code(excinfo: pytest.ExceptionInfo[HTTPException]) -> str:
+    """Extract the machine-readable error code from an HTTPException detail dict."""
+    detail = excinfo.value.detail
+    assert isinstance(detail, dict)
+    code = detail.get("code")
+    assert isinstance(code, str)
+    return code
+
+
 # ---------------------------------------------------------------------------
 # Flag gating
 # ---------------------------------------------------------------------------
@@ -156,7 +166,7 @@ def test_deny_identity_suspended(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(HTTPException) as excinfo:
         apply_governance_checks(_actor(), _request())
     assert excinfo.value.status_code == 403
-    assert excinfo.value.detail["code"] == IdentityErrorCode.IDENTITY_SUSPENDED.value
+    assert _error_code(excinfo) == IdentityErrorCode.IDENTITY_SUSPENDED.value
 
 
 def test_deny_identity_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -172,7 +182,7 @@ def test_deny_identity_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(HTTPException) as excinfo:
         apply_governance_checks(_actor(), _request())
     assert excinfo.value.status_code == 403
-    assert excinfo.value.detail["code"] == IdentityErrorCode.IDENTITY_DISABLED.value
+    assert _error_code(excinfo) == IdentityErrorCode.IDENTITY_DISABLED.value
 
 
 def test_deny_session_expired(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -183,7 +193,7 @@ def test_deny_session_expired(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(HTTPException) as excinfo:
         apply_governance_checks(_actor(), _request())
     assert excinfo.value.status_code == 403
-    assert excinfo.value.detail["code"] == IdentityErrorCode.SESSION_EXPIRED.value
+    assert _error_code(excinfo) == IdentityErrorCode.SESSION_EXPIRED.value
 
 
 def test_revoke_session_returns_401_and_revoked_code(
@@ -198,7 +208,7 @@ def test_revoke_session_returns_401_and_revoked_code(
     with pytest.raises(HTTPException) as excinfo:
         apply_governance_checks(_actor(), _request())
     assert excinfo.value.status_code == 401
-    assert excinfo.value.detail["code"] == IdentityErrorCode.SESSION_REVOKED.value
+    assert _error_code(excinfo) == IdentityErrorCode.SESSION_REVOKED.value
 
 
 def test_deny_device_revoked_state(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -209,7 +219,7 @@ def test_deny_device_revoked_state(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(HTTPException) as excinfo:
         apply_governance_checks(_actor(), _request())
     assert excinfo.value.status_code == 403
-    assert excinfo.value.detail["code"] == IdentityErrorCode.DEVICE_REVOKED.value
+    assert _error_code(excinfo) == IdentityErrorCode.DEVICE_REVOKED.value
 
 
 def test_step_up_from_device_maps_to_device_compromised(
@@ -224,7 +234,7 @@ def test_step_up_from_device_maps_to_device_compromised(
     with pytest.raises(HTTPException) as excinfo:
         apply_governance_checks(_actor(), _request())
     assert excinfo.value.status_code == 403
-    assert excinfo.value.detail["code"] == IdentityErrorCode.DEVICE_COMPROMISED.value
+    assert _error_code(excinfo) == IdentityErrorCode.DEVICE_COMPROMISED.value
 
 
 def test_step_up_from_mfa_maps_to_mfa_required(
@@ -237,7 +247,7 @@ def test_step_up_from_mfa_maps_to_mfa_required(
     with pytest.raises(HTTPException) as excinfo:
         apply_governance_checks(_actor(), _request())
     assert excinfo.value.status_code == 403
-    assert excinfo.value.detail["code"] == IdentityErrorCode.MFA_STEP_UP_REQUIRED.value
+    assert _error_code(excinfo) == IdentityErrorCode.MFA_STEP_UP_REQUIRED.value
 
 
 def test_critical_risk_deny_maps_to_policy_denied(
@@ -250,7 +260,7 @@ def test_critical_risk_deny_maps_to_policy_denied(
     with pytest.raises(HTTPException) as excinfo:
         apply_governance_checks(_actor(), _request())
     assert excinfo.value.status_code == 403
-    assert excinfo.value.detail["code"] == IdentityErrorCode.POLICY_DENIED.value
+    assert _error_code(excinfo) == IdentityErrorCode.POLICY_DENIED.value
 
 
 # ---------------------------------------------------------------------------
@@ -285,9 +295,7 @@ def test_internal_error_fails_closed_500(monkeypatch: pytest.MonkeyPatch) -> Non
     with pytest.raises(HTTPException) as excinfo:
         apply_governance_checks(_actor(), _request())
     assert excinfo.value.status_code == 500
-    assert (
-        excinfo.value.detail["code"] == IdentityErrorCode.GOVERNANCE_UNAVAILABLE.value
-    )
+    assert _error_code(excinfo) == IdentityErrorCode.GOVERNANCE_UNAVAILABLE.value
 
 
 # ---------------------------------------------------------------------------
@@ -319,8 +327,8 @@ def _critical_risk() -> RiskScore:
     )
 
 
-def _base_context(**overrides) -> SessionEvaluationContext:
-    data = dict(
+def _base_context() -> SessionEvaluationContext:
+    return SessionEvaluationContext(
         subject="user:1",
         tenant_id="tenant-a",
         session_id="sess",
@@ -333,8 +341,6 @@ def _base_context(**overrides) -> SessionEvaluationContext:
         risk_score=_low_risk(),
         evaluated_at=NOW,
     )
-    data.update(overrides)
-    return SessionEvaluationContext(**data)
 
 
 def test_evaluator_low_risk_active_allows() -> None:
@@ -347,7 +353,9 @@ def test_evaluator_low_risk_active_allows() -> None:
 def test_evaluator_critical_risk_denies() -> None:
     from api.identity_governance.session_evaluation import SessionEvaluator
 
-    result = SessionEvaluator().evaluate(_base_context(risk_score=_critical_risk()))
+    result = SessionEvaluator().evaluate(
+        dc_replace(_base_context(), risk_score=_critical_risk())
+    )
     assert result.decision == SessionEvaluationDecision.DENY
 
 
@@ -355,7 +363,7 @@ def test_evaluator_missing_mfa_when_required_stepup() -> None:
     from api.identity_governance.session_evaluation import SessionEvaluator
 
     result = SessionEvaluator().evaluate(
-        _base_context(mfa_verified=False, tenant_requires_mfa=True)
+        dc_replace(_base_context(), mfa_verified=False, tenant_requires_mfa=True)
     )
     assert result.decision == SessionEvaluationDecision.STEP_UP_REQUIRED
 
@@ -376,7 +384,7 @@ def test_evaluator_compromised_device_stepup() -> None:
         updated_at=NOW,
         last_reason="compromise_detected",
     )
-    result = SessionEvaluator().evaluate(_base_context(device=device))
+    result = SessionEvaluator().evaluate(dc_replace(_base_context(), device=device))
     assert result.decision == SessionEvaluationDecision.STEP_UP_REQUIRED
 
 
@@ -396,5 +404,5 @@ def test_evaluator_revoked_device_denies() -> None:
         updated_at=NOW,
         last_reason="admin_revoked",
     )
-    result = SessionEvaluator().evaluate(_base_context(device=device))
+    result = SessionEvaluator().evaluate(dc_replace(_base_context(), device=device))
     assert result.decision == SessionEvaluationDecision.DENY

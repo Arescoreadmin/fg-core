@@ -176,7 +176,9 @@ def test_memory_device_upsert_and_get() -> None:
         last_reason="revoked",
     )
     repo.upsert(updated)
-    assert repo.get("tenant-a", "d1").trust_state == DeviceTrustState.REVOKED
+    fetched_device = repo.get("tenant-a", "d1")
+    assert fetched_device is not None
+    assert fetched_device.trust_state == DeviceTrustState.REVOKED
 
 
 def test_memory_device_cross_tenant_isolation() -> None:
@@ -244,7 +246,9 @@ def test_memory_break_glass_create_and_update() -> None:
         expires_at=NOW + timedelta(minutes=30),
     )
     repo.update(active)
-    assert repo.get("tenant-a", req.request_id).status == BreakGlassStatus.ACTIVE
+    fetched_request = repo.get("tenant-a", req.request_id)
+    assert fetched_request is not None
+    assert fetched_request.status == BreakGlassStatus.ACTIVE
 
 
 def test_memory_break_glass_cross_tenant_isolation() -> None:
