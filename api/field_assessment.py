@@ -2399,7 +2399,7 @@ def patch_finding_remediation_route(
     finding_id: str,
     request: Request,
     body: FindingRemediationPatchRequest,
-    actor_ctx: ActorContext = Depends(require_permission("finding.create")),
+    actor_ctx: ActorContext = Depends(require_permission("governance.decision")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Set remediation_hint on a finding to satisfy the readiness gate."""
