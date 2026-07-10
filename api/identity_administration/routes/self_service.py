@@ -12,10 +12,14 @@ from pydantic import BaseModel, ConfigDict
 
 from api.actor_context import ActorContext
 from api.auth_dispatch import require_permission
+from api.auth_scopes import authz_scope
 from api.identity_administration.self_service import SelfServiceError
 from api.identity_administration.services import get_admin_services
 
-router = APIRouter(prefix="/identity/me")
+router = APIRouter(
+    prefix="/identity/me",
+    dependencies=[Depends(authz_scope("identity:read"))],
+)
 
 
 class ProfileResponse(BaseModel):

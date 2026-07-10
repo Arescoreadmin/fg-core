@@ -813,6 +813,29 @@ PLANE_REGISTRY: list[PlaneDef] = [
     ),
     # P0-11 CGCT routes live under /control-tower, already owned by the
     # control plane above. No separate PlaneDef required.
+    PlaneDef(
+        plane_id="identity",
+        route_prefixes=("/identity",),
+        allowed_dependency_categories=("auth", "tenant"),
+        required_ci_gates=COMMON_GATES,
+        maturity_tag="tester-ready",
+        auth_class=AuthClass(
+            required_scope_prefixes=("identity:",),
+            require_any_scope=True,
+            tenant_binding_required=False,
+        ),
+        auth_exempt_routes=(
+            ex(
+                "POST",
+                "/identity/invitations/accept",
+                "auth_exempt",
+                "Invite-token exchange: the invite token IS the credential. "
+                "SHA-256 hash comparison enforced; single-use replay protection. "
+                "No prior auth credential exists for a new invitee.",
+                permanent=True,
+            ),
+        ),
+    ),
 ]
 
 

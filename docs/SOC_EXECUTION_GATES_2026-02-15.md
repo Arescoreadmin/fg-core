@@ -1,3 +1,17 @@
+## 2026-07-10 — PR #527: PR-02 Customer Identity Lifecycle — Scope Lint + Plane Registry Fixes
+
+**Classification:** CI gate compliance. No runtime behavior change. No auth logic change. No new routes. No DB schema changes. No secrets.
+
+**Critical-path files changed:**
+- `api/security/public_paths.py` — added `/identity/invitations/accept` to `PUBLIC_PATHS_EXACT`. This endpoint was already public (no `require_permission`) and its token-based auth is enforced inside the handler via SHA-256 hash comparison and single-use replay protection. Entry is needed so the route scope linter (`check_route_scopes.py`) classifies it as public rather than flagging it as missing scope.
+- `tools/ci/route_inventory.json` — regenerated after adding `authz_scope` declarations to identity sub-routers and registering the new `identity` plane in `services/plane_registry/registry.py`.
+
+**Non-critical-path changes:**
+- `services/plane_registry/registry.py` — added `identity` plane with `route_prefixes=("/identity",)`. Registers all 27 identity routes added in PR-02 so `check_plane_registry.py` does not report unexpected-route gaps. `auth_exempt_routes` entry for `POST /identity/invitations/accept` reflects its existing public status.
+- `api/identity_administration/routes/{admin,groups,self_service}.py` — added `authz_scope("identity:write"/"identity:read")` as router-level dependency. `authz_scope` is a no-op at runtime (it only emits metadata consumed by the AST route scanner). Required so `check_route_scopes.py` accepts these routes.
+
+**SOC review outcome:** approved. The `public_paths.py` change documents an already-public endpoint — it does not make any previously-authenticated endpoint public. The scope declarations are purely governance metadata with zero runtime enforcement effect. No middleware, OPA, session, auth middleware, or CI workflow files modified. No secrets stored or accessed. No new external dependencies.
+
 ## 2026-07-06 — PR 18.8.1: Governance Digital Twin Foundation
 
 **Classification:** Backend service foundation + CI gate + deterministic test suite + architecture documentation. No DB schema changes. No API route additions. No OpenAPI changes. No secrets stored. Service-only foundation with replay-safe export and explicit API deferral.

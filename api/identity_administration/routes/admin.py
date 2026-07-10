@@ -14,10 +14,14 @@ from pydantic import BaseModel, ConfigDict
 
 from api.actor_context import ActorContext
 from api.auth_dispatch import require_permission
+from api.auth_scopes import authz_scope
 from api.identity_administration.services import get_admin_services
 from api.identity_governance.models import IdentityLifecycleState as LifecycleState
 
-router = APIRouter(prefix="/identity/admin")
+router = APIRouter(
+    prefix="/identity/admin",
+    dependencies=[Depends(authz_scope("identity:write"))],
+)
 
 
 # ---------------------------------------------------------------------------

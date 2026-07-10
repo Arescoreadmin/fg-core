@@ -283,10 +283,10 @@
     "control": 847,
     "data": 54,
     "evidence": 125,
+    "identity": 27,
     "rbac": 5,
     "security": 6,
     "ui": 49,
-    "unmapped": 27,
     "workforce": 17
   },
   "public_exempt": [
