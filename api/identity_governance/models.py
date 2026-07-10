@@ -31,6 +31,14 @@ class IdentityLifecycleState(str, Enum):
     DISABLED = "DISABLED"
     ARCHIVED = "ARCHIVED"
     DELETED = "DELETED"
+    # Extended states added by PR-02 (Customer Identity Lifecycle)
+    INVITATION_SENT = "INVITATION_SENT"
+    INVITATION_OPENED = "INVITATION_OPENED"
+    PROVISIONED = "PROVISIONED"
+    PASSWORD_RESET_PENDING = "PASSWORD_RESET_PENDING"
+    MFA_ENROLLMENT_REQUIRED = "MFA_ENROLLMENT_REQUIRED"
+    VERIFIED = "VERIFIED"
+    LOCKED = "LOCKED"
 
 
 class DeviceTrustState(str, Enum):

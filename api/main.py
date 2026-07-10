@@ -1128,6 +1128,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         routes.sort(key=lambda item: (str(item["path"]), ",".join(item["methods"])))
         return {"ok": True, "error": None, "routes": routes}
 
+    # PR-02: Customer Identity Lifecycle & Administration — deliberate API surface addition
+    from api.identity_administration.routes import router as identity_admin_router
+
+    app.include_router(identity_admin_router)
+
     return app
 
 
@@ -1271,6 +1276,11 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(entitlements_ui_router)
     app.include_router(subscriptions_router)
     app.include_router(billing_v2_router)
+
+    # PR-02: Customer Identity Lifecycle & Administration — deliberate API surface addition
+    from api.identity_administration.routes import router as identity_admin_router_contract
+
+    app.include_router(identity_admin_router_contract)
 
     @app.get("/health/live")
     async def health_live() -> dict[str, str]:

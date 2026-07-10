@@ -6,6 +6,50 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-10 — feat/pr-02-customer-identity-lifecycle: Customer Identity Lifecycle & Administration
+
+**Branch:** `feat/pr-02-customer-identity-lifecycle`
+**Date:** 2026-07-10
+
+**Scope:** New `api/identity_administration/` package implementing invitation workflow,
+lifecycle management, group administration, self-service, and REST routes.
+
+**Files created:**
+- `api/identity_administration/__init__.py`
+- `api/identity_administration/models.py` — IdentityRecord, Invitation, Group, GroupMember, NotificationEvent, AdminAuditRecord
+- `api/identity_administration/invitation.py` — InvitationService with SHA-256 token hashing and replay protection
+- `api/identity_administration/administration.py` — IdentityAdministrationService wrapping governance services
+- `api/identity_administration/groups.py` — GroupService
+- `api/identity_administration/self_service.py` — SelfService (user acts on own identity)
+- `api/identity_administration/notification.py` — NotificationPublisher (best-effort timeline emission)
+- `api/identity_administration/search.py` — SearchService
+- `api/identity_administration/services.py` — AdministrationServices singleton container
+- `api/identity_administration/repositories/base.py` — Protocol interfaces
+- `api/identity_administration/repositories/memory.py` — Thread-safe in-memory implementations
+- `api/identity_administration/repositories/db.py` — NotImplementedError stubs (follow-up PR)
+- `api/identity_administration/routes/__init__.py` — Combined router
+- `api/identity_administration/routes/admin.py` — 19 admin endpoints
+- `api/identity_administration/routes/invitations.py` — Public accept endpoint
+- `api/identity_administration/routes/self_service.py` — 5 self-service endpoints
+- `api/identity_administration/routes/groups.py` — 3 read-only group endpoints
+- `migrations/postgres/0149_identity_administration.sql` — 5 tables with RLS
+- `docs/identity/LIFECYCLE.md`, `INVITATIONS.md`, `CUSTOMER_ADMINISTRATION.md`, `DELEGATED_ADMINISTRATION.md`
+- Test files under `tests/identity_administration/` and `tests/security/`
+
+**Files modified:**
+- `api/identity_governance/models.py` — Added 7 new IdentityLifecycleState values
+- `api/identity_governance/lifecycle.py` — Extended VALID_TRANSITIONS dict with 7 new states
+- `api/main.py` — Wired `identity_admin_router` after `billing_v2_router`
+
+**Security invariants maintained:**
+- Raw invitation tokens are never stored (SHA-256 hash only)
+- Replay protection: once ACCEPTED, token cannot be reused
+- All service calls are tenant-scoped via `actor.tenant_id`
+- Timeline emission is best-effort (never fails the request)
+- Lifecycle transitions always go through `IdentityLifecycleManager.transition()`
+
+---
+
 ### 2026-07-10 — fix/pr-01b1-identity-governance-typing: strict mypy repair for identity governance tests
 
 **Branch:** `fix/pr-01b1-identity-governance-typing`
