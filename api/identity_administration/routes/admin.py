@@ -17,7 +17,7 @@ from api.auth_dispatch import require_permission
 from api.identity_administration.services import get_admin_services
 from api.identity_governance.models import IdentityLifecycleState as LifecycleState
 
-router = APIRouter(prefix="/admin")
+router = APIRouter(prefix="/identity/admin")
 
 
 # ---------------------------------------------------------------------------

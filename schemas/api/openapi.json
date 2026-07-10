@@ -139,6 +139,78 @@
         "title": "AIPolicyUpsertRequest",
         "type": "object"
       },
+      "AcceptInvitationRequest": {
+        "properties": {
+          "accepted_by": {
+            "title": "Accepted By",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "accepted_by"
+        ],
+        "title": "AcceptInvitationRequest",
+        "type": "object"
+      },
+      "AcceptInvitationResponse": {
+        "properties": {
+          "accepted_at": {
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "accepted_by": {
+            "title": "Accepted By",
+            "type": "string"
+          },
+          "assigned_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assigned Capabilities",
+            "type": "array"
+          },
+          "assigned_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assigned Roles",
+            "type": "array"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "invitation_id": {
+            "title": "Invitation Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invitation_id",
+          "tenant_id",
+          "email",
+          "status",
+          "accepted_at",
+          "accepted_by",
+          "assigned_roles",
+          "assigned_capabilities"
+        ],
+        "title": "AcceptInvitationResponse",
+        "type": "object"
+      },
       "AcceptRecommendationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -694,6 +766,19 @@
           "author"
         ],
         "title": "AddCommentRequest",
+        "type": "object"
+      },
+      "AddMemberRequest": {
+        "properties": {
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "AddMemberRequest",
         "type": "object"
       },
       "AffectedEntitySummaryResponse": {
@@ -4502,6 +4587,92 @@
           "events"
         ],
         "title": "AuditListResponse",
+        "type": "object"
+      },
+      "AuditRecordResponse": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "audit_id": {
+            "title": "Audit Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "new_state": {
+            "title": "New State",
+            "type": "string"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "previous_state": {
+            "title": "Previous State",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audit_id",
+          "tenant_id",
+          "action",
+          "actor",
+          "subject",
+          "occurred_at",
+          "reason",
+          "previous_state",
+          "new_state"
+        ],
+        "title": "AuditRecordResponse",
         "type": "object"
       },
       "AuthorityAvailability": {
@@ -11330,6 +11501,40 @@
         "title": "CreateGrantResponse",
         "type": "object"
       },
+      "CreateGroupRequest": {
+        "properties": {
+          "capabilities": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "roles": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateGroupRequest",
+        "type": "object"
+      },
       "CreateIntelligencePolicyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -13245,6 +13450,24 @@
         "title": "DeploymentTier",
         "type": "string"
       },
+      "DeviceActionRequest": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "DeviceActionRequest",
+        "type": "object"
+      },
       "DeviceActivityProofRequest": {
         "properties": {
           "activity_day": {
@@ -13386,6 +13609,44 @@
           "last_version"
         ],
         "title": "DeviceInfo",
+        "type": "object"
+      },
+      "DeviceResponse": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "registered_at": {
+            "title": "Registered At",
+            "type": "string"
+          },
+          "risk_score": {
+            "title": "Risk Score",
+            "type": "number"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "trust_state": {
+            "title": "Trust State",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "subject",
+          "trust_state",
+          "risk_score",
+          "registered_at",
+          "updated_at"
+        ],
+        "title": "DeviceResponse",
         "type": "object"
       },
       "DeviceUpsertRequest": {
@@ -22073,6 +22334,98 @@
         "title": "GraphBuildResultResponse",
         "type": "object"
       },
+      "GroupMemberResponse": {
+        "properties": {
+          "added_at": {
+            "title": "Added At",
+            "type": "string"
+          },
+          "added_by": {
+            "title": "Added By",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "tenant_id",
+          "subject",
+          "added_by",
+          "added_at"
+        ],
+        "title": "GroupMemberResponse",
+        "type": "object"
+      },
+      "GroupResponse": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "tenant_id",
+          "name",
+          "description",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "roles",
+          "capabilities"
+        ],
+        "title": "GroupResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -22374,6 +22727,107 @@
           "created_at"
         ],
         "title": "HistoryEntryResponse",
+        "type": "object"
+      },
+      "IdentityListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IdentityRecordResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "IdentityListResponse",
+        "type": "object"
+      },
+      "IdentityRecordResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "invitation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invitation Id"
+          },
+          "invited_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invited By"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_id",
+          "tenant_id",
+          "subject",
+          "email",
+          "display_name",
+          "lifecycle_state",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "IdentityRecordResponse",
         "type": "object"
       },
       "ImpactAnalysisResponse": {
@@ -23132,6 +23586,62 @@
         "title": "IntelligencePolicyResponse",
         "type": "object"
       },
+      "InvitationResponse": {
+        "properties": {
+          "assigned_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assigned Roles",
+            "type": "array"
+          },
+          "custom_message": {
+            "title": "Custom Message",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "invitation_id": {
+            "title": "Invitation Id",
+            "type": "string"
+          },
+          "invited_at": {
+            "title": "Invited At",
+            "type": "string"
+          },
+          "invited_by": {
+            "title": "Invited By",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invitation_id",
+          "tenant_id",
+          "email",
+          "invited_by",
+          "invited_at",
+          "expires_at",
+          "status",
+          "custom_message",
+          "assigned_roles"
+        ],
+        "title": "InvitationResponse",
+        "type": "object"
+      },
       "InviteCreateBody": {
         "additionalProperties": false,
         "properties": {
@@ -23212,6 +23722,88 @@
           "display_name"
         ],
         "title": "InviteUserPayload",
+        "type": "object"
+      },
+      "InviteUserRequest": {
+        "properties": {
+          "assigned_capabilities": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Assigned Capabilities",
+            "type": "array"
+          },
+          "assigned_roles": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Assigned Roles",
+            "type": "array"
+          },
+          "custom_message": {
+            "default": "",
+            "title": "Custom Message",
+            "type": "string"
+          },
+          "display_name": {
+            "default": "",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expiry_days": {
+            "default": 7,
+            "title": "Expiry Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "InviteUserRequest",
+        "type": "object"
+      },
+      "InviteUserResponse": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "invitation_id": {
+            "title": "Invitation Id",
+            "type": "string"
+          },
+          "invitation_token": {
+            "title": "Invitation Token",
+            "type": "string"
+          },
+          "invited_at": {
+            "title": "Invited At",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "email",
+          "lifecycle_state",
+          "invitation_id",
+          "invitation_token",
+          "invited_at"
+        ],
+        "title": "InviteUserResponse",
         "type": "object"
       },
       "InvoiceCreateRequest": {
@@ -24249,33 +24841,6 @@
           "created_at"
         ],
         "title": "LearningRecordResponse",
-        "type": "object"
-      },
-      "LifecycleTransitionRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "actor": {
-            "description": "Actor applying the transition.",
-            "title": "Actor",
-            "type": "string"
-          },
-          "reason": {
-            "description": "Reason for the transition.",
-            "title": "Reason",
-            "type": "string"
-          },
-          "to_state": {
-            "description": "Target lifecycle state.",
-            "title": "To State",
-            "type": "string"
-          }
-        },
-        "required": [
-          "to_state",
-          "actor",
-          "reason"
-        ],
-        "title": "LifecycleTransitionRequest",
         "type": "object"
       },
       "LinkControlRequest": {
@@ -29439,6 +30004,54 @@
         "title": "PrioritiesResponse",
         "type": "object"
       },
+      "ProfileResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_id",
+          "tenant_id",
+          "subject",
+          "email",
+          "display_name",
+          "lifecycle_state",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProfileResponse",
+        "type": "object"
+      },
       "PromoteConnectorAssetsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -32218,6 +32831,17 @@
           "secret_name"
         ],
         "title": "RegisterSecretGovernanceRequest",
+        "type": "object"
+      },
+      "ReissueInvitationRequest": {
+        "properties": {
+          "expiry_days": {
+            "default": 7,
+            "title": "Expiry Days",
+            "type": "integer"
+          }
+        },
+        "title": "ReissueInvitationRequest",
         "type": "object"
       },
       "RejectRequest": {
@@ -40847,6 +41471,19 @@
         "title": "UpdatePreferencesRequest",
         "type": "object"
       },
+      "UpdateProfileRequest": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "UpdateProfileRequest",
+        "type": "object"
+      },
       "UpdateReportRequest": {
         "additionalProperties": false,
         "properties": {
@@ -43598,6 +44235,106 @@
         "title": "WorkflowResponse",
         "type": "object"
       },
+      "api__identity_administration__routes__admin__LifecycleTransitionRequest": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_state": {
+            "title": "Target State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_state",
+          "reason"
+        ],
+        "title": "LifecycleTransitionRequest",
+        "type": "object"
+      },
+      "api__identity_administration__routes__admin__TimelineEventResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Details",
+            "type": "object"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_type",
+          "subject",
+          "actor",
+          "occurred_at",
+          "details"
+        ],
+        "title": "TimelineEventResponse",
+        "type": "object"
+      },
+      "api__identity_administration__routes__self_service__TimelineEventResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Details",
+            "type": "object"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_type",
+          "subject",
+          "actor",
+          "occurred_at",
+          "details"
+        ],
+        "title": "TimelineEventResponse",
+        "type": "object"
+      },
       "api__ops_governance_manager__CreateEnvironmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -43719,6 +44456,33 @@
           }
         },
         "title": "CreateExportRequest",
+        "type": "object"
+      },
+      "api__readiness_alerting_manager__LifecycleTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "description": "Actor applying the transition.",
+            "title": "Actor",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason for the transition.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "to_state": {
+            "description": "Target lifecycle state.",
+            "title": "To State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to_state",
+          "actor",
+          "reason"
+        ],
+        "title": "LifecycleTransitionRequest",
         "type": "object"
       },
       "api__readiness_manager__ControlResponse": {
@@ -61555,7 +62319,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LifecycleTransitionRequest"
+                "$ref": "#/components/schemas/api__readiness_alerting_manager__LifecycleTransitionRequest"
               }
             }
           },
@@ -94342,6 +95106,1250 @@
           }
         },
         "summary": "Health Ready"
+      }
+    },
+    "/identity/admin/audit": {
+      "get": {
+        "operationId": "list_audit_identity_admin_audit_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AuditRecordResponse"
+                  },
+                  "title": "Response List Audit Identity Admin Audit Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Audit",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/groups": {
+      "get": {
+        "operationId": "list_admin_groups_identity_admin_groups_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupResponse"
+                  },
+                  "title": "Response List Admin Groups Identity Admin Groups Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Admin Groups",
+        "tags": [
+          "identity-administration"
+        ]
+      },
+      "post": {
+        "operationId": "create_group_identity_admin_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Group",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/groups/{group_id}": {
+      "delete": {
+        "operationId": "delete_group_identity_admin_groups__group_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Group",
+        "tags": [
+          "identity-administration"
+        ]
+      },
+      "get": {
+        "operationId": "get_admin_group_identity_admin_groups__group_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Admin Group",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/groups/{group_id}/members": {
+      "post": {
+        "operationId": "add_group_member_identity_admin_groups__group_id__members_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupMemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Group Member",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/groups/{group_id}/members/{subject}": {
+      "delete": {
+        "operationId": "remove_group_member_identity_admin_groups__group_id__members__subject__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Group Member",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/invitations": {
+      "get": {
+        "operationId": "list_invitations_identity_admin_invitations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InvitationResponse"
+                  },
+                  "title": "Response List Invitations Identity Admin Invitations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Invitations",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/invitations/{invitation_id}": {
+      "delete": {
+        "operationId": "revoke_invitation_identity_admin_invitations__invitation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Invitation",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/invitations/{invitation_id}/reissue": {
+      "post": {
+        "operationId": "reissue_invitation_identity_admin_invitations__invitation_id__reissue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReissueInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reissue Invitation",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/users": {
+      "get": {
+        "operationId": "list_users_identity_admin_users_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Users",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/users/invite": {
+      "post": {
+        "operationId": "invite_user_identity_admin_users_invite_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invite User",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/users/{subject}": {
+      "delete": {
+        "operationId": "delete_user_identity_admin_users__subject__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete User",
+        "tags": [
+          "identity-administration"
+        ]
+      },
+      "get": {
+        "operationId": "get_user_identity_admin_users__subject__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get User",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/users/{subject}/devices": {
+      "get": {
+        "operationId": "get_user_devices_identity_admin_users__subject__devices_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceResponse"
+                  },
+                  "title": "Response Get User Devices Identity Admin Users  Subject  Devices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get User Devices",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/users/{subject}/devices/{device_id}": {
+      "patch": {
+        "operationId": "update_device_trust_identity_admin_users__subject__devices__device_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Device Trust",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/users/{subject}/lifecycle": {
+      "patch": {
+        "operationId": "transition_lifecycle_identity_admin_users__subject__lifecycle_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api__identity_administration__routes__admin__LifecycleTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Lifecycle",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/admin/users/{subject}/timeline": {
+      "get": {
+        "operationId": "get_user_timeline_identity_admin_users__subject__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/api__identity_administration__routes__admin__TimelineEventResponse"
+                  },
+                  "title": "Response Get User Timeline Identity Admin Users  Subject  Timeline Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get User Timeline",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/groups": {
+      "get": {
+        "description": "List groups for the actor's tenant.",
+        "operationId": "list_groups_identity_groups_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupResponse"
+                  },
+                  "title": "Response List Groups Identity Groups Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Groups",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/groups/{group_id}": {
+      "get": {
+        "description": "Return a single group.",
+        "operationId": "get_group_identity_groups__group_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Group",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/groups/{group_id}/members": {
+      "get": {
+        "description": "List members of a group.",
+        "operationId": "list_group_members_identity_groups__group_id__members_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupMemberResponse"
+                  },
+                  "title": "Response List Group Members Identity Groups  Group Id  Members Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Group Members",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/invitations/accept": {
+      "post": {
+        "description": "Accept an invitation using the raw token. Public endpoint \u2014 no auth required.\n\nToken is validated cryptographically (SHA-256 hash comparison).\nReplay protection: once accepted, the token cannot be reused.",
+        "operationId": "accept_invitation_identity_invitations_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptInvitationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Invitation",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/me": {
+      "get": {
+        "description": "Return own identity profile.",
+        "operationId": "get_own_profile_identity_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Own Profile",
+        "tags": [
+          "identity-administration"
+        ]
+      },
+      "patch": {
+        "description": "Update own display name.",
+        "operationId": "update_own_profile_identity_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Own Profile",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/me/devices": {
+      "get": {
+        "description": "Return own registered devices.",
+        "operationId": "get_own_devices_identity_me_devices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceResponse"
+                  },
+                  "title": "Response Get Own Devices Identity Me Devices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Own Devices",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/me/devices/{device_id}": {
+      "delete": {
+        "description": "Revoke own device.",
+        "operationId": "revoke_own_device_identity_me_devices__device_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Own Device",
+        "tags": [
+          "identity-administration"
+        ]
+      }
+    },
+    "/identity/me/timeline": {
+      "get": {
+        "description": "Return own timeline events.",
+        "operationId": "get_own_timeline_identity_me_timeline_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/api__identity_administration__routes__self_service__TimelineEventResponse"
+                  },
+                  "title": "Response Get Own Timeline Identity Me Timeline Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Own Timeline",
+        "tags": [
+          "identity-administration"
+        ]
       }
     },
     "/ingest": {

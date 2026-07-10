@@ -5632,6 +5632,22 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 
 **SOC review outcome:** approved. No auth, session, middleware, OPA, or security files changed. No secrets stored or accessed. No cryptographic signing — SHA-256 content-addressing only (no key material). No new API endpoints. No DB schema changes. No new external dependencies. The execution engine records governance decisions — it does not execute infrastructure changes, run scripts, or provision resources. Tenant isolation enforced at FATAL severity. The CI gate is a read-only static analysis tool.
 
+## 2026-07-10 — PR #527: PR-02 Customer Identity Lifecycle — CI Gate Fixes
+
+**Classification:** Route inventory update and prefix correction. No auth logic changes. No new scopes. No DB schema changes. No secrets.
+
+**Critical-path files changed:**
+- `tools/ci/route_inventory.json` — regenerated after the 27 new `/identity/*` routes added in PR-02 were registered. Root cause: each identity sub-router declared a short prefix assembled by a parent router with `prefix="/identity"`; the per-file AST scanner cannot resolve cross-file prefix chains. Fix: moved `/identity` into each sub-router's own `prefix` string so the AST scanner sees the full paths that match the public contract.
+- `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — regenerated as part of the inventory refresh pass.
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` — contract authority markers updated to reflect new `contracts/core/openapi.json` hash after the 27 new routes were included in contract generation.
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` — regenerated to include the 27 new `/identity/*` endpoints.
+
+**Non-critical-path changes:**
+- `api/identity_administration/routes/__init__.py` — removed `prefix="/identity"` from parent `APIRouter`; child routers now carry the full prefix.
+- `api/identity_administration/routes/{admin,groups,invitations,self_service}.py` — prefixes updated to include `/identity/` segment.
+
+**SOC review outcome:** approved. Mechanical CI gate fix only — no route paths changed at runtime (the app already served all routes at `/identity/…`; only the source-level prefix declaration was redistributed so the AST scanner resolves them correctly). No auth logic, middleware, OPA, session, or security files modified. No new scopes or permissions. No secrets. No new external dependencies.
+
 ## 2026-07-08 — PR #519: Phase 5 P0/P1 Governance + Admin Route Enforcement
 
 **Classification:** Authorization hardening. No new routes. No DB schema changes. No new secrets. No cryptographic operations.

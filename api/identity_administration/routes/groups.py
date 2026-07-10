@@ -13,7 +13,7 @@ from api.actor_context import ActorContext
 from api.auth_dispatch import require_permission
 from api.identity_administration.services import get_admin_services
 
-router = APIRouter(prefix="/groups")
+router = APIRouter(prefix="/identity/groups")
 
 
 class GroupResponse(BaseModel):

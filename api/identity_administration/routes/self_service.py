@@ -15,7 +15,7 @@ from api.auth_dispatch import require_permission
 from api.identity_administration.self_service import SelfServiceError
 from api.identity_administration.services import get_admin_services
 
-router = APIRouter(prefix="/me")
+router = APIRouter(prefix="/identity/me")
 
 
 class ProfileResponse(BaseModel):

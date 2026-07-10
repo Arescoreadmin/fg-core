@@ -17,7 +17,7 @@ from api.identity_administration.invitation import (
 )
 from api.identity_administration.services import get_admin_services
 
-router = APIRouter(prefix="/invitations")
+router = APIRouter(prefix="/identity/invitations")
 
 
 class AcceptInvitationRequest(BaseModel):
