@@ -30,7 +30,7 @@ jobs:
   fg-fast:
     name: fg-fast
     runs-on: ubuntu-latest
-    timeout-minutes: 25  # raised from 15: fg-fast-pytest hard_max is now 930s; make fg-fast (pre-checks + pytest + lint) needs ~18-20 min in CI
+    timeout-minutes: 35  # raised from 15→25→35: make fg-fast (pre-checks + pytest hard_max=930s + lint) takes ~20 min; post-steps (lane-runner etc.) add ~5 min; 35 min gives headroom
     permissions:
       contents: read
 
