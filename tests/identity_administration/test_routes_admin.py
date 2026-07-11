@@ -128,7 +128,9 @@ class TestAcceptInvitation:
         resp = client.post(
             "/identity/invitations/accept",
             json={"token": token, "accepted_by": "user-subject-001"},
-            headers={},  # override default key headers for public endpoint
+            headers=dict[
+                str, str
+            ](),  # override default key headers for public endpoint
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -172,7 +174,7 @@ class TestAcceptInvitationTransitionsLifecycle:
         resp = client.post(
             "/identity/invitations/accept",
             json={"token": token, "accepted_by": subject},
-            headers={},
+            headers=dict[str, str](),
         )
         assert resp.status_code == 200
 

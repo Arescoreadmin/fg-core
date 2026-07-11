@@ -218,7 +218,7 @@ def _classify(lines: list[str], lane: str = "unknown") -> TriageReport:
     for rule in _TERMINAL_ERROR_RULES:
         if rule.pattern.search(tail_text):
             excerpt = _excerpt(lines, rule.pattern)
-            report: TriageReport = {
+            content_report: TriageReport = {
                 "triage_schema_version": TRIAGE_SCHEMA_VERSION,
                 "lane": lane,
                 "category": rule.category.value,
@@ -237,10 +237,10 @@ def _classify(lines: list[str], lane: str = "unknown") -> TriageReport:
                 },
             }
             digest = hashlib.sha256(
-                json.dumps(report, sort_keys=True).encode("utf-8")
+                json.dumps(content_report, sort_keys=True).encode("utf-8")
             ).hexdigest()
-            report["evidence"]["stable_hash"] = digest
-            return report
+            content_report["evidence"]["stable_hash"] = digest
+            return content_report
 
     # Phase 2: check content-match rules against the full log.
     for rule in _RULES:
