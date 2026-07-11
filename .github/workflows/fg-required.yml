@@ -124,9 +124,14 @@ jobs:
           # optimisation). Combined with fg-fast (~150s in CI), the original
           # 480s budget was always insufficient. No tests removed; coverage
           # unchanged. See docs/ai/PR_FIX_LOG.md for full justification.
+          #
+          # Lane timeout raised from 1200s → 1500s (PR-02 CI repair):
+          # fg-fast-pytest hard_max raised to 930s; make fg-fast total
+          # (pre-checks + pytest + lint) now needs ~1200s in CI.
+          # Global budget raised from 2400s → 2800s proportionally.
           .venv/bin/python tools/testing/harness/fg_required.py \
-            --global-budget-seconds 2400 \
-            --lane-timeout-seconds 1200 \
+            --global-budget-seconds 2800 \
+            --lane-timeout-seconds 1500 \
             2>&1 | tee artifacts/fg-required/fg-required.stdout.log
 
       - name: Prepare fallback artifact notices

@@ -30,7 +30,7 @@ jobs:
   fg-fast:
     name: fg-fast
     runs-on: ubuntu-latest
-    timeout-minutes: 15  # raised from 10 (PR 14.3 CI repair): Makefile budget is now 720s; job wall-clock must exceed the budget
+    timeout-minutes: 25  # raised from 15: fg-fast-pytest hard_max is now 930s; make fg-fast (pre-checks + pytest + lint) needs ~18-20 min in CI
     permissions:
       contents: read
 
@@ -180,7 +180,7 @@ jobs:
   fg-security:
     name: fg-security
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20  # raised from 15: make fg-security (policy-validate + soc-invariants + security pytest) needs ~14-16 min in CI
     permissions:
       contents: read
 

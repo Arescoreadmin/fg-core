@@ -1,3 +1,13 @@
+## 2026-07-10 — PR #527: PR-02 Customer Identity Lifecycle — CI Job Timeout Repair
+
+**Classification:** CI configuration only. No runtime behavior change. No auth logic change. No test removal. No new routes. No secrets.
+
+**Critical-path files changed:**
+- `.github/workflows/testing-module.yml` — `fg-fast` job `timeout-minutes` raised 15→25; `fg-security` job raised 15→20. Root cause: `fg-fast-pytest hard_max` was raised from 900s to 930s in the budget-stability fix; `make fg-fast` total (pre-checks + pytest + lint) now takes ~18-20 min in CI, exceeding the previous 15-min job wall-clock. `fg-security` was independently hitting its own 15-min wall because the security pytest suite also runs close to the limit.
+- `.github/workflows/fg-required.yml` — `--lane-timeout-seconds` raised 1200→1500; `--global-budget-seconds` raised 2400→2800. Root cause: `make fg-fast` called as a lane now takes ~1200s total in CI, exhausting the previous lane budget. No tests removed; no gate logic changed.
+
+**SOC review outcome:** approved. CI timeout changes only — no security enforcement, no authentication, no OPA, no middleware, no secrets, and no test coverage affected. Both changes are proportional adjustments to observed CI runner wall-time, not arbitrary increases. A genuine test regression still fails within the raised limits.
+
 ## 2026-07-10 — PR #527: PR-02 Customer Identity Lifecycle — Scope Lint + Plane Registry Fixes
 
 **Classification:** CI gate compliance. No runtime behavior change. No auth logic change. No new routes. No DB schema changes. No secrets.
