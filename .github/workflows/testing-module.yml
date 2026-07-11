@@ -234,7 +234,7 @@ jobs:
   fg-full:
     name: fg-full
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40  # raised from 30: make fg-full lane runner hard_max is 1800s (30 min); setup + flake-detect steps add ~3 min
     permissions:
       contents: read
     needs: [fg-fast, fg-contract, fg-security]
