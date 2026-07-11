@@ -262,12 +262,26 @@ def test_fg_fast_test_count_not_reduced() -> None:
     """
     # Use the venv pytest so backend/tests conftest can import fastapi.
     venv_pytest = REPO_ROOT / ".venv" / "bin" / "pytest"
-    pytest_exe = str(venv_pytest) if venv_pytest.exists() else sys.executable + " -m pytest"
-    cmd = (
-        [str(venv_pytest), "-m", "smoke or contract or security", "--collect-only", "-q", "--no-header"]
-        if venv_pytest.exists()
-        else [sys.executable, "-m", "pytest", "-m", "smoke or contract or security", "--collect-only", "-q", "--no-header"]
-    )
+    if venv_pytest.exists():
+        cmd = [
+            str(venv_pytest),
+            "-m",
+            "smoke or contract or security",
+            "--collect-only",
+            "-q",
+            "--no-header",
+        ]
+    else:
+        cmd = [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-m",
+            "smoke or contract or security",
+            "--collect-only",
+            "-q",
+            "--no-header",
+        ]
     result = subprocess.run(
         cmd,
         cwd=REPO_ROOT,
@@ -279,7 +293,11 @@ def test_fg_fast_test_count_not_reduced() -> None:
     import re
 
     match = re.search(r"(\d+)/?\d* tests? collected", result.stdout)
-    assert match is not None, f"Could not parse test count from output:\n{output[:500]}"
+    assert match is not None, (
+        "Could not parse test count from output:\n"
+        f"stdout:\n{result.stdout[:500]}\n"
+        f"stderr:\n{result.stderr[:500]}"
+    )
     count = int(match.group(1))
     assert count >= _FG_FAST_BASELINE_COUNT, (
         f"fg-fast test count dropped below baseline: "
