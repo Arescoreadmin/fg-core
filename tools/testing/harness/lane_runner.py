@@ -49,7 +49,7 @@ ALLOWED_LANES: dict[str, tuple[CommandSpec, ...]] = {
         ),
     ),
     "fg-security": (
-        CommandSpec(("make", "fg-security")),
+        CommandSpec(("make", "fg-security"), timeout_seconds=1500),
         CommandSpec(
             (sys.executable, "tools/testing/security/check_security_invariants.py")
         ),

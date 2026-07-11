@@ -117,6 +117,42 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  detect-high-risk-paths:
+    name: detect-high-risk-paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      has_high_risk_paths: ${{ steps.check.outputs.result }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base for diff
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.base_ref }}"
+          if [ -z "${BASE_REF}" ]; then BASE_REF="main"; fi
+          git fetch --no-tags --prune --depth=200 origin "${BASE_REF}"
+
+      - name: Check for high-risk changed files
+        id: check
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.base_ref }}"
+          if [ -z "${BASE_REF}" ]; then BASE_REF="main"; fi
+          CHANGED=$(git diff --name-only "origin/${BASE_REF}...HEAD" 2>/dev/null || true)
+          if echo "$CHANGED" | grep -qE \
+              '^(\.github/workflows/|api/security/|api/middleware/|api/auth|admin_gateway/|migrations/|contracts/|services/plane_registry/|tools/ci/check_security|tests/security/)'; then
+            echo "result=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=false" >> "$GITHUB_OUTPUT"
+          fi
+
   fg-contract:
     name: fg-contract
     runs-on: ubuntu-latest
@@ -237,11 +273,15 @@ jobs:
     timeout-minutes: 60  # raised from 30→40→60: make fg-full (full test suite) observed running 35+ min before being cancelled at 40-min ceiling; 60 min gives headroom for suite + setup + flake-detect
     permissions:
       contents: read
-    needs: [fg-fast, fg-contract, fg-security]
+    needs: [fg-fast, fg-contract, fg-security, detect-high-risk-paths]
     # Run fg-full only on:
     #   (a) schedule / workflow_dispatch — nightly and manual runs always run fg-full
-    #   (b) PRs touching high-risk paths: CI workflows, security/middleware/auth API,
-    #       admin gateway, migrations, contracts, plane registry, or security tests
+    #   (b) PRs where detect-high-risk-paths found changed files in CI workflows,
+    #       security/middleware/auth API, admin gateway, migrations, contracts,
+    #       plane registry, or security tests
+    #   (c) PRs from release/*, hotfix/*, or any branch containing "security"
+    # High-risk path detection uses git diff (not branch name) so a PR from any
+    # branch that touches .github/workflows/ or api/security/ correctly triggers fg-full.
     # For normal tools/testing/policy/** PRs (runtime budget adjustments, quarantine
     # changes, policy YAML) fg-fast+contract+security already provide sufficient coverage.
     # This removes ~40 min from the critical path of non-high-risk policy PRs.
@@ -252,6 +292,7 @@ jobs:
         && (
           github.event_name == 'schedule'
           || github.event_name == 'workflow_dispatch'
+          || needs.detect-high-risk-paths.outputs.has_high_risk_paths == 'true'
           || (github.event_name == 'pull_request' && (
             contains(github.event.pull_request.head.ref, 'security')
             || startsWith(github.event.pull_request.head.ref, 'release/')

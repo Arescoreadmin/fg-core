@@ -8,10 +8,27 @@ Exit 0 = hierarchy is valid; exit 1 = violation found.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools.testing.harness.lane_runner import (  # noqa: E402
+    ALLOWED_LANES as _LANE_RUNNER_LANES,
+    COMMAND_TIMEOUT_SECONDS as _DEFAULT_CMD_TIMEOUT,
+)
+
+
+def _lane_runner_timeout_for(lane: str, make_target: str) -> int:
+    """Return the actual CommandSpec timeout for a given make target in a lane."""
+    for cmd_spec in _LANE_RUNNER_LANES.get(lane, ()):
+        if cmd_spec.argv == ("make", make_target):
+            return cmd_spec.timeout_seconds
+    return _DEFAULT_CMD_TIMEOUT
 
 
 @dataclass(frozen=True)
@@ -77,8 +94,8 @@ def _validate_fg_security_hierarchy(budgets: dict[str, object]) -> list[str]:
     if max_seconds is None:
         return violations
 
-    # Lane timeout from lane_runner.py CommandSpec: 1500s
-    lane_runner_timeout = 1500
+    # Read actual timeout from lane_runner.py ALLOWED_LANES to avoid staleness.
+    lane_runner_timeout = _lane_runner_timeout_for("fg-security", "fg-security")
 
     # fg-required global budget: 2800s
     global_budget = 2800
@@ -162,6 +179,9 @@ def _validate_global_pr_budget(budgets: dict[str, object]) -> list[str]:
         return violations
 
     # Minimum sanity: should be at least 60s, at most 7200s (2h) for a PR budget
+    if not isinstance(global_budget, (int, float, str)):
+        violations.append("global_pr_budget_seconds must be a number")
+        return violations
     val = int(global_budget)
     if val < 60:
         violations.append(
