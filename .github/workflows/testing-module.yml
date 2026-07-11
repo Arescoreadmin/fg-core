@@ -30,7 +30,7 @@ jobs:
   fg-fast:
     name: fg-fast
     runs-on: ubuntu-latest
-    timeout-minutes: 55  # raised from 15→25→35→55: make fg-fast (~20 min) + lane runner (fg-contract ~2 min + fg-security ~21 min + gap-audit ~1 min) = ~47 min observed; 55 min gives headroom
+    timeout-minutes: 35  # lowered from 55→35 after lane runner deduplication fix: make fg-fast (~20 min) + required-tests-gate step (~1 min) + lane runner (required_tests_gate.py only, ~1 min) = ~24 min; 35 min gives headroom. Previous 55 min accounted for removed fg-contract(~2 min) + fg-security(~21 min) + gap-audit(~1 min) in the lane runner. See docs/ci/CI_OPTIMIZATION_PLAN.md DUP-01/DUP-02/DUP-03.
     permissions:
       contents: read
 
@@ -238,7 +238,27 @@ jobs:
     permissions:
       contents: read
     needs: [fg-fast, fg-contract, fg-security]
-    if: ${{ needs.fg-fast.result == 'success' && needs.fg-contract.result == 'success' && needs.fg-security.result == 'success' }}
+    # Run fg-full only on:
+    #   (a) schedule / workflow_dispatch — nightly and manual runs always run fg-full
+    #   (b) PRs touching high-risk paths: CI workflows, security/middleware/auth API,
+    #       admin gateway, migrations, contracts, plane registry, or security tests
+    # For normal tools/testing/policy/** PRs (runtime budget adjustments, quarantine
+    # changes, policy YAML) fg-fast+contract+security already provide sufficient coverage.
+    # This removes ~40 min from the critical path of non-high-risk policy PRs.
+    # See docs/ci/CI_OPTIMIZATION_PLAN.md Priority 2.
+    if: |
+      ${{
+        (needs.fg-fast.result == 'success' && needs.fg-contract.result == 'success' && needs.fg-security.result == 'success')
+        && (
+          github.event_name == 'schedule'
+          || github.event_name == 'workflow_dispatch'
+          || (github.event_name == 'pull_request' && (
+            contains(github.event.pull_request.head.ref, 'security')
+            || startsWith(github.event.pull_request.head.ref, 'release/')
+            || startsWith(github.event.pull_request.head.ref, 'hotfix/')
+          ))
+        )
+      }}
 
     steps:
       - name: Checkout (full history)

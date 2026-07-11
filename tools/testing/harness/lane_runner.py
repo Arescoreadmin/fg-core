@@ -29,11 +29,18 @@ class CommandSpec:
 
 
 ALLOWED_LANES: dict[str, tuple[CommandSpec, ...]] = {
+    # fg-fast lane runner: only run the required-tests-gate script to produce
+    # the lane artifact and metadata. make fg-contract, make fg-security, and
+    # pytest test_gap_audit.py have been removed because they are covered by:
+    #   - make fg-fast (called in the workflow step before the lane runner) already
+    #     invokes fg-contract targets, security-regression-gates, soc-invariants,
+    #     audit-chain-verify, and gap-audit.
+    #   - Standalone fg-contract and fg-security jobs run in parallel in
+    #     testing-module.yml and produce independent artifacts.
+    # Removing these commands saves ~23 min per PR with zero loss of assurance.
+    # See docs/ci/CI_OPTIMIZATION_PLAN.md DUP-01 / DUP-02 / DUP-03.
     "fg-fast": (
         CommandSpec((sys.executable, "tools/testing/harness/required_tests_gate.py")),
-        CommandSpec(("make", "fg-contract")),
-        CommandSpec(("make", "fg-security"), timeout_seconds=1500),
-        CommandSpec((".venv/bin/pytest", "-q", "tests/test_gap_audit.py")),
     ),
     "fg-contract": (
         CommandSpec(("make", "fg-contract")),
