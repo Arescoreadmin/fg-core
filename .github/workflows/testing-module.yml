@@ -180,7 +180,7 @@ jobs:
   fg-security:
     name: fg-security
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # raised from 15: make fg-security (policy-validate + soc-invariants + security pytest) needs ~14-16 min in CI
+    timeout-minutes: 25  # raised from 15→20→25: make fg-security (policy-validate + soc-invariants + security pytest ~701 tests) needs ~20 min in CI
     permissions:
       contents: read
 
