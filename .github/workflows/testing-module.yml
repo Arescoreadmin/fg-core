@@ -30,7 +30,7 @@ jobs:
   fg-fast:
     name: fg-fast
     runs-on: ubuntu-latest
-    timeout-minutes: 35  # raised from 15→25→35: make fg-fast (pre-checks + pytest hard_max=930s + lint) takes ~20 min; post-steps (lane-runner etc.) add ~5 min; 35 min gives headroom
+    timeout-minutes: 55  # raised from 15→25→35→55: make fg-fast (~20 min) + lane runner (fg-contract ~2 min + fg-security ~21 min + gap-audit ~1 min) = ~47 min observed; 55 min gives headroom
     permissions:
       contents: read
 

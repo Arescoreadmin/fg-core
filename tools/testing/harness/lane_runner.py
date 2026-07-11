@@ -32,7 +32,7 @@ ALLOWED_LANES: dict[str, tuple[CommandSpec, ...]] = {
     "fg-fast": (
         CommandSpec((sys.executable, "tools/testing/harness/required_tests_gate.py")),
         CommandSpec(("make", "fg-contract")),
-        CommandSpec(("make", "fg-security")),
+        CommandSpec(("make", "fg-security"), timeout_seconds=1500),
         CommandSpec((".venv/bin/pytest", "-q", "tests/test_gap_audit.py")),
     ),
     "fg-contract": (
