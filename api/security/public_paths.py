@@ -34,6 +34,9 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     # Public key endpoint — external auditors need this to verify report signatures
     # without possessing the private key.
     "/signing/public-key",
+    # PR-02 invite-token exchange: the invite token IS the credential.
+    # SHA-256 hash comparison + single-use replay protection. No prior auth exists.
+    "/identity/invitations/accept",
     # Report Authority health probe — unauthenticated liveness check.
     "/reports/health",
     # Engagement Portal health probe (PR 18.2) — unauthenticated liveness check.

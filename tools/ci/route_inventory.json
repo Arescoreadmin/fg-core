@@ -13393,6 +13393,434 @@
     },
     {
       "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "GET",
+      "path": "/identity/admin/audit",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "GET",
+      "path": "/identity/admin/groups",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "POST",
+      "path": "/identity/admin/groups",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "DELETE",
+      "path": "/identity/admin/groups/{group_id}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "GET",
+      "path": "/identity/admin/groups/{group_id}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "POST",
+      "path": "/identity/admin/groups/{group_id}/members",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "DELETE",
+      "path": "/identity/admin/groups/{group_id}/members/{subject}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "GET",
+      "path": "/identity/admin/invitations",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "DELETE",
+      "path": "/identity/admin/invitations/{invitation_id}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "POST",
+      "path": "/identity/admin/invitations/{invitation_id}/reissue",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "GET",
+      "path": "/identity/admin/users",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "POST",
+      "path": "/identity/admin/users/invite",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "DELETE",
+      "path": "/identity/admin/users/{subject}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "GET",
+      "path": "/identity/admin/users/{subject}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "GET",
+      "path": "/identity/admin/users/{subject}/devices",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "PATCH",
+      "path": "/identity/admin/users/{subject}/devices/{device_id}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "PATCH",
+      "path": "/identity/admin/users/{subject}/lifecycle",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/admin.py",
+      "method": "GET",
+      "path": "/identity/admin/users/{subject}/timeline",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/groups.py",
+      "method": "GET",
+      "path": "/identity/groups",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/groups.py",
+      "method": "GET",
+      "path": "/identity/groups/{group_id}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/groups.py",
+      "method": "GET",
+      "path": "/identity/groups/{group_id}/members",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/identity_administration/routes/invitations.py",
+      "method": "POST",
+      "path": "/identity/invitations/accept",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/self_service.py",
+      "method": "GET",
+      "path": "/identity/me",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/self_service.py",
+      "method": "PATCH",
+      "path": "/identity/me",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/self_service.py",
+      "method": "GET",
+      "path": "/identity/me/devices",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/self_service.py",
+      "method": "DELETE",
+      "path": "/identity/me/devices/{device_id}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/identity_administration/routes/self_service.py",
+      "method": "GET",
+      "path": "/identity/me/timeline",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": true,
+      "scopes": [
+        "identity:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
         "auth",
         "tenant"
       ],
@@ -19431,7 +19859,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-08T17:05:45.720152+00:00",
+  "generated_at": "2026-07-10T21:55:01.658321+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

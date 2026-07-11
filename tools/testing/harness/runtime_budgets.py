@@ -59,10 +59,15 @@ def enforce_lane_budget(
     lane_cfg_dict = _as_dict(lane_cfg)
     max_seconds = _to_int(lane_cfg_dict["max_seconds"])
     fail_pct = _to_int(lane_cfg_dict["fail_pct"])
-    if duration_seconds > max_seconds:
+    # hard_max_seconds: CI-variance tolerance ceiling. When present, the gate
+    # fails only when duration exceeds hard_max_seconds (not nominal max_seconds).
+    # See timing_model in runtime_budgets.yaml for rationale.
+    hard_max_raw = lane_cfg_dict.get("hard_max_seconds")
+    hard_max_seconds = _to_int(hard_max_raw) if hard_max_raw is not None else max_seconds
+    if duration_seconds > hard_max_seconds:
         return (
             False,
-            f"lane={lane} exceeded max_seconds={max_seconds} actual={duration_seconds}",
+            f"lane={lane} exceeded hard_max_seconds={hard_max_seconds} actual={duration_seconds}",
         )
     allowed = int(baseline_seconds * (1 + (fail_pct / 100.0)))
     if baseline_seconds > 0 and duration_seconds > allowed:

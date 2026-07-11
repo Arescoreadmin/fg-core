@@ -25,9 +25,43 @@ class TriageRule:
     links: tuple[str, ...]
 
 
+# Terminal-error rules are evaluated against only the last N lines of the log
+# (where the fatal message appears) and take precedence over content-match rules.
+# This prevents incidental passing-test log text (e.g. test names referencing
+# "contract" or "openapi") from overriding the actual terminal failure category.
+_TERMINAL_ERROR_TAIL_LINES = 50
+
+_TERMINAL_ERROR_RULES: tuple[TriageRule, ...] = (
+    TriageRule(
+        TriageCategory.PERFORMANCE_BUDGET_EXCEEDED,
+        # Matches: "fg-fast exceeded budget (900s)" emitted by the Makefile
+        # fg-fast-pytest target when wall-time > FG_FAST_MAX_SECONDS.
+        re.compile(r"fg-fast exceeded budget", re.IGNORECASE),
+        0.97,
+        "fg-fast lane exceeded the pytest wall-time budget. All tests passed; "
+        "this is a timing/variance issue, not a functional or contract failure. "
+        "Check artifacts/ci/fg_fast_duration.json for timing details.",
+        (
+            "make fg-fast-pytest",
+            "cat artifacts/ci/fg_fast_duration.json",
+            "pytest --durations=20",
+        ),
+        (
+            "Makefile",
+            "artifacts/ci/fg_fast_duration.json",
+            "tools/testing/harness/triage_report.py",
+        ),
+        ("tools/testing/README.md",),
+    ),
+)
+
 _RULES: tuple[TriageRule, ...] = (
     TriageRule(
         TriageCategory.CONTRACT_DRIFT,
+        # NOTE: This rule matches broad content words like "contract", "openapi",
+        # "schema". It is intentionally placed AFTER terminal-error rules so that
+        # passing test log lines containing these words do not override a terminal
+        # failure classification (e.g. PERFORMANCE_BUDGET_EXCEEDED).
         re.compile(r"contract|openapi|schema|snapshot", re.IGNORECASE),
         0.92,
         "Contract or schema drift detected.",
@@ -174,6 +208,41 @@ def _top_frames(lines: list[str]) -> list[str]:
 
 
 def _classify(lines: list[str], lane: str = "unknown") -> TriageReport:
+    # Phase 1: check terminal-error rules against the tail of the log only.
+    # Terminal errors appear in the last few lines emitted by the failing command.
+    # This ensures that incidental content words in passing-test output (e.g.
+    # "contract", "openapi", "schema" in test names) cannot shadow the actual
+    # terminal failure category.
+    tail_lines = lines[-_TERMINAL_ERROR_TAIL_LINES:]
+    tail_text = "\n".join(tail_lines)
+    for rule in _TERMINAL_ERROR_RULES:
+        if rule.pattern.search(tail_text):
+            excerpt = _excerpt(lines, rule.pattern)
+            report: TriageReport = {
+                "triage_schema_version": TRIAGE_SCHEMA_VERSION,
+                "lane": lane,
+                "category": rule.category.value,
+                "confidence": rule.confidence,
+                "primary_error": excerpt[0] if excerpt else "no log lines available",
+                "evidence": {
+                    "top_frames": _top_frames(excerpt),
+                    "matched_patterns": [rule.pattern.pattern],
+                    "log_excerpt": excerpt[:30],
+                },
+                "suggested_fix": {
+                    "summary": rule.summary,
+                    "commands": list(rule.commands),
+                    "files": list(rule.files),
+                    "links": list(rule.links),
+                },
+            }
+            digest = hashlib.sha256(
+                json.dumps(report, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+            report["evidence"]["stable_hash"] = digest
+            return report
+
+    # Phase 2: check content-match rules against the full log.
     for rule in _RULES:
         if rule.pattern.search("\n".join(lines)):
             excerpt = _excerpt(lines, rule.pattern)

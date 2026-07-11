@@ -30,7 +30,7 @@ jobs:
   fg-fast:
     name: fg-fast
     runs-on: ubuntu-latest
-    timeout-minutes: 15  # raised from 10 (PR 14.3 CI repair): Makefile budget is now 720s; job wall-clock must exceed the budget
+    timeout-minutes: 55  # raised from 15→25→35→55: make fg-fast (~20 min) + lane runner (fg-contract ~2 min + fg-security ~21 min + gap-audit ~1 min) = ~47 min observed; 55 min gives headroom
     permissions:
       contents: read
 
@@ -180,7 +180,7 @@ jobs:
   fg-security:
     name: fg-security
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25  # raised from 15→20→25: make fg-security (policy-validate + soc-invariants + security pytest ~701 tests) needs ~20 min in CI
     permissions:
       contents: read
 
@@ -234,7 +234,7 @@ jobs:
   fg-full:
     name: fg-full
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60  # raised from 30→40→60: make fg-full (full test suite) observed running 35+ min before being cancelled at 40-min ceiling; 60 min gives headroom for suite + setup + flake-detect
     permissions:
       contents: read
     needs: [fg-fast, fg-contract, fg-security]

@@ -29,24 +29,66 @@ VALID_TRANSITIONS: dict[IdentityLifecycleState, set[IdentityLifecycleState]] = {
         IdentityLifecycleState.DISABLED,
     },
     IdentityLifecycleState.INVITED: {
+        IdentityLifecycleState.INVITATION_SENT,
         IdentityLifecycleState.ACCEPTED,
         IdentityLifecycleState.DISABLED,
         IdentityLifecycleState.ARCHIVED,
     },
+    IdentityLifecycleState.INVITATION_SENT: {
+        IdentityLifecycleState.INVITATION_OPENED,
+        IdentityLifecycleState.INVITED,
+        IdentityLifecycleState.DISABLED,
+    },
+    IdentityLifecycleState.INVITATION_OPENED: {
+        IdentityLifecycleState.ACCEPTED,
+        IdentityLifecycleState.INVITATION_SENT,
+    },
     IdentityLifecycleState.ACCEPTED: {
+        IdentityLifecycleState.PROVISIONED,
         IdentityLifecycleState.ACTIVE,
         IdentityLifecycleState.SUSPENDED,
         IdentityLifecycleState.DISABLED,
     },
+    IdentityLifecycleState.PROVISIONED: {
+        IdentityLifecycleState.ACTIVE,
+        IdentityLifecycleState.MFA_ENROLLMENT_REQUIRED,
+        IdentityLifecycleState.PASSWORD_RESET_PENDING,
+    },
     IdentityLifecycleState.ACTIVE: {
+        IdentityLifecycleState.PASSWORD_RESET_PENDING,
+        IdentityLifecycleState.MFA_ENROLLMENT_REQUIRED,
         IdentityLifecycleState.SUSPENDED,
+        IdentityLifecycleState.LOCKED,
         IdentityLifecycleState.DISABLED,
         IdentityLifecycleState.ARCHIVED,
+    },
+    IdentityLifecycleState.PASSWORD_RESET_PENDING: {
+        IdentityLifecycleState.ACTIVE,
+        IdentityLifecycleState.VERIFIED,
+        IdentityLifecycleState.SUSPENDED,
+        IdentityLifecycleState.DISABLED,
+    },
+    IdentityLifecycleState.MFA_ENROLLMENT_REQUIRED: {
+        IdentityLifecycleState.ACTIVE,
+        IdentityLifecycleState.VERIFIED,
+        IdentityLifecycleState.SUSPENDED,
+        IdentityLifecycleState.DISABLED,
+    },
+    IdentityLifecycleState.VERIFIED: {
+        IdentityLifecycleState.ACTIVE,
+        IdentityLifecycleState.SUSPENDED,
+        IdentityLifecycleState.DISABLED,
     },
     IdentityLifecycleState.SUSPENDED: {
         IdentityLifecycleState.ACTIVE,
+        IdentityLifecycleState.LOCKED,
         IdentityLifecycleState.DISABLED,
         IdentityLifecycleState.ARCHIVED,
+    },
+    IdentityLifecycleState.LOCKED: {
+        IdentityLifecycleState.ACTIVE,
+        IdentityLifecycleState.SUSPENDED,
+        IdentityLifecycleState.DISABLED,
     },
     IdentityLifecycleState.DISABLED: {
         IdentityLifecycleState.ARCHIVED,
