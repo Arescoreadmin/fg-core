@@ -79,6 +79,13 @@ def _command_env(lane: str) -> dict[str, str]:
     if addopts:
         existing = env.get("PYTEST_ADDOPTS", "").strip()
         env["PYTEST_ADDOPTS"] = f"{existing} {addopts}".strip()
+    # Prevent nested test runs from reading the CI policy-drift artifact.
+    # The "Policy drift check" step writes artifacts/testing/policy-drift.json
+    # before the lane runner executes. If that file has policy_changed=true,
+    # _derive_policy_change_event() returns True, causing a signature mismatch
+    # in test_testing_runs_rls.py (test signs with policy_change_event=False).
+    # Point to a nonexistent path so FileNotFoundError -> False.
+    env["FG_POLICY_DRIFT_ARTIFACT"] = "/tmp/fg-lane-runner-no-policy-drift-sentinel"
     return env
 
 
