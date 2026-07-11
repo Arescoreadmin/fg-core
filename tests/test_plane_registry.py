@@ -20,6 +20,7 @@ EXPECTED_PLANES = {
     "security",
     "rbac",
     "workforce",
+    "identity",
 }
 
 FORBIDDEN_LEGACY_DISABLED = (
@@ -30,6 +31,9 @@ FORBIDDEN_LEGACY_DISABLED = (
 
 def test_plane_registry_has_required_fields() -> None:
     assert {p.plane_id for p in PLANE_REGISTRY} == EXPECTED_PLANES
+    assert len({p.plane_id for p in PLANE_REGISTRY}) == len(PLANE_REGISTRY), (
+        "duplicate plane_id detected in PLANE_REGISTRY"
+    )
     for plane in PLANE_REGISTRY:
         assert plane.route_prefixes
         assert plane.allowed_dependency_categories

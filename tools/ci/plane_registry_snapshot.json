@@ -980,7 +980,9 @@
         "check_plane_registry",
         "route-inventory-audit"
       ],
-      "required_make_targets": [],
+      "required_make_targets": [
+        "soc-invariants"
+      ],
       "required_route_invariants": [],
       "route_prefixes": [
         "/identity"
@@ -1263,7 +1265,7 @@
       ]
     }
   ],
-  "generated_at": "2026-07-10T21:55:01.673414+00:00",
+  "generated_at": "2026-07-11T17:31:37.587446+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

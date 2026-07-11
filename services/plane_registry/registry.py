@@ -817,6 +817,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
         plane_id="identity",
         route_prefixes=("/identity",),
         allowed_dependency_categories=("auth", "tenant"),
+        required_make_targets=("soc-invariants",),
         required_ci_gates=COMMON_GATES,
         maturity_tag="tester-ready",
         auth_class=AuthClass(

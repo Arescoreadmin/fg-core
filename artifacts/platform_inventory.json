@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 970,
+    "contract_count": 997,
     "contract_only": [],
-    "runtime_count": 1136,
+    "runtime_count": 1163,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -179,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "272930de717cdaf74634a80312fb126ffe5df43da476eccb1aa935da00b5a00e",
+  "governance_fingerprint": "5dcbf504c40b0b21ff418cd20bd1488952b1689c54e43bf90328a976ba77faea",
   "planes": [
     {
       "compat": {
@@ -318,6 +318,18 @@
         "/remediation-authority",
         "/reports",
         "/verification-requests"
+      ]
+    },
+    {
+      "compat": {
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
+      },
+      "plane_id": "identity",
+      "required_make_targets": [
+        "soc-invariants"
+      ],
+      "route_prefixes": [
+        "/identity"
       ]
     },
     {
@@ -1443,6 +1455,35 @@
       "PUT /freshness-policies/{policy_id}",
       "PUT /freshness/{evidence_id}",
       "PUT /verification-requests/{req_id}/sla"
+    ],
+    "identity": [
+      "DELETE /identity/admin/groups/{group_id}",
+      "DELETE /identity/admin/groups/{group_id}/members/{subject}",
+      "DELETE /identity/admin/invitations/{invitation_id}",
+      "DELETE /identity/admin/users/{subject}",
+      "DELETE /identity/me/devices/{device_id}",
+      "GET /identity/admin/audit",
+      "GET /identity/admin/groups",
+      "GET /identity/admin/groups/{group_id}",
+      "GET /identity/admin/invitations",
+      "GET /identity/admin/users",
+      "GET /identity/admin/users/{subject}",
+      "GET /identity/admin/users/{subject}/devices",
+      "GET /identity/admin/users/{subject}/timeline",
+      "GET /identity/groups",
+      "GET /identity/groups/{group_id}",
+      "GET /identity/groups/{group_id}/members",
+      "GET /identity/me",
+      "GET /identity/me/devices",
+      "GET /identity/me/timeline",
+      "PATCH /identity/admin/users/{subject}/devices/{device_id}",
+      "PATCH /identity/admin/users/{subject}/lifecycle",
+      "PATCH /identity/me",
+      "POST /identity/admin/groups",
+      "POST /identity/admin/groups/{group_id}/members",
+      "POST /identity/admin/invitations/{invitation_id}/reissue",
+      "POST /identity/admin/users/invite",
+      "POST /identity/invitations/accept"
     ],
     "rbac": [
       "DELETE /rbac/assignments/{key_id}",

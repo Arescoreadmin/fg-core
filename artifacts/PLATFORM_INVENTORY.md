@@ -7,6 +7,7 @@
 - `control` targets=control-plane-check, plane-registry-spot
 - `data` targets=soc-invariants
 - `evidence` targets=audit-chain-verify
+- `identity` targets=soc-invariants
 - `rbac` targets=security-regression-gates
 - `security` targets=security-regression-gates
 - `ui` targets=test-quality-gate
