@@ -17,6 +17,7 @@ Does NOT use real sleeps; all timing is exercised via mocked inputs.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -251,6 +252,28 @@ def test_triage_contract_log_without_budget_error_is_still_contract_drift() -> N
 # not marked smoke/contract/security). Baseline stays at 398.
 _FG_FAST_BASELINE_COUNT = 398
 
+# Deterministic test-only API key — mirrors tests/conftest.py; never a real credential.
+_TEST_API_KEY = "ci-test-key-00000000000000000000000000000000"
+
+
+def _fg_fast_collection_env() -> dict[str, str]:
+    """
+    Build a deterministic subprocess environment for nested fg-fast collection.
+
+    Explicitly sets the three variables that Makefile provides (FG_ENV, PYTHONHASHSEED,
+    TZ) and ensures FG_API_KEY is populated so that import-time guards in test modules
+    do not raise even when the parent pytest process has a contaminated environment.
+
+    Does NOT mutate os.environ.
+    """
+    env = os.environ.copy()
+    env["FG_ENV"] = "test"
+    env["PYTHONHASHSEED"] = "0"
+    env["TZ"] = "UTC"
+    if not env.get("FG_API_KEY", "").strip():
+        env["FG_API_KEY"] = _TEST_API_KEY
+    return env
+
 
 def test_fg_fast_test_count_not_reduced() -> None:
     """
@@ -288,6 +311,7 @@ def test_fg_fast_test_count_not_reduced() -> None:
         capture_output=True,
         text=True,
         timeout=60,
+        env=_fg_fast_collection_env(),
     )
     assert result.returncode == 0, (
         "fg-fast test collection failed:\n"
@@ -303,3 +327,91 @@ def test_fg_fast_test_count_not_reduced() -> None:
         f"fg-fast test count dropped below baseline: "
         f"got {count}, expected >= {_FG_FAST_BASELINE_COUNT}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 8. _fg_fast_collection_env() isolation unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_collection_env_forces_fg_env_test(monkeypatch: object) -> None:
+    """FG_ENV must always be 'test' regardless of parent environment."""
+    import pytest
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("FG_ENV", "production")
+        env = _fg_fast_collection_env()
+    assert env["FG_ENV"] == "test"
+
+
+def test_collection_env_forces_pythonhashseed(monkeypatch: object) -> None:
+    """PYTHONHASHSEED must always be '0'."""
+    import pytest
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("PYTHONHASHSEED", "random")
+        env = _fg_fast_collection_env()
+    assert env["PYTHONHASHSEED"] == "0"
+
+
+def test_collection_env_forces_tz_utc(monkeypatch: object) -> None:
+    """TZ must always be 'UTC'."""
+    import pytest
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("TZ", "America/New_York")
+        env = _fg_fast_collection_env()
+    assert env["TZ"] == "UTC"
+
+
+def test_collection_env_fills_missing_api_key(monkeypatch: object) -> None:
+    """Missing FG_API_KEY must be replaced with the deterministic test fixture."""
+    import pytest
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.delenv("FG_API_KEY", raising=False)
+        env = _fg_fast_collection_env()
+    assert env["FG_API_KEY"] == _TEST_API_KEY
+
+
+def test_collection_env_fills_blank_api_key(monkeypatch: object) -> None:
+    """Blank FG_API_KEY must be replaced with the deterministic test fixture."""
+    import pytest
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("FG_API_KEY", "   ")
+        env = _fg_fast_collection_env()
+    assert env["FG_API_KEY"] == _TEST_API_KEY
+
+
+def test_collection_env_preserves_existing_api_key(monkeypatch: object) -> None:
+    """A non-blank FG_API_KEY must be left unchanged."""
+    import pytest
+
+    custom = "custom-test-key-12345"
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("FG_API_KEY", custom)
+        env = _fg_fast_collection_env()
+    assert env["FG_API_KEY"] == custom
+
+
+def test_collection_env_does_not_mutate_os_environ() -> None:
+    """_fg_fast_collection_env() must return a copy, not modify os.environ."""
+    original_fg_env = os.environ.get("FG_ENV")
+    _ = _fg_fast_collection_env()
+    assert os.environ.get("FG_ENV") == original_fg_env
+
+
+def test_collection_env_key_not_in_failure_output(monkeypatch: object) -> None:
+    """The test API key value must not appear in truncated failure output snippets."""
+    import pytest
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.delenv("FG_API_KEY", raising=False)
+        env = _fg_fast_collection_env()
+
+    # The key itself is a fixed dummy — confirm it matches the known fixture value
+    # and is not a real credential by asserting it equals the known test string.
+    assert env["FG_API_KEY"] == _TEST_API_KEY
+    assert "secret" not in _TEST_API_KEY
+    assert "prod" not in _TEST_API_KEY

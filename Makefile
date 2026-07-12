@@ -33,6 +33,7 @@ export PIP_NO_PYTHON_VERSION_WARNING := 1
 PY_CONTRACT := $(PY)
 
 PYTEST_ENV := env PYTHONHASHSEED=0 TZ=UTC
+JUNIT_DIR  ?= artifacts/ci/junit
 
 # =============================================================================
 # Setup (deterministic + fast via deps stamp)
@@ -604,6 +605,7 @@ fg-security: policy-validate required-tests-gate soc-invariants fg-security-pyte
 	@set -euo pipefail; \
 	.venv/bin/python tools/testing/security/check_invariant_coverage.py; \
 	echo "fg-security: PASS"
+	@$(MAKE) -s fg-security-record || true
 
 	
 # =============================================================================
@@ -691,11 +693,12 @@ PYTEST_FAST_FILTER ?= -m "smoke or contract or security"
 
 fg-fast-pytest: venv _require-pytest-venv
 	@set -euo pipefail; \
+	mkdir -p artifacts/ci $(JUNIT_DIR); \
 	start=$$(date +%s); \
-	FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q $(PYTEST_FAST_FILTER) --durations=25; \
+	FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q $(PYTEST_FAST_FILTER) --durations=25 \
+		--junitxml $(JUNIT_DIR)/fg-fast.xml; \
 	end=$$(date +%s); \
 	dur=$$((end - start)); \
-	mkdir -p artifacts/ci; \
 	printf '{"hard_max_seconds":%s,"lane":"fg-fast","duration_seconds":%s,"max_seconds":%s,"timing_model":"ci_variance_tolerance","warn_seconds":%s}\n' \
 		"$(FG_FAST_HARD_MAX_SECONDS)" "$$dur" "$(FG_FAST_MAX_SECONDS)" "$(FG_FAST_WARN_SECONDS)" \
 		> artifacts/ci/fg_fast_duration.json; \
@@ -720,10 +723,14 @@ fg-fast-budget-check: venv
 	test "$$dur" -le "$$hard_max"
 
 fg-security-pytest: venv _require-pytest-venv
-	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/security -m "not slow" --durations=25
+	@mkdir -p $(JUNIT_DIR)
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/security -m "not slow" --durations=25 \
+		--junitxml $(JUNIT_DIR)/fg-security.xml
 
 fg-full-pytest: venv _require-pytest-venv
-	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q --durations=50
+	@mkdir -p $(JUNIT_DIR)
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q --durations=50 \
+		--junitxml $(JUNIT_DIR)/fg-full.xml
 
 
 .PHONY: audit-engine audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
@@ -770,6 +777,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	@$(MAKE) -s test-dashboard-p0
 	@$(MAKE) -s sql-migration-percent-guard
 	@$(MAKE) -s fg-fast-budget-check
+	@$(MAKE) -s fg-fast-record || true
 
 # Compat alias
 g-fast: fg-fast
@@ -780,6 +788,7 @@ fg-fast-full: fg-fast-ci compliance-chain-verify canonicalization-guard
 
 fg-full: fg-fast-full fg-full-pytest \
 	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
+	@$(MAKE) -s fg-full-record || true
 
 fg-required-summary:
 	@mkdir -p artifacts/fg-required
@@ -1479,22 +1488,58 @@ fg-release:
 	bash codex_gates.sh
 
 # ---------------------------------------------------------------------------
-# Runtime Intelligence
+# Runtime Intelligence — per-gate record + compat aliases
 # ---------------------------------------------------------------------------
-.PHONY: runtime-record runtime-summary
+.PHONY: runtime-record runtime-summary \
+        fg-fast-record fg-security-record fg-full-record fg-contract-record
 
-runtime-record: venv
+_RI_CLI     := $(PY) tools/testing/runtime_intelligence/cli.py
+_RI_ART_DIR := artifacts/ci/runtime
+_RI_HIS_DIR := artifacts/ci/runtime/history
+
+fg-fast-record: venv
+	@$(MAKE) -s _ri-record-fast || true
+
+_ri-record-fast: venv
 	@$(PY) tools/testing/runtime_intelligence/cli.py \
 		--gate fg-fast \
-		--artifact-dir artifacts/ci/runtime \
-		--history-dir artifacts/ci/runtime/history \
-		|| true   # advisory — never fails the build
+		--junit $(JUNIT_DIR)/fg-fast.xml \
+		--artifact-dir $(_RI_ART_DIR) \
+		--history-dir $(_RI_HIS_DIR) \
+		--selector '$(PYTEST_FAST_FILTER)'
+
+fg-security-record: venv
+	@$(PY) tools/testing/runtime_intelligence/cli.py \
+		--gate fg-security \
+		--junit $(JUNIT_DIR)/fg-security.xml \
+		--artifact-dir $(_RI_ART_DIR) \
+		--history-dir $(_RI_HIS_DIR) \
+		--selector 'tests/security -m "not slow"' \
+		|| true
+
+fg-full-record: venv
+	@$(PY) tools/testing/runtime_intelligence/cli.py \
+		--gate fg-full \
+		--junit $(JUNIT_DIR)/fg-full.xml \
+		--artifact-dir $(_RI_ART_DIR) \
+		--history-dir $(_RI_HIS_DIR) \
+		|| true
+
+fg-contract-record: venv
+	@$(PY) tools/testing/runtime_intelligence/cli.py \
+		--gate fg-contract \
+		--artifact-dir $(_RI_ART_DIR) \
+		--history-dir $(_RI_HIS_DIR) \
+		|| true
+
+# Compat: original runtime-record alias targets fg-fast
+runtime-record: fg-fast-record
 
 runtime-summary: venv
 	@$(PY) tools/testing/runtime_intelligence/cli.py \
 		--gate fg-fast \
-		--artifact-dir artifacts/ci/runtime \
-		--history-dir artifacts/ci/runtime/history \
+		--artifact-dir $(_RI_ART_DIR) \
+		--history-dir $(_RI_HIS_DIR) \
 		--dry-run \
 		|| true
 

@@ -17978,3 +17978,91 @@ Result:
 - `docs/ci/REGRESSION_DETECTION.md` (new)
 - `Makefile` — appended `runtime-record` and `runtime-summary` targets
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR-CI-02.1 — Runtime Telemetry Integration & Canonical Gate Artifacts
+
+**Branch**: `infra/ci-runtime-telemetry-integration`
+
+### Problem
+
+PR-CI-02 created the runtime intelligence infrastructure but left it consuming only
+`fg_fast_duration.json` (wall-clock only). Result: `collected=0, passed=0, failed=0,
+manifest_fingerprint=""` even when 398 tests ran successfully.
+
+### Fix
+
+Integrated JUnit XML emission into all gate pytest targets (`fg-fast-pytest`,
+`fg-security-pytest`, `fg-full-pytest`). Added `merge_artifacts()` to parser that combines:
+- JUnit XML (counts, node_ids, manifest) — authoritative for test counts
+- `fg_fast_duration.json` (wall-clock) — overrides pytest-internal time
+
+Added per-gate record targets (`fg-fast-record`, `fg-security-record`, `fg-full-record`)
+called automatically as advisory steps at the end of each gate. Added `selector_fingerprint`
+field to `RuntimeResult`. GitHub summary now displays manifest fingerprint and slowest fixtures
+with plane/owner breakdown.
+
+### Files changed
+
+- `tools/testing/runtime_intelligence/models.py` — add `selector_fingerprint` to `RuntimeResult`
+- `tools/testing/runtime_intelligence/parser.py` — add `merge_artifacts()`, stderr advisory prints
+- `tools/testing/runtime_intelligence/cli.py` — auto-detect JUnit, `--selector`, richer history
+- `tools/testing/runtime_intelligence/github_summary.py` — manifest fingerprint + fixtures table
+- `tools/testing/runtime_intelligence/__init__.py` — export `merge_artifacts`, `selector_fingerprint`
+- `Makefile` — `JUNIT_DIR`, `--junitxml` on pytest targets, per-gate record targets, `|| true` integration
+- `tests/tools/test_runtime_intelligence.py` — 22 new tests (86 total)
+- `docs/ci/RUNTIME_INTELLIGENCE.md` — pipeline diagram, merge strategy, failure table
+- `docs/ci/RUNTIME_ARTIFACTS.md` — complete artifact format with new fields
+- `docs/ci/RUNTIME_HISTORY.md` — updated schema with manifest/selector fingerprints
+- `docs/ci/GITHUB_SUMMARY.md` — example with manifest + fixtures table
+
+---
+
+## PR-CI-02.1 fix — Collection guard isolation + fg-full-record wiring
+
+**Branch**: `infra/ci-runtime-telemetry-integration`
+
+### Failures addressed
+
+**Bot reviewer**: `fg-full-record` target was never invoked by `fg-full`. Scheduled and
+high-risk full runs produced `artifacts/ci/junit/fg-full.xml` but never wrote
+`artifacts/ci/runtime/fg-full.json` or updated history.
+
+**Full strict suite**: `tests/tools/test_fg_fast_budget_and_triage.py::test_fg_fast_test_count_not_reduced`
+failed when run inside the full 20 000+ test suite. Root cause: nested pytest subprocess
+inherited the outer process's environment, where earlier tests had consumed or cleared
+`FG_API_KEY`, causing import-time failures in 3 test modules. Collection returned exit 2
+with 394/20310 tests collected rather than the canonical 398.
+
+### Root cause
+
+The nested subprocess was called without `env=`, inheriting whatever mutations the
+outer test suite had applied. The canonical fg-fast collection environment requires
+`FG_ENV=test PYTHONHASHSEED=0 TZ=UTC` and a populated `FG_API_KEY`.
+
+### Fix
+
+- `Makefile`: add `@$(MAKE) -s fg-full-record || true` to `fg-full` target body.
+- `tests/tools/test_fg_fast_budget_and_triage.py`: add `_fg_fast_collection_env()` helper
+  that builds an explicit isolated environment dict (does not mutate `os.environ`); adds
+  `FG_API_KEY = "ci-test-key-00000000000000000000000000000000"` when absent or blank;
+  forces `FG_ENV=test`, `PYTHONHASHSEED=0`, `TZ=UTC`. Subprocess now called with `env=`.
+
+### Proof: selector still collects 398 tests
+
+```
+env -u FG_API_KEY .venv/bin/pytest -q test_fg_fast_test_count_not_reduced  → 1 passed
+FG_API_KEY=""     .venv/bin/pytest -q test_fg_fast_test_count_not_reduced  → 1 passed
+```
+
+### Tests added: 8 unit tests for `_fg_fast_collection_env()`
+
+Missing key, blank key, key preserved, FG_ENV forced, PYTHONHASHSEED forced,
+TZ forced, no os.environ mutation, key value is non-credential test fixture.
+
+### Files changed
+
+- `Makefile` — wire `fg-full-record` into `fg-full`
+- `tests/tools/test_fg_fast_budget_and_triage.py` — env helper + 8 isolation tests
+- `docs/ai/PR_FIX_LOG.md` — this entry

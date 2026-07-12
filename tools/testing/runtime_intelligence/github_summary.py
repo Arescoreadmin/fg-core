@@ -37,6 +37,8 @@ def generate_summary(
     lines.append(f"| Skipped | {result.skipped} |")
     lines.append(f"| Gate | {result.meta.gate} |")
     lines.append(f"| Commit | `{result.meta.commit_sha[:12]}` |")
+    if result.manifest_fingerprint:
+        lines.append(f"| Manifest | `{result.manifest_fingerprint}` |")
     lines.append("")
 
     # Rolling stats
@@ -72,6 +74,19 @@ def generate_summary(
             sanitized = _PARAM_RE.sub("[...]", t.node_id)
             short = sanitized[-60:] if len(sanitized) > 60 else sanitized
             lines.append(f"| `{short}` | {t.duration_seconds:.2f}s | {t.phase} |")
+        lines.append("")
+
+    # Slowest fixtures — grouped by plane when ownership is present
+    if result.slowest_fixtures:
+        lines.append("### Slowest Fixtures\n")
+        lines.append("| Fixture | Duration | Plane | Owner |")
+        lines.append("|---------|----------|-------|-------|")
+        for f in result.slowest_fixtures[:10]:
+            plane = f.plane or "—"
+            owner = f.owner or "—"
+            lines.append(
+                f"| `{f.name}` | {f.duration_seconds:.2f}s | {plane} | {owner} |"
+            )
         lines.append("")
 
     return "\n".join(lines)

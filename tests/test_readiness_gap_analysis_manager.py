@@ -37,8 +37,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture()
-def api_client(tmp_path, monkeypatch):
-    from api.auth_scopes import mint_key
+def _app_and_db(tmp_path, monkeypatch):
     from api.db import reset_engine_cache
     from api.main import build_app
 
@@ -47,44 +46,34 @@ def api_client(tmp_path, monkeypatch):
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
     reset_engine_cache()
+    return build_app(auth_enabled=True), db_path
 
-    app = build_app(auth_enabled=True)
+
+@pytest.fixture()
+def api_client(_app_and_db):
+    from api.auth_scopes import mint_key
+
+    app, _ = _app_and_db
     key = mint_key("control-plane:read", "control-plane:admin")
     return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
-def read_only_client(tmp_path, monkeypatch):
+def read_only_client(_app_and_db):
     """Client with only control-plane:read scope."""
     from api.auth_scopes import mint_key
-    from api.db import reset_engine_cache
-    from api.main import build_app
 
-    db_path = tmp_path / "readiness_gap_ro_test.db"
-    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
-    monkeypatch.setenv("FG_ENV", "test")
-    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
-    reset_engine_cache()
-
-    app = build_app(auth_enabled=True)
+    app, _ = _app_and_db
     key = mint_key("control-plane:read")
     return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
-def tenant_client(tmp_path, monkeypatch):
+def tenant_client(_app_and_db):
     """Client scoped to tenant-alpha."""
     from api.auth_scopes import mint_key
-    from api.db import reset_engine_cache
-    from api.main import build_app
 
-    db_path = tmp_path / "readiness_gap_tenant_test.db"
-    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
-    monkeypatch.setenv("FG_ENV", "test")
-    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
-    reset_engine_cache()
-
-    app = build_app(auth_enabled=True)
+    app, _ = _app_and_db
     key = mint_key(
         "control-plane:read", "control-plane:admin", tenant_id="tenant-alpha"
     )
@@ -92,12 +81,11 @@ def tenant_client(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def other_tenant_client(tmp_path, monkeypatch, tenant_client):
+def other_tenant_client(_app_and_db):
     """Client scoped to tenant-beta, sharing the same DB as tenant_client."""
     from api.auth_scopes import mint_key
-    from api.main import build_app
 
-    app = build_app(auth_enabled=True)
+    app, _ = _app_and_db
     key = mint_key("control-plane:read", "control-plane:admin", tenant_id="tenant-beta")
     return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 

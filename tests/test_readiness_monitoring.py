@@ -1103,8 +1103,7 @@ class TestSerialization:
 
 
 @pytest.fixture()
-def api_client(tmp_path, monkeypatch):
-    from api.auth_scopes import mint_key
+def _app_and_db(tmp_path, monkeypatch):
     from api.db import reset_engine_cache
     from api.main import build_app
 
@@ -1113,29 +1112,27 @@ def api_client(tmp_path, monkeypatch):
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
     reset_engine_cache()
+    return build_app(auth_enabled=True), db_path
+
+
+@pytest.fixture()
+def api_client(_app_and_db):
+    from api.auth_scopes import mint_key
 
     from fastapi.testclient import TestClient
 
-    app = build_app(auth_enabled=True)
+    app, _ = _app_and_db
     key = mint_key("control-plane:read", "control-plane:admin")
     return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
-def tenant_client(tmp_path, monkeypatch):
+def tenant_client(_app_and_db):
     from api.auth_scopes import mint_key
-    from api.db import reset_engine_cache
-    from api.main import build_app
-
-    db_path = tmp_path / "monitoring_tenant_test.db"
-    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
-    monkeypatch.setenv("FG_ENV", "test")
-    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
-    reset_engine_cache()
 
     from fastapi.testclient import TestClient
 
-    app = build_app(auth_enabled=True)
+    app, _ = _app_and_db
     key = mint_key(
         "control-plane:read", "control-plane:admin", tenant_id="tenant-alpha"
     )
@@ -1143,13 +1140,12 @@ def tenant_client(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def other_tenant_client(tmp_path, monkeypatch, tenant_client):
+def other_tenant_client(_app_and_db):
     from api.auth_scopes import mint_key
-    from api.main import build_app
 
     from fastapi.testclient import TestClient
 
-    app = build_app(auth_enabled=True)
+    app, _ = _app_and_db
     key = mint_key("control-plane:read", "control-plane:admin", tenant_id="tenant-beta")
     return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 

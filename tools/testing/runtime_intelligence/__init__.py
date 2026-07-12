@@ -5,6 +5,7 @@ from .fingerprints import (
     dependency_fingerprint,
     environment_fingerprint,
     manifest_fingerprint,
+    selector_fingerprint,
 )
 from .ownership import classify_test_path, node_id_to_path
 from .github_summary import generate_summary, write_step_summary
@@ -22,7 +23,7 @@ from .models import (
     SlowFixture,
     SlowTest,
 )
-from .parser import parse_fg_fast_artifact, parse_junit_xml
+from .parser import merge_artifacts, parse_fg_fast_artifact, parse_junit_xml
 from .recorder import record_gate_result
 from .regression import RegressionSeverity, detect_regressions
 from .serializer import from_json, to_json
@@ -48,9 +49,11 @@ __all__ = [
     "generate_summary",
     "load_history",
     "manifest_fingerprint",
+    "merge_artifacts",
     "node_id_to_path",
     "parse_fg_fast_artifact",
     "parse_junit_xml",
+    "selector_fingerprint",
     "record_gate_result",
     "save_history",
     "to_json",

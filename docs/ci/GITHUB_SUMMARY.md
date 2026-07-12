@@ -6,14 +6,38 @@ The runtime intelligence package generates GitHub Actions step summaries as mark
 
 `tools/testing/runtime_intelligence/github_summary.py` — `generate_summary(result, stats, regressions)`
 
-## Included fields
+## Included fields (updated PR-CI-02.1)
 
 | Section | Fields |
 |---------|--------|
-| Core metrics table | Duration (with % vs median), Collected, Passed, Failed, Skipped, Gate, Commit (12-char SHA) |
+| Core metrics table | Duration (with % vs median), Collected, Passed, Failed, Skipped, Gate, Commit (12-char SHA), Manifest fingerprint (when present) |
 | Rolling stats | Median, p90, p95, Min, Max, Run count (last 30 runs) |
 | Regressions | Severity, field, current value, baseline value, % change, message |
-| Slowest tests | Top 10: node_id (last 60 chars), duration, phase |
+| Slowest tests | Top 10: sanitized node_id (brackets replaced with `[...]`), duration, phase |
+| Slowest fixtures | Top 10: name, duration, plane, owner (from ownership map) |
+
+### Example output
+
+```
+## FG FAST Runtime Summary
+
+| Metric    | Value                        |
+|-----------|------------------------------|
+| Duration  | 450s (+3% vs median)         |
+| Collected | 398                          |
+| Passed    | 396                          |
+| Failed    | 0                            |
+| Skipped   | 2                            |
+| Gate      | fg-fast                      |
+| Commit    | `abc123def456`               |
+| Manifest  | `4ab8d2cf1a3b5e70`           |
+
+### Slowest Fixtures
+
+| Fixture          | Duration | Plane    | Owner          |
+|------------------|----------|----------|----------------|
+| `identity_setup` | 2.70s    | identity | team-identity  |
+```
 
 ## PII/secrets policy
 
