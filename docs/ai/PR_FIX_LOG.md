@@ -18066,3 +18066,86 @@ TZ forced, no os.environ mutation, key value is non-credential test fixture.
 - `Makefile` — wire `fg-full-record` into `fg-full`
 - `tests/tools/test_fg_fast_budget_and_triage.py` — env helper + 8 isolation tests
 - `docs/ai/PR_FIX_LOG.md` — this entry
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR-CI-03 — Signed Validation Manifests
+
+**Branch**: `infra/ci-signed-validation-manifests`
+**Date**: 2026-07-12
+
+### Purpose
+
+Implements FrostGate's Validation Trust Chain: every CI gate run produces a
+deterministic, cryptographically signed `ValidationManifest` that can be
+independently verified, chained, and replayed.
+
+### New modules
+
+- `tools/testing/runtime_intelligence/manifest.py` — `ValidationManifest` frozen
+  dataclass (26 fields), `canonical_bytes()` (sorted-key UTF-8 JSON, excludes
+  volatile/derived fields), `compute_manifest_hash()` (SHA-256), `build_manifest()`
+  factory from `RuntimeResult`, `serialize_manifest` / `deserialize_manifest`,
+  `with_signature()`.
+
+- `tools/testing/runtime_intelligence/signing.py` — `Ed25519KeyProvider`
+  (env-driven via `FG_MANIFEST_SIGNING_KEY` / `FG_MANIFEST_VERIFY_KEY`, ephemeral
+  fallback for dev/test; `repr` never exposes key bytes), `sign_manifest()`,
+  `verify_signature_bytes()`, `generate_keypair()`, `SignatureResult`,
+  `VerificationResult`.
+
+- `tools/testing/runtime_intelligence/verification.py` — `verify_hash()`,
+  `verify_signature()`, `verify_chain()`, `verify_runtime()`, `verify_manifest()`
+  (composite; unsigned legacy → `valid=True, algorithm="unsigned"`).
+
+- `tools/testing/runtime_intelligence/manifest_writer.py` — `write_manifest()`
+  → `artifacts/ci/manifests/{gate}.manifest.json`, `write_verification_report()`
+  → `verification.json`, `write_chain_record()` → `chain.json`, `load_manifest()`.
+
+### Modified files
+
+- `tools/testing/runtime_intelligence/__init__.py` — exports all new symbols.
+- `tools/testing/runtime_intelligence/cli.py` — 7 new subcommands (`create-manifest`,
+  `sign-manifest`, `verify-manifest`, `print-manifest`, `export-manifest`,
+  `validate-chain`, `verify-runtime`) dispatched before legacy `--gate` path.
+- `tools/testing/runtime_intelligence/github_summary.py` — optional `manifest=` param
+  adds "Validation Manifest" section (ID, hash, signature, verification, chain).
+- `tools/testing/runtime_intelligence/history.py` — `build_history_entry()` helper
+  with optional `manifest_id`, `manifest_hash`, `signature_status` fields.
+
+### Tests
+
+- `tests/tools/test_signed_validation_manifests.py` — 91 tests, all
+  `@pytest.mark.contract`, 12 classes: canonical serialization, hash stability,
+  `build_manifest`, key provider, signing, verification, tampering, chain,
+  history integration, GitHub summary, security invariants (no key leakage),
+  backward compatibility, serialization roundtrip, CLI dispatch.
+
+### Validation
+
+```
+make fmt-check        → All checks passed, 1061 files
+pytest test_signed_validation_manifests.py test_runtime_intelligence.py → 177 passed in 3.80s
+make fg-fast          → pending (gate green prior to this entry)
+```
+
+### Security
+
+Private key bytes never appear in `repr`, logs, exceptions, manifests, or
+history entries. Five dedicated security invariant tests assert this. Key material
+consumed only at signing time from `FG_MANIFEST_SIGNING_KEY`.
+
+### Files changed
+
+- `tools/testing/runtime_intelligence/manifest.py` (new)
+- `tools/testing/runtime_intelligence/signing.py` (new)
+- `tools/testing/runtime_intelligence/verification.py` (new)
+- `tools/testing/runtime_intelligence/manifest_writer.py` (new)
+- `tools/testing/runtime_intelligence/__init__.py`
+- `tools/testing/runtime_intelligence/cli.py`
+- `tools/testing/runtime_intelligence/github_summary.py`
+- `tools/testing/runtime_intelligence/history.py`
+- `tests/tools/test_signed_validation_manifests.py` (new)
+- `docs/ci/SIGNED_VALIDATION_MANIFESTS.md` (new)
+- `docs/ai/PR_FIX_LOG.md` — this entry

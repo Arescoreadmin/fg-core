@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .models import RollingStats
 from .statistics import compute_rolling_stats
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .manifest import ValidationManifest
+    from .models import RuntimeResult
 
 HISTORY_SCHEMA_VERSION = "1.0"
 MAX_HISTORY_RUNS = 100
@@ -75,6 +79,35 @@ def rolling_stats_for_history(
     recent = history.runs[-last_n:] if len(history.runs) >= last_n else history.runs
     durations = [r["duration_seconds"] for r in recent if "duration_seconds" in r]
     return compute_rolling_stats(durations)
+
+
+def build_history_entry(
+    result: RuntimeResult,
+    gate: str,
+    manifest: ValidationManifest | None = None,
+) -> dict[str, Any]:
+    """Build a history entry dict from a result and optional manifest.
+
+    When ``manifest`` is provided, ``manifest_id``, ``manifest_hash``, and
+    ``signature_status`` are included. The history schema is intentionally
+    flexible — extra keys are always allowed.
+    """
+    entry: dict[str, Any] = {
+        "duration_seconds": result.duration_seconds,
+        "passed": result.passed,
+        "failed": result.failed,
+        "collected": result.collected,
+        "skipped": result.skipped,
+        "commit_sha": result.meta.commit_sha[:12],
+        "gate": gate,
+        "manifest_fingerprint": result.manifest_fingerprint,
+        "selector_fingerprint": result.selector_fingerprint,
+    }
+    if manifest is not None:
+        entry["manifest_id"] = manifest.manifest_id
+        entry["manifest_hash"] = manifest.manifest_hash
+        entry["signature_status"] = manifest.verification_status
+    return entry
 
 
 def baseline_collected_for_history(
