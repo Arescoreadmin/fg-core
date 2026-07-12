@@ -16,6 +16,9 @@ class SlowTest:
 class SlowFixture:
     name: str
     duration_seconds: float
+    plane: str = ""    # from PLANE_REGISTRY / ownership_map
+    module: str = ""   # module_id from ownership_map
+    owner: str = ""    # team owner from ownership_map
 
 
 @dataclass(frozen=True)
@@ -45,7 +48,8 @@ class RuntimeResult:
     warnings: int
     duration_seconds: float
     slowest_tests: tuple[SlowTest, ...]  # top 25, sorted desc by duration
-    slowest_fixtures: tuple[SlowFixture, ...]  # top 25
+    slowest_fixtures: tuple[SlowFixture, ...]  # top 25, enriched with ownership
+    manifest_fingerprint: str = ""  # SHA-256[:16] of sorted test node_ids; "" if not collected
 
 
 @dataclass(frozen=True)

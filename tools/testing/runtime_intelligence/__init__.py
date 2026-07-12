@@ -4,7 +4,9 @@ from .fingerprints import (
     commit_fingerprint,
     dependency_fingerprint,
     environment_fingerprint,
+    manifest_fingerprint,
 )
+from .ownership import classify_test_path, node_id_to_path
 from .github_summary import generate_summary, write_step_summary
 from .history import append_result, load_history, save_history
 from .models import (
@@ -30,6 +32,7 @@ __all__ = [
     "SlowFixture",
     "SlowTest",
     "append_result",
+    "classify_test_path",
     "commit_fingerprint",
     "compute_rolling_stats",
     "dependency_fingerprint",
@@ -38,6 +41,8 @@ __all__ = [
     "from_json",
     "generate_summary",
     "load_history",
+    "manifest_fingerprint",
+    "node_id_to_path",
     "parse_fg_fast_artifact",
     "parse_junit_xml",
     "record_gate_result",

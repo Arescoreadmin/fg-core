@@ -12,6 +12,7 @@ from .fingerprints import (
     commit_fingerprint,
     dependency_fingerprint,
     environment_fingerprint,
+    manifest_fingerprint,
 )
 from .models import RuntimeMetadata, RuntimeResult, SlowTest, SlowFixture  # noqa: F401
 
@@ -85,12 +86,14 @@ def parse_junit_xml(xml_path: Path, gate: str) -> RuntimeResult | None:
     dur = float(suite.get("time", 0))
     meta = _make_meta(gate, dur)
 
-    # Extract slowest test cases
+    # Extract slowest test cases and collect node_ids for manifest fingerprint
     cases: list[SlowTest] = []
+    node_ids: list[str] = []
     for tc in suite.iter("testcase"):
         t = float(tc.get("time", 0))
         name = f"{tc.get('classname', '')}.{tc.get('name', '')}".strip(".")
         cases.append(SlowTest(node_id=name, duration_seconds=t, phase="call"))
+        node_ids.append(name)
     cases.sort(key=lambda x: x.duration_seconds, reverse=True)
 
     return RuntimeResult(
@@ -104,4 +107,5 @@ def parse_junit_xml(xml_path: Path, gate: str) -> RuntimeResult | None:
         duration_seconds=dur,
         slowest_tests=tuple(cases[:25]),
         slowest_fixtures=(),
+        manifest_fingerprint=manifest_fingerprint(node_ids),
     )

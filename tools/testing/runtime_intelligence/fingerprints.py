@@ -51,3 +51,20 @@ def environment_fingerprint() -> str:
 def selector_fingerprint(selector: str) -> str:
     """Hash of pytest selector expression."""
     return hashlib.sha256(selector.encode()).hexdigest()[:16]
+
+
+def manifest_fingerprint(node_ids: list[str]) -> str:
+    """SHA-256 of the sorted, deduplicated test node ID list.
+
+    Stable across runs with the same test suite. Changes when tests are
+    added, removed, or renamed, making two runs uncomparable if different.
+    Empty list returns the zero fingerprint '0000000000000000'.
+    """
+    if not node_ids:
+        return "0" * 16
+    canonical = sorted(set(node_ids))
+    h = hashlib.sha256()
+    for node_id in canonical:
+        h.update(node_id.encode("utf-8"))
+        h.update(b"\n")
+    return h.hexdigest()[:16]

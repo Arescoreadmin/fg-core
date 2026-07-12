@@ -492,3 +492,141 @@ def test_dependency_fingerprint_is_stable_across_calls() -> None:
     fp1 = dependency_fingerprint()
     fp2 = dependency_fingerprint()
     assert fp1 == fp2
+
+
+# ---------------------------------------------------------------------------
+# unit: manifest_fingerprint
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_fingerprint_empty_returns_zeros() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import manifest_fingerprint
+
+    assert manifest_fingerprint([]) == "0" * 16
+
+
+def test_manifest_fingerprint_stable_across_calls() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import manifest_fingerprint
+
+    ids = ["tests/foo.py::test_a", "tests/foo.py::test_b"]
+    assert manifest_fingerprint(ids) == manifest_fingerprint(ids)
+
+
+def test_manifest_fingerprint_order_independent() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import manifest_fingerprint
+
+    ids = ["tests/foo.py::test_a", "tests/bar.py::test_z"]
+    assert manifest_fingerprint(ids) == manifest_fingerprint(list(reversed(ids)))
+
+
+def test_manifest_fingerprint_changes_on_addition() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import manifest_fingerprint
+
+    base = ["tests/foo.py::test_a"]
+    extended = ["tests/foo.py::test_a", "tests/foo.py::test_b"]
+    assert manifest_fingerprint(base) != manifest_fingerprint(extended)
+
+
+def test_manifest_fingerprint_deduplicates() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import manifest_fingerprint
+
+    ids = ["tests/foo.py::test_a", "tests/foo.py::test_a"]
+    assert manifest_fingerprint(ids) == manifest_fingerprint(["tests/foo.py::test_a"])
+
+
+def test_manifest_fingerprint_is_16_hex_chars() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import manifest_fingerprint
+
+    fp = manifest_fingerprint(["tests/foo.py::test_x"])
+    assert len(fp) == 16
+    assert all(c in "0123456789abcdef" for c in fp)
+
+
+def test_runtime_result_stores_manifest_fingerprint() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import manifest_fingerprint
+
+    fp = manifest_fingerprint(["tests/foo.py::test_a", "tests/foo.py::test_b"])
+    r = _make_result(manifest_fingerprint=fp)
+    assert r.manifest_fingerprint == fp
+
+
+def test_junit_xml_populates_manifest_fingerprint(tmp_path: Path) -> None:
+    junit = tmp_path / "junit.xml"
+    junit.write_text(
+        '<?xml version="1.0"?>\n'
+        '<testsuite name="pytest" tests="2" failures="0" errors="0" skipped="0" time="1.0">\n'
+        '  <testcase classname="tests.foo" name="test_a" time="0.5"/>\n'
+        '  <testcase classname="tests.foo" name="test_b" time="0.5"/>\n'
+        "</testsuite>\n"
+    )
+    result = parse_junit_xml(junit, "fg-fast")
+    assert result is not None
+    assert len(result.manifest_fingerprint) == 16
+    assert result.manifest_fingerprint != "0" * 16
+
+
+# ---------------------------------------------------------------------------
+# unit: fixture ownership
+# ---------------------------------------------------------------------------
+
+
+def test_classify_test_path_known_module() -> None:
+    from tools.testing.runtime_intelligence.ownership import classify_test_path
+
+    plane, module_id, owner = classify_test_path("tools/testing/harness/lane_runner.py")
+    assert plane == "security"
+    assert module_id == "testing_module"
+    assert owner == "team-platform-security"
+
+
+def test_classify_test_path_unknown_returns_empty() -> None:
+    from tools.testing.runtime_intelligence.ownership import classify_test_path
+
+    plane, module_id, owner = classify_test_path("totally/unknown/path.py")
+    assert plane == ""
+    assert module_id == ""
+    assert owner == ""
+
+
+def test_node_id_to_path_strips_params() -> None:
+    from tools.testing.runtime_intelligence.ownership import node_id_to_path
+
+    assert node_id_to_path("tests/foo.py::TestClass::test_method") == "tests/foo.py"
+    assert node_id_to_path("tests/bar.py") == "tests/bar.py"
+
+
+def test_slow_fixture_carries_ownership() -> None:
+    from tools.testing.runtime_intelligence.models import SlowFixture
+
+    f = SlowFixture(
+        name="my_fixture",
+        duration_seconds=2.5,
+        plane="security",
+        module="testing_module",
+        owner="team-platform-security",
+    )
+    assert f.plane == "security"
+    assert f.module == "testing_module"
+    assert f.owner == "team-platform-security"
+
+
+def test_parse_durations_enriches_fixture_ownership() -> None:
+    durations_text = (
+        "3.50s setup  tools/testing/harness/lane_runner.py::TestSuite::test_x\n"
+        "1.20s call   tools/testing/harness/lane_runner.py::TestSuite::test_x\n"
+    )
+    _, fixtures = parse_durations_output(durations_text)
+    assert len(fixtures) == 1
+    f = fixtures[0]
+    assert f.plane == "security"
+    assert f.module == "testing_module"
+    assert f.owner == "team-platform-security"
+
+
+def test_parse_durations_fixture_unknown_path_has_empty_ownership() -> None:
+    durations_text = "2.00s setup  unknown/module/test_foo.py::test_bar\n"
+    _, fixtures = parse_durations_output(durations_text)
+    assert len(fixtures) == 1
+    assert fixtures[0].plane == ""
+    assert fixtures[0].module == ""
+    assert fixtures[0].owner == ""
