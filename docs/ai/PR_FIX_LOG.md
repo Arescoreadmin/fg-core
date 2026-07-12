@@ -17922,3 +17922,59 @@ Result:
 - `tests/test_decision_diff_surfaces.py`
 - `ROADMAP.md`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+### 2026-07-12 — feat(ci): PR-CI-02 Enterprise CI Runtime Intelligence & Gate Telemetry
+
+**Branch:** `infra/ci-runtime-intelligence`
+
+**What shipped:** New advisory telemetry package `tools/testing/runtime_intelligence/` with 12 modules covering runtime recording, regression detection, rolling statistics, history rotation, GitHub step summaries, and JUnit XML parsing.
+
+**Modules added:**
+- `models.py` — Frozen dataclasses: `RuntimeResult`, `RuntimeMetadata`, `RollingStats`, `Regression`, `SlowTest`, `SlowFixture`
+- `serializer.py` — Deterministic JSON (`sort_keys=True`, `ensure_ascii=True`)
+- `fingerprints.py` — Stable, secret-free fingerprints (env, dependency, commit, selector)
+- `statistics.py` — Pure stdlib percentile + rolling stats
+- `history.py` — Rolling per-gate history (max 100 runs, schema-version aware)
+- `regression.py` — Severity thresholds: low/medium/high/critical (advisory, exit 0)
+- `profiler.py` — Parse pytest `--durations` output
+- `parser.py` — Parse `fg_fast_duration.json` and JUnit XML into `RuntimeResult`
+- `recorder.py` — Write gate result JSON artifact
+- `github_summary.py` — GitHub Actions step summary markdown (no PII)
+- `cli.py` — CLI entry point with `--gate`, `--junit`, `--dry-run`, `--github-summary`
+- `__init__.py` — Public API surface
+
+**Tests:** 44 tests in `tests/tools/test_runtime_intelligence.py` covering unit, contract, security, and integration categories (satisfies `testing_module` ownership_map requirements).
+
+**Makefile targets added:** `runtime-record`, `runtime-summary` (advisory, `|| true`)
+
+**Docs added:** `docs/ci/RUNTIME_INTELLIGENCE.md`, `RUNTIME_HISTORY.md`, `RUNTIME_ARTIFACTS.md`, `GITHUB_SUMMARY.md`, `REGRESSION_DETECTION.md`
+
+**Invariants maintained:**
+- No existing gate, test, or timeout modified
+- No changes to `requirements.txt`, `constraints.txt`, or CI gate logic
+- All fingerprints are secret-free (no env vars, tokens, DB URLs)
+- Regressions are advisory only — never fail builds
+
+**Files created:**
+- `tools/testing/runtime_intelligence/__init__.py` (new)
+- `tools/testing/runtime_intelligence/models.py` (new)
+- `tools/testing/runtime_intelligence/serializer.py` (new)
+- `tools/testing/runtime_intelligence/fingerprints.py` (new)
+- `tools/testing/runtime_intelligence/statistics.py` (new)
+- `tools/testing/runtime_intelligence/history.py` (new)
+- `tools/testing/runtime_intelligence/regression.py` (new)
+- `tools/testing/runtime_intelligence/profiler.py` (new)
+- `tools/testing/runtime_intelligence/parser.py` (new)
+- `tools/testing/runtime_intelligence/recorder.py` (new)
+- `tools/testing/runtime_intelligence/github_summary.py` (new)
+- `tools/testing/runtime_intelligence/cli.py` (new)
+- `tests/tools/test_runtime_intelligence.py` (new, 44 tests)
+- `docs/ci/RUNTIME_INTELLIGENCE.md` (new)
+- `docs/ci/RUNTIME_HISTORY.md` (new)
+- `docs/ci/RUNTIME_ARTIFACTS.md` (new)
+- `docs/ci/GITHUB_SUMMARY.md` (new)
+- `docs/ci/REGRESSION_DETECTION.md` (new)
+- `Makefile` — appended `runtime-record` and `runtime-summary` targets
+- `docs/ai/PR_FIX_LOG.md` — this entry

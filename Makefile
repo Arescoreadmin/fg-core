@@ -1478,3 +1478,23 @@ fg-smart:
 fg-release:
 	bash codex_gates.sh
 
+# ---------------------------------------------------------------------------
+# Runtime Intelligence
+# ---------------------------------------------------------------------------
+.PHONY: runtime-record runtime-summary
+
+runtime-record: venv
+	@$(PY) tools/testing/runtime_intelligence/cli.py \
+		--gate fg-fast \
+		--artifact-dir artifacts/ci/runtime \
+		--history-dir artifacts/ci/runtime/history \
+		|| true   # advisory — never fails the build
+
+runtime-summary: venv
+	@$(PY) tools/testing/runtime_intelligence/cli.py \
+		--gate fg-fast \
+		--artifact-dir artifacts/ci/runtime \
+		--history-dir artifacts/ci/runtime/history \
+		--dry-run \
+		|| true
+
