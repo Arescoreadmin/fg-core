@@ -8,7 +8,7 @@ Per-gate rolling history of CI run durations and test counts.
 
 Example: `artifacts/ci/runtime/history/fg-fast-history.json`
 
-## Schema (v1.0)
+## Schema (v1.0) — updated PR-CI-02.1
 
 ```json
 {
@@ -16,16 +16,26 @@ Example: `artifacts/ci/runtime/history/fg-fast-history.json`
   "gate": "fg-fast",
   "runs": [
     {
-      "duration_seconds": 312.4,
+      "duration_seconds": 450.0,
       "passed": 396,
       "failed": 0,
       "collected": 398,
+      "skipped": 2,
       "commit_sha": "abc123def456",
-      "gate": "fg-fast"
+      "gate": "fg-fast",
+      "manifest_fingerprint": "4ab8d2cf1a3b5e70",
+      "selector_fingerprint": "e7f3a1b2c4d5e6f7"
     }
   ]
 }
 ```
+
+`manifest_fingerprint` enables cross-run comparability: two runs with the same fingerprint
+ran against the same test suite. Runs with different fingerprints should not be regressed
+against each other (test suite changed).
+
+`selector_fingerprint` identifies which pytest expression was used. Two runs with different
+selector fingerprints are not directly comparable.
 
 ## Rotation policy
 

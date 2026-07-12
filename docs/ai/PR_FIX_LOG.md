@@ -17978,3 +17978,41 @@ Result:
 - `docs/ci/REGRESSION_DETECTION.md` (new)
 - `Makefile` — appended `runtime-record` and `runtime-summary` targets
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+## PR-CI-02.1 — Runtime Telemetry Integration & Canonical Gate Artifacts
+
+**Branch**: `infra/ci-runtime-telemetry-integration`
+
+### Problem
+
+PR-CI-02 created the runtime intelligence infrastructure but left it consuming only
+`fg_fast_duration.json` (wall-clock only). Result: `collected=0, passed=0, failed=0,
+manifest_fingerprint=""` even when 398 tests ran successfully.
+
+### Fix
+
+Integrated JUnit XML emission into all gate pytest targets (`fg-fast-pytest`,
+`fg-security-pytest`, `fg-full-pytest`). Added `merge_artifacts()` to parser that combines:
+- JUnit XML (counts, node_ids, manifest) — authoritative for test counts
+- `fg_fast_duration.json` (wall-clock) — overrides pytest-internal time
+
+Added per-gate record targets (`fg-fast-record`, `fg-security-record`, `fg-full-record`)
+called automatically as advisory steps at the end of each gate. Added `selector_fingerprint`
+field to `RuntimeResult`. GitHub summary now displays manifest fingerprint and slowest fixtures
+with plane/owner breakdown.
+
+### Files changed
+
+- `tools/testing/runtime_intelligence/models.py` — add `selector_fingerprint` to `RuntimeResult`
+- `tools/testing/runtime_intelligence/parser.py` — add `merge_artifacts()`, stderr advisory prints
+- `tools/testing/runtime_intelligence/cli.py` — auto-detect JUnit, `--selector`, richer history
+- `tools/testing/runtime_intelligence/github_summary.py` — manifest fingerprint + fixtures table
+- `tools/testing/runtime_intelligence/__init__.py` — export `merge_artifacts`, `selector_fingerprint`
+- `Makefile` — `JUNIT_DIR`, `--junitxml` on pytest targets, per-gate record targets, `|| true` integration
+- `tests/tools/test_runtime_intelligence.py` — 22 new tests (86 total)
+- `docs/ci/RUNTIME_INTELLIGENCE.md` — pipeline diagram, merge strategy, failure table
+- `docs/ci/RUNTIME_ARTIFACTS.md` — complete artifact format with new fields
+- `docs/ci/RUNTIME_HISTORY.md` — updated schema with manifest/selector fingerprints
+- `docs/ci/GITHUB_SUMMARY.md` — example with manifest + fixtures table

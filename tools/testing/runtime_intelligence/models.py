@@ -52,6 +52,7 @@ class RuntimeResult:
     manifest_fingerprint: str = (
         ""  # SHA-256[:16] of sorted test node_ids; "" if not collected
     )
+    selector_fingerprint: str = ""  # SHA-256[:16] of pytest selector expression
 
 
 @dataclass(frozen=True)

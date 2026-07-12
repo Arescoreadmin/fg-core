@@ -728,3 +728,352 @@ def test_github_summary_sanitizes_parametrized_node_ids() -> None:
     assert "user@example.com" not in summary
     assert "token-abc123" not in summary
     assert "[...]" in summary
+
+
+# ---------------------------------------------------------------------------
+# unit: PR-CI-02.1 — merge_artifacts, selector_fingerprint, complete RuntimeResult
+# ---------------------------------------------------------------------------
+
+
+def _write_junit(
+    path: Path,
+    tests: int = 5,
+    failures: int = 1,
+    skipped: int = 1,
+    time: float = 12.3,
+    cases: list[tuple[str, str, float]] | None = None,
+) -> None:
+    """Write a minimal JUnit XML to path."""
+    if cases is None:
+        cases = [
+            ("tests.foo", "test_a", 1.2),
+            ("tests.foo", "test_b", 0.5),
+            ("tests.foo", "test_c", 0.1),
+        ]
+    lines = [
+        '<?xml version="1.0"?>',
+        f'<testsuite name="pytest" tests="{tests}" failures="{failures}"'
+        f' errors="0" skipped="{skipped}" time="{time}">',
+    ]
+    for cls, name, t in cases:
+        lines.append(f'  <testcase classname="{cls}" name="{name}" time="{t}"/>')
+    lines.append("</testsuite>")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _write_duration_json(path: Path, duration: float = 450.0) -> None:
+    import json
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "lane": "fg-fast",
+                "duration_seconds": duration,
+                "max_seconds": 900,
+                "hard_max_seconds": 930,
+                "warn_seconds": 810,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+# --- merge_artifacts: JUnit + duration ---
+
+
+def test_merge_artifacts_uses_junit_counts(tmp_path: Path) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    junit = tmp_path / "fg-fast.xml"
+    _write_junit(junit, tests=398, failures=0, skipped=2, time=399.0)
+    result = merge_artifacts("fg-fast", junit_path=junit)
+    assert result is not None
+    assert result.collected == 398
+    assert result.passed == 396
+    assert result.failed == 0
+    assert result.skipped == 2
+
+
+def test_merge_artifacts_overrides_duration_with_wall_clock(tmp_path: Path) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    junit = tmp_path / "fg-fast.xml"
+    dur = tmp_path / "fg_fast_duration.json"
+    _write_junit(junit, tests=5, failures=0, skipped=0, time=300.0)
+    _write_duration_json(dur, duration=450.0)
+    result = merge_artifacts("fg-fast", junit_path=junit, duration_json_path=dur)
+    assert result is not None
+    # Wall-clock (450s) replaces pytest-internal time (300s)
+    assert result.duration_seconds == pytest.approx(450.0)
+    # But counts come from JUnit
+    assert result.collected == 5
+
+
+def test_merge_artifacts_manifest_populated_from_junit(tmp_path: Path) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    junit = tmp_path / "fg-fast.xml"
+    _write_junit(
+        junit,
+        tests=3,
+        failures=0,
+        skipped=0,
+        time=5.0,
+        cases=[
+            ("tests.foo", "test_a", 1.0),
+            ("tests.foo", "test_b", 1.0),
+            ("tests.foo", "test_c", 1.0),
+        ],
+    )
+    result = merge_artifacts("fg-fast", junit_path=junit)
+    assert result is not None
+    assert len(result.manifest_fingerprint) == 16
+    assert result.manifest_fingerprint != "0" * 16
+
+
+def test_merge_artifacts_manifest_empty_when_no_tests(tmp_path: Path) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    junit = tmp_path / "fg-fast.xml"
+    # Zero tests
+    junit.write_text(
+        '<?xml version="1.0"?>\n'
+        '<testsuite name="pytest" tests="0" failures="0" errors="0"'
+        ' skipped="0" time="0.0"/>\n',
+        encoding="utf-8",
+    )
+    result = merge_artifacts("fg-fast", junit_path=junit)
+    assert result is not None
+    assert result.collected == 0
+    assert result.manifest_fingerprint == "0" * 16
+
+
+def test_merge_artifacts_missing_junit_falls_back_to_duration(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    dur = tmp_path / "fg_fast_duration.json"
+    _write_duration_json(dur, duration=399.0)
+    result = merge_artifacts(
+        "fg-fast",
+        junit_path=tmp_path / "nonexistent.xml",
+        duration_json_path=dur,
+    )
+    assert result is not None
+    assert result.duration_seconds == pytest.approx(399.0)
+    assert result.collected == 0  # duration-only has no counts
+    captured = capsys.readouterr()
+    assert "not found" in captured.err.lower()
+
+
+def test_merge_artifacts_malformed_junit_falls_back_to_duration(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    junit = tmp_path / "fg-fast.xml"
+    junit.write_text("NOT VALID XML<<<", encoding="utf-8")
+    dur = tmp_path / "fg_fast_duration.json"
+    _write_duration_json(dur, duration=399.0)
+
+    result = merge_artifacts("fg-fast", junit_path=junit, duration_json_path=dur)
+    assert result is not None
+    assert result.duration_seconds == pytest.approx(399.0)
+    captured = capsys.readouterr()
+    assert "malformed" in captured.err.lower()
+
+
+def test_merge_artifacts_both_missing_returns_none(tmp_path: Path) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    result = merge_artifacts(
+        "fg-fast",
+        junit_path=tmp_path / "nope.xml",
+        duration_json_path=None,
+    )
+    assert result is None
+
+
+def test_merge_artifacts_deterministic(tmp_path: Path) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    junit = tmp_path / "fg-fast.xml"
+    _write_junit(junit, tests=10, failures=0, skipped=1, time=30.0)
+    r1 = merge_artifacts("fg-fast", junit_path=junit)
+    r2 = merge_artifacts("fg-fast", junit_path=junit)
+    assert r1 is not None and r2 is not None
+    assert r1.manifest_fingerprint == r2.manifest_fingerprint
+    assert r1.collected == r2.collected
+
+
+# --- selector_fingerprint ---
+
+
+def test_selector_fingerprint_is_stable() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import selector_fingerprint
+
+    expr = '-m "smoke or contract or security"'
+    assert selector_fingerprint(expr) == selector_fingerprint(expr)
+
+
+def test_selector_fingerprint_differs_for_different_selectors() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import selector_fingerprint
+
+    a = selector_fingerprint('-m "smoke"')
+    b = selector_fingerprint('-m "security"')
+    assert a != b
+
+
+def test_selector_fingerprint_is_16_hex_chars() -> None:
+    from tools.testing.runtime_intelligence.fingerprints import selector_fingerprint
+
+    fp = selector_fingerprint("tests/ -m smoke")
+    assert len(fp) == 16
+    assert all(c in "0123456789abcdef" for c in fp)
+
+
+def test_merge_artifacts_populates_selector_fingerprint(tmp_path: Path) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    junit = tmp_path / "fg-fast.xml"
+    _write_junit(junit)
+    selector = '-m "smoke or contract or security"'
+    result = merge_artifacts("fg-fast", junit_path=junit, selector=selector)
+    assert result is not None
+    assert len(result.selector_fingerprint) == 16
+    assert result.selector_fingerprint != ""
+
+
+def test_merge_artifacts_empty_selector_gives_empty_fingerprint(tmp_path: Path) -> None:
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    junit = tmp_path / "fg-fast.xml"
+    _write_junit(junit)
+    result = merge_artifacts("fg-fast", junit_path=junit, selector="")
+    assert result is not None
+    assert result.selector_fingerprint == ""
+
+
+# --- RuntimeResult completeness ---
+
+
+def test_runtime_result_has_selector_fingerprint_field() -> None:
+    r = _make_result(selector_fingerprint="abcd1234abcd1234")
+    assert r.selector_fingerprint == "abcd1234abcd1234"
+
+
+def test_runtime_result_selector_fingerprint_defaults_empty() -> None:
+    r = _make_result()
+    assert r.selector_fingerprint == ""
+
+
+def test_398_collected_recorded_in_history(tmp_path: Path) -> None:
+    """Regression: collected=398 must survive the record→history roundtrip."""
+    from tools.testing.runtime_intelligence.history import (
+        RuntimeHistory,
+        append_result,
+        save_history,
+        load_history,
+    )
+
+    history_path = tmp_path / "fg-fast-history.json"
+    history = RuntimeHistory(schema_version="1.0", gate="fg-fast", runs=[])
+    entry = {
+        "duration_seconds": 399.0,
+        "passed": 396,
+        "failed": 0,
+        "collected": 398,
+        "skipped": 2,
+        "commit_sha": "abc123def456",
+        "gate": "fg-fast",
+        "manifest_fingerprint": "abcd1234abcd1234",
+        "selector_fingerprint": "ef012345ef012345",
+    }
+    updated = append_result(history, entry)
+    save_history(updated, history_path)
+
+    loaded = load_history(history_path)
+    assert len(loaded.runs) == 1
+    assert loaded.runs[0]["collected"] == 398
+    assert loaded.runs[0]["manifest_fingerprint"] == "abcd1234abcd1234"
+    assert loaded.runs[0]["selector_fingerprint"] == "ef012345ef012345"
+
+
+# --- GitHub summary with manifest fingerprint and fixtures ---
+
+
+def test_github_summary_shows_manifest_fingerprint() -> None:
+    r = _make_result(manifest_fingerprint="4ab8d2cf1a3b5e70")
+    summary = generate_summary(r)
+    assert "4ab8d2cf1a3b5e70" in summary
+    assert "Manifest" in summary
+
+
+def test_github_summary_no_manifest_when_empty() -> None:
+    r = _make_result(manifest_fingerprint="")
+    summary = generate_summary(r)
+    assert "Manifest" not in summary
+
+
+def test_github_summary_shows_slow_fixtures() -> None:
+    from tools.testing.runtime_intelligence.models import SlowFixture
+
+    f = SlowFixture(
+        name="identity_fixture",
+        duration_seconds=2.7,
+        plane="identity",
+        module="identity_plane",
+        owner="team-identity",
+    )
+    r = _make_result(slowest_fixtures=(f,))
+    summary = generate_summary(r)
+    assert "identity_fixture" in summary
+    assert "identity" in summary
+    assert "2.70" in summary
+
+
+def test_github_summary_fixture_plane_unknown_shows_dash() -> None:
+    from tools.testing.runtime_intelligence.models import SlowFixture
+
+    f = SlowFixture(name="anon_fixture", duration_seconds=1.0)
+    r = _make_result(slowest_fixtures=(f,))
+    summary = generate_summary(r)
+    assert "anon_fixture" in summary
+    assert "—" in summary  # em-dash for unknown plane/owner
+
+
+# --- Completeness contract ---
+
+
+def test_collected_nonzero_requires_manifest_fingerprint(tmp_path: Path) -> None:
+    """If collected > 0, manifest_fingerprint must not be empty."""
+    from tools.testing.runtime_intelligence.parser import merge_artifacts
+
+    junit = tmp_path / "fg-fast.xml"
+    _write_junit(junit, tests=398, failures=0, skipped=2, time=399.0)
+    result = merge_artifacts("fg-fast", junit_path=junit)
+    assert result is not None
+    assert result.collected > 0
+    assert result.manifest_fingerprint != ""
+    assert len(result.manifest_fingerprint) == 16
+
+
+def test_junit_parse_populates_all_counts(tmp_path: Path) -> None:
+    junit = tmp_path / "junit.xml"
+    junit.write_text(
+        '<?xml version="1.0"?>\n'
+        '<testsuite name="pytest" tests="10" failures="2"'
+        ' errors="1" skipped="1" time="42.0">\n'
+        '  <testcase classname="tests.a" name="test_x" time="5.0"/>\n'
+        '  <testcase classname="tests.a" name="test_y" time="3.0"/>\n'
+        "</testsuite>\n",
+        encoding="utf-8",
+    )
+    result = parse_junit_xml(junit, "fg-fast")
+    assert result is not None
+    assert result.collected == 10
+    assert result.failed == 3  # failures + errors
+    assert result.skipped == 1
+    assert result.passed == 6  # 10 - 3 - 1
