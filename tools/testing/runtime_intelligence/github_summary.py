@@ -5,8 +5,12 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .models import Regression, RollingStats, RuntimeResult
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .manifest import ValidationManifest
 
 _SEVERITY_EMOJI = {"low": "⚠️", "medium": "⚠️", "high": "🔴", "critical": "🔴"}
 _PARAM_RE = re.compile(r"\[.*?\]")
@@ -16,6 +20,7 @@ def generate_summary(
     result: RuntimeResult,
     stats: RollingStats | None = None,
     regressions: list[Regression] | None = None,
+    manifest: ValidationManifest | None = None,
 ) -> str:
     lines: list[str] = []
     gate = result.meta.gate.upper().replace("-", " ")
@@ -40,6 +45,30 @@ def generate_summary(
     if result.manifest_fingerprint:
         lines.append(f"| Manifest | `{result.manifest_fingerprint}` |")
     lines.append("")
+
+    # Validation manifest (signed integrity record)
+    if manifest is not None:
+        lines.append("### Validation Manifest\n")
+        lines.append("| Field | Value |")
+        lines.append("|-------|-------|")
+        lines.append(f"| Manifest ID | `{manifest.manifest_id[:16]}...` |")
+        lines.append(f"| Manifest Hash | `{manifest.manifest_hash[:16]}...` |")
+        if manifest.signature_algorithm == "ed25519" and manifest.signature:
+            sig_display = "Ed25519 ✓"
+        elif manifest.signature_algorithm == "unsigned" or not manifest.signature:
+            sig_display = "unsigned"
+        else:
+            sig_display = manifest.signature_algorithm
+        lines.append(f"| Signature | {sig_display} |")
+        lines.append(f"| Verification | {manifest.verification_status} |")
+        identity_display = manifest.signing_identity or "—"
+        lines.append(f"| Signing Identity | `{identity_display}` |")
+        if manifest.previous_manifest_hash:
+            chain_display = "✓ linked"
+        else:
+            chain_display = "✓ root"
+        lines.append(f"| Chain | {chain_display} |")
+        lines.append("")
 
     # Rolling stats
     if stats and stats.count > 0:
