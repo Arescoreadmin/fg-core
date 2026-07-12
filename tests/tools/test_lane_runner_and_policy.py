@@ -79,7 +79,9 @@ def test_fg_security_lane_has_explicit_timeout() -> None:
 def test_timeout_hierarchy_validator_passes() -> None:
     # Smoke-test the hierarchy validator end-to-end against the live repo.
     rc = check_timeout_hierarchy.main()
-    assert rc == 0, "CI timeout hierarchy has a violation — run check_timeout_hierarchy.py for details"
+    assert rc == 0, (
+        "CI timeout hierarchy has a violation — run check_timeout_hierarchy.py for details"
+    )
 
 
 def test_affected_plane_selector_identity_plane_files() -> None:
