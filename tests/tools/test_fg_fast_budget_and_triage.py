@@ -289,16 +289,16 @@ def test_fg_fast_test_count_not_reduced() -> None:
         text=True,
         timeout=60,
     )
-    # Parse "N/M tests collected" or "N tests collected" from stdout
-    import re
-
-    match = re.search(r"(\d+)/?\d* tests? collected", result.stdout)
-    assert match is not None, (
-        "Could not parse test count from output:\n"
-        f"stdout:\n{result.stdout[:500]}\n"
-        f"stderr:\n{result.stderr[:500]}"
+    assert result.returncode == 0, (
+        "fg-fast test collection failed:\n"
+        f"stdout:\n{result.stdout[-1000:]}\n"
+        f"stderr:\n{result.stderr[-1000:]}"
     )
-    count = int(match.group(1))
+
+    # Count canonical pytest node IDs instead of parsing the human-formatted
+    # collection summary, which can vary across pytest/plugin environments.
+    node_ids = {line.strip() for line in result.stdout.splitlines() if "::" in line}
+    count = len(node_ids)
     assert count >= _FG_FAST_BASELINE_COUNT, (
         f"fg-fast test count dropped below baseline: "
         f"got {count}, expected >= {_FG_FAST_BASELINE_COUNT}"
