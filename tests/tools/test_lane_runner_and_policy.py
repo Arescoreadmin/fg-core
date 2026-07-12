@@ -89,7 +89,9 @@ def test_affected_plane_selector_identity_plane_files() -> None:
         ["api/identity_administration/routes/admin.py"]
     )
     assert result["fallback"] is False
-    assert "identity" in result["affected_planes"]
+    affected_planes = result["affected_planes"]
+    assert isinstance(affected_planes, list)
+    assert "identity" in affected_planes
 
 
 def test_affected_plane_selector_high_risk_falls_back() -> None:

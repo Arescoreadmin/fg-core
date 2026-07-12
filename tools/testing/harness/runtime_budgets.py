@@ -63,7 +63,9 @@ def enforce_lane_budget(
     # fails only when duration exceeds hard_max_seconds (not nominal max_seconds).
     # See timing_model in runtime_budgets.yaml for rationale.
     hard_max_raw = lane_cfg_dict.get("hard_max_seconds")
-    hard_max_seconds = _to_int(hard_max_raw) if hard_max_raw is not None else max_seconds
+    hard_max_seconds = (
+        _to_int(hard_max_raw) if hard_max_raw is not None else max_seconds
+    )
     if duration_seconds > hard_max_seconds:
         return (
             False,
