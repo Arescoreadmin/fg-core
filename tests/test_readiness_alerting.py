@@ -831,8 +831,7 @@ class TestSerialization:
 
 
 @pytest.fixture()
-def alerting_client(tmp_path, monkeypatch):
-    from api.auth_scopes import mint_key
+def _app_and_db(tmp_path, monkeypatch):
     from api.db import reset_engine_cache
     from api.main import build_app
 
@@ -841,10 +840,16 @@ def alerting_client(tmp_path, monkeypatch):
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
     reset_engine_cache()
+    return build_app(auth_enabled=True), db_path
+
+
+@pytest.fixture()
+def alerting_client(_app_and_db):
+    from api.auth_scopes import mint_key
 
     from fastapi.testclient import TestClient
 
-    app = build_app(auth_enabled=True)
+    app, _ = _app_and_db
     key = mint_key(
         "control-plane:read",
         "control-plane:write",
@@ -855,34 +860,25 @@ def alerting_client(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def no_tenant_client(tmp_path, monkeypatch):
+def no_tenant_client(_app_and_db):
     """API key without a tenant_id binding."""
     from api.auth_scopes import mint_key
-    from api.db import reset_engine_cache
-    from api.main import build_app
-
-    db_path = tmp_path / "alerting_notenant_test.db"
-    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
-    monkeypatch.setenv("FG_ENV", "test")
-    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
-    reset_engine_cache()
 
     from fastapi.testclient import TestClient
 
-    app = build_app(auth_enabled=True)
+    app, _ = _app_and_db
     key = mint_key("control-plane:read", "control-plane:write", "control-plane:admin")
     return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
-def other_tenant_client(tmp_path, monkeypatch, alerting_client):
+def other_tenant_client(_app_and_db):
     """Second tenant's API key — same app instance."""
     from api.auth_scopes import mint_key
-    from api.main import build_app
 
     from fastapi.testclient import TestClient
 
-    app = build_app(auth_enabled=True)
+    app, _ = _app_and_db
     key = mint_key(
         "control-plane:read",
         "control-plane:write",
