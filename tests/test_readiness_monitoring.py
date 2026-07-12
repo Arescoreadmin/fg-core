@@ -1133,7 +1133,9 @@ def tenant_client(_app_and_db):
     from fastapi.testclient import TestClient
 
     app, _ = _app_and_db
-    key = mint_key("control-plane:read", "control-plane:admin", tenant_id="tenant-alpha")
+    key = mint_key(
+        "control-plane:read", "control-plane:admin", tenant_id="tenant-alpha"
+    )
     return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 
 
