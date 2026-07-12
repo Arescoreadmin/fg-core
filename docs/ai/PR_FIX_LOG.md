@@ -6,6 +6,40 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-07-10 — audit(ci): CI gates performance and assurance audit
+
+**Branch:** `audit/ci-gates-performance-and-assurance`
+
+**Scope:** Full audit of PR CI gates — duplication mapping, runtime baselining, coverage assurance matrix, and targeted optimizations.
+
+**Changes:**
+
+1. `perf(ci): remove duplicate make fg-security and make fg-contract from lane_runner.py fg-fast lane` — Saves ~23 min per PR. `ALLOWED_LANES['fg-fast']` now runs only `required_tests_gate.py`. Standalone fg-contract (5 min) and fg-security (25 min) jobs in testing-module.yml provide independent assurance. `make fg-fast` itself already includes fg-contract targets, security-regression-gates, soc-invariants, and gap-audit.
+
+2. `perf(ci): lower fg-fast job timeout from 55→35 min` — Proportional to lane runner fix. 35 min covers make fg-fast (~20 min) + steps (~4 min) + headroom.
+
+3. `perf(ci): condition fg-full on schedule/dispatch/high-risk branch names` — fg-full (35-40 min) no longer runs for all tools/testing/policy/** PRs. Still runs on schedule, workflow_dispatch, and branches with security/release/hotfix prefixes.
+
+4. `feat(ci): add tools/ci/check_timeout_hierarchy.py` — Validates command_hard_max < lane_timeout < job_timeout < global_budget. Passes against current config.
+
+5. `feat(ci): add tools/testing/affected_plane_selector.py` — Maps changed files to planes via PLANE_REGISTRY; returns pytest marker recommendation and gate layer. Fails safe to full selection.
+
+6. Audit artifacts: `artifacts/ci/` (6 JSON files) and `docs/ci/` (5 Markdown files).
+
+**Files changed:**
+- `tools/testing/harness/lane_runner.py`
+- `.github/workflows/testing-module.yml`
+- `tools/ci/check_timeout_hierarchy.py` (new)
+- `tools/testing/affected_plane_selector.py` (new)
+- `artifacts/ci/*.json` (new)
+- `docs/ci/*.md` (new)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- `docs/ai/PR_FIX_LOG.md`
+
+**Validation:** `pytest tests/tools/test_fg_fast_budget_and_triage.py tests/test_plane_registry.py` — 17 passed. `ruff check .` — clean. `check_timeout_hierarchy.py` — PASS.
+
+---
+
 ### 2026-07-10 — fix(ci): stabilize fg-fast budget measurement and triage (PR-02 follow-up)
 
 **Branch:** `feat/pr-02-customer-identity-lifecycle`

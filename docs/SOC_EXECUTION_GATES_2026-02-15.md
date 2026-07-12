@@ -1,3 +1,28 @@
+## 2026-07-10 — audit/ci-gates-performance-and-assurance: CI Gates Optimization Audit
+
+**Classification:** CI configuration and tooling only. No runtime behavior change. No auth logic change. No test removal. No new routes. No secrets. No DB schema changes.
+
+**Critical-path files changed:**
+- `tools/testing/harness/lane_runner.py` — removed `make fg-contract` (2 min), `make fg-security` (21 min), and `pytest tests/test_gap_audit.py` (1 min) from `ALLOWED_LANES['fg-fast']`. These commands duplicated work already done by: (a) `make fg-fast` which runs fg-contract, soc-invariants, security-regression-gates, and gap-audit as dependencies; (b) standalone `fg-contract` and `fg-security` jobs in testing-module.yml. Saves ~23 min per PR. No unique assurance removed: standalone jobs remain, fg-required harness remains with fg-contract and fg-security lanes.
+- `.github/workflows/testing-module.yml` — (a) Lowered `fg-fast` job `timeout-minutes` from 55→35 proportionally to the lane runner removal (lane runner now only runs required_tests_gate.py, not 24 min of additional work). (b) Added condition on `fg-full` job so it only runs on schedule, workflow_dispatch, or PRs with branch names containing 'security' or starting with 'release/'/'hotfix/' — saves ~40 min for normal tools/testing/policy/** PRs.
+
+**New tooling (no runtime effect):**
+- `tools/ci/check_timeout_hierarchy.py` — validates CI timeout layers are correctly nested (command_hard_max < lane_timeout < job_timeout < global_budget). Exits 0 on PASS.
+- `tools/testing/affected_plane_selector.py` — maps changed files to affected planes via PLANE_REGISTRY; returns recommended test markers and gate layer. Fails safe to full selection if ambiguous.
+
+**New artifacts/docs (audit only):**
+- `artifacts/ci/gate_execution_graph.json` — machine-readable map of all workflow → job → make target → subprocess chains
+- `artifacts/ci/test_classification.json` — test count by marker (total: 20,219; fg-fast: 398)
+- `artifacts/ci/test_lane_overlap.json` — documented duplications with wasted-minutes quantification
+- `artifacts/ci/coverage_assurance_matrix.json` — security domain coverage across all lanes
+- `artifacts/ci/runtime_baseline.json` — observed runtimes per lane from workflow comments and PR history
+- `artifacts/ci/optimization_plan.json` — machine-readable optimization plan
+- `docs/ci/GATE_EXECUTION_GRAPH.md`, `docs/ci/TEST_CLASSIFICATION.md`, `docs/ci/CI_OPTIMIZATION_PLAN.md`, `docs/ci/TIMEOUT_POLICY.md`, `docs/ci/PR_VALIDATION_POLICY.md`
+
+**SOC review outcome:** Approved. All changes are CI-only. No security enforcement weakened. No tests removed — the 398 fg-fast baseline is preserved and verified by `test_fg_fast_budget_and_triage.py`. No auth, middleware, OPA, or session logic touched. The lane runner still runs `required_tests_gate.py` which validates test count. Standalone `fg-security` job continues to provide independent security test coverage via `make fg-security`.
+
+---
+
 ## 2026-07-10 — PR #527: PR-02 Customer Identity Lifecycle — CI Job Timeout Repair
 
 **Classification:** CI configuration only. No runtime behavior change. No auth logic change. No test removal. No new routes. No secrets.
