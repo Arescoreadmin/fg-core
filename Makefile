@@ -788,6 +788,7 @@ fg-fast-full: fg-fast-ci compliance-chain-verify canonicalization-guard
 
 fg-full: fg-fast-full fg-full-pytest \
 	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
+	@$(MAKE) -s fg-full-record || true
 
 fg-required-summary:
 	@mkdir -p artifacts/fg-required
