@@ -23,20 +23,22 @@ class RuntimeHistory:
     ]  # list of {duration_seconds, passed, failed, collected, commit_sha, recorded_at}
 
 
+def _gate_from_stem(stem: str) -> str:
+    """Strip the '-history' suffix added by the filename convention."""
+    return stem.removesuffix("-history")
+
+
 def load_history(path: Path) -> RuntimeHistory:
+    gate = _gate_from_stem(path.stem)
     if not path.exists():
-        return RuntimeHistory(
-            schema_version=HISTORY_SCHEMA_VERSION, gate=path.stem, runs=[]
-        )
+        return RuntimeHistory(schema_version=HISTORY_SCHEMA_VERSION, gate=gate, runs=[])
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("schema_version") != HISTORY_SCHEMA_VERSION:
         # Schema mismatch: start fresh (forward-only migration)
-        return RuntimeHistory(
-            schema_version=HISTORY_SCHEMA_VERSION, gate=path.stem, runs=[]
-        )
+        return RuntimeHistory(schema_version=HISTORY_SCHEMA_VERSION, gate=gate, runs=[])
     return RuntimeHistory(
         schema_version=data["schema_version"],
-        gate=data.get("gate", path.stem),
+        gate=data.get("gate", gate),
         runs=data.get("runs", []),
     )
 
@@ -73,3 +75,15 @@ def rolling_stats_for_history(
     recent = history.runs[-last_n:] if len(history.runs) >= last_n else history.runs
     durations = [r["duration_seconds"] for r in recent if "duration_seconds" in r]
     return compute_rolling_stats(durations)
+
+
+def baseline_collected_for_history(
+    history: RuntimeHistory, last_n: int = 30
+) -> int | None:
+    """Median collected-test count from recent history, or None if no data."""
+    recent = history.runs[-last_n:] if len(history.runs) >= last_n else history.runs
+    counts = [int(r["collected"]) for r in recent if "collected" in r]
+    if not counts:
+        return None
+    counts.sort()
+    return counts[len(counts) // 2]

@@ -18,6 +18,7 @@ from tools.testing.runtime_intelligence.github_summary import (  # noqa: E402
 )
 from tools.testing.runtime_intelligence.history import (  # noqa: E402
     append_result,
+    baseline_collected_for_history,
     load_history,
     rolling_stats_for_history,
     save_history,
@@ -77,7 +78,7 @@ def main() -> int:
         current_duration=result.duration_seconds,
         current_collected=result.collected,
         baseline_stats=stats,
-        baseline_collected=None,
+        baseline_collected=baseline_collected_for_history(history, last_n=30),
     )
 
     if not args.dry_run:
@@ -99,7 +100,7 @@ def main() -> int:
         print(f"[runtime-intelligence] history: {len(updated.runs)} runs recorded")
 
     # GitHub summary
-    if args.github_summary or os.getenv("GITHUB_STEP_SUMMARY"):
+    if args.github_summary or args.dry_run or os.getenv("GITHUB_STEP_SUMMARY"):
         summary = generate_summary(
             result, stats if stats.count > 0 else None, regressions
         )

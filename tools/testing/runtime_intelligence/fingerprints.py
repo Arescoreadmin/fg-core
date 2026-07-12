@@ -29,6 +29,7 @@ def dependency_fingerprint() -> str:
     req_files = [
         REPO_ROOT / "requirements.txt",
         REPO_ROOT / "requirements-dev.txt",
+        REPO_ROOT / "requirements-shared.txt",
         REPO_ROOT / "constraints.txt",
     ]
     h = hashlib.sha256()

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from .models import Regression, RollingStats, RuntimeResult
 
 _SEVERITY_EMOJI = {"low": "⚠️", "medium": "⚠️", "high": "🔴", "critical": "🔴"}
+_PARAM_RE = re.compile(r"\[.*?\]")
 
 
 def generate_summary(
@@ -67,7 +69,8 @@ def generate_summary(
         lines.append("| Test | Duration | Phase |")
         lines.append("|------|----------|-------|")
         for t in result.slowest_tests[:10]:
-            short = t.node_id[-60:] if len(t.node_id) > 60 else t.node_id
+            sanitized = _PARAM_RE.sub("[...]", t.node_id)
+            short = sanitized[-60:] if len(sanitized) > 60 else sanitized
             lines.append(f"| `{short}` | {t.duration_seconds:.2f}s | {t.phase} |")
         lines.append("")
 

@@ -8,7 +8,12 @@ from .fingerprints import (
 )
 from .ownership import classify_test_path, node_id_to_path
 from .github_summary import generate_summary, write_step_summary
-from .history import append_result, load_history, save_history
+from .history import (
+    append_result,
+    baseline_collected_for_history,
+    load_history,
+    save_history,
+)
 from .models import (
     Regression,
     RollingStats,
@@ -32,6 +37,7 @@ __all__ = [
     "SlowFixture",
     "SlowTest",
     "append_result",
+    "baseline_collected_for_history",
     "classify_test_path",
     "commit_fingerprint",
     "compute_rolling_stats",
