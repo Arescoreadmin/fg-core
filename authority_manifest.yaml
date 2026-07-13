@@ -12,14 +12,15 @@
 #   _warn_db_not_registered / _warn_not_in_main — fix these before committing
 
 manifest_version: '1.0'
-generated_at: '2026-06-26T23:10:29Z'
+generated_at: '2026-07-13T16:51:17Z'
 library_services:
+- actor_identity
 - audit_engine
-- notifications
-- remediation_portal
-- cgin_trust
 - cgin_key_management
 - cgin_transparency
+- cgin_trust
+- notifications
+- remediation_portal
 authorities:
   billing:
     engine: services/billing
@@ -53,8 +54,6 @@ authorities:
     - tests/test_h16_5_control_effectiveness.py
     cgin_snapshot: true
     cgin_anonymized: true
-    privacy_version: "1.0"
-    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/control_effectiveness_explainability/engine.py
     - services/governance_chain/engine.py
@@ -96,6 +95,27 @@ authorities:
     consumers:
     - services/control_effectiveness/engine.py
     - services/governance_chain/engine.py
+  engagement_portal:
+    engine: services/engagement_portal
+    api_file: api/engagement_portal.py
+    db_models: api/db_models_engagement_portal.py
+    route_prefixes:
+    - /portal/engagement
+    tables:
+    - portal_engagement_preferences
+    - portal_engagement_activity
+    - portal_engagement_notifications
+    tests:
+    - tests/test_engagement_portal.py
+    - tests/test_engagement_dashboard.py
+    - tests/test_engagement_timeline.py
+    - tests/test_engagement_reports.py
+    - tests/test_engagement_notifications.py
+    - tests/test_engagement_search.py
+    - tests/test_engagement_activity.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
   evidence_authority:
     engine: services/evidence_authority
     api_file: api/evidence_authority.py
@@ -117,8 +137,6 @@ authorities:
     - tests/test_h14_6_5_evidence_status_model.py
     cgin_snapshot: true
     cgin_anonymized: true
-    privacy_version: "1.0"
-    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
     - services/governance_portal/engine.py
@@ -137,8 +155,6 @@ authorities:
     - tests/test_h14_6_7_evidence_freshness_authority.py
     cgin_snapshot: true
     cgin_anonymized: true
-    privacy_version: "1.0"
-    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
     - services/freshness_score_history/engine.py
@@ -174,26 +190,8 @@ authorities:
     - tests/test_h14_6_8_freshness_score_history.py
     cgin_snapshot: true
     cgin_anonymized: true
-    privacy_version: "1.0"
-    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
-  governance_chain:
-    engine: services/governance_chain
-    api_file: api/governance_chain.py
-    db_models: api/db_models_governance_chain.py
-    route_prefixes:
-    - /governance-chain
-    tables:
-    - fa_governance_chain_events
-    - fa_governance_chain_executions
-    - fa_governance_health_snapshots
-    - fa_governance_chain_snapshots
-    tests:
-    - tests/test_governance_chain.py
-    cgin_snapshot: true
-    cgin_anonymized: true
-    consumers: []
   governance_adaptive_intelligence:
     engine: services/governance_adaptive_intelligence
     api_file: api/governance_adaptive_intelligence.py
@@ -213,21 +211,68 @@ authorities:
     consumers:
     - services/governance_learning/engine.py
     - services/governance_optimization/engine.py
-  governance_optimization:
-    engine: services/governance_optimization
-    api_file: api/governance_optimization.py
-    db_models: api/db_models_governance_optimization.py
+  governance_chain:
+    engine: services/governance_chain
+    api_file: api/governance_chain.py
+    db_models: api/db_models_governance_chain.py
     route_prefixes:
-    - /governance-optimization
+    - /governance-chain
     tables:
-    - fa_governance_optimization_decisions
-    - fa_governance_optimization_aggregates
-    - fa_governance_optimization_snapshots
+    - fa_governance_chain_events
+    - fa_governance_chain_executions
+    - fa_governance_health_snapshots
+    - fa_governance_chain_snapshots
     tests:
-    - tests/test_governance_optimization.py
-    - tests/test_governance_optimization_end_to_end.py
+    - tests/test_governance_chain.py
     cgin_snapshot: true
     cgin_anonymized: true
+    consumers: []
+  governance_intelligence:
+    engine: services/governance_intelligence
+    api_file: api/governance_intelligence.py
+    db_models: api/db_models_governance_intelligence.py
+    route_prefixes:
+    - /intelligence
+    tables:
+    - fa_gov_intel_simulation
+    - fa_gov_intel_simulation_history
+    - fa_gov_intel_policy
+    - fa_gov_intel_policy_version
+    - fa_gov_intel_benchmark
+    - fa_gov_intel_external_event
+    - fa_gov_intel_federation
+    - fa_gov_intel_explainability
+    - fa_gov_intel_confidence_history
+    - fa_gov_intel_timeline
+    - fa_gov_intel_provenance_node
+    - fa_gov_intel_provenance_edge
+    - fa_gov_intel_replay_snapshot
+    - fa_gov_intel_evidence_matrix
+    - fa_gov_intel_quality_score
+    - fa_gov_intel_simulation_comparison
+    - fa_gov_intel_timeline_diff
+    - fa_gov_intel_counterfactual
+    - fa_gov_intel_export_history
+    tests:
+    - tests/test_governance_intelligence.py
+    - tests/test_governance_intelligence_explainability.py
+    - tests/test_governance_intelligence_simulation.py
+    - tests/test_governance_intelligence_benchmarking.py
+    - tests/test_governance_intelligence_forecasting.py
+    - tests/test_governance_intelligence_policy_lifecycle.py
+    - tests/test_governance_intelligence_confidence.py
+    - tests/test_governance_intelligence_federation.py
+    - tests/test_governance_intelligence_trend.py
+    - tests/test_governance_intelligence_provenance.py
+    - tests/test_governance_intelligence_counterfactual.py
+    - tests/test_governance_intelligence_replay.py
+    - tests/test_governance_intelligence_evidence_matrix.py
+    - tests/test_governance_intelligence_quality_score.py
+    - tests/test_governance_intelligence_benchmark_confidence.py
+    - tests/test_governance_intelligence_simulation_compare.py
+    - tests/test_governance_intelligence_export_package.py
+    cgin_snapshot: false
+    cgin_anonymized: false
     consumers: []
   governance_learning:
     engine: services/governance_learning
@@ -244,6 +289,54 @@ authorities:
     cgin_anonymized: true
     consumers:
     - services/governance_chain/engine.py
+  governance_optimization:
+    engine: services/governance_optimization
+    api_file: api/governance_optimization.py
+    db_models: api/db_models_governance_optimization.py
+    route_prefixes:
+    - /governance-optimization
+    tables:
+    - fa_governance_optimization_decisions
+    - fa_governance_optimization_aggregates
+    - fa_governance_optimization_snapshots
+    tests:
+    - tests/test_governance_optimization.py
+    - tests/test_governance_optimization_end_to_end.py
+    cgin_snapshot: true
+    cgin_anonymized: true
+    consumers: []
+  governance_orchestration:
+    engine: services/governance_orchestration
+    api_file: api/governance_orchestration.py
+    db_models: api/db_models_governance_orchestration.py
+    route_prefixes:
+    - /governance-orchestration
+    tables:
+    - fa_gov_orch_policy
+    - fa_gov_orch_policy_version
+    - fa_gov_orch_playbook
+    - fa_gov_orch_workflow
+    - fa_gov_orch_reassessment
+    - fa_gov_orch_trigger
+    - fa_gov_orch_trigger_timeline
+    - fa_gov_orch_simulation
+    - fa_gov_orch_approval
+    - fa_gov_orch_maintenance_window
+    - fa_gov_orch_change_detection
+    - fa_gov_orch_timeline
+    tests:
+    - tests/test_governance_orchestration.py
+    - tests/test_governance_policy_engine.py
+    - tests/test_governance_workflow.py
+    - tests/test_governance_playbooks.py
+    - tests/test_governance_loop.py
+    - tests/test_governance_approvals.py
+    - tests/test_governance_reassessment.py
+    - tests/test_governance_maintenance_windows.py
+    - tests/test_governance_change_detection.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
   governance_portal:
     engine: services/governance_portal
     api_file: api/governance_portal.py
@@ -304,6 +397,32 @@ authorities:
     consumers:
     - services/governance_chain/engine.py
     - services/remediation_effectiveness/engine.py
+  remediation_authority:
+    engine: services/remediation_authority
+    api_file: api/remediation_authority.py
+    db_models: api/db_models_remediation_authority.py
+    route_prefixes:
+    - /remediation-authority
+    tables:
+    - fa_rem_plan
+    - fa_rem_task
+    - fa_rem_timeline
+    - fa_rem_assignment
+    - fa_rem_dependency
+    - fa_rem_verification
+    - fa_rem_evidence_link
+    tests:
+    - tests/test_remediation_authority.py
+    - tests/test_remediation_workflow.py
+    - tests/test_remediation_state_machine.py
+    - tests/test_remediation_assignments.py
+    - tests/test_remediation_dependencies.py
+    - tests/test_remediation_verification.py
+    - tests/test_remediation_effectiveness.py
+    - tests/test_remediation_dashboard.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
   remediation_effectiveness:
     engine: services/remediation_effectiveness
     api_file: api/remediation_effectiveness.py
@@ -320,10 +439,27 @@ authorities:
     - tests/test_governance_chain.py
     cgin_snapshot: true
     cgin_anonymized: true
-    privacy_version: "1.0"
-    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
+  report_authority:
+    engine: services/report_authority
+    api_file: api/report_authority.py
+    db_models: api/db_models_report_authority.py
+    route_prefixes:
+    - /reports
+    tables:
+    - fa_report
+    - fa_report_audit_events
+    - fa_report_bundles
+    tests:
+    - tests/test_report_authority.py
+    - tests/test_report_determinism.py
+    - tests/test_report_rendering.py
+    - tests/test_report_manifest.py
+    - tests/test_report_exports.py
+    cgin_snapshot: false
+    cgin_anonymized: false
+    consumers: []
   risk_acceptance:
     engine: services/risk_acceptance
     api_file: api/risk_acceptance.py
@@ -404,185 +540,6 @@ authorities:
     - tests/test_h14_6_6_verification_workflow.py
     cgin_snapshot: true
     cgin_anonymized: true
-    privacy_version: "1.0"
-    fingerprint_algorithm: "sha256-cgin-v1"
     consumers:
     - services/governance_chain/engine.py
     - services/evidence_freshness_authority/engine.py
-  report_authority:
-    engine: services/report_authority
-    api_file: api/report_authority.py
-    db_models: api/db_models_report_authority.py
-    route_prefixes:
-    - /reports
-    tables:
-    - fa_report
-    - fa_report_audit_events
-    - fa_report_bundles
-    tests:
-    - tests/test_report_authority.py
-    - tests/test_report_determinism.py
-    - tests/test_report_rendering.py
-    - tests/test_report_manifest.py
-    - tests/test_report_exports.py
-    cgin_snapshot: false
-    cgin_anonymized: false
-    consumers: []
-  engagement_portal:
-    engine: services/engagement_portal
-    api_file: api/engagement_portal.py
-    db_models: api/db_models_engagement_portal.py
-    route_prefixes:
-    - /portal/engagement
-    tables:
-    - portal_engagement_preferences
-    - portal_engagement_activity
-    - portal_engagement_notifications
-    tests:
-    - tests/test_engagement_portal.py
-    - tests/test_engagement_dashboard.py
-    - tests/test_engagement_timeline.py
-    - tests/test_engagement_reports.py
-    - tests/test_engagement_notifications.py
-    - tests/test_engagement_search.py
-    - tests/test_engagement_activity.py
-    cgin_snapshot: false
-    cgin_anonymized: false
-    consumers: []
-  remediation_authority:
-    engine: services/remediation_authority
-    api_file: api/remediation_authority.py
-    db_models: api/db_models_remediation_authority.py
-    route_prefixes:
-    - /remediation-authority
-    tables:
-    - fa_rem_plan
-    - fa_rem_task
-    - fa_rem_timeline
-    - fa_rem_assignment
-    - fa_rem_dependency
-    - fa_rem_verification
-    - fa_rem_evidence_link
-    tests:
-    - tests/test_remediation_authority.py
-    - tests/test_remediation_workflow.py
-    - tests/test_remediation_state_machine.py
-    - tests/test_remediation_assignments.py
-    - tests/test_remediation_dependencies.py
-    - tests/test_remediation_verification.py
-    - tests/test_remediation_effectiveness.py
-    - tests/test_remediation_dashboard.py
-    cgin_snapshot: false
-    cgin_anonymized: false
-    consumers: []
-  governance_orchestration:
-    engine: services/governance_orchestration
-    api_file: api/governance_orchestration.py
-    db_models: api/db_models_governance_orchestration.py
-    route_prefixes:
-    - /governance-orchestration
-    tables:
-    - fa_gov_orch_policy
-    - fa_gov_orch_policy_version
-    - fa_gov_orch_playbook
-    - fa_gov_orch_workflow
-    - fa_gov_orch_reassessment
-    - fa_gov_orch_trigger
-    - fa_gov_orch_trigger_timeline
-    - fa_gov_orch_simulation
-    - fa_gov_orch_approval
-    - fa_gov_orch_maintenance_window
-    - fa_gov_orch_change_detection
-    - fa_gov_orch_timeline
-    tests:
-    - tests/test_governance_orchestration.py
-    - tests/test_governance_policy_engine.py
-    - tests/test_governance_workflow.py
-    - tests/test_governance_playbooks.py
-    - tests/test_governance_loop.py
-    - tests/test_governance_approvals.py
-    - tests/test_governance_reassessment.py
-    - tests/test_governance_maintenance_windows.py
-    - tests/test_governance_change_detection.py
-    cgin_snapshot: false
-    cgin_anonymized: false
-    consumers: []
-  governance_intelligence:
-    engine: services/governance_intelligence
-    api_file: api/governance_intelligence.py
-    db_models: api/db_models_governance_intelligence.py
-    route_prefixes:
-    - /intelligence
-    tables:
-    - fa_gov_intel_simulation
-    - fa_gov_intel_simulation_history
-    - fa_gov_intel_policy
-    - fa_gov_intel_policy_version
-    - fa_gov_intel_benchmark
-    - fa_gov_intel_external_event
-    - fa_gov_intel_federation
-    - fa_gov_intel_explainability
-    - fa_gov_intel_confidence_history
-    - fa_gov_intel_timeline
-    - fa_gov_intel_provenance_node
-    - fa_gov_intel_provenance_edge
-    - fa_gov_intel_replay_snapshot
-    - fa_gov_intel_evidence_matrix
-    - fa_gov_intel_quality_score
-    - fa_gov_intel_simulation_comparison
-    - fa_gov_intel_timeline_diff
-    - fa_gov_intel_counterfactual
-    - fa_gov_intel_export_history
-    tests:
-    - tests/test_governance_intelligence.py
-    - tests/test_governance_intelligence_explainability.py
-    - tests/test_governance_intelligence_simulation.py
-    - tests/test_governance_intelligence_benchmarking.py
-    - tests/test_governance_intelligence_forecasting.py
-    - tests/test_governance_intelligence_policy_lifecycle.py
-    - tests/test_governance_intelligence_confidence.py
-    - tests/test_governance_intelligence_federation.py
-    - tests/test_governance_intelligence_trend.py
-    - tests/test_governance_intelligence_provenance.py
-    - tests/test_governance_intelligence_counterfactual.py
-    - tests/test_governance_intelligence_replay.py
-    - tests/test_governance_intelligence_evidence_matrix.py
-    - tests/test_governance_intelligence_quality_score.py
-    - tests/test_governance_intelligence_benchmark_confidence.py
-    - tests/test_governance_intelligence_simulation_compare.py
-    - tests/test_governance_intelligence_export_package.py
-    cgin_snapshot: false
-    cgin_anonymized: false
-    consumers: []
-cgin_trust:
-  trust_version: "1.0"
-  signing_algorithm: "ed25519-v1"
-  canonicalization_version: "1.0"
-  ci_gate: "tools/ci/check_cgin_trust.py"
-  api_file: "api/cgin_trust.py"
-  trust_module: "services/cgin/trust.py"
-  manifest_module: "services/cgin/trust_manifest.py"
-  tests: "tests/test_cgin_trust.py"
-cgin_key_management:
-  contract_version: "1.0"
-  provider_registry: "services/cgin/key_management/registry.py"
-  active_provider: "memory"
-  supported_algorithms:
-  - "ed25519-v1"
-  ci_gate: "tools/ci/check_cgin_key_management.py"
-  provider_module: "services/cgin/key_management/provider.py"
-  registry_module: "services/cgin/key_management/registry.py"
-  memory_provider: "services/cgin/key_management/providers/memory.py"
-  tests: "tests/test_cgin_key_management.py"
-cgin_transparency:
-  transparency_version: "1.0"
-  schema_version: "1.0"
-  algorithm: "sha256"
-  signing_algorithm: "ed25519-v1"
-  ci_gate: "tools/ci/check_cgin_transparency.py"
-  api_file: "api/cgin_transparency.py"
-  entry_module: "services/cgin/transparency/entry.py"
-  merkle_module: "services/cgin/transparency/merkle.py"
-  store_module: "services/cgin/transparency/store.py"
-  ledger_module: "services/cgin/transparency/ledger.py"
-  tests: "tests/test_cgin_transparency.py"

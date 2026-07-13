@@ -19,6 +19,91 @@
     {
       "dependency_categories": [
         "auth",
+        "tenant"
+      ],
+      "file": "api/actor_attribution.py",
+      "method": "GET",
+      "path": "/actor-attribution/actor/{actor_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "actor:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/actor_attribution.py",
+      "method": "GET",
+      "path": "/actor-attribution/actor/{actor_id}/attribution",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "actor:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/actor_attribution.py",
+      "method": "GET",
+      "path": "/actor-attribution/actor/{actor_id}/history",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "actor:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/actor_attribution.py",
+      "method": "GET",
+      "path": "/actor-attribution/evidence/{evidence_id}/actor-chain",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "actor:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/actor_attribution.py",
+      "method": "GET",
+      "path": "/actor-attribution/report/{report_id}/actor-chain",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "actor:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate",
         "tenant"
       ],
@@ -20029,7 +20114,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-13T11:56:14.238906+00:00",
+  "generated_at": "2026-07-13T16:47:33.937467+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

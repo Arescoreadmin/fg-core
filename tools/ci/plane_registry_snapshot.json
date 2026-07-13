@@ -356,7 +356,8 @@
           "audit:",
           "keys:",
           "dev:",
-          "portal:"
+          "portal:",
+          "actor:"
         ],
         "tenant_binding_required": true
       },
@@ -668,6 +669,7 @@
         "/cgin/transparency",
         "/governance-orchestration",
         "/intelligence",
+        "/actor-attribution",
         "/api/executive"
       ]
     },
@@ -1265,7 +1267,7 @@
       ]
     }
   ],
-  "generated_at": "2026-07-13T11:56:14.253927+00:00",
+  "generated_at": "2026-07-13T16:47:33.954389+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -302,6 +302,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_intelligence"
     )  # PR 18.5: Governance Intelligence Authority
+    importlib.import_module(
+        "api.db_models_actor_attribution"
+    )  # PR 535: Enterprise Actor Attribution & Non-Repudiation
 
 
 def _get_base():

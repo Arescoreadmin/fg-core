@@ -51049,6 +51049,368 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/actor-attribution/actor/{actor_id}": {
+      "get": {
+        "description": "Return the canonical actor identity record.",
+        "operationId": "get_actor_actor_attribution_actor__actor_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "title": "Actor Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Actor Actor Attribution Actor  Actor Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Actor",
+        "tags": [
+          "actor-attribution"
+        ]
+      }
+    },
+    "/actor-attribution/actor/{actor_id}/attribution": {
+      "get": {
+        "description": "Return attribution records for an actor, optionally filtered by event_type.",
+        "operationId": "get_actor_attribution_actor_attribution_actor__actor_id__attribution_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "title": "Actor Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Actor Attribution Actor Attribution Actor  Actor Id  Attribution Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Actor Attribution",
+        "tags": [
+          "actor-attribution"
+        ]
+      }
+    },
+    "/actor-attribution/actor/{actor_id}/history": {
+      "get": {
+        "description": "Return the audit event history for an actor identity.",
+        "operationId": "get_actor_history_actor_attribution_actor__actor_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "title": "Actor Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Actor History Actor Attribution Actor  Actor Id  History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Actor History",
+        "tags": [
+          "actor-attribution"
+        ]
+      }
+    },
+    "/actor-attribution/evidence/{evidence_id}/actor-chain": {
+      "get": {
+        "description": "Return all attribution records linked to a specific evidence item.",
+        "operationId": "get_evidence_actor_chain_actor_attribution_evidence__evidence_id__actor_chain_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Evidence Actor Chain Actor Attribution Evidence  Evidence Id  Actor Chain Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Evidence Actor Chain",
+        "tags": [
+          "actor-attribution"
+        ]
+      }
+    },
+    "/actor-attribution/report/{report_id}/actor-chain": {
+      "get": {
+        "description": "Return all attribution records linked to a specific report.",
+        "operationId": "get_report_actor_chain_actor_attribution_report__report_id__actor_chain_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Report Actor Chain Actor Attribution Report  Report Id  Actor Chain Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Actor Chain",
+        "tags": [
+          "actor-attribution"
+        ]
+      }
+    },
     "/agent/cert/enroll": {
       "post": {
         "operationId": "cert_enroll_agent_cert_enroll_post",
