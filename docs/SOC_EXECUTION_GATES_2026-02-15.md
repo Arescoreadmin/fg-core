@@ -5736,3 +5736,45 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - No secrets stored or accessed. No new external dependencies.
 
 **SOC review outcome:** approved. Route inventory and registry updates are mechanical reflections of the PR 535 actor attribution routes. No security boundary changes.
+
+---
+
+## PR feat/identity-assurance-trust-engine — Enterprise Identity Assurance & Trust Levels (2026-07-13)
+
+**Classification:** New bounded-context authority — pure deterministic assurance evaluation + 5 tenant-bound read/write endpoints. No changes to auth middleware, OPA, session, or CI workflow files. New DB tables added under RLS with append-only triggers.
+
+**Critical-path files added:**
+- `services/identity_assurance/{__init__,models,engine,metrics}.py` — pure Python assurance engine. No randomness, no datetime inside calculations. Provider adapters for Keycloak / Entra / Okta / Google Workspace / Ping / Auth0 map raw claims to a normalized `ProviderClaims` shape. `build_assurance_decision(claims, tenant_id, actor_id)` produces an immutable `AssuranceDecision` with SHA-256 fingerprint and a deterministic `computed_at_sequence` hash — no wall clocks.
+- `api/db_models_identity_assurance.py` — 4 ORM tables:
+  - `actor_identity_assurance` (mutable: `is_current` flips only; new records inserted per decision fingerprint)
+  - `actor_assurance_snapshots` (append-only, ORM before_update/before_delete guards + PG triggers via migration 0153)
+  - `actor_assurance_history` (append-only, guards)
+  - `actor_trust_metrics` (upsertable per (tenant, actor, period_key))
+- `migrations/postgres/0153_identity_assurance.sql` — CREATE TABLE IF NOT EXISTS + CREATE INDEX IF NOT EXISTS + `ENABLE ROW LEVEL SECURITY` + tenant isolation policies for all 4 tables + `append_only_guard()` triggers on the two append-only tables. Fully idempotent.
+- `api/actor_assurance.py` — 5 endpoints, all `require_bound_tenant()`:
+  - `GET  /actor-assurance/{actor_id}`         — `assurance:read`
+  - `GET  /actor-assurance/{actor_id}/history` — `assurance:read`
+  - `GET  /actor-assurance/{actor_id}/snapshot` — `assurance:read`
+  - `GET  /actor-assurance/{actor_id}/trust`   — `assurance:read`
+  - `POST /actor-assurance/recalculate`         — `assurance:write`
+- `tests/test_identity_assurance.py` — 177 deterministic tests (IA-1 through IA-177) covering engine determinism, provider adapters, trust band mapping, ORM append-only guards, endpoint auth/scope/tenant enforcement, and idempotent recalculation.
+
+**Non-critical-path additions:**
+- `api/actor_context.py` — added `"assurance:read"` / `"assurance:write"` to `ALL_PERMISSIONS`/`CAPABILITY_REGISTRY`; added `"assurance:read"` to the `tenant_admin` role.
+- `api/db.py` — imported `api.db_models_identity_assurance` so `init_db()` sees the tables.
+- `api/main.py` — mounted `actor_assurance_router` alongside `actor_attribution_router` on both `build_app()` code paths.
+- `services/plane_registry/registry.py` — added `/actor-assurance` to control plane `route_prefixes` and `"assurance:"` to `required_scope_prefixes`.
+- `tools/ci/route_inventory.json`, `plane_registry_snapshot.json`, `topology.sha256`, `route_inventory_summary.json` — regenerated.
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` — regenerated to include the 5 new endpoints; `Contract-Authority-SHA256` updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+- `authority_manifest.yaml` — regenerated; `identity_assurance` classified as a library service (engine module name differs from API file name).
+- `ROADMAP.md` — new row added for this PR.
+
+**Security review:**
+- No middleware, OPA, session, or CI workflow files modified.
+- No secrets stored or accessed. No cryptographic signing — SHA-256 is used for content-addressing / fingerprinting only (no key material).
+- `assurance:read` / `assurance:write` are new scopes; both are additive. `assurance:` prefix added to control plane `required_scope_prefixes` — no existing route is affected.
+- All 5 endpoints call `require_bound_tenant()`, filter every query by `tenant_id`, and return 404 (not 403) on cross-tenant reads to avoid enumeration.
+- Migration 0153 enables RLS on all 4 new tables with `tenant_id = current_setting('app.tenant_id', true)` policies. `actor_assurance_snapshots` and `actor_assurance_history` also install append-only triggers via `append_only_guard()`.
+- Assurance evaluation is deterministic: `build_assurance_decision(claims, tenant_id, actor_id)` never consults wall-clock time or PRNG. `computed_at_sequence` is a hash-based sequence value, not a timestamp. Idempotent recomputation is verified by test IA-167 — repeated calls with identical claims produce identical fingerprints and do not create duplicate snapshots.
+
+**SOC review outcome:** approved. New assurance authority layer is additive; no security boundary is weakened. All endpoints require both `assurance:*` scope and tenant binding. Append-only tables are guarded at both ORM and PG-trigger layers. No changes to auth middleware, session handling, or existing route surfaces.

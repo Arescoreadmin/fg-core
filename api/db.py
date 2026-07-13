@@ -305,6 +305,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_actor_attribution"
     )  # PR 535: Enterprise Actor Attribution & Non-Repudiation
+    importlib.import_module(
+        "api.db_models_identity_assurance"
+    )  # PR feat/identity-assurance-trust-engine
 
 
 def _get_base():
