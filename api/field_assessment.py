@@ -46,6 +46,7 @@ from pydantic import (
     model_validator,
 )
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import authz_scope, require_bound_tenant
@@ -11786,8 +11787,47 @@ def _collect_framework_ids(report_json: dict[str, Any]) -> list[str]:
     return sorted(seen)
 
 
+def _evidence_artifact_hashes(
+    db: Session, *, tenant_id: str, engagement_id: str, evidence_ids: list[str]
+) -> dict[str, str]:
+    """Return {evidence_id: artifact_hash} from the most-recent provenance row.
+
+    artifact_hash is the SHA-256 of the evidence payload — the value that can
+    actually be used to verify bytes, unlike event_hash which hashes the link
+    relationship metadata.
+    """
+    if not evidence_ids:
+        return {}
+    # Fetch all provenance rows with artifact_hash for these evidence IDs,
+    # ordered most-recent first, then deduplicate per evidence_id in Python.
+    # Avoids DISTINCT ON which is PostgreSQL-only.
+    rows = db.execute(
+        select(
+            FaEvidenceProvenance.evidence_id,
+            FaEvidenceProvenance.artifact_hash,
+        )
+        .where(
+            FaEvidenceProvenance.tenant_id == tenant_id,
+            FaEvidenceProvenance.engagement_id == engagement_id,
+            FaEvidenceProvenance.evidence_id.in_(evidence_ids),
+            FaEvidenceProvenance.artifact_hash.is_not(None),
+        )
+        .order_by(
+            FaEvidenceProvenance.evidence_id,
+            FaEvidenceProvenance.created_at.desc(),
+            FaEvidenceProvenance.id.desc(),
+        )
+    ).all()
+    result: dict[str, str] = {}
+    for r in rows:
+        if r.evidence_id not in result:
+            result[r.evidence_id] = r.artifact_hash
+    return result
+
+
 def _build_report_manifest(
     *,
+    db: Session,
     report_version: FaReportVersion,
     report_record: GovernanceReportRecord,
     evidence_links: list[FaEvidenceReportLink],
@@ -11796,16 +11836,19 @@ def _build_report_manifest(
     framework_ids: list[str],
 ) -> dict[str, Any]:
     """Assemble the deterministic manifest dict for a report version."""
+    unique_evidence_ids = sorted({link.evidence_id for link in evidence_links})
+    artifact_hash_map = _evidence_artifact_hashes(
+        db,
+        tenant_id=report_version.tenant_id,
+        engagement_id=report_version.engagement_id,
+        evidence_ids=unique_evidence_ids,
+    )
     evidence_hashes: list[dict[str, str]] = []
-    seen_evidence: set[str] = set()
-    for link in sorted(evidence_links, key=lambda link_: link_.evidence_id):
-        if link.evidence_id in seen_evidence:
-            continue
-        seen_evidence.add(link.evidence_id)
+    for eid in unique_evidence_ids:
         evidence_hashes.append(
             {
-                "evidence_id": link.evidence_id,
-                "sha256": link.event_hash or "",
+                "evidence_id": eid,
+                "sha256": artifact_hash_map.get(eid, ""),
             }
         )
 
@@ -12059,9 +12102,20 @@ def create_report_version_route(
         schema_version="1.0",
     )
     db.add(rv)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_CONFLICT",
+                "A concurrent request already created this version. Retry to get the next version number.",
+            ),
+        )
 
     manifest = _build_report_manifest(
+        db=db,
         report_version=rv,
         report_record=report_record,
         evidence_links=evidence_links,
@@ -12447,17 +12501,27 @@ def supersede_report_version_route(
                 "A version cannot supersede itself.",
             ),
         )
-    if new_version.status not in {"approved", "delivered"}:
+    if new_version.status != "approved":
         raise HTTPException(
             status_code=409,
             detail=api_error(
                 "REPORT_VERSION_SUPERSEDE_NOT_APPROVED",
-                "Superseding version must be approved or delivered.",
+                "Superseding version must be in 'approved' status (not yet delivered).",
+            ),
+        )
+    if new_version.parent_version_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_LINEAGE_ALREADY_SET",
+                "The superseding version already has a parent; its lineage cannot be changed.",
             ),
         )
 
     rv.status = "superseded"
     rv.superseded_by_id = new_version.id
+    # parent_version_id is set here before delivery — the only allowed mutation
+    # on an approved version is this one-time lineage write.
     new_version.parent_version_id = rv.id
     db.flush()
     _record_delivery_event(
@@ -12537,6 +12601,7 @@ def get_report_version_manifest_route(
     control_ids = _collect_control_ids(report_record.report_json or {})
     framework_ids = _collect_framework_ids(report_record.report_json or {})
     manifest = _build_report_manifest(
+        db=db,
         report_version=rv,
         report_record=report_record,
         evidence_links=evidence_links,
