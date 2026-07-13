@@ -18149,3 +18149,78 @@ consumed only at signing time from `FG_MANIFEST_SIGNING_KEY`.
 - `tests/tools/test_signed_validation_manifests.py` (new)
 - `docs/ci/SIGNED_VALIDATION_MANIFESTS.md` (new)
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+## feat/revenue-first-field-assessment-hardening — Evidence Provenance Persistence
+
+**Branch**: `feat/revenue-first-field-assessment-hardening`
+**Date**: 2026-07-12
+
+### Purpose
+
+Repairs the missing production provenance persistence path: every ingested
+evidence object (scan result, document analysis, observation) now records a
+chain-of-custody row in `fa_evidence_provenance` at creation time. Also wires
+`_create_report_links_for_report` into report generation so evidence→report
+linkage is recorded in `fa_evidence_report_link`.
+
+### Root cause
+
+`create_evidence_provenance()` was already imported and available but was never
+called from the three ingest routes. The table remained empty after every POST,
+causing three provenance-assertion tests to fail despite HTTP 201 responses.
+
+### Changes
+
+#### `api/field_assessment.py`
+
+- `ingest_scan_result_route`: calls `create_evidence_provenance()` after
+  `create_scan_result()` with `source_type=body.source_type.value`,
+  `collected_by_type="connector"`, `collection_method="scan_connector"`.
+  Guarded by `_latest_provenance_id_for_evidence()` to preserve idempotency —
+  re-posting identical content returns the same `scan_result_id` and produces
+  exactly one provenance row.
+- `register_document_analysis_route`: calls `create_evidence_provenance()` with
+  `source_type="document_analysis"`, `collected_by_type="user"`,
+  `collection_method="manual_upload"`.
+- `capture_observation_route`: calls `create_evidence_provenance()` with
+  `source_type="observation"`, `collected_by_type="user"`,
+  `collection_method="manual_capture"`.
+- Added `_collect_report_evidence_ids()`, `_latest_provenance_id_for_evidence()`,
+  `_report_link_exists()`, `_create_report_links_for_report()` helpers.
+- `create_engagement_report_route`: calls `_create_report_links_for_report()` to
+  record `fa_evidence_report_link` rows at report generation time.
+- Imports `FaEvidenceProvenance`, `FaEvidenceReportLink` from
+  `api.db_models_field_assessment`.
+
+#### `tests/test_field_assessment.py`
+
+- Added `_get_provenance_rows()` helper using `get_sessionmaker()` directly
+  (corrected from an incorrect `dependency_overrides` approach — this test suite
+  uses a real committed DB, not a transactional session override).
+- Added `test_ingest_scan_result_creates_single_provenance_record` — verifies
+  one provenance row per scan result, idempotent on re-post.
+- Added `test_register_document_analysis_creates_provenance` — verifies
+  `source_type="document_analysis"`, `collection_method="manual_upload"`.
+- Added `test_capture_observation_creates_provenance` — verifies
+  `source_type="observation"`, `collection_method="manual_capture"`.
+
+#### `tests/test_field_assessment_reports.py`
+
+- Added `_get_report_links()` helper.
+- Added `test_report_generation_creates_evidence_report_links` — verifies that
+  generating a report creates `fa_evidence_report_link` rows for evidence
+  referenced in the report JSON.
+
+### Validation
+
+```
+pytest tests/test_field_assessment.py tests/test_field_assessment_reports.py
+→ 95 passed in 158s
+```
+
+### Files changed
+
+- `api/field_assessment.py`
+- `tests/test_field_assessment.py`
+- `tests/test_field_assessment_reports.py`
+- `docs/ai/PR_FIX_LOG.md` — this entry
