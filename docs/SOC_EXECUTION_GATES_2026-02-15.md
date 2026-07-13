@@ -5717,3 +5717,22 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md` — tracking entries.
 
 **SOC review outcome:** approved. The route inventory change reflects a security improvement (read endpoint no longer requires write scope). The legacy fallback extensions restore pre-existing access for audit and admin service keys — they do not grant new privileges beyond what those keys previously had. No middleware, OPA, session, or CI workflow files were modified. No secrets stored or accessed. No new external dependencies.
+
+
+---
+
+## PR 535 — Actor Attribution & Non-Repudiation — Route Inventory / Registry Update (2026-07-13)
+
+**Scope of tools/ci changes:**
+- `tools/ci/route_inventory.json` — 5 new routes added: `GET /actor-attribution/actor/{actor_id}`, `GET /actor-attribution/actor/{actor_id}/history`, `GET /actor-attribution/actor/{actor_id}/attribution`, `GET /actor-attribution/report/{report_id}/actor-chain`, `GET /actor-attribution/evidence/{evidence_id}/actor-chain`. All require `actor:read` scope + `require_bound_tenant()`. All tenant-isolated.
+- `tools/ci/plane_registry_snapshot.json`, `topology.sha256`, `contract_routes.json`, `route_inventory_summary.json` — regenerated artifacts reflecting the 5 new routes.
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` — Contract-Authority-SHA256 updated to reflect new OpenAPI spec after actor-attribution routes added.
+
+**Security review:**
+- No middleware, OPA, session, auth, or CI workflow files modified.
+- No new scopes with write authority. `actor:read` is read-only. `actor:write` defined but no routes use it yet.
+- `"actor:"` scope prefix added to control plane `required_scope_prefixes` — additive, no existing routes affected.
+- All 5 new routes enforce `require_bound_tenant()` — cross-tenant enumeration blocked.
+- No secrets stored or accessed. No new external dependencies.
+
+**SOC review outcome:** approved. Route inventory and registry updates are mechanical reflections of the PR 535 actor attribution routes. No security boundary changes.
