@@ -3594,3 +3594,38 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `pytest tests/test_field_assessment.py -k upload`: 15/15 passed
 
 **SOC review outcome:** approved. No auth, OPA, session, or scope logic changed. The middleware change is narrowly scoped: multipart requests bypass the 1 MB body-size guard only, with size enforcement delegated to the upload route's own cap. The content-type default extension is safe given existing route-layer MIME validation.
+
+## 2026-07-13 — feat/enterprise-report-delivery: 9 new report delivery routes
+
+**Reviewer:** Codex | **Classification:** SOC-MEDIUM (new routes added to existing field-assessment plane; no auth, OPA, session, or middleware logic changed)
+
+**Changes:**
+
+1. `api/db_models_field_assessment.py` — two new ORM models: `FaReportVersion` (mutable through lifecycle transitions, immutable at route layer once approved/delivered/superseded/archived) and `FaReportDeliveryEvent` (append-only, PG trigger via shared `append_only_guard()`).
+2. `api/field_assessment.py` — 9 new routes under `/field-assessment/engagements/{id}/reports/{id}/versions/...` covering: create, list, get, submit-for-review, approve, deliver, supersede, manifest, history. All require `governance:read` or `governance:write` + `require_bound_tenant()`.
+3. `migrations/postgres/0150_report_versioning.sql` — creates `fa_report_versions` and `fa_report_delivery_events` with FK constraints, tenant indexes, RLS policies (`current_setting('app.tenant_id', true)`), and append-only triggers on delivery events.
+4. `tools/ci/route_inventory.json` / `route_inventory_summary.json` / `plane_registry_snapshot.json` / `topology.sha256` — regenerated via `make route-inventory-generate` to capture 9 new routes (additive).
+5. `contracts/core/openapi.json` + `schemas/api/openapi.json` — refreshed via `make contract-authority-refresh`.
+
+**Security assessment:**
+
+1. **Tenant isolation:** every route calls `require_bound_tenant(request)` then filters every DB query on `(tenant_id, engagement_id, report_id)`. Cross-tenant lookups return HTTP 404 via `ENGAGEMENT_NOT_FOUND` — no existence leakage.
+2. **Immutability:** `_guard_mutable()` checks status ∈ `{approved, delivered, superseded, archived}` and raises HTTP 409 `REPORT_VERSION_IMMUTABLE`. No SQL trigger required because the version row itself is allowed to update during the lifecycle; the guard is enforced at the route layer.
+3. **Append-only audit trail:** `FaReportDeliveryEvent` uses the shared `append_only_guard()` PG trigger. Each state transition also emits an atomic `FaEngagementAuditEvent` via the existing `emit_engagement_audit_event()` pattern.
+4. **No new auth surface:** no new scopes, no new middleware, no changes to `api/auth*` or `api/security*`.
+5. **No PKI / no secret material:** `signature_placeholder` is a plain nullable text column reserved for future Ed25519 integration; no keys are generated or stored.
+6. **Route inventory changes are purely additive:** 9 new entries appended to the `control` plane; no existing routes altered or removed.
+
+**Critical-path files changed:**
+- `tools/ci/route_inventory.json` — 9 new report delivery route entries (additive)
+- `tools/ci/route_inventory_summary.json` — regenerated counts (additive)
+- `tools/ci/plane_registry_snapshot.json` — regenerated (additive)
+- `tools/ci/topology.sha256` — regenerated
+
+**Validation:**
+- `make fg-contract`: OK
+- `make route-inventory-generate`: OK
+- `pytest tests/test_report_delivery.py`: 18/18 passed
+- `pytest tests/test_field_assessment.py`: no regression
+
+**SOC review outcome:** approved. No auth, OPA, session, middleware, or security files changed. All 9 routes require `governance:read` or `governance:write` via existing `require_scopes()` + `require_bound_tenant()`. Delivery events are append-only at both ORM and PG layers. Route inventory update is purely additive. Migration 0150 adds 2 tables + RLS + append-only triggers — backward compatible, safe to apply under live traffic.
