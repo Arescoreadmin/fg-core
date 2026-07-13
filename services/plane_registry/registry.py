@@ -74,6 +74,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
             "/cgin/transparency",
             "/governance-orchestration",
             "/intelligence",
+            "/actor-attribution",
             "/api/executive",
         ),
         allowed_dependency_categories=("auth", "tenant", "db", "rate", "breakglass"),

@@ -1,5 +1,88 @@
 # PR Fix Log (Strict)
 
+## PR 535 — feat(actor-attribution): Enterprise Actor Attribution & Non-Repudiation
+
+**Branch:** `feature/pr-535-actor-attribution-non-repudiation`
+**Date:** 2026-07-13
+
+### Purpose
+
+Every governance action performed inside the Field Assessment platform is now
+attributable to an actual actor. The system captures an immutable identity
+snapshot at action time, computes a three-layer cryptographic fingerprint chain
+(actor → identity → request → attribution hash → event hash), and persists an
+append-only attribution record for every governance event. Future identity
+changes never rewrite historical snapshots. The design supports human users,
+service accounts, automation, AI agents, and future autonomous systems without
+schema migration.
+
+### Changes
+
+1. `feat(db): api/db_models_actor_attribution.py` — Four new SQLAlchemy models:
+   `ActorIdentity` (canonical mutable actor record), `ActorIdentitySnapshot`
+   (append-only, immutable snapshot at action time), `ActorAttributionRecord`
+   (append-only, per-event cryptographic attribution with actor_fingerprint /
+   identity_fingerprint / request_fingerprint / attribution_hash / event_hash /
+   previous_hash), `ActorAuditEvent` (append-only change trail). ORM-level
+   append-only guards on three tables. Autonomous system fields on
+   ActorAttributionRecord (decision_confidence, policy_version, authority_chain,
+   execution_context, reasoning_reference, governance_scope).
+
+2. `feat(migration): migrations/postgres/0152_actor_attribution.sql` — Creates
+   all four tables. Unique constraint on (tenant_id, actor_subject) in
+   actor_identities. RLS policies via `current_setting('app.tenant_id', true)`
+   on all tables. BEFORE UPDATE/DELETE append-only triggers from
+   `append_only_guard()` on the three append-only tables. Composite indexes
+   for tenant-scoped queries and replay verification (attribution_hash index).
+
+3. `feat(service): services/actor_identity/` — New Actor Identity Authority
+   service package: `engine.py` (ActorIdentityEngine with
+   resolve_actor_identity, capture_identity_snapshot, create_actor_fingerprint,
+   create_identity_hash, create_request_fingerprint, attach_actor_to_audit_event,
+   validate_actor_context), `models.py` (ActorType, TrustLevel, SnapshotReason,
+   AttributionEventType enums + ActorIdentityResolved, ActorIdentitySnapshot,
+   ActorAttributionContext, ActorFingerprint, AutonomousActorFields,
+   IdentityValidationResult Pydantic models), `metrics.py` (11 Prometheus
+   metrics: resolution counters, spoof attempt counter, attribution latency
+   histogram, system/automation usage counters).
+
+4. `feat(api): api/actor_attribution.py` — Five deterministic read endpoints:
+   `GET /actor-attribution/actor/{actor_id}`, `GET
+   /actor-attribution/actor/{actor_id}/history`, `GET
+   /actor-attribution/actor/{actor_id}/attribution`, `GET
+   /actor-attribution/report/{report_id}/actor-chain`, `GET
+   /actor-attribution/evidence/{evidence_id}/actor-chain`. All require
+   `actor:read` scope + `require_bound_tenant()`. All tenant-isolated. Report
+   and evidence chains ordered ascending for replay verification.
+
+5. `feat(auth): api/actor_context.py` — Added `actor.read` and `actor.write`
+   to ALL_PERMISSIONS and CAPABILITY_REGISTRY. `tenant_admin` role granted
+   `actor.read`. `platform_admin` inherits both via ALL_PERMISSIONS. SoD
+   maintained: actor attribution read is separate from governance decision
+   authority.
+
+6. `feat(registry): services/plane_registry/registry.py` — `/actor-attribution`
+   prefix added to the control plane. Requires `actor:read` scope. Tenant-bound.
+
+7. `feat(db): api/db.py` — `api.db_models_actor_attribution` added to
+   `_ensure_models_imported()` so `init_db()` creates the tables.
+
+8. `feat(main): api/main.py` — `actor_attribution_router` imported and
+   registered in both `build_app` paths.
+
+9. `test(actor-attribution): tests/test_actor_attribution.py` — 27 tests
+   (AA-1 through AA-27) covering: missing/wrong scope, valid scope, cross-tenant
+   denial, no tenant binding, actor not found, actor CRUD from DB, actor type
+   variants (service account, human user), history pagination, attribution record
+   filtering by event_type, report actor chain, evidence actor chain
+   (event_ref_type filtering), immutability field presence, hash determinism,
+   chain ascending-order replay guarantee.
+
+### Validation
+
+- `ruff check api/db_models_actor_attribution.py api/actor_attribution.py services/actor_identity/ tests/test_actor_attribution.py` — pending
+- `pytest tests/test_actor_attribution.py -q` — pending (27 tests)
+
 ## Purpose
 
 This log records **completed, intentional fixes**.

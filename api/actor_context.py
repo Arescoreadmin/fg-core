@@ -70,6 +70,9 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         "tenant.configure",
         # Platform
         "platform.admin",
+        # Actor attribution — read and write non-repudiation records (SoD: separate from governance)
+        "actor.read",
+        "actor.write",
     }
 )
 
@@ -232,6 +235,17 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
         "description": "Full platform access including cross-tenant operations",
         "risk_level": "critical",
     },
+    # Actor attribution
+    "actor.read": {
+        "display_name": "View Actor Attribution",
+        "description": "Read actor identity records and attribution chains (non-repudiation audit)",
+        "risk_level": "low",
+    },
+    "actor.write": {
+        "display_name": "Write Actor Attribution",
+        "description": "Create and update actor attribution records (service/automation use)",
+        "risk_level": "medium",
+    },
 }
 
 # Role → permission mapping.
@@ -319,6 +333,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "connector.manage",
             "tenant.configure",
             "governance.promote",
+            # actor attribution — admins can read the attribution audit trail
+            "actor.read",
         }
     ),
     # platform_admin gets every permission — expanded explicitly, not via wildcard
