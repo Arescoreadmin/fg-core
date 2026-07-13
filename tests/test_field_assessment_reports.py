@@ -181,6 +181,25 @@ def _make_report(
     return resp.json()
 
 
+def _get_report_links(*, tenant_id: str, engagement_id: str, report_id: str):
+    from sqlalchemy import select
+
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaEvidenceReportLink
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        stmt = select(FaEvidenceReportLink).where(
+            FaEvidenceReportLink.tenant_id == tenant_id,
+            FaEvidenceReportLink.engagement_id == engagement_id,
+            FaEvidenceReportLink.report_id == report_id,
+        )
+        return list(db.execute(stmt).scalars().all())
+    finally:
+        db.close()
+
+
 # ---------------------------------------------------------------------------
 # Test 1: Same content → same manifest_hash (within one report; hash is stable)
 # ---------------------------------------------------------------------------
@@ -548,6 +567,34 @@ def test_list_pagination_is_deterministic(client: TestClient) -> None:
 
     total = resp1.json()["total"]
     assert total == 3
+
+
+def test_report_generation_creates_evidence_report_links(client: TestClient) -> None:
+    eid = _make_engagement(client)
+    scan_resp = client.post(
+        f"/field-assessment/engagements/{eid}/scan-results",
+        json={
+            "source_type": "microsoft_graph",
+            "schema_version": "1.0",
+            "collected_at": "2026-05-19T00:00:00Z",
+            "raw_payload": {"users": []},
+            "object_count": 0,
+        },
+    )
+    assert scan_resp.status_code == 201, scan_resp.text
+    scan_id = scan_resp.json()["id"]
+
+    report = _make_report(client, eid)
+    links = _get_report_links(
+        tenant_id=_TENANT_A,
+        engagement_id=eid,
+        report_id=report["report_id"],
+    )
+
+    assert len(links) == 1
+    assert links[0].evidence_id == scan_id
+    assert links[0].report_id == report["report_id"]
+    assert links[0].report_hash is not None
 
 
 # ---------------------------------------------------------------------------

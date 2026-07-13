@@ -182,6 +182,31 @@ def _create_engagement(client: TestClient) -> dict:
     return resp.json()
 
 
+def _get_provenance_rows(
+    client: TestClient,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    evidence_id: str,
+):
+    from sqlalchemy import select
+
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaEvidenceProvenance
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        stmt = select(FaEvidenceProvenance).where(
+            FaEvidenceProvenance.tenant_id == tenant_id,
+            FaEvidenceProvenance.engagement_id == engagement_id,
+            FaEvidenceProvenance.evidence_id == evidence_id,
+        )
+        return list(db.execute(stmt).scalars().all())
+    finally:
+        db.close()
+
+
 # ---------------------------------------------------------------------------
 # API tests — Engagement CRUD
 # ---------------------------------------------------------------------------
@@ -334,6 +359,37 @@ def test_list_scan_results(client: TestClient) -> None:
     assert len(data) >= 1
 
 
+def test_ingest_scan_result_creates_single_provenance_record(
+    client: TestClient,
+) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    first = client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=_SCAN_RESULT_BODY,
+    )
+    assert first.status_code == 201, first.text
+    scan_id = first.json()["id"]
+
+    second = client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=_SCAN_RESULT_BODY,
+    )
+    assert second.status_code == 201, second.text
+    assert second.json()["id"] == scan_id
+
+    rows = _get_provenance_rows(
+        client,
+        tenant_id=_TENANT_ID,
+        engagement_id=eng_id,
+        evidence_id=scan_id,
+    )
+    assert len(rows) == 1
+    assert rows[0].source_type == "microsoft_graph"
+    assert rows[0].collection_method == "scan_connector"
+
+
 # ---------------------------------------------------------------------------
 # API tests — Document analyses
 # ---------------------------------------------------------------------------
@@ -353,6 +409,28 @@ def test_register_document_analysis(client: TestClient) -> None:
     assert data["document_classification"] == "ai_policy"
     assert data["engagement_id"] == eng_id
     assert "schema_version" in data
+
+
+def test_register_document_analysis_creates_provenance(client: TestClient) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/document-analyses",
+        json=_DOC_ANALYSIS_BODY,
+    )
+    assert resp.status_code == 201, resp.text
+    analysis_id = resp.json()["id"]
+
+    rows = _get_provenance_rows(
+        client,
+        tenant_id=_TENANT_ID,
+        engagement_id=eng_id,
+        evidence_id=analysis_id,
+    )
+    assert len(rows) == 1
+    assert rows[0].source_type == "document_analysis"
+    assert rows[0].collection_method == "manual_upload"
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +467,28 @@ def test_list_observations(client: TestClient) -> None:
     data = resp.json()
     assert isinstance(data, list)
     assert len(data) >= 1
+
+
+def test_capture_observation_creates_provenance(client: TestClient) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/observations",
+        json=_OBSERVATION_BODY,
+    )
+    assert resp.status_code == 201, resp.text
+    observation_id = resp.json()["id"]
+
+    rows = _get_provenance_rows(
+        client,
+        tenant_id=_TENANT_ID,
+        engagement_id=eng_id,
+        evidence_id=observation_id,
+    )
+    assert len(rows) == 1
+    assert rows[0].source_type == "observation"
+    assert rows[0].collection_method == "manual_capture"
 
 
 # ---------------------------------------------------------------------------

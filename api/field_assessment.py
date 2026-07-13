@@ -156,6 +156,8 @@ from api.db_models_field_assessment import (
     FaDocumentAnalysis,
     FaEngagement,
     FaEvidenceLink,
+    FaEvidenceProvenance,
+    FaEvidenceReportLink,
     FaFieldObservation,
     FaNormalizedFinding,
     FaScanResult,
@@ -1098,6 +1100,116 @@ def _evidence_link_to_response(lnk: FaEvidenceLink) -> EvidenceLinkResponse:
     )
 
 
+def _collect_report_evidence_ids(report_json: dict[str, Any]) -> list[str]:
+    evidence_ids: set[str] = set()
+
+    for ref in report_json.get("evidence_appendix") or []:
+        if isinstance(ref, dict):
+            evidence_id = ref.get("evidence_id")
+            if isinstance(evidence_id, str) and evidence_id:
+                evidence_ids.add(evidence_id)
+
+    for finding in report_json.get("findings") or []:
+        if not isinstance(finding, dict):
+            continue
+        for evidence_id in finding.get("evidence_ids") or []:
+            if isinstance(evidence_id, str) and evidence_id:
+                evidence_ids.add(evidence_id)
+
+    for finding in report_json.get("normalized_findings") or []:
+        if not isinstance(finding, dict):
+            continue
+        for evidence_id in finding.get("evidence_ref_ids") or []:
+            if isinstance(evidence_id, str) and evidence_id:
+                evidence_ids.add(evidence_id)
+
+    return sorted(evidence_ids)
+
+
+def _latest_provenance_id_for_evidence(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    evidence_id: str,
+) -> str | None:
+    row = db.execute(
+        select(FaEvidenceProvenance.id)
+        .where(
+            FaEvidenceProvenance.tenant_id == tenant_id,
+            FaEvidenceProvenance.engagement_id == engagement_id,
+            FaEvidenceProvenance.evidence_id == evidence_id,
+        )
+        .order_by(
+            FaEvidenceProvenance.created_at.desc(), FaEvidenceProvenance.id.desc()
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    return row if isinstance(row, str) else None
+
+
+def _report_link_exists(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    report_id: str,
+    evidence_id: str,
+) -> bool:
+    existing = db.execute(
+        select(FaEvidenceReportLink.id).where(
+            FaEvidenceReportLink.tenant_id == tenant_id,
+            FaEvidenceReportLink.engagement_id == engagement_id,
+            FaEvidenceReportLink.report_id == report_id,
+            FaEvidenceReportLink.evidence_id == evidence_id,
+        )
+    ).scalar_one_or_none()
+    return existing is not None
+
+
+def _create_report_links_for_report(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    report_id: str,
+    report_hash: str,
+    report_signature: str | None,
+    report_json: dict[str, Any],
+    linked_by: str | None,
+) -> int:
+    from services.field_assessment.report_link_authority import create_report_link
+
+    created = 0
+    for evidence_id in _collect_report_evidence_ids(report_json):
+        if _report_link_exists(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            report_id=report_id,
+            evidence_id=evidence_id,
+        ):
+            continue
+        create_report_link(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            evidence_id=evidence_id,
+            report_id=report_id,
+            provenance_record_id=_latest_provenance_id_for_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                evidence_id=evidence_id,
+            ),
+            report_hash=report_hash,
+            report_signature=report_signature,
+            linked_by=linked_by,
+        )
+        created += 1
+    return created
+
+
 # ---------------------------------------------------------------------------
 # Routes — Engagements
 # ---------------------------------------------------------------------------
@@ -1508,6 +1620,21 @@ def ingest_scan_result_route(
         object_count=body.object_count,
         evidence_hash=original_hash,
     )
+    if _latest_provenance_id_for_evidence(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        evidence_id=result.id,
+    ) is None:
+        create_evidence_provenance(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            evidence_id=result.id,
+            source_type=body.source_type.value,
+            collected_by_type="connector",
+            collection_method="scan_connector",
+        )
 
     # If the caller provided a normalized_payload with a "findings" key, extract
     # and persist FaNormalizedFinding rows now. This closes the evidence pipeline
@@ -1665,6 +1792,15 @@ def register_document_analysis_route(
         analysis_findings=body.analysis_findings,
         gaps_identified=body.gaps_identified,
     )
+    create_evidence_provenance(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        evidence_id=analysis.id,
+        source_type="document_analysis",
+        collected_by_type="user",
+        collection_method="manual_upload",
+    )
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,
@@ -1748,6 +1884,15 @@ def capture_observation_route(
         structured_evidence=body.structured_evidence,
         linked_finding_ids=body.linked_finding_ids,
         assessor_id=eng.assessor_id,
+    )
+    create_evidence_provenance(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        evidence_id=observation.id,
+        source_type="observation",
+        collected_by_type="user",
+        collection_method="manual_capture",
     )
     emit_engagement_audit_event(
         db,
@@ -8284,6 +8429,16 @@ def create_engagement_report_route(
         )
         db.add(record)
         db.flush()
+        report_link_count = _create_report_links_for_report(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            report_id=record.id,
+            report_hash=manifest_hash,
+            report_signature=signature,
+            report_json=report_json,
+            linked_by=record.compiled_by,
+        )
 
     # Emit audit BEFORE commit so report row and audit event commit atomically.
     # (Previously: commit happened first; audit was in a new transaction that was
@@ -8303,6 +8458,7 @@ def create_engagement_report_route(
             "version": version,
             "report_type": body.report_type,
             "manifest_hash": manifest_hash,
+            "report_link_count": report_link_count,
         },
     )
     db.commit()
