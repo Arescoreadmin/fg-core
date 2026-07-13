@@ -1177,11 +1177,16 @@ def _create_report_links_for_report(
     report_signature: str | None,
     report_json: dict[str, Any],
     linked_by: str | None,
+    input_evidence_ids: list[str] | None = None,
 ) -> int:
     from services.field_assessment.report_link_authority import create_report_link
 
+    evidence_ids = set(_collect_report_evidence_ids(report_json))
+    if input_evidence_ids:
+        evidence_ids.update(input_evidence_ids)
+
     created = 0
-    for evidence_id in _collect_report_evidence_ids(report_json):
+    for evidence_id in sorted(evidence_ids):
         if _report_link_exists(
             db,
             tenant_id=tenant_id,
@@ -1620,12 +1625,15 @@ def ingest_scan_result_route(
         object_count=body.object_count,
         evidence_hash=original_hash,
     )
-    if _latest_provenance_id_for_evidence(
-        db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        evidence_id=result.id,
-    ) is None:
+    if (
+        _latest_provenance_id_for_evidence(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            evidence_id=result.id,
+        )
+        is None
+    ):
         create_evidence_provenance(
             db,
             tenant_id=tenant_id,
@@ -1633,7 +1641,9 @@ def ingest_scan_result_route(
             evidence_id=result.id,
             source_type=body.source_type.value,
             collected_by_type="connector",
+            collected_at=body.collected_at,
             collection_method="scan_connector",
+            artifact_hash=original_hash,
         )
 
     # If the caller provided a normalized_payload with a "findings" key, extract
@@ -7964,7 +7974,7 @@ def _build_engagement_report_json(
     include_sections: list[str] | None,
     assessment_type: str,
     db: Session,
-) -> tuple[dict[str, Any], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, str], list[str]]:
     from services.governance.report import (
         GovernanceReportEngine,
         EvidenceRef,
@@ -8030,6 +8040,7 @@ def _build_engagement_report_json(
     scan_rows = list_scan_results(
         db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
     )
+    scan_result_ids: list[str] = [sr.id for sr in scan_rows]
     evidence_refs: list[EvidenceRef] = [
         EvidenceRef(
             evidence_id=sr.id,
@@ -8317,7 +8328,7 @@ def _build_engagement_report_json(
         "generated_at": report.generated_at,
         **section_content,
     }
-    return report_json, section_hashes
+    return report_json, section_hashes, scan_result_ids
 
 
 @router.post(
@@ -8366,7 +8377,7 @@ def create_engagement_report_route(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    report_json, section_hashes = _build_engagement_report_json(
+    report_json, section_hashes, scan_result_ids = _build_engagement_report_json(
         engagement_id=engagement_id,
         tenant_id=tenant_id,
         report_type=body.report_type,
@@ -8438,6 +8449,7 @@ def create_engagement_report_route(
             report_signature=signature,
             report_json=report_json,
             linked_by=record.compiled_by,
+            input_evidence_ids=scan_result_ids,
         )
 
     # Emit audit BEFORE commit so report row and audit event commit atomically.
