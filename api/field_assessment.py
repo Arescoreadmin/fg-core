@@ -10047,7 +10047,7 @@ def upload_artifact_route(
     # Strip charset and boundary parameters before comparison.
     declared_ct = (file.content_type or "").split(";")[0].strip().lower()
     allowed_mimes = _ALLOWED_ARTIFACT_MIME_TYPES[artifact_type]
-    if declared_ct and declared_ct not in allowed_mimes:
+    if not declared_ct or declared_ct not in allowed_mimes:
         emit_engagement_audit_event(
             db,
             tenant_id=tenant_id,

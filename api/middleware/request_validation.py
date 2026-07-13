@@ -67,7 +67,7 @@ class RequestValidationConfig:
             max_body_size=_env_int("FG_MAX_BODY_SIZE", 1024 * 1024),  # 1MB default
             enabled=_env_bool("FG_REQUEST_VALIDATION_ENABLED", True),
             allowed_content_types=_env_csv(
-                "FG_ALLOWED_CONTENT_TYPES", "application/json"
+                "FG_ALLOWED_CONTENT_TYPES", "application/json,multipart/form-data"
             ),
             enforce_content_type=_env_bool("FG_ENFORCE_CONTENT_TYPE", True),
             skip_paths=(
@@ -118,24 +118,30 @@ class RequestValidationMiddleware(BaseHTTPMiddleware):
 
         # Check Content-Length header for body size
         if self._should_check_body(method):
-            content_length = request.headers.get("content-length")
-            if content_length:
-                try:
-                    length = int(content_length)
-                    if length > self.config.max_body_size:
-                        log.warning(
-                            f"Request body too large: {length} > {self.config.max_body_size} "
-                            f"for {method} {path}"
-                        )
-                        return JSONResponse(
-                            status_code=413,
-                            content={
-                                "detail": "Request body too large",
-                                "max_size": self.config.max_body_size,
-                            },
-                        )
-                except ValueError:
-                    pass
+            request_ct = (
+                request.headers.get("content-type", "").lower().split(";")[0].strip()
+            )
+            # Multipart routes enforce their own per-route size limits; skip the
+            # global 1 MB guard so it doesn't shadow a route's larger allowance.
+            if request_ct != "multipart/form-data":
+                content_length = request.headers.get("content-length")
+                if content_length:
+                    try:
+                        length = int(content_length)
+                        if length > self.config.max_body_size:
+                            log.warning(
+                                f"Request body too large: {length} > {self.config.max_body_size} "
+                                f"for {method} {path}"
+                            )
+                            return JSONResponse(
+                                status_code=413,
+                                content={
+                                    "detail": "Request body too large",
+                                    "max_size": self.config.max_body_size,
+                                },
+                            )
+                    except ValueError:
+                        pass
 
             # Content-Type validation
             if self.config.enforce_content_type and self.config.allowed_content_types:

@@ -1642,6 +1642,22 @@ def test_upload_artifact_no_file_bytes_in_response(upload_client) -> None:
     assert all(c in "0123456789abcdef" for c in sha256_val)
 
 
+def test_upload_artifact_missing_content_type_rejected(upload_client) -> None:
+    """A file part with no Content-Type must be rejected with 415, not silently accepted."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+
+    # Pass an empty string for content-type to simulate a part with no declared type.
+    # httpx infers from filename extension when None is used, so we pass "" directly.
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/artifacts/upload",
+        data={"artifact_type": "document"},
+        files={"file": ("evidence.bin", b"%PDF-1.4 content", "")},
+    )
+    assert resp.status_code == 415, resp.text
+    assert "ARTIFACT_UNSUPPORTED_TYPE" in resp.text
+
+
 def test_upload_artifact_file_persisted_to_storage(upload_client) -> None:
     """The uploaded file must be written to the configured artifact storage directory."""
     client, artifact_dir = upload_client
