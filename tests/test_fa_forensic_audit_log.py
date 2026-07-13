@@ -30,7 +30,17 @@ def test_audit_events_accumulate_and_observation_diff_is_specific(
     assert patch.status_code == 200, patch.text
     assert deleted.status_code == 204, deleted.text
     assert events.status_code == 200, events.text
-    assert len(events.json()) == 4
+    payload = events.json()
+    event_types = [event["event_type"] for event in payload]
+
+    assert len(payload) == 5
+    assert set(event_types) == {
+        "engagement.created",
+        "trust_validation_warning",
+        "observation.captured",
+        "observation.updated",
+        "observation.deleted",
+    }
     assert all(
         event["event_type"] and event["actor"] and event["created_at"]
         for event in events.json()
@@ -41,4 +51,4 @@ def test_audit_events_accumulate_and_observation_diff_is_specific(
     assert updated["payload"]["before"]["title"] == observation["title"]
     assert updated["payload"]["after"]["title"] == "Changed under audit"
     with Session(ctx.engine) as session:
-        assert session.query(FaEngagementAuditEvent).count() == 4
+        assert session.query(FaEngagementAuditEvent).count() == 5
