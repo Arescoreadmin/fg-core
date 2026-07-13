@@ -240,11 +240,19 @@ def get_report_actor_chain(report_id: str, request: Request) -> dict:
     tenant_id = require_bound_tenant(request)
     REPORT_CHAIN_GET_TOTAL.inc()
     with Session(get_engine()) as db:
+        _REPORT_EVENT_TYPES = [
+            "report_generation",
+            "report_approval",
+            "report_supersede",
+            "report_delivery",
+            "manifest_generation",
+        ]
         rows = (
             db.query(ActorAttributionRecord)
             .filter(
                 ActorAttributionRecord.event_ref == report_id,
                 ActorAttributionRecord.tenant_id == tenant_id,
+                ActorAttributionRecord.event_type.in_(_REPORT_EVENT_TYPES),
             )
             .order_by(ActorAttributionRecord.created_at.asc())
             .all()

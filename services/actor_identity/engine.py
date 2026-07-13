@@ -156,8 +156,11 @@ class ActorIdentityEngine:
         db: Session,
     ) -> ActorIdentityResolved:
         # --- Extract request.state signals ---
+        # AuthGate stores the verified AuthResult on request.state.auth; read key_prefix
+        # from there first so API-key requests resolve to the actual caller, not anonymous.
+        _auth_result = getattr(request.state, "auth", None)
         actor_subject: str = (
-            getattr(request.state, "key_prefix", None)
+            getattr(_auth_result, "key_prefix", None)
             or getattr(request.state, "actor_subject", None)
             or "anonymous"
         )
@@ -399,7 +402,13 @@ class ActorIdentityEngine:
         request_fp = self.create_request_fingerprint(request, request_id)
 
         attribution_hash = _sha256(f"{actor_fp}:{identity_fp}:{request_fp}")
-        event_hash = _sha256(f"{attribution_hash}:{_canonical_json(event_data)}")
+        # Bind event classification fields into the hash so misclassifying event_type,
+        # event_ref, or event_ref_type is detectable during replay verification.
+        _event_context = dict(event_data)
+        _event_context["_event_type"] = event_type.value
+        _event_context["_event_ref"] = event_ref or ""
+        _event_context["_event_ref_type"] = event_ref_type or ""
+        event_hash = _sha256(f"{attribution_hash}:{_canonical_json(_event_context)}")
         attribution_id = _new_id()
 
         client_ip_hash = _hash_ip(request.client.host if request.client else "")

@@ -97,6 +97,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "keys:",
                 "dev:",
                 "portal:",
+                "actor:",
             ),
             require_any_scope=True,
             tenant_binding_required=True,
