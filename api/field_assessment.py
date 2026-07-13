@@ -13,22 +13,28 @@ Security invariants:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import os
 import secrets
 import threading
 import uuid as _uuid_module
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal, cast
 
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    File,
+    Form,
     HTTPException,
     Query,
     Request,
     Response,
+    UploadFile,
     status,
 )
 from pydantic import (
@@ -9768,6 +9774,86 @@ def get_remediation_roadmap(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Evidence upload: server-side integrity constants and helpers
+# ---------------------------------------------------------------------------
+
+_MAX_ARTIFACT_UPLOAD_BYTES: int = 50 * 1_024 * 1_024  # 50 MB
+
+_ALLOWED_ARTIFACT_MIME_TYPES: dict[str, frozenset[str]] = {
+    "audio": frozenset(
+        {
+            "audio/wav",
+            "audio/x-wav",
+            "audio/mpeg",
+            "audio/mp4",
+            "audio/ogg",
+            "audio/webm",
+        }
+    ),
+    "document": frozenset(
+        {
+            "application/pdf",
+            "text/plain",
+            "text/csv",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+    ),
+    "export": frozenset(
+        {
+            "application/json",
+            "text/csv",
+            "application/zip",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+    ),
+}
+
+_MIME_SUFFIX: dict[str, str] = {
+    "application/pdf": ".pdf",
+    "text/plain": ".txt",
+    "text/csv": ".csv",
+    "application/json": ".json",
+    "application/zip": ".zip",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/ogg": ".ogg",
+    "audio/webm": ".webm",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+}
+
+
+def _file_sha256(data: bytes) -> str:
+    """SHA-256 of raw bytes. Always computed server-side."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def _digests_match(server_hex: str, client_hex: str) -> bool:
+    """Constant-time comparison of hex digests to prevent timing attacks."""
+    return hmac.compare_digest(server_hex.lower(), client_hex.lower())
+
+
+def _artifact_store_path(artifact_id: str, suffix: str) -> Path:
+    """Return the filesystem path for a stored artifact file.
+
+    Reads FG_ARTIFACTS_DIR at call time so tests can monkeypatch the env var.
+    """
+    base = Path(os.environ.get("FG_ARTIFACTS_DIR", "artifacts")) / "evidence_files"
+    base.mkdir(parents=True, exist_ok=True)
+    return base / f"{artifact_id}{suffix}"
+
+
+# ---------------------------------------------------------------------------
+# Artifact request / response models
+# ---------------------------------------------------------------------------
+
+
 class RegisterArtifactRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -9861,6 +9947,210 @@ def register_artifact_route(
             "size_bytes": body.size_bytes,
             "content_type": body.content_type,
             "retention_class": body.retention_class,
+        },
+    )
+    db.commit()
+    db.refresh(artifact)
+    return ArtifactResponse(
+        id=artifact.id,
+        engagement_id=artifact.engagement_id,
+        artifact_type=artifact.artifact_type,
+        sha256=artifact.sha256,
+        size_bytes=artifact.size_bytes,
+        content_type=artifact.content_type,
+        created_by=artifact.created_by,
+        created_at=artifact.created_at,
+        retention_class=artifact.retention_class,
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/artifacts/upload",
+    response_model=ArtifactResponse,
+    status_code=201,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def upload_artifact_route(
+    engagement_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    artifact_type: str = Form(...),
+    expected_sha256: str | None = Form(default=None),
+    retention_class: str = Form(default="standard_3y"),
+    actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ArtifactResponse:
+    """Upload evidence file bytes with server-side integrity verification.
+
+    Computes SHA-256 from the actual received bytes — never trusts a
+    client-supplied digest as authoritative. If expected_sha256 is provided,
+    it is compared using constant-time comparison and the request is rejected
+    on mismatch. The server-computed digest is persisted as the authoritative
+    content hash and is bound to the provenance record.
+    """
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+
+    # Validate artifact_type against the known allowlist.
+    if artifact_type not in _ALLOWED_ARTIFACT_MIME_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "INVALID_ARTIFACT_TYPE",
+                f"artifact_type must be one of: {sorted(_ALLOWED_ARTIFACT_MIME_TYPES)}",
+            ),
+        )
+
+    # Engagement ownership and acceptance check.
+    try:
+        eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    _assert_engagement_accepts_evidence(eng)
+
+    # Read bytes with a one-byte overrun to detect oversized payloads without
+    # streaming the entire file when we know it already exceeds the limit.
+    raw_bytes: bytes = file.file.read(_MAX_ARTIFACT_UPLOAD_BYTES + 1)
+
+    if len(raw_bytes) > _MAX_ARTIFACT_UPLOAD_BYTES:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="artifact.upload_rejected",
+            actor=actor,
+            reason_code="ARTIFACT_OVERSIZED",
+            payload={
+                "artifact_type": artifact_type,
+                "size_limit_bytes": _MAX_ARTIFACT_UPLOAD_BYTES,
+                "filename": file.filename or "",
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=413,
+            detail=api_error(
+                "ARTIFACT_OVERSIZED",
+                f"file exceeds {_MAX_ARTIFACT_UPLOAD_BYTES // (1024 * 1024)} MB limit",
+            ),
+        )
+
+    if len(raw_bytes) == 0:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error("ARTIFACT_EMPTY", "uploaded file must not be empty"),
+        )
+
+    # MIME type validation against the per-artifact-type allowlist.
+    # Strip charset and boundary parameters before comparison.
+    declared_ct = (file.content_type or "").split(";")[0].strip().lower()
+    allowed_mimes = _ALLOWED_ARTIFACT_MIME_TYPES[artifact_type]
+    if declared_ct and declared_ct not in allowed_mimes:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="artifact.upload_rejected",
+            actor=actor,
+            reason_code="ARTIFACT_UNSUPPORTED_TYPE",
+            payload={
+                "artifact_type": artifact_type,
+                "declared_content_type": declared_ct,
+                "filename": file.filename or "",
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=415,
+            detail=api_error(
+                "ARTIFACT_UNSUPPORTED_TYPE",
+                f"content type {declared_ct!r} is not permitted for {artifact_type!r} artifacts",
+            ),
+        )
+
+    # Server-side SHA-256 — this is the authoritative digest.
+    authoritative_sha256 = _file_sha256(raw_bytes)
+
+    # Constant-time comparison if caller supplied an expected digest.
+    if expected_sha256 is not None:
+        if not _digests_match(authoritative_sha256, expected_sha256):
+            emit_engagement_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="artifact.upload_rejected",
+                actor=actor,
+                reason_code="ARTIFACT_DIGEST_MISMATCH",
+                payload={
+                    "artifact_type": artifact_type,
+                    "filename": file.filename or "",
+                    "expected_sha256_prefix": (expected_sha256 or "")[:8],
+                },
+            )
+            db.commit()
+            raise HTTPException(
+                status_code=422,
+                detail=api_error(
+                    "ARTIFACT_DIGEST_MISMATCH",
+                    "supplied digest does not match server-computed hash",
+                ),
+            )
+
+    # Persist file bytes to local artifact storage.
+    artifact_id = str(_uuid_module.uuid4())
+    file_suffix = _MIME_SUFFIX.get(declared_ct, ".bin")
+    storage_path = _artifact_store_path(artifact_id, file_suffix)
+    storage_path.write_bytes(raw_bytes)
+
+    now = utc_iso8601_z_now()
+    artifact = FaArtifact(
+        id=artifact_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        artifact_type=artifact_type,
+        storage_key=str(storage_path),
+        sha256=authoritative_sha256,
+        size_bytes=len(raw_bytes),
+        content_type=declared_ct or None,
+        created_by=actor,
+        created_at=now,
+        retention_class=retention_class,
+    )
+    db.add(artifact)
+    db.flush()
+
+    # Provenance row: authoritative hash binds artifact to engagement.
+    create_evidence_provenance(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        evidence_id=artifact_id,
+        source_type=artifact_type,
+        collected_by_type="user",
+        collected_by_id=actor,
+        collected_at=now,
+        collection_method="file_upload",
+        artifact_hash=authoritative_sha256,
+    )
+
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="artifact.uploaded",
+        actor=actor,
+        reason_code="ARTIFACT_UPLOADED",
+        payload={
+            "artifact_id": artifact_id,
+            "artifact_type": artifact_type,
+            "sha256": authoritative_sha256,
+            "size_bytes": len(raw_bytes),
+            "content_type": declared_ct or None,
+            "retention_class": retention_class,
+            "digest_verified": expected_sha256 is not None,
+            "filename": file.filename or "",
         },
     )
     db.commit()
