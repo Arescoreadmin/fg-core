@@ -48,7 +48,7 @@ from pydantic import (
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import authz_scope
+from api.auth_scopes import authz_scope, require_bound_tenant
 from api.auth_dispatch import require_permission
 from api.actor_context import ActorContext
 from api.deps import auth_ctx_db_session
@@ -166,6 +166,8 @@ from api.db_models_field_assessment import (
     FaEvidenceReportLink,
     FaFieldObservation,
     FaNormalizedFinding,
+    FaReportDeliveryEvent,
+    FaReportVersion,
     FaScanResult,
     FaScanAuditEvent,
     FaScanJob,
@@ -11598,3 +11600,1005 @@ def list_ai_vendor_governance_decisions(
         limit=limit,
         offset=offset,
     )
+
+
+# ---------------------------------------------------------------------------
+# Enterprise Report Delivery
+#
+# Adds an approval + delivery workflow on top of an existing signed
+# GovernanceReportRecord. The report row itself is not mutated; each
+# FaReportVersion tracks the review → approve → deliver → supersede lineage
+# and every state transition emits an append-only FaReportDeliveryEvent.
+# ---------------------------------------------------------------------------
+
+
+_REPORT_VERSION_STATUSES: frozenset[str] = frozenset(
+    {
+        "draft",
+        "internal_review",
+        "approved",
+        "delivered",
+        "superseded",
+        "archived",
+    }
+)
+
+_REPORT_VERSION_IMMUTABLE_STATUSES: frozenset[str] = frozenset(
+    {"approved", "delivered", "superseded", "archived"}
+)
+
+_REPORT_DELIVERY_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "generated",
+        "reviewed",
+        "approved",
+        "downloaded",
+        "emailed",
+        "portal_viewed",
+        "superseded",
+    }
+)
+
+
+class ReportApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_name: str = Field(min_length=1, max_length=255)
+    reviewer_role: str = Field(min_length=1, max_length=128)
+    approval_notes: str | None = None
+    signature_placeholder: str | None = None
+
+
+class ReportSupersedeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_version_id: str = Field(min_length=1, max_length=64)
+
+
+class ReportVersionResponse(BaseModel):
+    id: str
+    engagement_id: str
+    report_id: str
+    version: int
+    revision: str
+    status: str
+    created_at: str
+    approved_at: str | None = None
+    approved_by: str | None = None
+    delivered_at: str | None = None
+    manifest_hash: str | None = None
+    report_hash: str | None = None
+    evidence_count: int
+    finding_count: int
+    control_count: int
+    framework_count: int
+    confidence_score: float | None = None
+    reviewer_name: str | None = None
+    reviewer_role: str | None = None
+    approval_notes: str | None = None
+    parent_version_id: str | None = None
+    superseded_by_id: str | None = None
+
+
+class ReportDeliveryEventResponse(BaseModel):
+    id: str
+    event_type: str
+    actor: str
+    actor_role: str | None = None
+    report_version: int
+    created_at: str
+
+
+class ReportManifest(BaseModel):
+    manifest_version: str
+    schema_version: str
+    report_version: int
+    report_revision: str
+    report_id: str
+    engagement_id: str
+    tenant_id: str
+    generated_at: str
+    report_hash: str
+    evidence_hashes: list[dict[str, str]]
+    finding_ids: list[str]
+    control_ids: list[str]
+    framework_ids: list[str]
+    evidence_count: int
+    finding_count: int
+    control_count: int
+    framework_count: int
+
+
+_REPORT_MANIFEST_VERSION = "1.0"
+_REPORT_MANIFEST_SCHEMA_VERSION = "1.0"
+
+
+def _compute_report_hash(report_json: dict[str, Any]) -> str:
+    """SHA-256 of canonical (sorted-keys) JSON serialization."""
+    import hashlib
+    import json
+
+    canonical = json.dumps(report_json, sort_keys=True, ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _compute_manifest_hash(manifest: dict[str, Any]) -> str:
+    import hashlib
+    import json
+
+    canonical = json.dumps(manifest, sort_keys=True, ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _collect_finding_ids(report_json: dict[str, Any]) -> list[str]:
+    """Deterministic list of finding IDs referenced by the report."""
+    seen: set[str] = set()
+    findings = report_json.get("normalized_findings") or []
+    if isinstance(findings, list):
+        for entry in findings:
+            if isinstance(entry, dict):
+                fid = entry.get("id") or entry.get("finding_id")
+                if fid:
+                    seen.add(str(fid))
+    return sorted(seen)
+
+
+def _collect_control_ids(report_json: dict[str, Any]) -> list[str]:
+    """Deterministic list of control IDs referenced by the report."""
+    seen: set[str] = set()
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in {
+                    "control_id",
+                    "control_ref",
+                    "nist_control_id",
+                    "nist_ai_rmf_id",
+                }:
+                    if value:
+                        seen.add(str(value))
+                _walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    _walk(report_json)
+    return sorted(seen)
+
+
+def _collect_framework_ids(report_json: dict[str, Any]) -> list[str]:
+    """Deterministic list of framework IDs referenced by the report."""
+    seen: set[str] = set()
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            fw = node.get("framework") or node.get("framework_id")
+            if fw:
+                seen.add(str(fw))
+            for value in node.values():
+                _walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    _walk(report_json)
+    return sorted(seen)
+
+
+def _build_report_manifest(
+    *,
+    report_version: FaReportVersion,
+    report_record: GovernanceReportRecord,
+    evidence_links: list[FaEvidenceReportLink],
+    finding_ids: list[str],
+    control_ids: list[str],
+    framework_ids: list[str],
+) -> dict[str, Any]:
+    """Assemble the deterministic manifest dict for a report version."""
+    evidence_hashes: list[dict[str, str]] = []
+    seen_evidence: set[str] = set()
+    for link in sorted(evidence_links, key=lambda link_: link_.evidence_id):
+        if link.evidence_id in seen_evidence:
+            continue
+        seen_evidence.add(link.evidence_id)
+        evidence_hashes.append(
+            {
+                "evidence_id": link.evidence_id,
+                "sha256": link.event_hash or "",
+            }
+        )
+
+    return {
+        "manifest_version": _REPORT_MANIFEST_VERSION,
+        "schema_version": _REPORT_MANIFEST_SCHEMA_VERSION,
+        "report_version": report_version.version,
+        "report_revision": report_version.revision,
+        "report_id": report_version.report_id,
+        "engagement_id": report_version.engagement_id,
+        "tenant_id": report_version.tenant_id,
+        "generated_at": report_record.generated_at,
+        "report_hash": report_version.report_hash or "",
+        "evidence_hashes": evidence_hashes,
+        "finding_ids": finding_ids,
+        "control_ids": control_ids,
+        "framework_ids": framework_ids,
+        "evidence_count": report_version.evidence_count,
+        "finding_count": report_version.finding_count,
+        "control_count": report_version.control_count,
+        "framework_count": report_version.framework_count,
+    }
+
+
+def _report_version_to_response(rv: FaReportVersion) -> ReportVersionResponse:
+    return ReportVersionResponse(
+        id=rv.id,
+        engagement_id=rv.engagement_id,
+        report_id=rv.report_id,
+        version=rv.version,
+        revision=rv.revision,
+        status=rv.status,
+        created_at=rv.created_at,
+        approved_at=rv.approved_at,
+        approved_by=rv.approved_by,
+        delivered_at=rv.delivered_at,
+        manifest_hash=rv.manifest_hash,
+        report_hash=rv.report_hash,
+        evidence_count=rv.evidence_count,
+        finding_count=rv.finding_count,
+        control_count=rv.control_count,
+        framework_count=rv.framework_count,
+        confidence_score=rv.confidence_score,
+        reviewer_name=rv.reviewer_name,
+        reviewer_role=rv.reviewer_role,
+        approval_notes=rv.approval_notes,
+        parent_version_id=rv.parent_version_id,
+        superseded_by_id=rv.superseded_by_id,
+    )
+
+
+def _load_report_version(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+) -> FaReportVersion:
+    row = db.execute(
+        select(FaReportVersion).where(
+            FaReportVersion.id == version_id,
+            FaReportVersion.tenant_id == tenant_id,
+            FaReportVersion.engagement_id == engagement_id,
+            FaReportVersion.report_id == report_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("REPORT_VERSION_NOT_FOUND", "Report version not found."),
+        )
+    return row
+
+
+def _load_report_record(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    report_id: str,
+) -> GovernanceReportRecord:
+    record = db.execute(
+        select(GovernanceReportRecord).where(
+            GovernanceReportRecord.id == report_id,
+            GovernanceReportRecord.tenant_id == tenant_id,
+            GovernanceReportRecord.assessment_id == engagement_id,
+        )
+    ).scalar_one_or_none()
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("REPORT_NOT_FOUND", "Report not found."),
+        )
+    return record
+
+
+def _record_delivery_event(
+    db: Session,
+    *,
+    rv: FaReportVersion,
+    event_type: str,
+    actor: str,
+    actor_role: str | None,
+) -> None:
+    if event_type not in _REPORT_DELIVERY_EVENT_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "INVALID_DELIVERY_EVENT_TYPE",
+                f"event_type must be one of {sorted(_REPORT_DELIVERY_EVENT_TYPES)}",
+            ),
+        )
+    import hashlib
+
+    event_id = hashlib.sha256(
+        f"{rv.tenant_id}|{rv.id}|{event_type}|{utc_iso8601_z_now()}|{_uuid_module.uuid4()}".encode()
+    ).hexdigest()[:32]
+    db.add(
+        FaReportDeliveryEvent(
+            id=event_id,
+            tenant_id=rv.tenant_id,
+            engagement_id=rv.engagement_id,
+            report_version_id=rv.id,
+            event_type=event_type,
+            actor=actor,
+            actor_role=actor_role,
+            report_version=rv.version,
+            created_at=utc_iso8601_z_now(),
+            schema_version="1.0",
+        )
+    )
+    db.flush()
+
+
+def _guard_mutable(rv: FaReportVersion) -> None:
+    if rv.status in _REPORT_VERSION_IMMUTABLE_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_IMMUTABLE",
+                f"Report version is {rv.status!r} and cannot be modified.",
+            ),
+        )
+
+
+def _next_report_version_number(
+    db: Session, *, tenant_id: str, engagement_id: str, report_id: str
+) -> int:
+    row = db.execute(
+        select(func.max(FaReportVersion.version)).where(
+            FaReportVersion.tenant_id == tenant_id,
+            FaReportVersion.engagement_id == engagement_id,
+            FaReportVersion.report_id == report_id,
+        )
+    ).scalar_one_or_none()
+    return int(row or 0) + 1
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/versions",
+    response_model=ReportVersionResponse,
+    status_code=201,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def create_report_version_route(
+    engagement_id: str,
+    report_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.generate")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportVersionResponse:
+    """Create a draft FaReportVersion from an existing signed report.
+
+    Computes report_hash + manifest_hash immediately and emits a 'generated'
+    delivery event. Tenant is bound to the auth context.
+    """
+    tenant_id = require_bound_tenant(request)
+    actor = _actor_from_request(request)
+    actor_role = actor_ctx.primary_role()
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    report_record = _load_report_record(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+    )
+
+    version_number = _next_report_version_number(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+    )
+
+    now = utc_iso8601_z_now()
+    version_id = _uuid_module.uuid4().hex
+
+    report_hash = _compute_report_hash(report_record.report_json or {})
+
+    finding_ids = _collect_finding_ids(report_record.report_json or {})
+    control_ids = _collect_control_ids(report_record.report_json or {})
+    framework_ids = _collect_framework_ids(report_record.report_json or {})
+
+    evidence_links = list(
+        db.execute(
+            select(FaEvidenceReportLink).where(
+                FaEvidenceReportLink.tenant_id == tenant_id,
+                FaEvidenceReportLink.engagement_id == engagement_id,
+                FaEvidenceReportLink.report_id == report_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    evidence_count = len({link.evidence_id for link in evidence_links})
+
+    rv = FaReportVersion(
+        id=version_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version=version_number,
+        revision=f"{version_number}.0",
+        status="draft",
+        parent_version_id=None,
+        superseded_by_id=None,
+        created_at=now,
+        approved_at=None,
+        approved_by=None,
+        generated_by=actor,
+        delivered_at=None,
+        manifest_hash=None,
+        report_hash=report_hash,
+        evidence_count=evidence_count,
+        finding_count=len(finding_ids),
+        control_count=len(control_ids),
+        framework_count=len(framework_ids),
+        confidence_score=None,
+        approval_notes=None,
+        reviewer_name=None,
+        reviewer_role=None,
+        signature_placeholder=None,
+        schema_version="1.0",
+    )
+    db.add(rv)
+    db.flush()
+
+    manifest = _build_report_manifest(
+        report_version=rv,
+        report_record=report_record,
+        evidence_links=evidence_links,
+        finding_ids=finding_ids,
+        control_ids=control_ids,
+        framework_ids=framework_ids,
+    )
+    rv.manifest_hash = _compute_manifest_hash(manifest)
+    db.flush()
+
+    _record_delivery_event(
+        db,
+        rv=rv,
+        event_type="generated",
+        actor=actor,
+        actor_role=actor_role,
+    )
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report_version_created",
+        actor=actor,
+        reason_code="REPORT_VERSION_CREATED",
+        payload={
+            "report_id": report_id,
+            "report_version_id": rv.id,
+            "version": rv.version,
+            "manifest_hash": rv.manifest_hash,
+            "report_hash": rv.report_hash,
+        },
+        entity_type="report_version",
+        entity_id=rv.id,
+        actor_type="human_operator",
+    )
+    db.commit()
+    db.refresh(rv)
+    return _report_version_to_response(rv)
+
+
+@router.get(
+    "/engagements/{engagement_id}/reports/{report_id}/versions",
+    response_model=list[ReportVersionResponse],
+    dependencies=[Depends(authz_scope("governance:read"))],
+)
+def list_report_versions_route(
+    engagement_id: str,
+    report_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.read")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[ReportVersionResponse]:
+    """List all versions for a report scoped to the caller's tenant."""
+    tenant_id = require_bound_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rows = list(
+        db.execute(
+            select(FaReportVersion)
+            .where(
+                FaReportVersion.tenant_id == tenant_id,
+                FaReportVersion.engagement_id == engagement_id,
+                FaReportVersion.report_id == report_id,
+            )
+            .order_by(FaReportVersion.version.asc())
+        )
+        .scalars()
+        .all()
+    )
+    return [_report_version_to_response(r) for r in rows]
+
+
+@router.get(
+    "/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}",
+    response_model=ReportVersionResponse,
+    dependencies=[Depends(authz_scope("governance:read"))],
+)
+def get_report_version_route(
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.read")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportVersionResponse:
+    """Return a single report version by its ID."""
+    tenant_id = require_bound_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rv = _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=version_id,
+    )
+    return _report_version_to_response(rv)
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/submit-for-review",
+    response_model=ReportVersionResponse,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def submit_report_version_for_review_route(
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.generate")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportVersionResponse:
+    """Transition a draft version to internal_review and record the event."""
+    tenant_id = require_bound_tenant(request)
+    actor = _actor_from_request(request)
+    actor_role = actor_ctx.primary_role()
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rv = _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=version_id,
+    )
+    _guard_mutable(rv)
+    if rv.status != "draft":
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_INVALID_TRANSITION",
+                f"Cannot submit for review from status {rv.status!r}.",
+            ),
+        )
+
+    rv.status = "internal_review"
+    db.flush()
+    _record_delivery_event(
+        db, rv=rv, event_type="reviewed", actor=actor, actor_role=actor_role
+    )
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report_version_submitted_for_review",
+        actor=actor,
+        reason_code="REPORT_VERSION_SUBMITTED_FOR_REVIEW",
+        payload={
+            "report_id": report_id,
+            "report_version_id": rv.id,
+            "version": rv.version,
+        },
+        entity_type="report_version",
+        entity_id=rv.id,
+        actor_type="human_operator",
+    )
+    db.commit()
+    db.refresh(rv)
+    return _report_version_to_response(rv)
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/approve",
+    response_model=ReportVersionResponse,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def approve_report_version_route(
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+    body: ReportApprovalRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.qa_approve")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportVersionResponse:
+    """Approve a version currently in internal_review.
+
+    Sets approved_at/approved_by, reviewer metadata, and freezes the version.
+    """
+    tenant_id = require_bound_tenant(request)
+    actor = _actor_from_request(request)
+    actor_role = actor_ctx.primary_role() or body.reviewer_role
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rv = _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=version_id,
+    )
+    _guard_mutable(rv)
+    if rv.status != "internal_review":
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_INVALID_TRANSITION",
+                f"Cannot approve from status {rv.status!r}.",
+            ),
+        )
+
+    now = utc_iso8601_z_now()
+    rv.status = "approved"
+    rv.approved_at = now
+    rv.approved_by = actor
+    rv.reviewer_name = body.reviewer_name.strip()
+    rv.reviewer_role = body.reviewer_role.strip()
+    rv.approval_notes = body.approval_notes.strip() if body.approval_notes else None
+    rv.signature_placeholder = body.signature_placeholder
+    db.flush()
+    _record_delivery_event(
+        db, rv=rv, event_type="approved", actor=actor, actor_role=actor_role
+    )
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report_version_approved",
+        actor=actor,
+        reason_code="REPORT_VERSION_APPROVED",
+        payload={
+            "report_id": report_id,
+            "report_version_id": rv.id,
+            "version": rv.version,
+            "reviewer_name": rv.reviewer_name,
+            "reviewer_role": rv.reviewer_role,
+        },
+        entity_type="report_version",
+        entity_id=rv.id,
+        actor_type="human_operator",
+    )
+    db.commit()
+    db.refresh(rv)
+    return _report_version_to_response(rv)
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/deliver",
+    response_model=ReportVersionResponse,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def deliver_report_version_route(
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.generate")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportVersionResponse:
+    """Mark an approved version as delivered and stamp delivered_at."""
+    tenant_id = require_bound_tenant(request)
+    actor = _actor_from_request(request)
+    actor_role = actor_ctx.primary_role()
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rv = _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=version_id,
+    )
+    if rv.status != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_INVALID_TRANSITION",
+                "Only approved versions can be delivered.",
+            ),
+        )
+
+    rv.status = "delivered"
+    rv.delivered_at = utc_iso8601_z_now()
+    db.flush()
+    _record_delivery_event(
+        db, rv=rv, event_type="downloaded", actor=actor, actor_role=actor_role
+    )
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report_version_delivered",
+        actor=actor,
+        reason_code="REPORT_VERSION_DELIVERED",
+        payload={
+            "report_id": report_id,
+            "report_version_id": rv.id,
+            "version": rv.version,
+        },
+        entity_type="report_version",
+        entity_id=rv.id,
+        actor_type="human_operator",
+    )
+    db.commit()
+    db.refresh(rv)
+    return _report_version_to_response(rv)
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/supersede",
+    response_model=ReportVersionResponse,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def supersede_report_version_route(
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+    body: ReportSupersedeRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.generate")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportVersionResponse:
+    """Mark a delivered version as superseded by a newer approved version."""
+    tenant_id = require_bound_tenant(request)
+    actor = _actor_from_request(request)
+    actor_role = actor_ctx.primary_role()
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rv = _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=version_id,
+    )
+    if rv.status != "delivered":
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_INVALID_TRANSITION",
+                "Only delivered versions can be superseded.",
+            ),
+        )
+
+    new_version = _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=body.new_version_id,
+    )
+    if new_version.id == rv.id:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REPORT_VERSION_SUPERSEDE_SELF",
+                "A version cannot supersede itself.",
+            ),
+        )
+    if new_version.status not in {"approved", "delivered"}:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_SUPERSEDE_NOT_APPROVED",
+                "Superseding version must be approved or delivered.",
+            ),
+        )
+
+    rv.status = "superseded"
+    rv.superseded_by_id = new_version.id
+    new_version.parent_version_id = rv.id
+    db.flush()
+    _record_delivery_event(
+        db, rv=rv, event_type="superseded", actor=actor, actor_role=actor_role
+    )
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report_version_superseded",
+        actor=actor,
+        reason_code="REPORT_VERSION_SUPERSEDED",
+        payload={
+            "report_id": report_id,
+            "report_version_id": rv.id,
+            "superseded_by": new_version.id,
+            "version": rv.version,
+            "new_version": new_version.version,
+        },
+        entity_type="report_version",
+        entity_id=rv.id,
+        actor_type="human_operator",
+    )
+    db.commit()
+    db.refresh(rv)
+    return _report_version_to_response(rv)
+
+
+@router.get(
+    "/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/manifest",
+    response_model=ReportManifest,
+    dependencies=[Depends(authz_scope("governance:read"))],
+)
+def get_report_version_manifest_route(
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.read")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportManifest:
+    """Return the deterministic manifest for a report version."""
+    tenant_id = require_bound_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rv = _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=version_id,
+    )
+    report_record = _load_report_record(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+    )
+    evidence_links = list(
+        db.execute(
+            select(FaEvidenceReportLink).where(
+                FaEvidenceReportLink.tenant_id == tenant_id,
+                FaEvidenceReportLink.engagement_id == engagement_id,
+                FaEvidenceReportLink.report_id == report_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    finding_ids = _collect_finding_ids(report_record.report_json or {})
+    control_ids = _collect_control_ids(report_record.report_json or {})
+    framework_ids = _collect_framework_ids(report_record.report_json or {})
+    manifest = _build_report_manifest(
+        report_version=rv,
+        report_record=report_record,
+        evidence_links=evidence_links,
+        finding_ids=finding_ids,
+        control_ids=control_ids,
+        framework_ids=framework_ids,
+    )
+    return ReportManifest(**manifest)
+
+
+@router.get(
+    "/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/history",
+    response_model=list[ReportDeliveryEventResponse],
+    dependencies=[Depends(authz_scope("governance:read"))],
+)
+def get_report_version_history_route(
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.read")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[ReportDeliveryEventResponse]:
+    """Return the ordered append-only delivery history for a report version."""
+    tenant_id = require_bound_tenant(request)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    # Ensure the version exists and belongs to the tenant before returning events
+    _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=version_id,
+    )
+    events = list(
+        db.execute(
+            select(FaReportDeliveryEvent)
+            .where(
+                FaReportDeliveryEvent.tenant_id == tenant_id,
+                FaReportDeliveryEvent.engagement_id == engagement_id,
+                FaReportDeliveryEvent.report_version_id == version_id,
+            )
+            .order_by(FaReportDeliveryEvent.created_at.asc())
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        ReportDeliveryEventResponse(
+            id=e.id,
+            event_type=e.event_type,
+            actor=e.actor,
+            actor_role=e.actor_role,
+            report_version=e.report_version,
+            created_at=e.created_at,
+        )
+        for e in events
+    ]
