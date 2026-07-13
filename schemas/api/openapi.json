@@ -5379,6 +5379,41 @@
         "title": "BindPolicyRequest",
         "type": "object"
       },
+      "Body_upload_artifact_route_field_assessment_engagements__engagement_id__artifacts_upload_post": {
+        "properties": {
+          "artifact_type": {
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sha256"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "retention_class": {
+            "default": "standard_3y",
+            "title": "Retention Class",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "artifact_type"
+        ],
+        "title": "Body_upload_artifact_route_field_assessment_engagements__engagement_id__artifacts_upload_post",
+        "type": "object"
+      },
       "Body_upload_document_rag_upload_post": {
         "properties": {
           "corpus_id": {
@@ -74906,6 +74941,59 @@
           }
         },
         "summary": "Register Artifact Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/artifacts/upload": {
+      "post": {
+        "description": "Upload evidence file bytes with server-side integrity verification.\n\nComputes SHA-256 from the actual received bytes \u2014 never trusts a\nclient-supplied digest as authoritative. If expected_sha256 is provided,\nit is compared using constant-time comparison and the request is rejected\non mismatch. The server-computed digest is persisted as the authoritative\ncontent hash and is bound to the provenance record.",
+        "operationId": "upload_artifact_route_field_assessment_engagements__engagement_id__artifacts_upload_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_artifact_route_field_assessment_engagements__engagement_id__artifacts_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Artifact Route",
         "tags": [
           "field-assessment"
         ]

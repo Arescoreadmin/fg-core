@@ -18224,3 +18224,54 @@ pytest tests/test_field_assessment.py tests/test_field_assessment_reports.py
 - `tests/test_field_assessment.py`
 - `tests/test_field_assessment_reports.py`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
+### 2026-07-12 — feat(field-assessment): server-side evidence file integrity verification
+
+**Branch:** `feat/field-assessment-server-side-evidence-integrity`
+
+### Purpose
+
+Closes the trust gap where clients supplied artifact hashes that were never
+verified. The server now computes SHA-256 from raw upload bytes, compares
+against any client-supplied digest with constant-time comparison, persists the
+authoritative hash to `FaArtifact.sha256`, and creates an evidence provenance
+row tied to the upload event.
+
+### Changes
+
+1. `POST /engagements/{engagement_id}/artifacts/upload` — new multipart
+   endpoint. Enforces 50 MB size limit (reads `limit+1` bytes to avoid full
+   buffering), validates MIME type per artifact_type allowlist, rejects
+   mismatched digests (HTTP 422), persists bytes to `FG_ARTIFACTS_DIR`,
+   creates `FaArtifact` with `sha256=authoritative_sha256`, calls
+   `create_evidence_provenance(... collection_method="file_upload")`, emits
+   `artifact.uploaded` audit event.
+2. Helpers added: `_file_sha256()`, `_digests_match()`,
+   `_artifact_store_path()`.
+3. Constants added: `_MAX_ARTIFACT_UPLOAD_BYTES`, `_ALLOWED_ARTIFACT_MIME_TYPES`,
+   `_MIME_SUFFIX`.
+4. 14 new tests covering: authoritative SHA-256 persistence, digest match,
+   digest mismatch rejection, empty file rejection, oversized rejection,
+   max-size boundary acceptance, unsupported MIME rejection, invalid
+   artifact_type rejection, duplicate upload creates distinct artifacts,
+   tenant isolation, unknown engagement rejection, provenance uses authoritative
+   hash, no file bytes in response, file persisted to storage.
+
+### Validation
+
+```
+pytest tests/test_field_assessment.py -k upload
+→ 14 passed
+pytest tests/test_field_assessment.py
+→ 109 passed
+ruff check api/field_assessment.py tests/test_field_assessment.py
+→ All checks passed
+```
+
+### Files changed
+
+- `api/field_assessment.py`
+- `tests/test_field_assessment.py`
+- `docs/ai/PR_FIX_LOG.md` — this entry

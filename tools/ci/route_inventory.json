@@ -8020,6 +8020,23 @@
         "tenant"
       ],
       "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/artifacts/upload",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/artifacts/{artifact_id}",
       "plane": "control",
@@ -19859,7 +19876,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-10T21:55:01.658321+00:00",
+  "generated_at": "2026-07-13T10:08:37.768285+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

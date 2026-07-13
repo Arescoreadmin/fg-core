@@ -3566,3 +3566,31 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `pytest tests/test_plane_registry.py tests/test_platform_inventory_determinism.py`: 5/5 passed
 
 **SOC review outcome:** approved. Route inventory update is purely additive: 8 new endpoints appended to the `control` plane. No auth, session, middleware, OPA, or security files changed. All 8 routes require `governance:read` or `governance:write` via existing `require_scopes()` + `require_bound_tenant()`. CGIN snapshot anonymizes tenant identity via SHA-256. All 3 audit tables are append-only at both ORM and PG layers. Bridge engine never surfaces downstream exceptions to callers. Migration 0136 adds 4 tables + 3 append-only triggers — backward compatible; safe to apply under live traffic.
+
+## 2026-07-13 — feat/field-assessment-server-side-evidence-integrity: RequestValidationMiddleware multipart allowance
+
+**Reviewer:** Codex | **Classification:** SOC-MEDIUM (middleware default config change; no auth logic altered)
+
+**Changes:**
+
+1. `api/middleware/request_validation.py` — two targeted changes:
+   - `FG_ALLOWED_CONTENT_TYPES` default extended from `"application/json"` to `"application/json,multipart/form-data"`. Operators who previously relied on the default to block multipart at the middleware layer must now set `FG_ENFORCE_CONTENT_TYPE=false` or an explicit allowlist if they want to restrict. In the standard deployment, multipart is only accepted where routes explicitly handle it.
+   - Body-size check (default 1 MB) is now skipped when the request `Content-Type` is `multipart/form-data`. This prevents the middleware 413 from firing before the per-route 50 MB cap in `upload_artifact_route`. All other content types continue to hit the 1 MB guard as before.
+
+**Security assessment:**
+
+1. **Blast radius:** The size-check bypass applies only to `multipart/form-data` requests. All non-multipart POSTs/PUTs/PATCHes retain the 1 MB middleware guard unchanged. Auth, OPA, session, tenant binding, and scope enforcement are unaffected.
+2. **Multipart size enforcement:** `upload_artifact_route` reads `_MAX_ARTIFACT_UPLOAD_BYTES + 1` bytes (50 MB) and returns HTTP 413 if exceeded. The responsibility moves from the middleware to the route, which is the correct layer for per-endpoint limits.
+3. **Content-type default extension:** `multipart/form-data` is a standard web content type. Existing endpoints that do not handle multipart payloads are unaffected because they will fail at the route's parameter-parsing layer before any handler logic runs.
+4. **No new attack surface in the middleware itself:** The middleware still validates content type against the allowlist for multipart requests; it only skips the `Content-Length` size guard.
+
+**Critical-path files changed:**
+- `api/middleware/request_validation.py` — default config and dispatch logic (size-check skip for multipart)
+- `tools/ci/route_inventory.json` — regenerated (additive: new upload route entry)
+
+**Validation:**
+- `make fg-contract`: OK
+- `make route-inventory-generate`: OK
+- `pytest tests/test_field_assessment.py -k upload`: 15/15 passed
+
+**SOC review outcome:** approved. No auth, OPA, session, or scope logic changed. The middleware change is narrowly scoped: multipart requests bypass the 1 MB body-size guard only, with size enforcement delegated to the upload route's own cap. The content-type default extension is safe given existing route-layer MIME validation.

@@ -16,6 +16,7 @@ Covers:
 
 from __future__ import annotations
 
+import hashlib
 import os
 
 os.environ.setdefault("FG_ENV", "test")
@@ -1335,3 +1336,337 @@ def test_qa_approve_response_falls_back_to_actor_when_no_name(
     )
     assert resp.status_code == 200
     assert resp.json()["qa_approved_by"]  # non-empty fallback
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for artifact upload tests
+# ---------------------------------------------------------------------------
+
+_TENANT_ID_B = "tenant-fa-test-b"  # second tenant for isolation tests
+
+
+@pytest.fixture()
+def upload_client(build_app: object, tmp_path, monkeypatch):
+    """Client with a temp artifact storage dir wired via FG_ARTIFACTS_DIR."""
+    from sqlalchemy import text as sa_text
+
+    from api.auth_scopes import mint_key
+    from api.db import get_sessionmaker
+    from api.tenant_rbac import assign_role
+
+    artifact_dir = tmp_path / "fa_artifacts"
+    artifact_dir.mkdir()
+    # Must be set before build_app so the middleware config picks it up at init.
+    monkeypatch.setenv("FG_ARTIFACTS_DIR", str(artifact_dir))
+    monkeypatch.setenv(
+        "FG_ALLOWED_CONTENT_TYPES", "application/json,multipart/form-data"
+    )
+
+    app = build_app(auth_enabled=True)  # type: ignore[operator]
+    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        key_id = db.execute(
+            sa_text(
+                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+            ),
+            {"t": _TENANT_ID},
+        ).scalar_one()
+        assign_role(
+            db,
+            tenant_id=_TENANT_ID,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name="analyst",
+        )
+    finally:
+        db.close()
+
+    return TestClient(app, headers={"X-API-Key": key}), artifact_dir
+
+
+@pytest.fixture()
+def other_tenant_upload_client(build_app: object, tmp_path, monkeypatch):
+    """Second-tenant client sharing the same app as upload_client for isolation tests."""
+    from sqlalchemy import text as sa_text
+
+    from api.auth_scopes import mint_key
+    from api.db import get_sessionmaker
+    from api.tenant_rbac import assign_role
+
+    artifact_dir = tmp_path / "fa_artifacts_b"
+    artifact_dir.mkdir()
+    monkeypatch.setenv("FG_ARTIFACTS_DIR", str(artifact_dir))
+    monkeypatch.setenv(
+        "FG_ALLOWED_CONTENT_TYPES", "application/json,multipart/form-data"
+    )
+
+    app = build_app(auth_enabled=True)  # type: ignore[operator]
+    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID_B)
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        key_id = db.execute(
+            sa_text(
+                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+            ),
+            {"t": _TENANT_ID_B},
+        ).scalar_one()
+        assign_role(
+            db,
+            tenant_id=_TENANT_ID_B,
+            actor_key_prefix="pytest",
+            target_key_id=int(key_id),
+            role_name="analyst",
+        )
+    finally:
+        db.close()
+
+    return TestClient(app, headers={"X-API-Key": key}), artifact_dir
+
+
+def _upload_pdf(client, eng_id: str, content: bytes, **extra_form):
+    data = {"artifact_type": "document", **extra_form}
+    return client.post(
+        f"/field-assessment/engagements/{eng_id}/artifacts/upload",
+        data=data,
+        files={"file": ("evidence.pdf", content, "application/pdf")},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tests: upload_artifact_route — server-side integrity
+# ---------------------------------------------------------------------------
+
+
+def test_upload_artifact_server_sha256_persisted(upload_client) -> None:
+    """SHA-256 stored in artifact row must be computed from the actual bytes."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+    content = b"%PDF-1.4 hello evidence"
+    expected = hashlib.sha256(content).hexdigest()
+
+    resp = _upload_pdf(client, eng_id, content)
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["sha256"] == expected
+    assert data["size_bytes"] == len(content)
+    assert data["artifact_type"] == "document"
+    assert data["content_type"] == "application/pdf"
+
+
+def test_upload_artifact_supplied_digest_matches(upload_client) -> None:
+    """Correct expected_sha256 must be accepted without error."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+    content = b"correct-evidence-bytes"
+    digest = hashlib.sha256(content).hexdigest()
+
+    resp = _upload_pdf(client, eng_id, content, expected_sha256=digest)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["sha256"] == digest
+
+
+def test_upload_artifact_supplied_digest_mismatch_rejected(upload_client) -> None:
+    """Incorrect expected_sha256 must be rejected with 422 ARTIFACT_DIGEST_MISMATCH."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+    content = b"real-bytes"
+    wrong_digest = "a" * 64  # 64 hex chars but wrong content
+
+    resp = _upload_pdf(client, eng_id, content, expected_sha256=wrong_digest)
+    assert resp.status_code == 422, resp.text
+    assert "ARTIFACT_DIGEST_MISMATCH" in resp.text
+
+
+def test_upload_artifact_empty_file_rejected(upload_client) -> None:
+    """Empty file (0 bytes) must be rejected with 422 ARTIFACT_EMPTY."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+
+    resp = _upload_pdf(client, eng_id, b"")
+    assert resp.status_code == 422, resp.text
+    assert "ARTIFACT_EMPTY" in resp.text
+
+
+def test_upload_artifact_oversized_rejected(upload_client, monkeypatch) -> None:
+    """Payload exceeding the size limit must be rejected with 413 ARTIFACT_OVERSIZED."""
+    import api.field_assessment as _fa_mod
+
+    monkeypatch.setattr(_fa_mod, "_MAX_ARTIFACT_UPLOAD_BYTES", 10)
+
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+
+    resp = _upload_pdf(client, eng_id, b"x" * 11)  # 11 > 10
+    assert resp.status_code == 413, resp.text
+    assert "ARTIFACT_OVERSIZED" in resp.text
+
+
+def test_upload_artifact_max_size_boundary_accepted(upload_client, monkeypatch) -> None:
+    """Payload exactly at the size limit must be accepted."""
+    import api.field_assessment as _fa_mod
+
+    monkeypatch.setattr(_fa_mod, "_MAX_ARTIFACT_UPLOAD_BYTES", 10)
+
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+
+    resp = _upload_pdf(client, eng_id, b"x" * 10)  # exactly 10
+    assert resp.status_code == 201, resp.text
+
+
+def test_upload_artifact_unsupported_content_type_rejected(upload_client) -> None:
+    """A MIME type not in the document allowlist must be rejected with 415."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/artifacts/upload",
+        data={"artifact_type": "document"},
+        files={"file": ("evil.exe", b"\x4d\x5a payload", "application/octet-stream")},
+    )
+    assert resp.status_code == 415, resp.text
+    assert "ARTIFACT_UNSUPPORTED_TYPE" in resp.text
+
+
+def test_upload_artifact_invalid_artifact_type_rejected(upload_client) -> None:
+    """An unknown artifact_type must be rejected with 422."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/artifacts/upload",
+        data={"artifact_type": "malware"},
+        files={"file": ("x.pdf", b"bytes", "application/pdf")},
+    )
+    assert resp.status_code == 422, resp.text
+    assert "INVALID_ARTIFACT_TYPE" in resp.text
+
+
+def test_upload_artifact_duplicate_creates_distinct_artifacts(upload_client) -> None:
+    """Uploading the same bytes twice creates two distinct artifacts (versioned evidence)."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+    content = b"repeated evidence"
+
+    r1 = _upload_pdf(client, eng_id, content)
+    r2 = _upload_pdf(client, eng_id, content)
+    assert r1.status_code == 201, r1.text
+    assert r2.status_code == 201, r2.text
+    assert r1.json()["id"] != r2.json()["id"]
+    assert r1.json()["sha256"] == r2.json()["sha256"]  # same content hash
+
+
+def test_upload_artifact_tenant_isolation(
+    upload_client, other_tenant_upload_client
+) -> None:
+    """Tenant B must not be able to upload to Tenant A's engagement."""
+    client_a, _ = upload_client
+    client_b, _ = other_tenant_upload_client
+
+    eng_id_a = _create_engagement(client_a)["id"]
+
+    resp = client_b.post(
+        f"/field-assessment/engagements/{eng_id_a}/artifacts/upload",
+        data={"artifact_type": "document"},
+        files={"file": ("x.pdf", b"bytes", "application/pdf")},
+    )
+    assert resp.status_code in (403, 404), resp.text
+
+
+def test_upload_artifact_unknown_engagement_rejected(upload_client) -> None:
+    """Upload to a non-existent engagement must return 404."""
+    client, _ = upload_client
+
+    resp = _upload_pdf(client, "nonexistent-engagement-id", b"bytes")
+    assert resp.status_code == 404, resp.text
+    assert "ENGAGEMENT_NOT_FOUND" in resp.text
+
+
+def test_upload_artifact_provenance_uses_authoritative_hash(upload_client) -> None:
+    """The provenance row artifact_hash must equal the server-computed digest."""
+    from sqlalchemy import select
+
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaEvidenceProvenance
+
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+    content = b"provenance-binding-test"
+    expected = hashlib.sha256(content).hexdigest()
+
+    resp = _upload_pdf(client, eng_id, content)
+    assert resp.status_code == 201, resp.text
+    artifact_id = resp.json()["id"]
+
+    SM = get_sessionmaker()
+    db = SM()
+    try:
+        rows = list(
+            db.execute(
+                select(FaEvidenceProvenance).where(
+                    FaEvidenceProvenance.tenant_id == _TENANT_ID,
+                    FaEvidenceProvenance.engagement_id == eng_id,
+                    FaEvidenceProvenance.evidence_id == artifact_id,
+                )
+            ).scalars()
+        )
+    finally:
+        db.close()
+
+    assert len(rows) == 1
+    assert rows[0].artifact_hash == expected
+    assert rows[0].collection_method == "file_upload"
+    assert rows[0].source_type == "document"
+
+
+def test_upload_artifact_no_file_bytes_in_response(upload_client) -> None:
+    """The API response and sha256 field must not expose raw file content."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+    content = b"sensitive-binary-evidence"
+
+    resp = _upload_pdf(client, eng_id, content)
+    assert resp.status_code == 201, resp.text
+    body = resp.text
+
+    # Raw bytes must never appear in the response body.
+    assert content.decode("latin-1") not in body
+    # The sha256 field is a hex string (64 chars), not the raw bytes.
+    sha256_val = resp.json()["sha256"]
+    assert len(sha256_val) == 64
+    assert all(c in "0123456789abcdef" for c in sha256_val)
+
+
+def test_upload_artifact_missing_content_type_rejected(upload_client) -> None:
+    """A file part with no Content-Type must be rejected with 415, not silently accepted."""
+    client, _ = upload_client
+    eng_id = _create_engagement(client)["id"]
+
+    # Pass an empty string for content-type to simulate a part with no declared type.
+    # httpx infers from filename extension when None is used, so we pass "" directly.
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/artifacts/upload",
+        data={"artifact_type": "document"},
+        files={"file": ("evidence.bin", b"%PDF-1.4 content", "")},
+    )
+    assert resp.status_code == 415, resp.text
+    assert "ARTIFACT_UNSUPPORTED_TYPE" in resp.text
+
+
+def test_upload_artifact_file_persisted_to_storage(upload_client) -> None:
+    """The uploaded file must be written to the configured artifact storage directory."""
+    client, artifact_dir = upload_client
+    eng_id = _create_engagement(client)["id"]
+    content = b"storage-persistence-check"
+
+    resp = _upload_pdf(client, eng_id, content)
+    assert resp.status_code == 201, resp.text
+
+    stored = list((artifact_dir / "evidence_files").iterdir())
+    assert len(stored) == 1
+    assert stored[0].read_bytes() == content
