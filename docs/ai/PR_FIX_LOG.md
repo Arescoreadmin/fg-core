@@ -18344,3 +18344,29 @@ ruff check api/field_assessment.py tests/test_field_assessment.py
 - `api/field_assessment.py`
 - `tests/test_field_assessment.py`
 - `docs/ai/PR_FIX_LOG.md` — this entry
+
+## 2026-07-13 — Audit expectation alignment after provenance events
+
+### Reason
+
+Evidence provenance persistence introduced additional audit events for
+observation capture and document analysis registration.
+
+Existing forensic and H13 audit tests assumed one audit event per write,
+which is no longer true.
+
+### Changes
+
+- Updated forensic audit expectations
+- Updated observation atomicity expectation (+2 events)
+- Updated document analysis atomicity expectation (+2 events)
+
+### Verification
+
+- tests/test_fa_forensic_audit_log.py
+- tests/test_h13_audit_atomicity.py
+
+Result:
+
+Behavior now matches production audit semantics without changing runtime
+behavior.

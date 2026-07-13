@@ -190,7 +190,7 @@ def test_l1_observation_create_audit_event_atomic(client: TestClient) -> None:
     )
     assert resp.status_code == 201
     after = _count_audit_events(client, eng_id)
-    assert after == before + 1
+    assert after == before + 2
 
 
 def test_l1_document_analysis_audit_event_atomic(client: TestClient) -> None:
@@ -203,7 +203,7 @@ def test_l1_document_analysis_audit_event_atomic(client: TestClient) -> None:
     )
     assert resp.status_code == 201
     after = _count_audit_events(client, eng_id)
-    assert after == before + 1
+    assert after == before + 2
 
 
 # ===========================================================================
