@@ -1556,8 +1556,8 @@ def test_ia_172_recalculate_records_current(build_app, fresh_db):
             "actor_id": actor,
             "provider": "OKTA",
             "claims": {
-                "subject": actor,
-                "issuer": "https://okta.com/x",
+                "sub": actor,
+                "iss": "https://okta.com/x",
                 "mfa_verified": True,
             },
         },

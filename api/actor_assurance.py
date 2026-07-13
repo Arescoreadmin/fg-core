@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.auth_scopes.resolution import require_bound_tenant, require_scopes
-from api.db import get_engine
+from api.db import get_engine, set_tenant_context
 from api.db_models_identity_assurance import (
     ActorAssuranceHistory,
     ActorAssuranceSnapshot,
@@ -36,6 +36,7 @@ from api.db_models_identity_assurance import (
 from services.identity_assurance.engine import (
     build_assurance_decision,
     chain_hash,
+    normalize_provider_claims,
     trust_band_for_score,
 )
 from services.identity_assurance.metrics import (
@@ -49,7 +50,6 @@ from services.identity_assurance.metrics import (
 )
 from services.identity_assurance.models import (
     IdentityProvider,
-    ProviderClaims,
 )
 
 router = APIRouter(tags=["actor-assurance"])
@@ -221,6 +221,7 @@ def get_actor_assurance(actor_id: str, request: Request) -> dict:
     tenant_id = require_bound_tenant(request)
     ASSURANCE_GET_TOTAL.inc()
     with Session(get_engine()) as db:
+        set_tenant_context(db, tenant_id)
         row = (
             db.query(ActorIdentityAssurance)
             .filter(
@@ -270,6 +271,7 @@ def get_actor_assurance_history(
     tenant_id = require_bound_tenant(request)
     ASSURANCE_HISTORY_GET_TOTAL.inc()
     with Session(get_engine()) as db:
+        set_tenant_context(db, tenant_id)
         base_q = db.query(ActorAssuranceHistory).filter(
             ActorAssuranceHistory.actor_id == actor_id,
             ActorAssuranceHistory.tenant_id == tenant_id,
@@ -300,6 +302,7 @@ def get_actor_assurance_snapshot(actor_id: str, request: Request) -> dict:
     tenant_id = require_bound_tenant(request)
     ASSURANCE_SNAPSHOT_GET_TOTAL.inc()
     with Session(get_engine()) as db:
+        set_tenant_context(db, tenant_id)
         row = (
             db.query(ActorAssuranceSnapshot)
             .filter(
@@ -323,6 +326,7 @@ def get_actor_trust_summary(actor_id: str, request: Request) -> dict:
     tenant_id = require_bound_tenant(request)
     ASSURANCE_TRUST_GET_TOTAL.inc()
     with Session(get_engine()) as db:
+        set_tenant_context(db, tenant_id)
         row = (
             db.query(ActorIdentityAssurance)
             .filter(
@@ -395,28 +399,14 @@ def recalculate_actor_assurance(body: RecalculateBody, request: Request) -> dict
     except Exception:
         provider_enum = IdentityProvider.UNKNOWN
 
-    # Build a ProviderClaims from the raw dict — accept a permissive shape so
-    # callers can invoke recalculate without needing to know normalization
-    # details. Fields default to None; the engine tolerates that.
+    # Route through the provider-specific adapter so that provider-native claim
+    # names (e.g. Okta amr:["mfa"], Entra oid, Keycloak realm_access) are
+    # translated before the assurance engine evaluates them.  Inject actor_id
+    # as the subject fallback before normalisation so the adapter can use it.
+    if "sub" not in raw_claims and "subject" not in raw_claims:
+        raw_claims = {**raw_claims, "sub": actor_id}
     try:
-        provider_claims = ProviderClaims(
-            subject=raw_claims.get("subject") or raw_claims.get("sub") or actor_id,
-            email=raw_claims.get("email"),
-            email_verified=raw_claims.get("email_verified"),
-            issuer=raw_claims.get("issuer") or raw_claims.get("iss"),
-            provider_hint=raw_claims.get("provider_hint")
-            or provider_enum.value.lower(),
-            authentication_method=raw_claims.get("authentication_method"),
-            mfa_verified=raw_claims.get("mfa_verified"),
-            hardware_key_verified=raw_claims.get("hardware_key_verified"),
-            certificate_verified=raw_claims.get("certificate_verified"),
-            smart_card_verified=raw_claims.get("smart_card_verified"),
-            passwordless=raw_claims.get("passwordless"),
-            is_service_account=raw_claims.get("is_service_account"),
-            is_workload_identity=raw_claims.get("is_workload_identity"),
-            is_system_autonomous=raw_claims.get("is_system_autonomous"),
-            raw_provider=provider_enum.value.lower(),
-        )
+        provider_claims = normalize_provider_claims(raw_claims, provider_enum)
     except Exception:
         ASSURANCE_FAILURES.inc()
         raise HTTPException(
@@ -443,6 +433,7 @@ def recalculate_actor_assurance(body: RecalculateBody, request: Request) -> dict
     now = _now()
 
     with Session(get_engine()) as db:
+        set_tenant_context(db, tenant_id)
         # Locate the most recent current record (if any) for chain continuity.
         prev = (
             db.query(ActorIdentityAssurance)

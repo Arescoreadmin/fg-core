@@ -18453,3 +18453,77 @@ Result:
 
 Behavior now matches production audit semantics without changing runtime
 behavior.
+## PR feat/identity-assurance-trust-engine — feat(identity): Enterprise Identity Assurance & Trust Levels
+
+**Branch:** `feat/identity-assurance-trust-engine`
+**Date:** 2026-07-13
+
+### Purpose
+
+Implements the Identity Assurance & Trust Score layer extending the FrostGate
+evidence trust chain: Actor Attribution → Identity Assurance → Trust Score.
+Deterministic 0-100 trust scores with 10 assurance levels, 6 provider adapters,
+4 new append-only tables with RLS, 5 API endpoints, 177 tests.
+
+### Changes
+
+1. `feat(service): services/identity_assurance/` — Deterministic engine:
+   `compute_assurance_level`, `compute_trust_score`, `normalize_provider_claims`,
+   provider adapters for Keycloak / Entra ID / Okta / Google Workspace / Ping /
+   Auth0. Pure functions, no randomness, no timestamps inside calculations.
+   SHA-256 fingerprinted decisions with chain_hash continuity.
+
+2. `feat(db): api/db_models_identity_assurance.py` — Four ORM models:
+   `ActorIdentityAssurance` (current mutable record), `ActorAssuranceSnapshot`
+   (append-only immutable chain), `ActorAssuranceHistory` (append-only event
+   trail), `ActorTrustMetrics` (period-bucketed analytics). Append-only ORM
+   guards on two tables.
+
+3. `feat(migration): migrations/postgres/0153_identity_assurance.sql` —
+   Idempotent migration: all four tables, composite indexes, RLS policies via
+   `current_setting('app.tenant_id', true)`, append-only triggers on snapshot
+   and history tables.
+
+4. `feat(api): api/actor_assurance.py` — Five endpoints:
+   `GET /actor-assurance/{actor_id}`, `/history`, `/snapshot`, `/trust`,
+   `POST /actor-assurance/recalculate`. All scope-gated and tenant-bound.
+
+5. `feat(auth): api/actor_context.py` — `assurance:read` / `assurance:write`
+   added to ALL_PERMISSIONS, CAPABILITY_REGISTRY, and tenant_admin role.
+
+6. CI artifacts updated: OpenAPI, route inventory, plane registry snapshot,
+   authority manifest, topology hash, platform inventory, SOC gates doc.
+
+### Bot-reviewer fixes (P1 + P2)
+
+**P1 — Tenant context not bound before RLS queries**
+
+`api/actor_assurance.py` opened raw `Session(get_engine())` without calling
+`set_tenant_context(db, tenant_id)`. PostgreSQL RLS policies on the new tables
+compare `tenant_id` to `current_setting('app.tenant_id', true)`, so without
+this call all reads returned zero rows and recalculate inserts could be rejected
+at the policy level.
+
+Fix: imported `set_tenant_context` from `api.db` and called it immediately after
+each of the five `with Session(get_engine()) as db:` blocks.
+
+**P2 — Recalculate bypassed provider-specific claim adapters**
+
+`POST /actor-assurance/recalculate` manually constructed `ProviderClaims` from
+generic keys, ignoring provider-specific claim names (e.g. Okta `amr:["mfa"]`,
+Entra `oid`, Keycloak `realm_access`). This caused correct provider claims to
+be silently downgraded or misclassified.
+
+Fix: replaced manual construction with `normalize_provider_claims(raw_claims,
+provider_enum)`, which dispatches through the correct provider adapter. Actor ID
+is injected as `sub` fallback before normalization so the adapter always has a
+subject to work with.
+
+### Verification
+
+```
+pytest tests/test_identity_assurance.py -q
+→ 177 passed
+make fg-fast-full
+→ all gates green, exit 0
+```
