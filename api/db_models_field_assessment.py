@@ -39,11 +39,13 @@ Tables:
   fa_legal_holds                 — H15: legal hold application and removal audit record
   fa_evidence_provenance         — PR 1.1: append-only chain-of-custody provenance ledger
   fa_evidence_report_links       — PR 1.4: append-only evidence-to-report link authority
+  fa_report_versions             — Enterprise Report Delivery: report lifecycle version rows
+  fa_report_delivery_events      — Enterprise Report Delivery: append-only delivery audit trail
 """
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Float, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -699,4 +701,105 @@ class FaEvidenceReportLink(Base):
             "report_id",
         ),
         Index("ix_fa_evidence_report_links_event_hash", "event_hash"),
+    )
+
+
+class FaReportVersion(Base):
+    """Enterprise Report Delivery — versioned report row for CIO/CISO/Audit delivery.
+
+    Tracks the review → approval → delivery → supersede lineage on top of an
+    existing GovernanceReportRecord. Not append-only; row mutates through status
+    transitions. Once status is 'approved' or 'delivered', mutation is blocked at
+    the route layer to preserve the artifact for external stakeholders.
+    """
+
+    __tablename__ = "fa_report_versions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    revision: Mapped[str] = mapped_column(String(32), nullable=False, default="1.0")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    parent_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    superseded_by_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    approved_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    generated_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    delivered_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    report_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evidence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    finding_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    control_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    framework_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    approval_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reviewer_role: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    signature_placeholder: Mapped[str | None] = mapped_column(Text, nullable=True)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_report_versions_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index(
+            "ix_fa_report_versions_tenant_report",
+            "tenant_id",
+            "report_id",
+        ),
+        Index(
+            "ix_fa_report_versions_tenant_status",
+            "tenant_id",
+            "status",
+        ),
+    )
+
+
+class FaReportDeliveryEvent(Base):
+    """Enterprise Report Delivery — append-only audit trail for report lifecycle.
+
+    Every state transition (generated, reviewed, approved, delivered, downloaded,
+    emailed, portal_viewed, superseded) writes one row here. Append-only via
+    Postgres trigger (see migration 0150); ORM-level guard by convention.
+    """
+
+    __tablename__ = "fa_report_delivery_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_role: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    report_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_report_delivery_events_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index(
+            "ix_fa_report_delivery_events_tenant_version",
+            "tenant_id",
+            "report_version_id",
+        ),
+        Index(
+            "ix_fa_report_delivery_events_tenant_type",
+            "tenant_id",
+            "event_type",
+        ),
     )
