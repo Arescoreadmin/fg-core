@@ -280,7 +280,7 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 848,
+    "control": 857,
     "data": 54,
     "evidence": 125,
     "identity": 27,
@@ -341,7 +341,7 @@
     "POST /ui/devices/{device_id}/enable"
   ],
   "removed": [],
-  "runtime_count": 1164,
+  "runtime_count": 1173,
   "runtime_only": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
     "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -402,6 +402,10 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
+    "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions",
+    "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}",
+    "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/history",
+    "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/manifest",
     "GET /health",
     "GET /metrics",
     "GET /ui/ai",
@@ -494,6 +498,11 @@
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/approve",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/deliver",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/submit-for-review",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/supersede",
     "POST /ui/ai/chat",
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
@@ -503,5 +512,15 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": []
+  "unauthorized_runtime_only": [
+    "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions",
+    "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}",
+    "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/history",
+    "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/manifest",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/approve",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/deliver",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/submit-for-review",
+    "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/supersede"
+  ]
 }
