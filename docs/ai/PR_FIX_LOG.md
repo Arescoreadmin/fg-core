@@ -6,6 +6,75 @@ This log records **completed, intentional fixes**.
 
 ---
 
+## PR — feat(field-assessment): Enterprise Report Delivery workflow
+
+**Branch:** `feat/enterprise-report-delivery`
+**Date:** 2026-07-13
+
+### Purpose
+
+Complete the enterprise report lifecycle on top of the existing signed
+`GovernanceReportRecord`. The signed report row is now the deterministic
+artifact; a new `FaReportVersion` tracks the human review, approval, delivery,
+and supersedes chain that CIO / CISO / Internal Audit / Risk Committee / Cyber
+Insurance / Board / Regulator stakeholders need. Every state transition is
+persisted to an append-only `FaReportDeliveryEvent` audit trail alongside the
+existing `FaEngagementAuditEvent` chain.
+
+### Changes
+
+1. `feat(db): add FaReportVersion + FaReportDeliveryEvent SQLAlchemy models` —
+   Two new tables in `api/db_models_field_assessment.py`. `FaReportVersion`
+   holds the review/approve/deliver/supersede lineage; `FaReportDeliveryEvent`
+   is append-only.
+2. `feat(migration): migrations/postgres/0150_report_versioning.sql` — Creates
+   both tables, adds FK constraints (parent/superseded_by lineage), tenant
+   `(tenant_id, engagement_id)`, `(tenant_id, report_id)`, `(tenant_id, status)`
+   indexes, enables ROW LEVEL SECURITY with `current_setting('app.tenant_id')`
+   policies, and installs BEFORE UPDATE/DELETE triggers using the shared
+   `append_only_guard()` function on the delivery events table.
+3. `feat(api): 9 new report-version routes` on the field-assessment router —
+   create version, list, get, submit-for-review, approve, deliver, supersede,
+   manifest, history. All require `governance:read`/`governance:write` scopes
+   AND `require_bound_tenant()`. Approved / delivered / superseded / archived
+   versions are immutable — the route rejects any further transition attempts
+   with HTTP 409.
+4. `feat(api): deterministic ReportManifest generation` — SHA-256 over sorted
+   canonical JSON for both the underlying report and the manifest. Manifest
+   embeds evidence hashes (drawn from `FaEvidenceReportLink`), finding IDs,
+   control IDs, framework IDs, and per-category counts. Recomputable at any
+   time; the persisted `manifest_hash` is a snapshot of that computation at
+   version creation.
+5. `test(field-assessment): tests/test_report_delivery.py` — 18 tests covering
+   version creation, listing, get, status transitions, immutability, deliver,
+   supersede lineage, manifest determinism, evidence hash inclusion, delivery
+   history, tenant isolation, cross-tenant denial, approval body validation,
+   version numbering, and preservation of existing evidence links.
+6. `refactor(api): actor_ctx.primary_role() invocation cleanup` — Existing
+   sites already invoke `primary_role()` (it's a method, not a property); the
+   new routes follow the same convention.
+
+### Validation
+
+- `ruff format api/field_assessment.py tests/test_report_delivery.py api/db_models_field_assessment.py` — 2 reformatted, 1 unchanged.
+- `ruff check api/field_assessment.py tests/test_report_delivery.py api/db_models_field_assessment.py` — clean.
+- `pytest tests/test_report_delivery.py -q` — 18 passed.
+- `pytest tests/test_field_assessment.py tests/test_field_assessment_reports.py -q` — passes (no regression).
+- `make route-inventory-generate` — refreshed.
+- `make fg-contract` — clean.
+
+### Files changed
+
+- `api/db_models_field_assessment.py` — models + Float import
+- `api/field_assessment.py` — schemas, helpers, 9 routes, `require_bound_tenant` import, `FaReportDeliveryEvent`/`FaReportVersion` imports, `primary_role()` invocations
+- `migrations/postgres/0150_report_versioning.sql` — new tables + append-only trigger
+- `tests/test_report_delivery.py` — 18-test workflow suite
+- `tools/ci/route_inventory.json` — regenerated
+- `ROADMAP.md` — Phase 3 entry
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+---
+
 ### 2026-07-10 — audit(ci): CI gates performance and assurance audit
 
 **Branch:** `audit/ci-gates-performance-and-assurance`
