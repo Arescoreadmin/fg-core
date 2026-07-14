@@ -31760,6 +31760,52 @@
         "title": "RecalculateAdaptiveRequest",
         "type": "object"
       },
+      "RecalculateBody": {
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "claims": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claims"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "actor_id"
+        ],
+        "title": "RecalculateBody",
+        "type": "object"
+      },
       "RecalculateHealthRequest": {
         "additionalProperties": false,
         "properties": {
@@ -51049,6 +51095,330 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/actor-assurance/recalculate": {
+      "post": {
+        "description": "Recompute the assurance for an actor and append snapshot + history rows.\n\nDeterministic: given the same claims + tenant + actor, the resulting\n``decision_fingerprint`` and ``computed_at_sequence`` will match a prior\nrecomputation exactly.",
+        "operationId": "recalculate_actor_assurance_actor_assurance_recalculate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecalculateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Recalculate Actor Assurance Actor Assurance Recalculate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recalculate Actor Assurance",
+        "tags": [
+          "actor-assurance"
+        ]
+      }
+    },
+    "/actor-assurance/{actor_id}": {
+      "get": {
+        "description": "Return the current assurance record for an actor.",
+        "operationId": "get_actor_assurance_actor_assurance__actor_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "title": "Actor Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Actor Assurance Actor Assurance  Actor Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Actor Assurance",
+        "tags": [
+          "actor-assurance"
+        ]
+      }
+    },
+    "/actor-assurance/{actor_id}/history": {
+      "get": {
+        "description": "Return paginated assurance history for an actor.\n\nReturns empty pages (not 404) when no history exists \u2014 history is a\npermission-side-effect stream and absence is a legitimate observation.",
+        "operationId": "get_actor_assurance_history_actor_assurance__actor_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "title": "Actor Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Actor Assurance History Actor Assurance  Actor Id  History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Actor Assurance History",
+        "tags": [
+          "actor-assurance"
+        ]
+      }
+    },
+    "/actor-assurance/{actor_id}/snapshot": {
+      "get": {
+        "description": "Return the latest immutable snapshot in the assurance chain.",
+        "operationId": "get_actor_assurance_snapshot_actor_assurance__actor_id__snapshot_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "title": "Actor Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Actor Assurance Snapshot Actor Assurance  Actor Id  Snapshot Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Actor Assurance Snapshot",
+        "tags": [
+          "actor-assurance"
+        ]
+      }
+    },
+    "/actor-assurance/{actor_id}/trust": {
+      "get": {
+        "description": "Return a trust-score summary for an actor.",
+        "operationId": "get_actor_trust_summary_actor_assurance__actor_id__trust_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "title": "Actor Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Actor Trust Summary Actor Assurance  Actor Id  Trust Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Actor Trust Summary",
+        "tags": [
+          "actor-assurance"
+        ]
+      }
+    },
     "/actor-attribution/actor/{actor_id}": {
       "get": {
         "description": "Return the canonical actor identity record.",

@@ -10,11 +10,15 @@
   "governance": {
     "contract_count": 1012,
     "contract_only": [],
-    "runtime_count": 1178,
+    "runtime_count": 1183,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
+      "GET /actor-assurance/{actor_id}",
+      "GET /actor-assurance/{actor_id}/history",
+      "GET /actor-assurance/{actor_id}/snapshot",
+      "GET /actor-assurance/{actor_id}/trust",
       "GET /admin/agent/devices",
       "GET /admin/agent/devices/{device_id}/status",
       "GET /admin/agent/evidence/export/{device_id}",
@@ -121,6 +125,7 @@
       "PATCH /admin/billing/meters/{meter_code}",
       "PATCH /admin/subscriptions/contracts/{contract_id}/status",
       "PATCH /admin/subscriptions/items/{item_id}/status",
+      "POST /actor-assurance/recalculate",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",
@@ -179,7 +184,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "26a21e7e9a42d2ec9b387471cb06d4b85f92b929919220ddd54be0b1c2d84413",
+  "governance_fingerprint": "be5d68e9c5d8179293604394fdca9fcc33252381f837ece8eb0b90b5e8a04072",
   "planes": [
     {
       "compat": {
@@ -234,6 +239,7 @@
       "route_prefixes": [
         "/_debug",
         "/_legacy",
+        "/actor-assurance",
         "/actor-attribution",
         "/admin",
         "/api/executive",
@@ -445,6 +451,10 @@
       "DELETE /portal/sessions/{session_id}",
       "DELETE /remediation/tasks/{task_id}",
       "GET /_debug/routes",
+      "GET /actor-assurance/{actor_id}",
+      "GET /actor-assurance/{actor_id}/history",
+      "GET /actor-assurance/{actor_id}/snapshot",
+      "GET /actor-assurance/{actor_id}/trust",
       "GET /actor-attribution/actor/{actor_id}",
       "GET /actor-attribution/actor/{actor_id}/attribution",
       "GET /actor-attribution/actor/{actor_id}/history",
@@ -993,6 +1003,7 @@
       "PATCH /remediation-effectiveness/{remediation_id}",
       "PATCH /remediation/tasks/{task_id}",
       "PATCH /risk-acceptances/{ra_id}",
+      "POST /actor-assurance/recalculate",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",

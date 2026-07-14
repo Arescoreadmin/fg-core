@@ -12,13 +12,14 @@
 #   _warn_db_not_registered / _warn_not_in_main — fix these before committing
 
 manifest_version: '1.0'
-generated_at: '2026-07-13T16:51:17Z'
+generated_at: '2026-07-13T20:29:05Z'
 library_services:
 - actor_identity
 - audit_engine
 - cgin_key_management
 - cgin_transparency
 - cgin_trust
+- identity_assurance
 - notifications
 - remediation_portal
 authorities:

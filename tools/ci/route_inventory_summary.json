@@ -280,7 +280,7 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 862,
+    "control": 867,
     "data": 54,
     "evidence": 125,
     "identity": 27,
@@ -341,11 +341,15 @@
     "POST /ui/devices/{device_id}/enable"
   ],
   "removed": [],
-  "runtime_count": 1178,
+  "runtime_count": 1183,
   "runtime_only": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
     "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
     "GET /_debug/routes",
+    "GET /actor-assurance/{actor_id}",
+    "GET /actor-assurance/{actor_id}/history",
+    "GET /actor-assurance/{actor_id}/snapshot",
+    "GET /actor-assurance/{actor_id}/trust",
     "GET /admin/agent/devices",
     "GET /admin/agent/devices/{device_id}/status",
     "GET /admin/agent/evidence/export/{device_id}",
@@ -452,6 +456,7 @@
     "PATCH /admin/billing/meters/{meter_code}",
     "PATCH /admin/subscriptions/contracts/{contract_id}/status",
     "PATCH /admin/subscriptions/items/{item_id}/status",
+    "POST /actor-assurance/recalculate",
     "POST /admin/agent/commands/issue",
     "POST /admin/agent/devices/{device_id}/disable",
     "POST /admin/agent/devices/{device_id}/enable",
@@ -503,5 +508,11 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": []
+  "unauthorized_runtime_only": [
+    "GET /actor-assurance/{actor_id}",
+    "GET /actor-assurance/{actor_id}/history",
+    "GET /actor-assurance/{actor_id}/snapshot",
+    "GET /actor-assurance/{actor_id}/trust",
+    "POST /actor-assurance/recalculate"
+  ]
 }
