@@ -7339,6 +7339,30 @@
       "CompleteWorkflowRequest": {
         "additionalProperties": false,
         "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
           "validation_results": {
             "title": "Validation Results",
             "type": "object"
