@@ -574,15 +574,20 @@ def list_assets(
         limit=limit,
         offset=offset,
     )
-    # Batch-fetch primary owner per asset so the portal can render attestation state
+    # Batch-fetch the most-overdue owner per asset for portal attestation state.
+    # Order by next_attestation_due_at ASC NULLS FIRST so that a never-attested or
+    # overdue owner always wins over a recently-attested co-owner — ensuring the
+    # asset appears in the portal due list whenever any owner is overdue.
     owners: dict[str, GaAssetOwner] = {}
     if assets:
         rows = (
             db.execute(
-                select(GaAssetOwner).where(
+                select(GaAssetOwner)
+                .where(
                     GaAssetOwner.tenant_id == tenant_id,
                     GaAssetOwner.asset_id.in_([a.asset_id for a in assets]),
                 )
+                .order_by(GaAssetOwner.next_attestation_due_at.asc().nullsfirst())
             )
             .scalars()
             .all()

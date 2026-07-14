@@ -107,6 +107,44 @@ def test_FA1_2_list_assets_includes_owner_fields(client: TestClient):
 
 
 # ---------------------------------------------------------------------------
+# FA1-2b: multi-owner — most overdue owner wins
+# ---------------------------------------------------------------------------
+
+
+def test_FA1_2b_multi_owner_most_overdue_wins(client: TestClient):
+    """When an asset has two owners, list_assets returns the one with the
+    earlier next_attestation_due — ensuring the asset appears in the portal
+    due list if any owner is overdue, regardless of insertion order.
+    """
+    asset = _create_asset(client, name="FA-1 Multi-Owner Model")
+    asset_id = asset["asset_id"]
+
+    resp1 = client.post(
+        f"/governance/assets/{asset_id}/owners",
+        json={"owner_email": "owner-a@example.com"},
+    )
+    assert resp1.status_code == 201, resp1.text
+    due_a = resp1.json()["next_attestation_due_at"]
+
+    resp2 = client.post(
+        f"/governance/assets/{asset_id}/owners",
+        json={"owner_email": "owner-b@example.com"},
+    )
+    assert resp2.status_code == 201, resp2.text
+    due_b = resp2.json()["next_attestation_due_at"]
+
+    resp = client.get("/governance/assets")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()
+    match = next((a for a in items if a["asset_id"] == asset_id), None)
+    assert match is not None
+
+    # The returned next_attestation_due must be the earlier of the two
+    expected_email = "owner-a@example.com" if due_a <= due_b else "owner-b@example.com"
+    assert match["owner_email"] == expected_email
+
+
+# ---------------------------------------------------------------------------
 # FA1-3: owner fields null when no owner
 # ---------------------------------------------------------------------------
 
