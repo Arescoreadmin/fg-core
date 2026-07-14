@@ -3995,6 +3995,10 @@
             "title": "Asset Id",
             "type": "string"
           },
+          "asset_name": {
+            "title": "Asset Name",
+            "type": "string"
+          },
           "asset_type": {
             "title": "Asset Type",
             "type": "string"
@@ -4044,6 +4048,17 @@
             ],
             "title": "External Id"
           },
+          "last_attested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attested At"
+          },
           "metadata": {
             "title": "Metadata",
             "type": "object"
@@ -4051,6 +4066,28 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "next_attestation_due": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attestation Due"
+          },
+          "owner_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Email"
           },
           "risk_score": {
             "title": "Risk Score",
@@ -4081,6 +4118,7 @@
           "asset_id",
           "tenant_id",
           "asset_type",
+          "asset_name",
           "name",
           "description",
           "status",

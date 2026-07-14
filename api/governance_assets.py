@@ -20,9 +20,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes.resolution import require_scopes
+from api.db_models_governance_assets import GaAssetOwner
 from api.deps import auth_ctx_db_session
 from services.governance_asset_registry import registry
 from services.governance_asset_registry.audit import verify_asset_audit_chain
@@ -152,6 +154,7 @@ class AssetResponse(BaseModel):
     asset_id: str
     tenant_id: str
     asset_type: str
+    asset_name: str  # portal canonical name field
     name: str
     description: str | None
     status: str
@@ -165,6 +168,10 @@ class AssetResponse(BaseModel):
     created_at: str
     updated_at: str
     created_by_email: str
+    # Owner fields — populated by list_assets; null when asset has no owner
+    last_attested_at: str | None = None
+    next_attestation_due: str | None = None
+    owner_email: str | None = None
 
 
 class AssetVersionResponse(BaseModel):
@@ -283,11 +290,12 @@ class ContinuityGapsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _asset_out(a: Any) -> AssetResponse:
+def _asset_out(a: Any, owner: GaAssetOwner | None = None) -> AssetResponse:
     return AssetResponse(
         asset_id=a.asset_id,
         tenant_id=a.tenant_id,
         asset_type=a.asset_type,
+        asset_name=a.name,
         name=a.name,
         description=a.description,
         status=a.status,
@@ -301,6 +309,9 @@ def _asset_out(a: Any) -> AssetResponse:
         created_at=a.created_at,
         updated_at=a.updated_at,
         created_by_email=a.created_by_email,
+        last_attested_at=owner.last_attested_at if owner else None,
+        next_attestation_due=owner.next_attestation_due_at if owner else None,
+        owner_email=owner.owner_email if owner else None,
     )
 
 
@@ -563,7 +574,22 @@ def list_assets(
         limit=limit,
         offset=offset,
     )
-    return [_asset_out(a) for a in assets]
+    # Batch-fetch primary owner per asset so the portal can render attestation state
+    owners: dict[str, GaAssetOwner] = {}
+    if assets:
+        rows = (
+            db.execute(
+                select(GaAssetOwner).where(
+                    GaAssetOwner.tenant_id == tenant_id,
+                    GaAssetOwner.asset_id.in_([a.asset_id for a in assets]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for o in rows:
+            owners.setdefault(o.asset_id, o)
+    return [_asset_out(a, owners.get(a.asset_id)) for a in assets]
 
 
 @router.get(
