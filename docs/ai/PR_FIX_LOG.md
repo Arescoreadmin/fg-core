@@ -1,5 +1,35 @@
 # PR Fix Log (Strict)
 
+## TC-7 — feat(report-quality): wire quality scores to real FA evidence sources
+
+**Branch:** `feat/tc-7-report-quality-real`
+**Date:** 2026-07-14
+
+### Purpose
+
+Clears Revenue Gate 1 item G1.3 (`report_quality_real`). Replaces the static
+`_PLACEHOLDER_COVERAGE = 0.5` in `services/report_authority/engine.py` with
+live reads from three FA tables so every delivered report shows defensible,
+evidence-backed quality scores.
+
+### Changes
+
+1. `feat: services/report_authority/quality_inputs.py` — New module. Five
+   metrics computed from live DB data: `evidence_coverage` (distinct linked
+   entities / findings), `verification_coverage` (approved provenance /
+   total provenance), `freshness` (exponential decay from `collected_at`,
+   90-day half-life), `confidence` (avg finding.confidence_score / 100),
+   `completeness` (total links / findings×2). All values in [0.0, 1.0].
+
+2. `feat: services/report_authority/engine.py` — Import `compute_quality_inputs`,
+   removed `_PLACEHOLDER_COVERAGE = 0.5`, replaced 5-line placeholder block with
+   call to `compute_quality_inputs(db, tenant_id, engagement_id)`.
+
+3. `test: tests/test_tc7_quality_inputs.py` — 13 tests covering all acceptance
+   criteria (QI-1 through QI-11): zero-case for each metric, positive-case for
+   each metric, engine integration verifying `quality_score == 0.0` on empty
+   engagement (was 0.5 with placeholder).
+
 ## PR 539 — feat(trust-chain): assert MINISIGN_SECRET_KEY at startup (TC-0)
 
 **Branch:** `feat/tc-0-startup-key-assertions`
