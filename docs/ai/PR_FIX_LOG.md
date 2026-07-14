@@ -1,5 +1,48 @@
 # PR Fix Log (Strict)
 
+## PR 539 — feat(trust-chain): assert MINISIGN_SECRET_KEY at startup (TC-0)
+
+**Branch:** `feat/tc-0-startup-key-assertions`
+**Date:** 2026-07-14
+
+### Purpose
+
+Clears Revenue Gate 1 item G1.1 (`startup_keys_asserted`). Both
+`FG_BILLING_EVIDENCE_HMAC_KEY` (pre-existing) and `MINISIGN_SECRET_KEY` (this
+PR) now raise `RuntimeError` at startup if absent in production, preventing
+silently invalid billing evidence or artifact signatures from reaching a
+paying client.
+
+### Changes
+
+1. `feat: api/config/startup_validation.py` — Added `_check_minisign_key` to
+   `StartupValidator`. Absent `MINISIGN_SECRET_KEY` is severity=error in
+   production (RuntimeError via `fail_on_error`) and severity=warning
+   elsewhere. Wired into `validate()` after `_check_billing_hmac_key`.
+
+2. `test: tests/security/test_startup_validation.py` — Three new tests:
+   absent key in prod raises RuntimeError matching "MINISIGN_SECRET_KEY";
+   absent in non-prod is warning-only; present key passes.
+
+3. `ci: .github/workflows/docker-ci.yml` — Added
+   `MINISIGN_SECRET_KEY=ci-minisign-secret-key-for-testing-only-not-real` to
+   both prod env generation blocks so the new startup assertion does not abort
+   the Docker Compose healthcheck in CI.
+
+4. `chore: .gitignore` — Unignored `artifacts/audits/canonical_roadmap/` so
+   FROSTGATE_CANONICAL_ROADMAP.md, roadmap_manifest.json, and
+   EXECUTION_STATE.json are present on a fresh checkout (required by
+   prompts/canonical/ templates).
+
+### Fixes applied
+
+- Codex P1: MINISIGN_SECRET_KEY not seeded in docker-ci prod env → fixed by
+  change 3 above.
+- Codex P2: canonical roadmap paths not tracked in git → fixed by change 4
+  above.
+
+---
+
 ## PR 535 — feat(actor-attribution): Enterprise Actor Attribution & Non-Repudiation
 
 **Branch:** `feature/pr-535-actor-attribution-non-repudiation`

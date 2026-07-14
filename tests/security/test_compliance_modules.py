@@ -63,6 +63,8 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         # PR-SIGN-4: startup validation errors in prod when these are absent.
         "FG_REPORT_SIGNING_KEY": "0" * 63 + "1",
         "FG_BILLING_EVIDENCE_HMAC_KEY": "test-billing-hmac-key-32-bytes-x",
+        # TC-0: startup validation errors in prod when MINISIGN_SECRET_KEY is absent.
+        "MINISIGN_SECRET_KEY": "test-minisign-secret-key-for-ci-only",
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)

@@ -1,0 +1,295 @@
+{
+  "schema_version": "1.1",
+  "execution_state_version": "1.1",
+  "roadmap_version": "1.1",
+  "last_updated": "2026-07-14",
+  "audited_commit": "71339c1cdd86184c22f34cb44c5c1cb888879800",
+
+  "integrity": {
+    "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
+    "manifest_sha256": "sha256:56d157ed26574f1a635978a57a48953ab4faf739be89e721e3319efaf68005e7",
+    "roadmap_file": "artifacts/audits/canonical_roadmap/FROSTGATE_CANONICAL_ROADMAP.md",
+    "manifest_file": "artifacts/audits/canonical_roadmap/roadmap_manifest.json",
+    "ci_check": "execution_state_version must match manifest.manifest_version; roadmap_sha256 must match manifest.output_file_hashes.FROSTGATE_CANONICAL_ROADMAP.md; any mismatch = drift"
+  },
+
+  "position": {
+    "current_lane": "Lane 1 — Revenue Critical Path",
+    "current_phase": "Phase 0 — Trust Chain",
+    "current_step": 1,
+    "current_step_name": "Trust Chain Completion",
+    "current_focus": "First Paying Client",
+    "current_pr": "TC-0",
+    "current_pr_title": "Assert production keys at startup",
+    "current_pr_size": "XS",
+    "current_pr_kpi": "Billing Integrity",
+    "current_pr_file": "api/config/startup_validation.py",
+    "current_pr_days_estimate": 0.25,
+    "parallelizable_now": ["R-1"],
+    "unblocked_now": ["TC-0", "R-1", "FA-2", "P-2"],
+    "next_pr": "TC-1",
+    "next_pr_title": "Evidence provenance foundation (PR 417)",
+    "next_pr_deps": ["TC-0"],
+    "next_pr_kpi": "Report Defensibility"
+  },
+
+  "gate": {
+    "id": "Revenue Gate 1",
+    "total": 12,
+    "cleared": 0,
+    "completion": "0/12",
+    "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened",
+    "items": {
+      "G1.1_startup_keys_asserted": false,
+      "G1.2_provenance_foundation_durable": false,
+      "G1.3_report_quality_real": false,
+      "G1.4_remediation_canonical": false,
+      "G1.5_portal_pages_live_validated": false,
+      "G1.6_credential_preflight_operational": false,
+      "G1.7_ai_auto_enable_on_qa": false,
+      "G1.8_provisioning_deterministic": false,
+      "G1.9_remediation_live_validated": false,
+      "G1.10_dry_run_h1_h18_complete": false,
+      "G1.11_anthropic_credit_verified": false,
+      "G1.12_railway_headroom_verified": false
+    }
+  },
+
+  "blocking_items": [
+    {
+      "id": "G1.1",
+      "title": "Startup key assertions active",
+      "blocking_pr": "TC-0",
+      "reason": "FG_BILLING_EVIDENCE_HMAC_KEY and MINISIGN_SECRET_KEY may be absent in Railway production with no detection — billing evidence and report signatures could be silently invalid on every engagement",
+      "effort": "0.25 days",
+      "unblocks": ["TC-1"]
+    },
+    {
+      "id": "G1.3",
+      "title": "Report quality scores real",
+      "blocking_pr": "TC-7",
+      "reason": "services/report_authority/engine.py:96 — _PLACEHOLDER_COVERAGE = 0.5 assigned to all five quality inputs; every delivered report shows fabricated quality scores; first invoice carries legal exposure",
+      "effort": "3-5 days",
+      "unblocks": ["FA-1", "P-1", "first invoice"]
+    },
+    {
+      "id": "G1.4",
+      "title": "Remediation authority canonical",
+      "blocking_pr": "R-1",
+      "reason": "api/remediation.py (legacy) and api/remediation_authority.py (canonical, 24 routes) are both active; portal remediation traffic may route to the wrong system; client remediation state is unreliable at scale",
+      "effort": "0.25 days",
+      "unblocks": ["R-2", "remediation MRR"]
+    },
+    {
+      "id": "G1.5",
+      "title": "All portal pages render live data",
+      "blocking_pr": "FA-1",
+      "reason": "Reports, coverage, and attestation pages are unvalidated with live engagement data — client may encounter empty or broken content at the moment of report delivery",
+      "effort": "1-2 days",
+      "unblocks": ["portal activation", "subscription conversion"]
+    },
+    {
+      "id": "G1.6",
+      "title": "Connector credential pre-flight",
+      "blocking_pr": "FA-2",
+      "reason": "Invalid MS Graph credentials fail silently during scan execution — a 3-hour engagement can fail with no early warning; pre-flight catches this at scan launch",
+      "effort": "1 day",
+      "unblocks": ["reliable scan execution"]
+    },
+    {
+      "id": "G1.7",
+      "title": "AI assistant auto-enables on QA approval",
+      "blocking_pr": "P-2",
+      "reason": "apps/portal/app/assistant/page.tsx:72 — portal_ai_enabled flag requires manual Jason API patch per client; the highest habit-forming, highest-switching-cost feature is dark by default",
+      "effort": "1-2 days",
+      "unblocks": ["AI workspace adoption", "subscription conversion"]
+    },
+    {
+      "id": "G1.8",
+      "title": "Provisioning to portal activation is deterministic",
+      "blocking_pr": "P-1",
+      "reason": "Provisioning completion does not automatically seed portal prerequisites — client may be unable to log in after provisioning without a Jason manual step",
+      "effort": "1-2 days",
+      "unblocks": ["portal activation", "first client delivery"]
+    },
+    {
+      "id": "G1.9",
+      "title": "Remediation portal routing validated with live data",
+      "blocking_pr": "R-2",
+      "reason": "Portal remediation page is wired but untested with a real engagement — live-data behavior unconfirmed; split-brain risk exists until R-1 ships and R-2 validates the canonical path",
+      "effort": "1 day",
+      "unblocks": ["remediation MRR"]
+    },
+    {
+      "id": "G1.10",
+      "title": "Dry run H1-H18 complete",
+      "blocking_pr": null,
+      "reason": "No PR — operational milestone. Full engagement (tenant creation → scanning → report → portal delivery) has not been walked end-to-end. First paying client should not be the first time this sequence runs.",
+      "effort": "1 day",
+      "unblocks": ["first client confidence", "first invoice"]
+    },
+    {
+      "id": "G1.11",
+      "title": "Anthropic credit balance verified",
+      "blocking_pr": null,
+      "reason": "No PR — operational check. Balance was $3.50 on 2026-05-31. AI executive summary generation during a live engagement could fail silently if balance is depleted.",
+      "effort": "30 minutes",
+      "unblocks": ["AI executive summary on delivery"]
+    },
+    {
+      "id": "G1.12",
+      "title": "Railway Hobby plan headroom verified",
+      "blocking_pr": null,
+      "reason": "No PR — operational check. A10 in CLIENT_READINESS is unchecked. Concurrent scan + AI query load during a live engagement is untested at current Railway tier.",
+      "effort": "30 minutes",
+      "unblocks": ["stable first engagement"]
+    }
+  ],
+
+  "recent_execution": [
+    {
+      "pr": "#537",
+      "title": "feat(identity): Entra ID identity assurance — RS256/ES256, 8-level ladder, 0-100 score",
+      "merged_at": "2026-07-13",
+      "gate_items_cleared": [],
+      "kpi": "Customer Trust",
+      "note": "Resolved Codex audit concern about Entra ID stub status. api/identity_authority/providers/entra_provider.py confirmed full implementation. Enables TC-IDENTITY track to proceed."
+    },
+    {
+      "pr": "#536",
+      "title": "feat(actor-attribution): 3-layer fingerprint chain, non-repudiation for regulators",
+      "merged_at": "2026-07-13",
+      "gate_items_cleared": [],
+      "kpi": "Customer Trust",
+      "note": "Resolved Codex audit branch-contamination flag. Branch is now clean at audited commit."
+    },
+    {
+      "pr": "#534",
+      "title": "feat(report-delivery): enterprise report delivery — approval, immutability, manifest, delivery audit",
+      "merged_at": "2026-07-13",
+      "gate_items_cleared": [],
+      "kpi": "Report Defensibility",
+      "note": "Confirmed real ReportLab PDF — resolved Codex pseudoformat concern. api/report_exports.py is byte-stable replay."
+    },
+    {
+      "pr": "#533",
+      "title": "feat(evidence): server-side evidence file integrity",
+      "merged_at": "2026-07-13",
+      "gate_items_cleared": [],
+      "kpi": "Customer Trust",
+      "note": "Immutable evidence claim established at file upload boundary."
+    }
+  ],
+
+  "commercial": {
+    "first_invoice": false,
+    "first_invoice_amount": null,
+    "first_invoice_date": null,
+    "first_portal_login": false,
+    "first_portal_login_date": null,
+    "first_report_delivered": false,
+    "first_report_delivered_date": null,
+    "first_ai_conversation": false,
+    "first_ai_conversation_date": null,
+    "first_remediation_task_created": false,
+    "first_remediation_task_date": null,
+    "first_subscription": false,
+    "first_subscription_amount_monthly": null,
+    "first_subscription_date": null,
+    "first_renewal": false,
+    "first_renewal_date": null,
+    "first_referral": false,
+    "first_referral_date": null,
+    "clients_total": 0,
+    "clients_active_subscription": 0,
+    "mrr_current": "$0"
+  },
+
+  "drift_status": "none",
+  "drift_flags": [],
+
+  "north_star": "MRR",
+  "north_star_current": "$0",
+  "north_star_target_gate_1": "$5,000–$40,000 assessment fee",
+  "north_star_target_gate_2": "$500–$2,000/month subscription",
+
+  "leading_indicators": {
+    "assessments_completed": 0,
+    "proposal_conversion_pct": null,
+    "assessment_duration_days": null,
+    "portal_activation_pct": null,
+    "portal_weekly_active_users": 0,
+    "ai_conversations_per_tenant_per_week": null,
+    "evidence_uploaded_per_engagement": null,
+    "remediation_tasks_created": null,
+    "remediation_completion_pct": null,
+    "subscription_conversion_pct": null,
+    "average_revenue_per_client": "$0",
+    "client_retention": null,
+    "nps": null,
+    "time_to_first_value_days": null,
+    "time_proposal_to_invoice_days": null,
+    "time_delivery_to_subscription_days": null
+  },
+
+  "mission_check": {
+    "assessments_as_institutional_memory": true,
+    "remediations_as_organizational_improvement": true,
+    "interactions_increase_switching_cost": true,
+    "each_client_increases_platform_intelligence": true,
+    "any_property_at_risk": false,
+    "at_risk_detail": null
+  },
+
+  "critical_unknowns": [
+    "Production AI call path — which module handles live chat (403 dead-symbol flags in census)",
+    "Anthropic API credit balance — last confirmed $3.50 on 2026-05-31; may be depleted",
+    "MINISIGN_SECRET_KEY presence in Railway production — unconfirmed",
+    "FG_BILLING_EVIDENCE_HMAC_KEY presence in Railway production — unconfirmed",
+    "Production embedding provider — real semantic vs stub unconfirmed"
+  ],
+
+  "stop_doing": [
+    "services/governance_orchestration/",
+    "services/governance_simulation/",
+    "services/governance_digital_twin/",
+    "services/governance_learning/",
+    "services/governance_optimization/",
+    "services/governance_adaptive_intelligence/",
+    "services/ai_plane_extension/ — before live call path confirmed",
+    "New CI lanes — before team exceeds 3 engineers",
+    "FedRAMP planning — before signed govcon LOI",
+    "PCI DSS playbook — before PCI client identified",
+    "SAML — before client 5"
+  ],
+
+  "how_to_update": {
+    "on_pr_merge": [
+      "Set last entry in recent_execution if not already present",
+      "Update position.current_pr to next unblocked PR",
+      "Set position.last_completed_pr to merged PR id + title",
+      "If PR clears a gate item: set gate.items[item] to true, increment gate.cleared, update gate.completion",
+      "If gate.cleared reaches gate.total: advance gate to Revenue Gate 2, reset cleared/total"
+    ],
+    "on_commercial_milestone": [
+      "Set commercial.[milestone] to true",
+      "Set commercial.[milestone]_date to ISO date",
+      "Update mrr_current and leading_indicators with observed values"
+    ],
+    "on_metric_update": [
+      "Update leading_indicators with observed value",
+      "Replace null with actual measurement once first data point exists"
+    ],
+    "on_drift_detected": [
+      "Set drift_status to one of: platform_expansion_active | off_sequence | gate_bypassed | mission_property_at_risk",
+      "Populate drift_flags with description",
+      "If mission property at risk: set mission_check.any_property_at_risk to true and populate at_risk_detail"
+    ],
+    "on_integrity_check": [
+      "Recompute sha256 of FROSTGATE_CANONICAL_ROADMAP.md",
+      "Compare to integrity.roadmap_sha256",
+      "If mismatch: roadmap was edited without updating execution state — update hash and review changes",
+      "execution_state_version must match manifest.manifest_version"
+    ]
+  }
+}

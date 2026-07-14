@@ -177,6 +177,13 @@ artifacts/
 !artifacts/PLATFORM_INVENTORY.det.md
 !artifacts/PLATFORM_GAPS.det.md
 
+# Canonical roadmap artifacts are authoritative state, not runtime output
+!artifacts/audits/
+!artifacts/audits/canonical_roadmap/
+!artifacts/audits/canonical_roadmap/FROSTGATE_CANONICAL_ROADMAP.md
+!artifacts/audits/canonical_roadmap/roadmap_manifest.json
+!artifacts/audits/canonical_roadmap/EXECUTION_STATE.json
+
 # Keep volatile evidence ignored
 artifacts/platform_inventory.json
 # Local caches (Codex / CI / dev)

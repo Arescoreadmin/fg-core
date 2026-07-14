@@ -1,0 +1,361 @@
+{
+  "plan_id": "frostgate_canonical_roadmap_20260713",
+  "created_at": "2026-07-13",
+  "authority": "This manifest and FROSTGATE_CANONICAL_ROADMAP.md supersede all prior phase descriptions. This is the definitive implementation roadmap combining all three audit sources.",
+  "repository": "fg-core",
+  "branch": "main",
+  "audited_commit": "f70cccc29c6d28c3c012f8dcdc96dbe0bf8bd25e",
+  "audit_source_paths": [
+    "artifacts/audits/master_inventory_claude/",
+    "artifacts/audits/master_inventory_codex/",
+    "artifacts/audits/revenue_execution_master_plan/"
+  ],
+  "audit_source_file_counts": {
+    "master_inventory_claude": 16,
+    "master_inventory_codex": 12,
+    "revenue_execution_master_plan": 20
+  },
+  "output_directory": "artifacts/audits/canonical_roadmap/",
+  "output_files": [
+    "FROSTGATE_CANONICAL_ROADMAP.md",
+    "roadmap_manifest.json",
+    "EXECUTION_STATE.json"
+  ],
+  "execution_state_file": "artifacts/audits/canonical_roadmap/EXECUTION_STATE.json",
+  "execution_state_purpose": "Machine-readable current position in the roadmap. Single source of truth for agents, CI, dashboards, and autonomous planners. Update on every PR merge and gate transition.",
+  "output_file_hashes": {
+    "FROSTGATE_CANONICAL_ROADMAP.md": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483"
+  },
+  "roadmap_line_count": 1624,
+  "roadmap_sections": {
+    "mission_statement": "FrostGate Mission — 4 immutable properties; no PR may reduce any",
+    "section_1": "Executive Summary",
+    "section_2": "Audit Reconciliation — 12 topics, 3 audits reconciled",
+    "section_3": "Current Platform State — complete, partial, and missing capabilities",
+    "section_4": "Revenue Readiness Assessment — 10-step readiness table",
+    "section_5": "Capability Inventory — full module matrix",
+    "section_6": "Gap Analysis — 14 gaps with effort and risk",
+    "section_7": "Deterministic PR Roadmap — two-lane architecture, 8-KPI map, 62 PRs across 10 steps",
+    "revenue_gate_1": "Revenue Gate 1 — 12-item checklist before Phase 1+; exit condition: one paying client",
+    "revenue_gate_2": "Revenue Gate 2 — first MRR signed before Platform Expansion",
+    "section_8": "Expansion Backlog — deferred capabilities with triggering conditions",
+    "section_9": "Timeline to First Paying Customer — critical path, 3-4 week estimate",
+    "section_10": "Timeline to Sustainable MRR — 4-6 month estimate",
+    "section_11": "Timeline to Platform Leadership — 24-36 month estimate",
+    "section_12": "Risks to Revenue — 9 risks with mitigations",
+    "section_13": "Risks to Architecture — 7 structural risks",
+    "section_14": "Risks to Long-Term Vision — 7 strategic risks",
+    "section_15": "Final Recommended Execution Order — two-lane table with KPI column; Lane 1 before first invoice, Lane 1 before first MRR, Lane 2 expansion phases",
+    "section_16": "Customer Journey Map — 16 stages from cold lead to expansion, each with customer/Jason/software/revenue answers",
+    "section_17": "Anti-Drift Constitution — 10 permitted categories, explicit deferred list, 3-question adjudication, one override case",
+    "section_18": "Product Operating Metrics — north star (MRR), 16 leading indicators, metric-to-PR mapping, instrumentation minimum"
+  },
+  "files_reviewed_directly": [
+    "services/report_authority/engine.py",
+    "services/report_authority/statistics.py",
+    "services/connectors/runner.py",
+    "services/connectors/scheduler.py",
+    "api/rag_corpus_ingestion.py",
+    "apps/portal/app/assistant/page.tsx",
+    "apps/portal/app/remediation/page.tsx",
+    "apps/portal/app/reports/page.tsx",
+    "apps/portal/lib/portalApi.ts",
+    "api/field_assessment.py",
+    "services/billing/stripe_provider.py",
+    "services/subscriptions/engine.py",
+    "api/identity_authority/providers/entra_provider.py",
+    "api/report_exports.py",
+    "api/remediation.py",
+    "api/remediation_authority.py",
+    "api/config/startup_validation.py",
+    "api/provisioning_manager.py",
+    "services/cgin/trust.py",
+    "services/cgin/transparency/",
+    "services/trust_monitoring/monitoring_engine.py",
+    "ROADMAP.md",
+    "CLIENT_READINESS.md",
+    "authority_manifest.yaml"
+  ],
+  "pre_verified_facts": [
+    {
+      "id": "PVF-1",
+      "file": "services/report_authority/engine.py",
+      "line": 96,
+      "finding": "_PLACEHOLDER_COVERAGE: float = 0.5 — all five quality inputs (evidence_coverage, verification_coverage, freshness, confidence, completeness) assigned from this constant. Comment reads 'Real integration with evidence, verification, and remediation services happens later.'",
+      "verdict": "CONFIRMED — report quality scores are not real"
+    },
+    {
+      "id": "PVF-2",
+      "file": "services/connectors/runner.py",
+      "lines": "170-173",
+      "finding": "Returns mode: read-only-v1, polling: stub, subscription: stub for continuous monitoring connector runtime",
+      "verdict": "CONFIRMED — continuous monitoring is a stub"
+    },
+    {
+      "id": "PVF-3",
+      "file": "api/rag_corpus_ingestion.py",
+      "line": 1073,
+      "finding": "Returns HTTP 503 with message 'Retry ingestion is a planned capability and is not yet available.' and planned: true",
+      "verdict": "CONFIRMED — RAG retry-ingestion not operational"
+    },
+    {
+      "id": "PVF-4",
+      "file": "apps/portal/app/assistant/page.tsx",
+      "line": 72,
+      "finding": "const enabled = !!(eng.engagement_metadata as Record<string, unknown> | null)?.portal_ai_enabled — AI workspace requires manual flag set via API; no self-serve path, no operator UI",
+      "verdict": "CONFIRMED — AI workspace dark by default"
+    },
+    {
+      "id": "PVF-5",
+      "file": "apps/portal/app/remediation/page.tsx",
+      "finding": "635 lines of real code, imports portalApi.getRemediationRoadmap(), wired to backend",
+      "verdict": "CONFIRMED — portal remediation page is wired, NOT a placeholder (Claude audit was wrong)"
+    },
+    {
+      "id": "PVF-6",
+      "file": "apps/portal/lib/portalApi.ts",
+      "line": 446,
+      "finding": "return request('/field-assessment/engagements/${engagementId}/findings...') — findings endpoint confirmed wired",
+      "verdict": "CONFIRMED — portal findings page is wired, NOT no-backend (Claude audit was wrong)"
+    },
+    {
+      "id": "PVF-7",
+      "file": "api/field_assessment.py",
+      "line": 9629,
+      "finding": "/engagements/{engagement_id}/remediation-roadmap route confirmed present and implemented",
+      "verdict": "CONFIRMED — remediation roadmap backend endpoint exists"
+    },
+    {
+      "id": "PVF-8",
+      "git": "commit hash",
+      "finding": "PRs #536 (actor attribution) and #537 (Entra ID identity assurance / RS256+ES256) are merged — branch is clean",
+      "verdict": "CONFIRMED — Codex branch-contamination concern is resolved"
+    },
+    {
+      "id": "PVF-9",
+      "file": "api/identity_authority/providers/entra_provider.py",
+      "finding": "Full RS256/ES256 implementation present — NOT a stub. Merged as PR #537.",
+      "verdict": "CONFIRMED — Entra ID is fully implemented"
+    },
+    {
+      "id": "PVF-10",
+      "file": "api/report_exports.py",
+      "finding": "Real ReportLab PDF implementation — NOT pseudoformat. Merged as PR #534.",
+      "verdict": "CONFIRMED — PDF export is real"
+    },
+    {
+      "id": "PVF-11",
+      "file": "services/trust_monitoring/monitoring_engine.py",
+      "finding": "Returns {} and logs on error — fail-open behavior confirmed. TIM is silent on failure.",
+      "verdict": "CONFIRMED — trust monitoring is fail-open (Codex P1 finding)"
+    }
+  ],
+  "audit_disagreements_resolved": [
+    {
+      "id": "DR-1",
+      "topic": "Portal remediation page status",
+      "claude_audit": "Identified as placeholder-backed / not wired",
+      "codex_audit": "Ambiguous",
+      "repository_evidence": "apps/portal/app/remediation/page.tsx — 635 lines, real code, getRemediationRoadmap() wired to api/field_assessment.py:9629",
+      "resolution": "WIRED — Claude audit was wrong. Repository evidence is authoritative.",
+      "winner": "Repository evidence over all audits"
+    },
+    {
+      "id": "DR-2",
+      "topic": "Portal findings page status",
+      "claude_audit": "Identified as no-backend",
+      "codex_audit": "Not specifically flagged",
+      "repository_evidence": "apps/portal/lib/portalApi.ts:446 confirmed wired to real endpoint",
+      "resolution": "WIRED — Claude audit was wrong.",
+      "winner": "Repository evidence"
+    },
+    {
+      "id": "DR-3",
+      "topic": "First client journey first break",
+      "claude_audit": "AI assistant gate is first break (Step 16 of journey)",
+      "codex_audit": "Report quality placeholder is upstream first break",
+      "resolution": "Report quality placeholder (engine.py:96) is the first break — it affects the delivered artifact before the portal is even opened. AI gate is second break. Codex had the correct sequence.",
+      "winner": "Codex"
+    },
+    {
+      "id": "DR-4",
+      "topic": "Remediation split-brain",
+      "claude_audit": "Not identified",
+      "codex_audit": "Uniquely identified — api/remediation_authority.py (canonical, 24 routes) vs api/remediation.py (legacy, still active)",
+      "resolution": "Confirmed. Two active remediation subsystems with no formal canonical declaration. Codex unique finding incorporated as R-1 in canonical roadmap.",
+      "winner": "Codex (unique finding)"
+    },
+    {
+      "id": "DR-5",
+      "topic": "Branch cleanliness",
+      "claude_audit": "Did not flag",
+      "codex_audit": "Flagged dirty working tree with uncommitted actor-attribution files",
+      "resolution": "Codex concern was valid at time of audit. Resolved by subsequent merges — PRs #536 and #537 merged the in-progress work. Branch is now clean at audited commit.",
+      "winner": "Codex (raised correct concern; pre-spawn confirms resolved)"
+    },
+    {
+      "id": "DR-6",
+      "topic": "Entra ID / identity assurance status",
+      "claude_audit": "Listed as in-progress / open PR",
+      "codex_audit": "Flagged as open PR concern",
+      "resolution": "api/identity_authority/providers/entra_provider.py confirmed fully implemented. PR #537 merged. Not a stub.",
+      "winner": "Repository evidence (both audits stale at merge time)"
+    }
+  ],
+  "strategic_sequence": [
+    {"step": 1, "name": "Trust Chain Completion", "pr_prefix": "TC", "objective": "Complete evidence provenance persistence foundation — logic exists but durability layer incomplete"},
+    {"step": 2, "name": "Field Assessment Hardening", "pr_prefix": "FA", "objective": "First defensible commercial product — portable, certifiable, legally signed"},
+    {"step": 3, "name": "Customer Portal Activation", "pr_prefix": "P", "objective": "Client's daily compliance workspace — habit before subscription conversion"},
+    {"step": 4, "name": "Remediation Tracking MRR Engine", "pr_prefix": "R", "objective": "Second revenue stream — recurring monthly fee for immutable remediation audit trail"},
+    {"step": 5, "name": "AI Workspace Daily Use Layer", "pr_prefix": "AI", "objective": "Defensible AI-powered compliance with evidence-grounded answers"},
+    {"step": 6, "name": "Enterprise RAG", "pr_prefix": "RAG", "objective": "Customer document corpus — more documents = smarter AI = deeper moat"},
+    {"step": 7, "name": "Continuous Monitoring", "pr_prefix": "CM", "objective": "First real connector polling path — unlocks continuous monitoring MRR tier"},
+    {"step": 8, "name": "CGIN Competitive Moat", "pr_prefix": "CG", "objective": "Cross-tenant benchmark intelligence — visible to customers, compounds with scale"},
+    {"step": 9, "name": "Autonomous Governance", "pr_prefix": "AG", "objective": "Self-directing governance recommendations — requires proven trust chain"},
+    {"step": 10, "name": "AGI-Scale Governance", "pr_prefix": "GS", "objective": "Strategic moat — requires 10+ clients and multi-person team"}
+  ],
+  "phase_0_prs": [
+    {"id": "TC-0", "title": "Assert critical production keys at startup", "size": "XS", "risk": "VERY LOW", "deps": [], "file": "api/config/startup_validation.py", "days": 0.25},
+    {"id": "R-1", "title": "Declare remediation authority canonical; mark api/remediation.py non-canonical", "size": "XS", "risk": "LOW", "deps": [], "files": ["authority_manifest.yaml", "api/remediation.py", "services/remediation/__init__.py"], "days": 0.25},
+    {"id": "TC-1", "title": "Evidence provenance foundation (PR 417)", "size": "M", "risk": "MEDIUM", "deps": ["TC-0"], "days": 3},
+    {"id": "TC-7", "title": "Wire report quality to real evidence sources", "size": "M", "risk": "MEDIUM", "deps": ["TC-1"], "files": ["services/report_authority/engine.py", "services/report_authority/statistics.py"], "days": "3-5"},
+    {"id": "TC-2", "title": "Full chain replay verification", "size": "M", "risk": "MEDIUM", "deps": ["TC-1"], "days": 2},
+    {"id": "TC-3", "title": "Evidence authority foundation", "size": "M", "risk": "MEDIUM", "deps": ["TC-2"], "days": 2},
+    {"id": "FA-1", "title": "Validate all portal pages with live engagement data", "size": "S", "risk": "LOW", "deps": ["TC-7"], "days": 1},
+    {"id": "FA-2", "title": "Connector credential pre-flight validation", "size": "S", "risk": "LOW", "deps": [], "days": 1},
+    {"id": "P-1", "title": "Bind provisioning completion to portal activation deterministically", "size": "S", "risk": "LOW", "deps": ["TC-7", "R-1"], "files": ["api/provisioning_manager.py", "apps/portal/app/page.tsx"], "days": "1-2"},
+    {"id": "P-2", "title": "Auto-enable AI assistant on QA approval (remove manual gate)", "size": "S", "risk": "LOW", "deps": [], "files": ["apps/portal/app/assistant/page.tsx", "api/field_assessment.py"], "days": "1-2"},
+    {"id": "R-2", "title": "Validate portal remediation routing with live data", "size": "S", "risk": "LOW", "deps": ["R-1"], "days": 1}
+  ],
+  "current_phase": "Phase 0",
+  "phase_0_entry_criteria": "Branch clean (PRs #536, #537 merged). Production live. ROADMAP.md Phase 0 infrastructure tasks 1.1-18.6 complete.",
+  "phase_0_exit_criteria": "TC-7 merged (report quality placeholder fixed). R-1 merged (remediation canonical declared). P-1 merged (provisioning bind deterministic). H1-H18 dry run completed. First client identified.",
+  "proceed_to_execution": true,
+  "proceed_verdict": "PROCEED — first client can be booked today with manual workarounds. TC-7 must ship before first invoice is issued.",
+  "first_client_readiness": "READY WITH CONDITIONS",
+  "first_client_conditions": [
+    "TC-7: Report quality placeholder must be replaced before first invoice",
+    "TC-0: Startup key assertions must be added",
+    "H1-H18 dry run must be completed",
+    "Anthropic API credit balance must be verified (last confirmed $3.50 on 2026-05-31 — may be depleted)",
+    "Railway Hobby plan headroom (CLIENT_READINESS A10 unchecked) must be verified"
+  ],
+  "stop_doing": [
+    "New work in services/governance_orchestration/ (21 files — Phase 5, requires client scale)",
+    "New work in services/governance_simulation/ (14 files — Phase 5)",
+    "New work in services/governance_digital_twin/ (Phase 6, requires 10+ clients)",
+    "New work in services/governance_learning/ (Year 3 capability)",
+    "New work in services/governance_optimization/ (requires data at scale)",
+    "New work in services/governance_adaptive_intelligence/ (requires cross-tenant data set)",
+    "Extending services/ai_plane_extension/ before live call path is confirmed end-to-end",
+    "New CI test lanes before team exceeds 3 engineers",
+    "FedRAMP planning before govcon client signs letter of intent",
+    "PCI DSS playbook before PCI client identified",
+    "SAML before client 5",
+    "Trust-chain depth beyond TC-7 before first invoice",
+    "Report Authority complexity beyond placeholder fix",
+    "/_debug/routes public endpoint — remove immediately (information disclosure)"
+  ],
+  "critical_unknowns": [
+    "Production AI call path — which of services/ai/* or services/ai_plane_extension/ handles live production chat (dead-symbol census flagged 403 symbols)",
+    "Whether remediation-roadmap endpoint returns populated data for real engagements (not tested with live data)",
+    "Whether reportlab is installed in Railway production environment",
+    "Whether MINISIGN_SECRET_KEY is set in Railway production",
+    "Whether FG_BILLING_EVIDENCE_HMAC_KEY is set in Railway production",
+    "Whether Anthropic API credit balance is still sufficient as of 2026-07-13 (last confirmed $3.50 on 2026-05-31)",
+    "Whether portal AI assistant returns grounded evidence-based answers or generic Anthropic responses",
+    "Which report system (field_assessment or report_authority) the portal reads from for report delivery"
+  ],
+  "commercial_readiness_scores": {
+    "assessment_delivery": 7,
+    "report_defensibility": 5,
+    "portal_usability": 6,
+    "remediation_workflow": 6,
+    "ai_workspace_readiness": 5,
+    "rag_operational_completeness": 4,
+    "subscription_billing_activation": 3,
+    "identity_and_security": 7,
+    "continuous_monitoring_credibility": 2,
+    "operational_independence": 2,
+    "moat_visibility_to_customer": 3,
+    "overall_weighted": 5.25
+  },
+  "score_progression": {
+    "ship_tc7": {"delta": "+1.0", "projected_score": 6.1, "explanation": "Report Defensibility 5→8, Assessment Delivery 7→8.5"},
+    "ship_p2_validate_portal": {"delta": "+0.7", "projected_score": 6.8, "explanation": "Portal Usability 6→8, AI Workspace 5→7"},
+    "ship_r1_self_serve_subscription": {"delta": "+0.5", "projected_score": 7.3, "explanation": "Remediation 6→7.5, Subscription 3→6"},
+    "ship_rag_retry_connector_polling": {"delta": "+0.6", "projected_score": 7.9, "explanation": "RAG 4→7, Monitoring 2→6"},
+    "ship_conversation_history_soc2_start": {"delta": "+0.5", "projected_score": 8.4, "explanation": "AI Workspace 7→8.5, Identity/Security 7→8"}
+  },
+  "revenue_targets": {
+    "first_invoice": "$5,000-$15,000 for NIST AI RMF assessment",
+    "remediation_mrr": "$300-$800/month per client",
+    "first_mrr_contract": "$500-$2,000/month",
+    "phase_5_arr": "$25,000-$100,000 ARR (5 clients)",
+    "phase_6_arr": "$250,000-$1,000,000 ARR (10 enterprise clients)",
+    "phase_7_arr": "Enterprise moat tier $8,000-$20,000/month with compounding data advantage"
+  },
+  "assumptions": [
+    "Audited commit f70cccc29c6d28c3c012f8dcdc96dbe0bf8bd25e is the baseline; all file-level findings are relative to this commit",
+    "PRs #536 and #537 are merged and branch is clean — confirmed via git log",
+    "ROADMAP.md Phase 0 infrastructure tasks 1.1-18.6 are complete per living roadmap",
+    "Railway Hobby plan is current deployment environment",
+    "Stripe is the billing provider",
+    "Auth0 OIDC is the console auth provider; HMAC-SHA256 portal sessions for client auth",
+    "Anthropic API is the LLM provider for AI workspace"
+  ],
+  "limitations": [
+    "Dead-symbol census identified 403 symbols across multiple modules that could not be verified as live — production call paths for AI dispatch are unconfirmed",
+    "Trust chain architecture was built top-down (logic layer 1.6A-1.8A before persistence 1.1-1.6) — TC-1 through TC-6 are required to complete the durability layer",
+    "Continuous monitoring connector runtime is fully stubbed — cannot pitch automated continuous monitoring before PR-8/CM-1 ships",
+    "No live engagement data validation was performed — portal pages confirmed wired but not tested with real client data",
+    "Anthropic credit balance was $3.50 on 2026-05-31 — current balance unknown"
+  ],
+  "manifest_version": "1.1",
+  "manifest_changelog": [
+    {"version": "1.0", "date": "2026-07-13", "changes": "Initial manifest — sections 1-15"},
+    {"version": "1.1", "date": "2026-07-14", "changes": "Added mission statement, two-lane architecture, Revenue Gates 1-2, KPI map, Section 16 (Customer Journey Map), Section 17 (Anti-Drift Constitution), Section 18 (Product Operating Metrics)"}
+  ],
+  "north_star_metric": "Monthly Recurring Revenue (MRR)",
+  "leading_indicators": [
+    "assessments_completed",
+    "proposal_conversion_pct",
+    "assessment_duration_days",
+    "portal_activation_pct",
+    "portal_weekly_active_users",
+    "ai_conversations_per_tenant_per_week",
+    "evidence_uploaded_per_engagement",
+    "remediation_tasks_created",
+    "remediation_completion_pct",
+    "subscription_conversion_pct",
+    "average_revenue_per_client",
+    "client_retention",
+    "nps",
+    "time_to_first_value_days",
+    "time_proposal_to_invoice_days",
+    "time_delivery_to_subscription_days"
+  ],
+  "mission_properties": [
+    "Every assessment becomes institutional memory",
+    "Every remediation becomes organizational improvement",
+    "Every interaction increases customer switching cost",
+    "Every client increases the intelligence of the platform"
+  ],
+  "revenue_gates": {
+    "gate_1": {
+      "description": "Before Phase 1+ work begins",
+      "items": 12,
+      "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened"
+    },
+    "gate_2": {
+      "description": "Before Platform Expansion begins",
+      "exit_condition": "First MRR contract signed, Stripe subscription active"
+    }
+  },
+  "two_lane_summary": {
+    "lane_1_before_invoice": ["TC-0", "R-1", "TC-1", "TC-7", "TC-2", "TC-3", "TC-4", "FA-1", "FA-2", "P-1", "P-2", "R-2"],
+    "lane_1_before_mrr": ["TC-IDENTITY", "P-3", "P-4", "AI-1"],
+    "lane_2_expansion": ["TC-5", "TC-6", "TC-8", "FA-3", "P-5", "P-6", "R-3", "R-4", "R-5", "R-6", "AI-2", "AI-3", "AI-4", "AI-5", "AI-6", "AI-7", "AI-8", "RAG-1", "RAG-2", "RAG-3", "RAG-4", "RAG-5", "RAG-6", "CM-1", "CM-2", "CM-3", "CM-4", "CM-5", "CM-6", "CGIN-1", "CGIN-2", "CGIN-3", "CGIN-4", "AG-1", "AG-2", "AG-3", "AGI-1", "AGI-2", "AGI-3"]
+  },
+  "generated_by": "Claude Sonnet 4.6 — revenue_execution_master_plan + canonical_roadmap synthesis"
+}
