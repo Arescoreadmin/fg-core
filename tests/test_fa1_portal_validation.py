@@ -24,7 +24,14 @@ from fastapi.testclient import TestClient
 
 _TENANT = "tenant-fa1-validation"
 
-_REPORT_FIELDS = {"report_id", "version", "status", "compiled_at", "compiled_by", "report_type"}
+_REPORT_FIELDS = {
+    "report_id",
+    "version",
+    "status",
+    "compiled_at",
+    "compiled_by",
+    "report_type",
+}
 _QR_FIELDS = {"id", "framework", "framework_version", "status", "responses"}
 
 
