@@ -3,7 +3,7 @@
   "execution_state_version": "1.1",
   "roadmap_version": "1.1",
   "last_updated": "2026-07-14",
-  "audited_commit": "71339c1cdd86184c22f34cb44c5c1cb888879800",
+  "audited_commit": "6410d9dd",
 
   "integrity": {
     "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
@@ -19,28 +19,31 @@
     "current_step": 1,
     "current_step_name": "Trust Chain Completion",
     "current_focus": "First Paying Client",
-    "current_pr": "TC-0",
-    "current_pr_title": "Assert production keys at startup",
-    "current_pr_size": "XS",
-    "current_pr_kpi": "Billing Integrity",
-    "current_pr_file": "api/config/startup_validation.py",
-    "current_pr_days_estimate": 0.25,
-    "parallelizable_now": ["R-1"],
-    "unblocked_now": ["TC-0", "R-1", "FA-2", "P-2"],
-    "next_pr": "TC-1",
-    "next_pr_title": "Evidence provenance foundation (PR 417)",
-    "next_pr_deps": ["TC-0"],
+    "last_completed_pr": "TC-0",
+    "last_completed_pr_title": "Assert production keys at startup (#539)",
+    "current_pr": "TC-1",
+    "current_pr_title": "Evidence provenance foundation (PR 417)",
+    "current_pr_size": "S",
+    "current_pr_kpi": "Report Defensibility",
+    "current_pr_file": null,
+    "current_pr_days_estimate": null,
+    "current_pr_deps": ["TC-0"],
+    "parallelizable_now": ["R-1", "FA-2", "P-2"],
+    "unblocked_now": ["TC-1", "R-1", "FA-2", "P-2"],
+    "next_pr": "TC-7",
+    "next_pr_title": "Wire report quality scores to real evidence sources",
+    "next_pr_deps": [],
     "next_pr_kpi": "Report Defensibility"
   },
 
   "gate": {
     "id": "Revenue Gate 1",
     "total": 12,
-    "cleared": 0,
-    "completion": "0/12",
+    "cleared": 1,
+    "completion": "1/12",
     "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened",
     "items": {
-      "G1.1_startup_keys_asserted": false,
+      "G1.1_startup_keys_asserted": true,
       "G1.2_provenance_foundation_durable": false,
       "G1.3_report_quality_real": false,
       "G1.4_remediation_canonical": false,
@@ -147,6 +150,14 @@
   ],
 
   "recent_execution": [
+    {
+      "pr": "#539",
+      "title": "feat(trust-chain): assert MINISIGN_SECRET_KEY at startup (TC-0)",
+      "merged_at": "2026-07-14",
+      "gate_items_cleared": ["G1.1_startup_keys_asserted"],
+      "kpi": "Billing Integrity",
+      "note": "Both FG_BILLING_EVIDENCE_HMAC_KEY (pre-existing) and MINISIGN_SECRET_KEY (this PR) now raise RuntimeError at startup if absent in production. G1.1 cleared. Unblocks TC-1."
+    },
     {
       "pr": "#537",
       "title": "feat(identity): Entra ID identity assurance — RS256/ES256, 8-level ladder, 0-100 score",
