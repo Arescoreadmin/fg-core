@@ -1,5 +1,43 @@
 # PR Fix Log (Strict)
 
+## FA-1 — feat(portal): validate portal pages with live engagement data
+
+**Branch:** `feat/fa-1-portal-page-validation`
+**Date:** 2026-07-14
+
+### Purpose
+
+Clears Revenue Gate 1 item G1.5 (`portal_pages_live_validated`). Fixes the
+broken `asset_name` binding on the attestation page (backend returned `name`,
+portal TypeScript expected `asset_name`) and adds owner attestation data to the
+`GET /governance/assets` response so the portal due-date filter works correctly.
+
+### Changes
+
+1. `feat: api/governance_assets.py` — `AssetResponse` gains `asset_name: str`
+   (populated from `a.name`), plus `last_attested_at`, `next_attestation_due`,
+   `owner_email` (nullable, populated by batch owner lookup in `list_assets`).
+   `_asset_out` gains optional `GaAssetOwner` parameter. `list_assets` batch-
+   fetches one owner per asset after the registry query and passes it through.
+
+2. `test: tests/test_fa1_portal_validation.py` — 5 acceptance tests via
+   `TestClient`: FA1-1 (`asset_name` populated), FA1-2 (owner fields when owner
+   assigned), FA1-3 (owner fields null when no owner), FA1-4 (reports list shape
+   compatible with `ReportVersionSummary`), FA1-5 (questionnaires list shape
+   compatible with `Questionnaire`).
+
+3. `fix: BLUEPRINT_STAGED.md`, `CONTRACT.md` — Updated `Contract-Authority-SHA256`
+   to reflect new fields in the generated OpenAPI contract.
+
+### Validation gates passed
+
+- `ruff check` + `ruff format` — clean
+- `mypy` — no issues
+- `fg-fast` — green (contract, lint, test budget)
+- 5/5 FA-1 acceptance tests pass
+
+---
+
 ## TC-7 — feat(report-quality): wire quality scores to real FA evidence sources
 
 **Branch:** `feat/tc-7-report-quality-real`
