@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_scopes
 from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
+from services.field_assessment.audit import audit_atomicity_svc
 from services.portal_grant_service import portal_grant_svc
 from services.provisioning import (
     ComplianceClassification,
@@ -175,8 +176,8 @@ class CompleteWorkflowRequest(BaseModel):
     validation_results: dict[str, Any] = Field(default_factory=dict)
     # When both are provided, a portal grant is automatically issued at completion.
     # The raw_secret is returned in the response exactly once — store it immediately.
-    client_id: Optional[str] = Field(default=None, max_length=256)
-    engagement_id: Optional[str] = Field(default=None, max_length=256)
+    client_id: Optional[str] = Field(default=None, max_length=255)
+    engagement_id: Optional[str] = Field(default=None, max_length=64)
 
     @field_validator("validation_results")
     @classmethod
@@ -625,6 +626,22 @@ def complete_workflow(
                 client_id=body.client_id,
                 engagement_id=body.engagement_id,
                 created_by=actor,
+            )
+            audit_atomicity_svc.emit(
+                db,
+                tenant_id=_grant_tenant,
+                engagement_id=body.engagement_id,
+                event_type="portal_grant.created",
+                actor=actor,
+                actor_type="provisioning_workflow",
+                reason_code="PORTAL_GRANT_AUTO_PROVISIONED",
+                entity_type="portal_grant",
+                entity_id=portal_grant_result.grant.id,
+                payload={
+                    "grant_id": portal_grant_result.grant.id,
+                    "client_id": body.client_id,
+                    "provisioning_id": provisioning_id,
+                },
             )
         db.commit()
     except ProvisioningStoreError as exc:
