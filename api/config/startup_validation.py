@@ -281,6 +281,7 @@ class StartupValidator:
         self._check_connectors_router_wiring(report)
         self._check_report_signing_key(report)
         self._check_billing_hmac_key(report)
+        self._check_minisign_key(report)
 
         return report
 
@@ -1128,6 +1129,27 @@ class StartupValidator:
                 name="billing_hmac_key",
                 passed=True,
                 message="Billing evidence HMAC key configured.",
+                severity="info",
+            )
+
+    def _check_minisign_key(self, report: StartupValidationReport) -> None:
+        minisign_key = _env_str("MINISIGN_SECRET_KEY", "")
+        if not minisign_key:
+            report.add(
+                name="minisign_secret_key_missing",
+                passed=False,
+                message=(
+                    "MINISIGN_SECRET_KEY is not set. "
+                    "Evidence artifact signing will fail at call time. "
+                    "Configure this key in Railway production environment variables."
+                ),
+                severity="error" if self.is_production else "warning",
+            )
+        else:
+            report.add(
+                name="minisign_secret_key",
+                passed=True,
+                message="Minisign secret key configured.",
                 severity="info",
             )
 
