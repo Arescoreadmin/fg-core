@@ -3,7 +3,7 @@
   "execution_state_version": "1.1",
   "roadmap_version": "1.1",
   "last_updated": "2026-07-14",
-  "audited_commit": "6fbb2a75034537cbda89bf5198cf4edff6ee00fc",
+  "audited_commit": "6d9c0767fa15259e516dd947dd4d312f35791e23",
 
   "integrity": {
     "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
@@ -19,35 +19,35 @@
     "current_step": 1,
     "current_step_name": "Trust Chain Completion",
     "current_focus": "First Paying Client",
-    "last_completed_pr": "TC-7",
-    "last_completed_pr_title": "Wire report quality scores to real evidence sources (#540)",
-    "current_pr": "FA-1",
-    "current_pr_title": "Portal page validation with live engagement data",
+    "last_completed_pr": "FA-1",
+    "last_completed_pr_title": "Portal page validation with live engagement data",
+    "current_pr": "P-1",
+    "current_pr_title": "Provisioning to portal activation is deterministic",
     "current_pr_size": "M",
     "current_pr_kpi": "Portal Activation",
     "current_pr_file": null,
     "current_pr_days_estimate": null,
-    "current_pr_deps": ["TC-7"],
-    "parallelizable_now": ["R-1", "FA-2", "P-2", "P-1"],
-    "unblocked_now": ["FA-1", "R-1", "FA-2", "P-2", "P-1"],
-    "next_pr": "P-1",
-    "next_pr_title": "Provisioning to portal activation is deterministic",
+    "current_pr_deps": [],
+    "parallelizable_now": ["R-1", "FA-2", "P-2"],
+    "unblocked_now": ["P-1", "R-1", "FA-2", "P-2"],
+    "next_pr": "R-1",
+    "next_pr_title": "Remediation authority canonical (retire legacy api/remediation.py)",
     "next_pr_deps": [],
-    "next_pr_kpi": "Portal Activation"
+    "next_pr_kpi": "Remediation MRR"
   },
 
   "gate": {
     "id": "Revenue Gate 1",
     "total": 12,
-    "cleared": 3,
-    "completion": "3/12",
+    "cleared": 4,
+    "completion": "4/12",
     "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened",
     "items": {
       "G1.1_startup_keys_asserted": true,
       "G1.2_provenance_foundation_durable": true,
       "G1.3_report_quality_real": true,
       "G1.4_remediation_canonical": false,
-      "G1.5_portal_pages_live_validated": false,
+      "G1.5_portal_pages_live_validated": true,
       "G1.6_credential_preflight_operational": false,
       "G1.7_ai_auto_enable_on_qa": false,
       "G1.8_provisioning_deterministic": false,
@@ -150,6 +150,14 @@
   ],
 
   "recent_execution": [
+    {
+      "pr": "FA-1",
+      "title": "feat(portal): FA-1 — validate portal pages with live engagement data",
+      "merged_at": "2026-07-14",
+      "gate_items_cleared": ["G1.5_portal_pages_live_validated"],
+      "kpi": "Portal Activation",
+      "note": "Fixes asset_name broken binding on attestation page (AssetResponse.name vs GovernanceAsset.asset_name in TS). Adds last_attested_at, next_attestation_due, owner_email to GET /governance/assets via batch GaAssetOwner lookup in list_assets handler. 5 acceptance tests (FA1-1 through FA1-5). G1.5 cleared."
+    },
     {
       "pr": "#540",
       "title": "feat(report-authority): TC-7 — replace placeholder quality scores with live evidence metrics",
