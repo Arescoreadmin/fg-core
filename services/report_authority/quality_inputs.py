@@ -9,10 +9,16 @@ Returns five floats in [0.0, 1.0]. Falls back to 0.0 on empty engagement.
 
 Metric definitions
 ------------------
-evidence_coverage   Breadth: distinct evidence-linked entities / findings.
+evidence_coverage   Breadth: distinct finding-linked entities / findings.
+                    Scoped to source_entity_type IN ('finding', 'normalized_finding')
+                    so workflow/observation links do not inflate the score.
                     "How many findings have at least one piece of evidence?"
 
-verification_coverage  Depth: approved provenance rows / total provenance rows.
+verification_coverage  Depth: approved head records / total head records.
+                       Head = event_hash not referenced as any row's previous_hash.
+                       Counts per provenance chain, not per raw row, so a single
+                       reviewed item counts as 1/1 even though mark_provenance_reviewed
+                       appended a second row to the chain.
                        "How much of the collected evidence has been reviewed?"
 
 freshness           Recency: average exponential decay across provenance
@@ -31,7 +37,7 @@ from __future__ import annotations
 import math
 from datetime import datetime, timezone
 
-from sqlalchemy import distinct, func
+from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from api.db_models_field_assessment import (
@@ -78,6 +84,7 @@ def _evidence_coverage(db: Session, tenant_id: str, engagement_id: str) -> float
         .filter(
             FaEvidenceLink.tenant_id == tenant_id,
             FaEvidenceLink.engagement_id == engagement_id,
+            FaEvidenceLink.source_entity_type.in_(("finding", "normalized_finding")),
         )
         .scalar()
         or 0
@@ -86,12 +93,23 @@ def _evidence_coverage(db: Session, tenant_id: str, engagement_id: str) -> float
 
 
 def _verification_coverage(db: Session, tenant_id: str, engagement_id: str) -> float:
+    # Head records: rows whose event_hash is not referenced as any other row's
+    # previous_hash. mark_provenance_reviewed appends a new approved row and
+    # leaves the original pending row untouched; counting all rows would
+    # understate coverage (1 reviewed item → 1/2 instead of 1/1).
+    superseded_hashes = select(FaEvidenceProvenance.previous_hash).where(
+        FaEvidenceProvenance.tenant_id == tenant_id,
+        FaEvidenceProvenance.engagement_id == engagement_id,
+        FaEvidenceProvenance.previous_hash.isnot(None),
+    )
+    head_filter = [
+        FaEvidenceProvenance.tenant_id == tenant_id,
+        FaEvidenceProvenance.engagement_id == engagement_id,
+        FaEvidenceProvenance.event_hash.not_in(superseded_hashes),
+    ]
     total = (
         db.query(func.count(FaEvidenceProvenance.id))
-        .filter(
-            FaEvidenceProvenance.tenant_id == tenant_id,
-            FaEvidenceProvenance.engagement_id == engagement_id,
-        )
+        .filter(*head_filter)
         .scalar()
         or 0
     )
@@ -99,11 +117,7 @@ def _verification_coverage(db: Session, tenant_id: str, engagement_id: str) -> f
         return 0.0
     approved = (
         db.query(func.count(FaEvidenceProvenance.id))
-        .filter(
-            FaEvidenceProvenance.tenant_id == tenant_id,
-            FaEvidenceProvenance.engagement_id == engagement_id,
-            FaEvidenceProvenance.review_status == "approved",
-        )
+        .filter(*head_filter, FaEvidenceProvenance.review_status == "approved")
         .scalar()
         or 0
     )

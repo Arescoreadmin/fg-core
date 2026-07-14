@@ -196,6 +196,40 @@ def test_QI_2_evidence_coverage_positive_when_links_present(seeded_db: Session):
     assert cov > 0.0
 
 
+def test_QI_2c_evidence_coverage_ignores_non_finding_links(db: Session):
+    """A workflow link must not inflate evidence_coverage for an unevidenced finding.
+
+    attach_workflow_evidence stores links with source_entity_type='workflow'.
+    One workflow link + one finding with no evidence should give coverage = 0.0,
+    not 1/1 = 1.0.
+    """
+    now = _now_iso()
+    _add_engagement(db, _ENG, now)
+    _add_finding(db, _ENG, confidence=80, now=now)
+
+    # Workflow link — source is a workflow entity, not a finding
+    lid = _uid()
+    db.add(
+        FaEvidenceLink(
+            id=lid,
+            tenant_id=_TENANT,
+            engagement_id=_ENG,
+            source_entity_type="workflow",
+            source_entity_id=_uid(),
+            evidence_entity_type="document_analysis",
+            evidence_entity_id=_uid(),
+            link_metadata={},
+            created_at=now,
+            schema_version="1.0",
+            lifecycle_state="collected",
+        )
+    )
+    db.commit()
+
+    cov, _, _, _, _ = compute_quality_inputs(db, tenant_id=_TENANT, engagement_id=_ENG)
+    assert cov == 0.0
+
+
 # ---------------------------------------------------------------------------
 # QI-3: verification_coverage = 0.0 when no provenance
 # ---------------------------------------------------------------------------
@@ -227,6 +261,72 @@ def test_QI_4b_verification_coverage_zero_when_only_pending(db: Session):
 
     _, vc, _, _, _ = compute_quality_inputs(db, tenant_id=_TENANT, engagement_id=_ENG)
     assert vc == 0.0
+
+
+def test_QI_4c_verification_coverage_counts_chain_not_rows(db: Session):
+    """A pending→approved chain (2 rows) is 1 head record, not 2.
+
+    mark_provenance_reviewed appends an approved row with previous_hash set to
+    the prior event_hash. Without the head-record filter, coverage would be
+    reported as 1/2 (0.5) instead of 1/1 (1.0).
+    """
+    import hashlib as _hl
+
+    now = _now_iso()
+    _add_engagement(db, _ENG, now)
+
+    # Row 1: pending (chain root)
+    pid1 = _uid()
+    h1 = _hl.sha256(pid1.encode()).hexdigest()
+    db.add(
+        FaEvidenceProvenance(
+            id=pid1,
+            tenant_id=_TENANT,
+            engagement_id=_ENG,
+            source_type="document",
+            collected_by_type="assessor",
+            collected_at=now,
+            collection_method="manual",
+            collection_context_json={},
+            trust_level="unverified",
+            review_status="pending",
+            chain_status="active",
+            used_in_report_ids=[],
+            previous_hash=None,
+            event_hash=h1,
+            created_at=now,
+            schema_version="1.0",
+        )
+    )
+
+    # Row 2: approved (child of row 1, as mark_provenance_reviewed would produce)
+    pid2 = _uid()
+    h2 = _hl.sha256(pid2.encode()).hexdigest()
+    db.add(
+        FaEvidenceProvenance(
+            id=pid2,
+            tenant_id=_TENANT,
+            engagement_id=_ENG,
+            source_type="document",
+            collected_by_type="assessor",
+            collected_at=now,
+            collection_method="manual",
+            collection_context_json={},
+            trust_level="unverified",
+            review_status="approved",
+            chain_status="active",
+            used_in_report_ids=[],
+            previous_hash=h1,  # links back to row 1
+            event_hash=h2,
+            created_at=now,
+            schema_version="1.0",
+        )
+    )
+    db.commit()
+
+    _, vc, _, _, _ = compute_quality_inputs(db, tenant_id=_TENANT, engagement_id=_ENG)
+    # Head record count = 1 (row 2 only); approved head count = 1 → vc = 1.0
+    assert vc == 1.0
 
 
 # ---------------------------------------------------------------------------
