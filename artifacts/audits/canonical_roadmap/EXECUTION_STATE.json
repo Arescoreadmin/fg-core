@@ -3,7 +3,7 @@
   "execution_state_version": "1.1",
   "roadmap_version": "1.1",
   "last_updated": "2026-07-14",
-  "audited_commit": "6410d9dd",
+  "audited_commit": "75f9936a",
 
   "integrity": {
     "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
@@ -19,32 +19,32 @@
     "current_step": 1,
     "current_step_name": "Trust Chain Completion",
     "current_focus": "First Paying Client",
-    "last_completed_pr": "TC-0",
-    "last_completed_pr_title": "Assert production keys at startup (#539)",
-    "current_pr": "TC-1",
-    "current_pr_title": "Evidence provenance foundation (PR 417)",
+    "last_completed_pr": "TC-1",
+    "last_completed_pr_title": "Evidence provenance foundation (already shipped in prior PRs)",
+    "current_pr": "TC-7",
+    "current_pr_title": "Wire report quality scores to real evidence sources",
     "current_pr_size": "S",
     "current_pr_kpi": "Report Defensibility",
     "current_pr_file": null,
     "current_pr_days_estimate": null,
-    "current_pr_deps": ["TC-0"],
+    "current_pr_deps": [],
     "parallelizable_now": ["R-1", "FA-2", "P-2"],
-    "unblocked_now": ["TC-1", "R-1", "FA-2", "P-2"],
-    "next_pr": "TC-7",
-    "next_pr_title": "Wire report quality scores to real evidence sources",
-    "next_pr_deps": [],
-    "next_pr_kpi": "Report Defensibility"
+    "unblocked_now": ["TC-7", "R-1", "FA-2", "P-2"],
+    "next_pr": "FA-1",
+    "next_pr_title": "Portal page validation with live engagement data",
+    "next_pr_deps": ["TC-7"],
+    "next_pr_kpi": "Portal Activation"
   },
 
   "gate": {
     "id": "Revenue Gate 1",
     "total": 12,
-    "cleared": 1,
-    "completion": "1/12",
+    "cleared": 2,
+    "completion": "2/12",
     "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened",
     "items": {
       "G1.1_startup_keys_asserted": true,
-      "G1.2_provenance_foundation_durable": false,
+      "G1.2_provenance_foundation_durable": true,
       "G1.3_report_quality_real": false,
       "G1.4_remediation_canonical": false,
       "G1.5_portal_pages_live_validated": false,
@@ -150,6 +150,14 @@
   ],
 
   "recent_execution": [
+    {
+      "pr": "TC-1",
+      "title": "Evidence provenance foundation (shipped in prior PRs — confirmed complete 2026-07-14)",
+      "merged_at": "2026-07-14",
+      "gate_items_cleared": ["G1.2_provenance_foundation_durable"],
+      "kpi": "Report Defensibility",
+      "note": "TC-1 spec (fa_evidence_provenance table, append-only RLS+triggers, provenance service, 22 tests) confirmed fully implemented in services/field_assessment/evidence_provenance.py and migrations/postgres/0105_fa_evidence_provenance.sql. No new PR needed. G1.2 cleared."
+    },
     {
       "pr": "#539",
       "title": "feat(trust-chain): assert MINISIGN_SECRET_KEY at startup (TC-0)",

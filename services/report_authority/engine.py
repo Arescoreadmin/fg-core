@@ -10,11 +10,11 @@ All mutating operations follow the pattern:
   4. Write the audit event (always, never skipped)
   5. Return schema object (never raw ORM)
 
-The engine never exposes raw ORM rows. Real integration with evidence, control,
-verification, and remediation services happens later — placeholder scores of 0.5
-are used for now per the integration contract.
+The engine never exposes raw ORM rows. Quality scores are derived from live
+FA evidence data via quality_inputs.py (evidence links, provenance, findings).
 
-No imports from services outside this package — coupling is explicit.
+No imports from services outside this package — quality_inputs.py is the
+explicit coupling point to FA DB models.
 """
 
 from __future__ import annotations
@@ -59,6 +59,7 @@ from services.report_authority.schemas import (
     VersionComparisonResponse,
     VerifyReportRequest,
 )
+from services.report_authority.quality_inputs import compute_quality_inputs
 from services.report_authority.statistics import compute_quality_score
 from services.report_authority.validators import (
     validate_report_request,
@@ -90,10 +91,6 @@ def _report_ref(tenant_id: str, report_id: str) -> str:
 def _initial_version() -> str:
     """Return the canonical initial version string for a new report."""
     return str(ReportVersion(major=1, minor=0, patch=0))
-
-
-# Placeholder coverage values — replaced by real integration in a later PR.
-_PLACEHOLDER_COVERAGE: float = 0.5
 
 
 def _build_report_response(row: FaReport) -> ReportResponse:
@@ -180,8 +177,8 @@ class ReportAuthorityEngine:
         """Create and 'generate' a report from a GenerateReportRequest.
 
         State progression: DRAFT → GENERATING → GENERATED.
-        Quality scores are computed from placeholder data until real
-        integration with Evidence/Verification/Control authorities is wired.
+        Quality scores are derived from live FA evidence data (evidence links,
+        provenance review status, finding confidence scores).
         Hashes are computed over the canonical report payload.
         """
         validate_report_request(request)
@@ -190,12 +187,18 @@ class ReportAuthorityEngine:
         now = _now()
         version = _initial_version()
 
-        # Compute placeholder quality scores
-        evidence_coverage = _PLACEHOLDER_COVERAGE
-        verification_coverage = _PLACEHOLDER_COVERAGE
-        freshness = _PLACEHOLDER_COVERAGE
-        confidence = _PLACEHOLDER_COVERAGE
-        completeness = _PLACEHOLDER_COVERAGE
+        # Derive quality inputs from live FA evidence data
+        (
+            evidence_coverage,
+            verification_coverage,
+            freshness,
+            confidence,
+            completeness,
+        ) = compute_quality_inputs(
+            db=self._db,
+            tenant_id=self._tenant_id,
+            engagement_id=request.assessment_id,
+        )
 
         quality_score, quality_grade = compute_quality_score(
             evidence_coverage=evidence_coverage,

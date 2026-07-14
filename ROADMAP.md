@@ -286,7 +286,9 @@ When a PR merges:
 | — | PR #517 — Phase 3: FA GET Route Read-Capability Enforcement | ✅ merged (#517) 2026-07-08 | All 43 FA GET route handlers enforced with `require_permission("X.read")`. `emit_alerts` write gate (viewer cannot trigger alerts via GET). Global key (`FG_API_KEY`) fix in `api_key.py` — returns `platform_admin` `ActorContext`. 29 denial/smoke tests. |
 | — | PR #518 — Phase 4: Governance Intelligence + Orchestration Enforcement | ✅ merged (#518) 2026-07-08 | New `governance.read` capability added to all 5 non-platform roles. 73/74 routes in `governance_intelligence.py` and 34/35 routes in `governance_orchestration.py` enforced (health exempt). 22 new tests. |
 | — | PR #519 — Phase 5: P0/P1 Governance + Admin Enforcement | 🔄 open (feat/phase5-p0p1-governance-admin-enforcement) | 83 injections across 7 files: `decisions.py`, `governance.py`, `risk_acceptance.py`, `risk_governance.py` (P0); `keys.py`, `admin.py`, `admin_identity.py` (P1). Legacy scope fallback extended to cover `admin:write/read`, `keys:admin/write/read` → `platform_admin`. 16 new tests. |
+| — | PR #539 — TC-0: Assert MINISIGN_SECRET_KEY at startup | ✅ merged (#539) 2026-07-14 | G1.1 cleared. `MINISIGN_SECRET_KEY` now raises `RuntimeError` at startup in production (severity="error"). `FG_BILLING_EVIDENCE_HMAC_KEY` assertion pre-existing. 3 tests. |
+| — | TC-7: Wire report quality scores to real evidence sources | 🔄 open (feat/tc-7-report-quality-real) | G1.3. Replaces `_PLACEHOLDER_COVERAGE = 0.5` in `engine.py` with live DB reads. New `services/report_authority/quality_inputs.py` — 5 metrics from `fa_evidence_links`, `fa_evidence_provenance`, `fa_normalized_findings`. 13 tests. |
 
-*Last updated: 2026-07-08 (PR #519 — Phase 5: P0/P1 authority enforcement across governance/risk/admin routes; 83 injections, 16 new tests, legacy fallback extended.)*
+*Last updated: 2026-07-14 (TC-7: wire report quality scores to real FA evidence data; 13 tests; G1.3 in progress.)*
 
 
