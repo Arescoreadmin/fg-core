@@ -1,0 +1,42 @@
+{
+  "files": [
+    {
+      "bytes": 4630,
+      "path": "prompts/canonical/01_IMPLEMENTATION.md",
+      "sha256": "b64b1dc412cd2ec8061e1a00f4db9ac2304b5eef6e6434fee6c71c3bed99a299"
+    },
+    {
+      "bytes": 2323,
+      "path": "prompts/canonical/02_VALIDATION.md",
+      "sha256": "42249d2b7b3532095066b92e2bcde0668199c87a4249597869e4b9cb019c4c18"
+    },
+    {
+      "bytes": 2246,
+      "path": "prompts/canonical/03_AUDIT.md",
+      "sha256": "ad56f6adea1480b8b93bf88413389d4b4989d254768d78daf88a716a2466de0a"
+    },
+    {
+      "bytes": 2514,
+      "path": "prompts/canonical/04_ARCHITECTURE.md",
+      "sha256": "16c80ac16200de08594e25432e1a16cf44bc5baa5652e0b06b2c423a0471ffac"
+    },
+    {
+      "bytes": 2528,
+      "path": "prompts/canonical/05_INCIDENT.md",
+      "sha256": "4aed20982a161e885ee15dc1161dbe971864034860b0bb5e0b90068ee8489f4f"
+    },
+    {
+      "bytes": 2145,
+      "path": "prompts/canonical/06_ROADMAP_EVOLUTION.md",
+      "sha256": "862af801162241730f075fcfc671e0b6a862bbccc8b6d0c065a579a1f6d45962"
+    },
+    {
+      "bytes": 884,
+      "path": "prompts/canonical/README.md",
+      "sha256": "f1405f86419ed6d16a9ed450ae5f81dee5c755a73a246744f146b0569581bf03"
+    }
+  ],
+  "schema_version": "1.0",
+  "template_count": 6,
+  "template_set": "frostgate_canonical_prompts"
+}
