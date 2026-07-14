@@ -52,7 +52,9 @@ def test_startup_warns_missing_minisign_key_non_prod(monkeypatch):
 
 
 def test_startup_passes_minisign_key_present(monkeypatch):
-    monkeypatch.setenv("MINISIGN_SECRET_KEY", "RWSxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+    monkeypatch.setenv(
+        "MINISIGN_SECRET_KEY", "RWSxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    )
     from api.config.startup_validation import StartupValidator
 
     v = StartupValidator()
