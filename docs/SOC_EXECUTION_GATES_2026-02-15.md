@@ -5778,3 +5778,20 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - Assurance evaluation is deterministic: `build_assurance_decision(claims, tenant_id, actor_id)` never consults wall-clock time or PRNG. `computed_at_sequence` is a hash-based sequence value, not a timestamp. Idempotent recomputation is verified by test IA-167 — repeated calls with identical claims produce identical fingerprints and do not create duplicate snapshots.
 
 **SOC review outcome:** approved. New assurance authority layer is additive; no security boundary is weakened. All endpoints require both `assurance:*` scope and tenant binding. Append-only tables are guarded at both ORM and PG-trigger layers. No changes to auth middleware, session handling, or existing route surfaces.
+
+---
+
+## PR 539 — feat(trust-chain): TC-0 startup key assertions (2026-07-14)
+
+**CI workflow change:** `.github/workflows/docker-ci.yml`
+
+**Change:** Added `MINISIGN_SECRET_KEY=ci-minisign-secret-key-for-testing-only-not-real` to both prod.env generation blocks (the `.env.ci` block and the `env/prod.env` heredoc).
+
+**Reason:** PR 539 added `_check_minisign_key` to `StartupValidator` — absent `MINISIGN_SECRET_KEY` is severity=error in production (raises `RuntimeError` via `fail_on_error`). Without a CI dummy value, the Docker Compose healthcheck would abort before the app starts.
+
+**Security review:**
+- The CI value is a clearly-labelled dummy with no cryptographic significance. The real key is managed in Railway production environment variables and is never committed.
+- No authentication, authorization, session, OPA, or middleware files are modified.
+- The assertion reads the env var for presence only — no secrets are logged or transmitted.
+
+**SOC review outcome:** approved. Workflow change is additive (new env var in CI dummy env only). Security posture is unchanged or improved — absent key now fails loudly at startup instead of silently at call time.
