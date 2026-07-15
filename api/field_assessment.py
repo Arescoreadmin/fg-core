@@ -79,6 +79,12 @@ from services.field_assessment.connectors.msgraph_bridge import (
     ConnectorTenantMismatch,
     import_msgraph_scan_result,
 )
+from services.connectors.msgraph.preflight import (
+    MsgraphPreflightError,
+    MsgraphTenantFormatError,
+    MsgraphTenantNotFoundError,
+    validate_msgraph_tenant_preflight,
+)
 from services.field_assessment.connectors.oauth_inventory_bridge import (
     import_oauth_inventory_scan,
 )
@@ -3449,6 +3455,17 @@ def initiate_msgraph_scan(
             status_code=503,
             detail=api_error("MSAL_NOT_INSTALLED", "msal package is not installed"),
         )
+
+    # Pre-flight: validate azure_tenant_id and probe Azure AD before committing
+    # to a device-code flow that would silently fail hours into a live engagement.
+    try:
+        validate_msgraph_tenant_preflight(body.azure_tenant_id)
+    except MsgraphTenantFormatError as exc:
+        raise HTTPException(status_code=422, detail=api_error(exc.code, exc.message))
+    except MsgraphTenantNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=api_error(exc.code, exc.message))
+    except MsgraphPreflightError as exc:
+        raise HTTPException(status_code=502, detail=api_error(exc.code, exc.message))
 
     authority = f"https://login.microsoftonline.com/{body.azure_tenant_id}"
     msal_app = msal.PublicClientApplication(client_id, authority=authority)
