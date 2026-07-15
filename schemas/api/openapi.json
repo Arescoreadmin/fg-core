@@ -7342,7 +7342,7 @@
           "client_id": {
             "anyOf": [
               {
-                "maxLength": 256,
+                "maxLength": 255,
                 "type": "string"
               },
               {
@@ -7354,7 +7354,7 @@
           "engagement_id": {
             "anyOf": [
               {
-                "maxLength": 256,
+                "maxLength": 64,
                 "type": "string"
               },
               {
