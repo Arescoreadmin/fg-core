@@ -74,8 +74,8 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         "actor.read",
         "actor.write",
         # Identity assurance — read and write assurance level / trust score records
-        "assurance:read",
-        "assurance:write",
+        "assurance.read",
+        "assurance.write",
     }
 )
 
@@ -250,12 +250,12 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
         "risk_level": "medium",
     },
     # Identity assurance
-    "assurance:read": {
+    "assurance.read": {
         "display_name": "View Identity Assurance",
         "description": "Read actor assurance levels, trust scores, and assurance history",
         "risk_level": "low",
     },
-    "assurance:write": {
+    "assurance.write": {
         "display_name": "Recalculate Identity Assurance",
         "description": "Trigger recomputation of actor assurance level and trust score",
         "risk_level": "medium",
@@ -350,7 +350,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             # actor attribution — admins can read the attribution audit trail
             "actor.read",
             # identity assurance — admins can read assurance levels/trust scores
-            "assurance:read",
+            "assurance.read",
         }
     ),
     # platform_admin gets every permission — expanded explicitly, not via wildcard
