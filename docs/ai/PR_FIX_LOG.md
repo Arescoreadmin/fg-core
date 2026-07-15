@@ -1,5 +1,44 @@
 # PR Fix Log (Strict)
 
+## P-1 — feat(provisioning): provisioning to portal activation is deterministic
+
+**Branch:** `feat/p-1-provisioning-deterministic`
+**Date:** 2026-07-14
+
+### Purpose
+
+Clears Revenue Gate 1 item G1.8 (`provisioning_deterministic`). After
+`complete_workflow` fires, a `portal_grant` is now automatically issued when
+the operator provides `client_id` and `engagement_id` in the request body.
+The returned `raw_secret` is the credential the client uses to log into the
+portal — no additional operator step required.
+
+### Changes
+
+1. `feat: api/provisioning_manager.py` — `CompleteWorkflowRequest` gains
+   optional `client_id: str | None` and `engagement_id: str | None` fields.
+   `complete_workflow` handler calls `portal_grant_svc.create_grant(...)` within
+   the same transaction when both are provided. Response includes a `portal_grant`
+   key: `{grant_id, client_id, engagement_id, expires_at, raw_secret}` when
+   auto-issued, or `null` when not (backward compatible).
+
+2. `test: tests/test_p1_provisioning_deterministic.py` — 4 integration tests:
+   P1-1 (no grant fields → `portal_grant: null`), P1-2 (both fields → non-null
+   grant with `raw_secret`), P1-3 (full flow: `raw_secret` authenticates at
+   `POST /portal/authenticate`, session returned), P1-4 (partial fields → no grant).
+
+3. `fix: BLUEPRINT_STAGED.md`, `CONTRACT.md` — Updated `Contract-Authority-SHA256`
+   to reflect new fields in the generated OpenAPI contract.
+
+### Validation gates passed
+
+- `ruff check` + `ruff format` — clean
+- `mypy` — no issues
+- `fg-contract` — green (contract authority, lint, artifact schemas)
+- 4/4 P-1 integration tests pass
+
+---
+
 ## FA-1 — feat(portal): validate portal pages with live engagement data
 
 **Branch:** `feat/fa-1-portal-page-validation`

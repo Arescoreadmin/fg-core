@@ -29,6 +29,8 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_scopes
 from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
+from services.field_assessment.audit import audit_atomicity_svc
+from services.portal_grant_service import portal_grant_svc
 from services.provisioning import (
     ComplianceClassification,
     DeploymentTier,
@@ -172,6 +174,10 @@ class CompleteWorkflowRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     validation_results: dict[str, Any] = Field(default_factory=dict)
+    # When both are provided, a portal grant is automatically issued at completion.
+    # The raw_secret is returned in the response exactly once — store it immediately.
+    client_id: Optional[str] = Field(default=None, max_length=255)
+    engagement_id: Optional[str] = Field(default=None, max_length=64)
 
     @field_validator("validation_results")
     @classmethod
@@ -599,6 +605,7 @@ def complete_workflow(
     tenant_id = _tenant_from_auth(request)
     actor = _actor_from_request(request)
 
+    portal_grant_result = None
     try:
         wf = _store.complete_provisioning_workflow(
             db,
@@ -607,12 +614,52 @@ def complete_workflow(
             tenant_id=tenant_id,
             validation_results=body.validation_results,
         )
+        if body.client_id and body.engagement_id:
+            _grant_tenant = tenant_id or wf.tenant_id
+            if not _grant_tenant:
+                raise HTTPException(
+                    status_code=422, detail="tenant context required for portal grant"
+                )
+            portal_grant_result = portal_grant_svc.create_grant(
+                db,
+                tenant_id=_grant_tenant,
+                client_id=body.client_id,
+                engagement_id=body.engagement_id,
+                created_by=actor,
+            )
+            audit_atomicity_svc.emit(
+                db,
+                tenant_id=_grant_tenant,
+                engagement_id=body.engagement_id,
+                event_type="portal_grant.created",
+                actor=actor,
+                actor_type="provisioning_workflow",
+                reason_code="PORTAL_GRANT_AUTO_PROVISIONED",
+                entity_type="portal_grant",
+                entity_id=portal_grant_result.grant.id,
+                payload={
+                    "grant_id": portal_grant_result.grant.id,
+                    "client_id": body.client_id,
+                    "provisioning_id": provisioning_id,
+                },
+            )
         db.commit()
     except ProvisioningStoreError as exc:
         db.rollback()
         raise _handle_store_error(exc) from exc
 
-    return _workflow_response(wf)
+    resp = _workflow_response(wf)
+    if portal_grant_result is not None:
+        resp["portal_grant"] = {
+            "grant_id": portal_grant_result.grant.id,
+            "client_id": portal_grant_result.grant.client_id,
+            "engagement_id": portal_grant_result.grant.engagement_id,
+            "expires_at": portal_grant_result.grant.expires_at,
+            "raw_secret": portal_grant_result.raw_secret,
+        }
+    else:
+        resp["portal_grant"] = None
+    return resp
 
 
 @router.post(
