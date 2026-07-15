@@ -3,7 +3,7 @@
   "execution_state_version": "1.1",
   "roadmap_version": "1.1",
   "last_updated": "2026-07-15",
-  "audited_commit": "7a6c7f0c",
+  "audited_commit": "663c7318",
 
   "integrity": {
     "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
@@ -134,6 +134,14 @@
   ],
 
   "recent_execution": [
+    {
+      "pr": "#544",
+      "title": "fix(rbac): normalize assurance permission names to dot notation",
+      "merged_at": "2026-07-15",
+      "gate_items_cleared": [],
+      "kpi": "CI Health",
+      "note": "assurance:read/assurance:write in ALL_PERMISSIONS used colons instead of dots, failing test_P01_all_permissions_are_explicit. Fixed: ALL_PERMISSIONS, CAPABILITY_REGISTRY, ROLE_PERMISSIONS now use assurance.read/assurance.write (dots). require_scopes() and mint_key() in tests kept colon format (OAuth scope strings — plane registry requires assurance: prefix). Route inventory regenerated."
+    },
     {
       "pr": "R-1",
       "title": "feat(remediation): R-1 — declare remediation authority canonical (retire legacy api/remediation.py)",
