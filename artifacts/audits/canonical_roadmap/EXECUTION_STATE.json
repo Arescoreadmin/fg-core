@@ -3,7 +3,7 @@
   "execution_state_version": "1.1",
   "roadmap_version": "1.1",
   "last_updated": "2026-07-15",
-  "audited_commit": "2d993229",
+  "audited_commit": "8441e235",
 
   "integrity": {
     "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
@@ -19,17 +19,17 @@
     "current_step": 1,
     "current_step_name": "Trust Chain Completion",
     "current_focus": "First Paying Client",
-    "last_completed_pr": "R-2",
-    "last_completed_pr_title": "Remediation portal routing validated with live data",
-    "current_pr": "FA-2",
-    "current_pr_title": "Connector credential pre-flight",
+    "last_completed_pr": "FA-2",
+    "last_completed_pr_title": "Connector credential pre-flight",
+    "current_pr": "P-2",
+    "current_pr_title": "Auto-enable AI assistant on QA approval",
     "current_pr_size": "S",
-    "current_pr_kpi": "Reliable scan execution",
+    "current_pr_kpi": "AI workspace adoption",
     "current_pr_file": null,
-    "current_pr_days_estimate": "1 day",
+    "current_pr_days_estimate": "1-2 days",
     "current_pr_deps": [],
-    "parallelizable_now": ["FA-2", "P-2"],
-    "unblocked_now": ["FA-2", "P-2"],
+    "parallelizable_now": ["P-2"],
+    "unblocked_now": ["P-2"],
     "next_pr": null,
     "next_pr_title": "Dry Run H1-H18 (operational milestone, no PR)",
     "next_pr_deps": ["R-2", "FA-2", "P-2"],
@@ -39,8 +39,8 @@
   "gate": {
     "id": "Revenue Gate 1",
     "total": 12,
-    "cleared": 7,
-    "completion": "7/12",
+    "cleared": 8,
+    "completion": "8/12",
     "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened",
     "items": {
       "G1.1_startup_keys_asserted": true,
@@ -48,7 +48,7 @@
       "G1.3_report_quality_real": true,
       "G1.4_remediation_canonical": true,
       "G1.5_portal_pages_live_validated": true,
-      "G1.6_credential_preflight_operational": false,
+      "G1.6_credential_preflight_operational": true,
       "G1.7_ai_auto_enable_on_qa": false,
       "G1.8_provisioning_deterministic": true,
       "G1.9_remediation_live_validated": true,
@@ -134,6 +134,14 @@
   ],
 
   "recent_execution": [
+    {
+      "pr": "FA-2",
+      "title": "feat(connectors): FA-2 — MS Graph connector credential pre-flight validation",
+      "merged_at": "2026-07-15",
+      "gate_items_cleared": ["G1.6_credential_preflight_operational"],
+      "kpi": "Reliable scan execution",
+      "note": "New services/connectors/msgraph/preflight.py: validate_msgraph_tenant_preflight() does UUID format check + OIDC discovery probe (GET login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration, 8s timeout). Hooked into initiate_msgraph_scan before device-code flow. Bad UUID → 422 CONNECTOR_INVALID_TENANT_FORMAT; unknown tenant → 422 CONNECTOR_TENANT_NOT_FOUND; timeout → 502 CONNECTOR_PREFLIGHT_TIMEOUT; unexpected status → 502 CONNECTOR_PREFLIGHT_FAILED. Valid tenants pass in <100ms, proceed to device flow unchanged. 8 acceptance tests (FA2-1 through FA2-8). G1.6 cleared."
+    },
     {
       "pr": "R-2",
       "title": "feat(portal): R-2 — validate portal remediation with live engagement data",
