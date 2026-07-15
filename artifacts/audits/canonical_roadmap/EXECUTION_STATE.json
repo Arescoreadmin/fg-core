@@ -3,7 +3,7 @@
   "execution_state_version": "1.1",
   "roadmap_version": "1.1",
   "last_updated": "2026-07-14",
-  "audited_commit": "6d9c0767fa15259e516dd947dd4d312f35791e23",
+  "audited_commit": "f45a4036e218621cc4e680e6f986125cae51aec8",
 
   "integrity": {
     "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
@@ -19,28 +19,28 @@
     "current_step": 1,
     "current_step_name": "Trust Chain Completion",
     "current_focus": "First Paying Client",
-    "last_completed_pr": "FA-1",
-    "last_completed_pr_title": "Portal page validation with live engagement data",
-    "current_pr": "P-1",
-    "current_pr_title": "Provisioning to portal activation is deterministic",
-    "current_pr_size": "M",
-    "current_pr_kpi": "Portal Activation",
+    "last_completed_pr": "P-1",
+    "last_completed_pr_title": "Provisioning to portal activation is deterministic",
+    "current_pr": "R-1",
+    "current_pr_title": "Remediation authority canonical (retire legacy api/remediation.py)",
+    "current_pr_size": "S",
+    "current_pr_kpi": "Remediation MRR",
     "current_pr_file": null,
-    "current_pr_days_estimate": null,
+    "current_pr_days_estimate": "0.25 days",
     "current_pr_deps": [],
     "parallelizable_now": ["R-1", "FA-2", "P-2"],
-    "unblocked_now": ["P-1", "R-1", "FA-2", "P-2"],
-    "next_pr": "R-1",
-    "next_pr_title": "Remediation authority canonical (retire legacy api/remediation.py)",
-    "next_pr_deps": [],
+    "unblocked_now": ["R-1", "FA-2", "P-2"],
+    "next_pr": "R-2",
+    "next_pr_title": "Remediation portal routing validated with live data",
+    "next_pr_deps": ["R-1"],
     "next_pr_kpi": "Remediation MRR"
   },
 
   "gate": {
     "id": "Revenue Gate 1",
     "total": 12,
-    "cleared": 4,
-    "completion": "4/12",
+    "cleared": 5,
+    "completion": "5/12",
     "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened",
     "items": {
       "G1.1_startup_keys_asserted": true,
@@ -50,7 +50,7 @@
       "G1.5_portal_pages_live_validated": true,
       "G1.6_credential_preflight_operational": false,
       "G1.7_ai_auto_enable_on_qa": false,
-      "G1.8_provisioning_deterministic": false,
+      "G1.8_provisioning_deterministic": true,
       "G1.9_remediation_live_validated": false,
       "G1.10_dry_run_h1_h18_complete": false,
       "G1.11_anthropic_credit_verified": false,
@@ -108,14 +108,6 @@
       "unblocks": ["AI workspace adoption", "subscription conversion"]
     },
     {
-      "id": "G1.8",
-      "title": "Provisioning to portal activation is deterministic",
-      "blocking_pr": "P-1",
-      "reason": "Provisioning completion does not automatically seed portal prerequisites — client may be unable to log in after provisioning without a Jason manual step",
-      "effort": "1-2 days",
-      "unblocks": ["portal activation", "first client delivery"]
-    },
-    {
       "id": "G1.9",
       "title": "Remediation portal routing validated with live data",
       "blocking_pr": "R-2",
@@ -150,6 +142,14 @@
   ],
 
   "recent_execution": [
+    {
+      "pr": "P-1",
+      "title": "feat(provisioning): P-1 — provisioning to portal activation is deterministic",
+      "merged_at": "2026-07-14",
+      "gate_items_cleared": ["G1.8_provisioning_deterministic"],
+      "kpi": "Portal Activation",
+      "note": "Extends CompleteWorkflowRequest with optional client_id and engagement_id. When both provided, complete_workflow auto-creates portal_grant within the same transaction and returns raw_secret once. Client authenticates at POST /portal/authenticate with no operator step. Codex P2 fixes: audit_atomicity_svc.emit(portal_grant.created) for H13 coverage; client_id maxLength=255 and engagement_id maxLength=64 match portal_grants VARCHAR column sizes. 4 integration tests (P1-1 through P1-3, P1-4). G1.8 cleared."
+    },
     {
       "pr": "FA-1",
       "title": "feat(portal): FA-1 — validate portal pages with live engagement data",
