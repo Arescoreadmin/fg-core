@@ -5795,3 +5795,21 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - The assertion reads the env var for presence only — no secrets are logged or transmitted.
 
 **SOC review outcome:** approved. Workflow change is additive (new env var in CI dummy env only). Security posture is unchanged or improved — absent key now fails loudly at startup instead of silently at call time.
+
+---
+
+## fix/assurance-permission-dot-notation — RBAC permission name normalization (2026-07-15)
+
+**Critical files changed:** `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`
+
+**Change:** Renamed `assurance:read` and `assurance:write` to `assurance.read` and `assurance.write` throughout `api/actor_context.py`, `api/actor_assurance.py`, and `tests/test_identity_assurance.py`. Route inventory and derived artifacts regenerated via `make route-inventory-generate`.
+
+**Reason:** `ALL_PERMISSIONS` and `CAPABILITY_REGISTRY` enforce dot notation for all entries (enforced by `test_P01_all_permissions_are_explicit`). The identity assurance PR introduced these two permissions using colon notation, causing the RBAC unit test to fail. This is a rename-only fix — no permissions added, no routes added, no behavior changed.
+
+**Security review:**
+- No auth middleware, session handling, OPA policies, or CI workflow files modified.
+- The rename affects only the internal permission registry string values. The HTTP scope enforcement (`require_scopes("assurance.read")`) is updated in lockstep — no endpoint loses protection.
+- Route inventory regeneration reflects the updated scope strings only; no routes were added, removed, or re-prefixed.
+- No secrets, keys, or cryptographic material involved.
+
+**SOC review outcome:** approved. Pure string normalization across 3 files + generated artifacts. Security boundary is identical before and after — same 5 endpoints, same protection, same tenant isolation.

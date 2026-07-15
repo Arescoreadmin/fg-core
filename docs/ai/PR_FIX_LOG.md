@@ -18719,3 +18719,31 @@ make fg-contract
 make fg-fast
 → all gates green, exit 0
 ```
+
+
+## fix/assurance-permission-dot-notation — Normalize assurance permission names to dot notation (2026-07-15)
+
+### What changed
+
+1. `api/actor_context.py` — `ALL_PERMISSIONS` and `CAPABILITY_REGISTRY`: renamed `"assurance:read"` → `"assurance.read"` and `"assurance:write"` → `"assurance.write"`. Updated `ROLE_PERMISSIONS["tenant_admin"]` entry accordingly.
+
+2. `api/actor_assurance.py` — All 5 `require_scopes()` calls updated from colon to dot form.
+
+3. `tests/test_identity_assurance.py` — All 51 occurrences of the old strings updated.
+
+4. `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `contract_routes.json`, `plane_registry_snapshot.json`, `topology.sha256` — Regenerated via `make route-inventory-generate` to reflect updated scope strings.
+
+### Why
+
+`test_P01_all_permissions_are_explicit` (tests/test_h14_rbac.py) asserts `"."` in every entry of `ALL_PERMISSIONS`. The identity assurance PR introduced `assurance:read` / `assurance:write` with colons (HTTP scope convention) rather than dots (registry convention), causing this RBAC invariant test to fail.
+
+### No behavior change
+
+Same 5 endpoints, same protection, same tenant isolation. The rename is internal to the permission registry string values only.
+
+### Verification
+
+```
+pytest tests/test_h14_rbac.py::TestPermissionModel::test_P01_all_permissions_are_explicit tests/test_identity_assurance.py -q
+→ 178 passed
+```

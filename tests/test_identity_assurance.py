@@ -1583,16 +1583,16 @@ def test_ia_173_assurance_levels_declared():
 def test_ia_174_assurance_write_permission_registered():
     from api.actor_context import ALL_PERMISSIONS, CAPABILITY_REGISTRY
 
-    assert "assurance:read" in ALL_PERMISSIONS
-    assert "assurance:write" in ALL_PERMISSIONS
-    assert "assurance:read" in CAPABILITY_REGISTRY
-    assert "assurance:write" in CAPABILITY_REGISTRY
+    assert "assurance.read" in ALL_PERMISSIONS
+    assert "assurance.write" in ALL_PERMISSIONS
+    assert "assurance.read" in CAPABILITY_REGISTRY
+    assert "assurance.write" in CAPABILITY_REGISTRY
 
 
 def test_ia_175_tenant_admin_has_assurance_read():
     from api.actor_context import ROLE_PERMISSIONS
 
-    assert "assurance:read" in ROLE_PERMISSIONS["tenant_admin"]
+    assert "assurance.read" in ROLE_PERMISSIONS["tenant_admin"]
 
 
 def test_ia_176_trust_context_bundle_immutable():
