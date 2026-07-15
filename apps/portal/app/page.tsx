@@ -16,6 +16,7 @@ import {
   getStoredEngagementId,
   setStoredEngagementId,
 } from '@/lib/engagementStore';
+import RemediationCenter, { type RemediationTab } from '@/components/portal/RemediationCenter';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -543,6 +544,58 @@ function EngagementCard({
 }
 
 // ---------------------------------------------------------------------------
+// Remediation status widget — 4-tab live view backed by remediation-roadmap
+// ---------------------------------------------------------------------------
+
+const TERMINAL_STATUSES = new Set(['remediated', 'resolved', 'accepted', 'deferred', 'false_positive']);
+
+function RemediationCenterSection({ engagementId }: { engagementId: string }) {
+  const [roadmap, setRoadmap] = useState<RemediationRoadmap | null>(null);
+  const [allFindings, setAllFindings] = useState<FindingSummary[]>([]);
+  const [activeTab, setActiveTab] = useState<RemediationTab>('open');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isCurrent = true;
+    setLoading(true);
+    Promise.allSettled([
+      portalApi.getRemediationRoadmap(engagementId),
+      fetchAllFindings(engagementId),
+    ]).then(([rmRes, fnRes]) => {
+      if (!isCurrent) return;
+      if (rmRes.status === 'fulfilled') setRoadmap(rmRes.value);
+      if (fnRes.status === 'fulfilled') setAllFindings(fnRes.value);
+      setLoading(false);
+    });
+    return () => { isCurrent = false; };
+  }, [engagementId]);
+
+  const terminalFindings = allFindings.filter((f) => TERMINAL_STATUSES.has(f.status));
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <SectionLabel>Remediation Status</SectionLabel>
+        <Link
+          href={`/remediation?e=${engagementId}`}
+          className="text-xs text-muted underline hover:text-foreground transition-colors"
+          aria-label="open full remediation roadmap"
+        >
+          Full roadmap →
+        </Link>
+      </div>
+      <RemediationCenter
+        roadmap={roadmap}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        loading={loading}
+        terminalFindings={terminalFindings}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page root
 // ---------------------------------------------------------------------------
 
@@ -641,6 +694,11 @@ export default function PortalHome() {
           <SectionLabel>Risk Posture</SectionLabel>
           <RiskPosturePanel engagementId={activeId} />
         </div>
+      )}
+
+      {/* Remediation status — 4-tab view (open/overdue/completed/blocked) */}
+      {!loading && activeId && (
+        <RemediationCenterSection engagementId={activeId} />
       )}
 
       {/* Attestation health */}
