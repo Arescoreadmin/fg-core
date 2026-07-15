@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { getStoredEngagementId } from '@/lib/engagementStore';
+import { portalApi } from '@/lib/portalApi';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -55,11 +56,23 @@ export default function AssistantPage() {
   const [loading, setLoading] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
   const [engagementId, setEngagementId] = useState<string>('');
+  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const eid = getStoredEngagementId();
-    if (eid) setEngagementId(eid);
+    if (!eid) {
+      setAiEnabled(false);
+      return;
+    }
+    setEngagementId(eid);
+    portalApi
+      .getEngagement(eid)
+      .then((eng) => {
+        const enabled = !!(eng.engagement_metadata as Record<string, unknown> | null)?.portal_ai_enabled;
+        setAiEnabled(enabled);
+      })
+      .catch(() => setAiEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -127,6 +140,34 @@ export default function AssistantPage() {
       e.preventDefault();
       sendMessage();
     }
+  }
+
+  if (aiEnabled === null) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-sm text-muted">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!aiEnabled) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">AI Assistant</h1>
+          <p className="text-xs text-muted mt-0.5">Remediation guidance · assessment-aware</p>
+        </div>
+        <div className="rounded border border-border bg-surface p-8 text-center space-y-3">
+          <p className="text-sm font-medium text-foreground">
+            AI Assistant is not enabled for this engagement
+          </p>
+          <p className="text-xs text-muted max-w-sm mx-auto">
+            The remediation AI assistant is available as part of the monthly tracking plan.
+            Contact your FrostGate assessor to enable it for your account.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
