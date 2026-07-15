@@ -56,7 +56,7 @@ export default function AssistantPage() {
   const [loading, setLoading] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
   const [engagementId, setEngagementId] = useState<string>('');
-  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null); // null = still loading
+  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -142,7 +142,6 @@ export default function AssistantPage() {
     }
   }
 
-  // Loading state
   if (aiEnabled === null) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -151,7 +150,6 @@ export default function AssistantPage() {
     );
   }
 
-  // Not enabled for this engagement
   if (!aiEnabled) {
     return (
       <div className="space-y-6">

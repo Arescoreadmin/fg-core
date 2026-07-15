@@ -7429,6 +7429,11 @@ def qa_approve_report_route(
             FaEngagement.tenant_id == tenant_id,
         )
     ).scalar_one()
+    eng.engagement_metadata = {
+        **(eng.engagement_metadata or {}),
+        "portal_ai_enabled": True,
+    }
+    eng.updated_at = now
     portal_grant_id: str | None = None
     portal_raw_secret: str | None = None
     portal_expires_at: str | None = None

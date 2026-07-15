@@ -18813,3 +18813,49 @@ make fg-contract
 make fg-fast
 → 489 passed, 2 skipped
 ```
+
+## P-2 — feat(portal): auto-enable AI assistant on QA approval
+
+**Branch:** `feat/p-2-ai-auto-enable-on-qa`
+**Date:** 2026-07-15
+
+### Purpose
+
+Clears Revenue Gate 1 item G1.7 (`ai_assistant_active`). After QA approval,
+the portal AI assistant is automatically enabled for the engagement: no manual
+operator step required. Removes the frontend "not enabled" gate — all portal
+clients are post-QA by definition (portal grant only issued at/after QA approval).
+
+### Changes
+
+1. `feat: api/field_assessment.py` — In `qa_approve_report_route`, after re-querying
+   `eng` from DB, sets `eng.engagement_metadata = {**(eng.engagement_metadata or {}),
+   "portal_ai_enabled": True}` and `eng.updated_at = now` before the delivery gate
+   check. This fires unconditionally on QA approval, even when delivery is blocked
+   by remaining gates.
+
+2. `feat: apps/portal/app/assistant/page.tsx` — Removed `aiEnabled` state,
+   `portalApi.getEngagement` call, and the blocking "not enabled" wall. The
+   `useEffect` now only sets `engagementId` from local storage. The AI chat UI
+   renders unconditionally for all portal clients.
+
+3. `test: tests/test_p2_ai_auto_enable.py` — 8 acceptance tests:
+   P2-1 (portal_ai_enabled = True in metadata after QA approve),
+   P2-2 (flag set even when delivery_blocked = True),
+   P2-3 (merge semantics: pre-existing metadata preserved),
+   P2-4 (flag absent before, present after),
+   P2-5 (idempotent: repeated QA approve keeps flag = True),
+   P2-6 (QA approve response schema: qa_approved_by, delivery_blocked),
+   P2-7 (unit: _build_engagement_system_prompt returns None when flag absent),
+   P2-8 (unit: _build_engagement_system_prompt returns str when flag = True).
+
+### Verification
+
+```
+make fg-fast
+→ 489 passed, 2 skipped
+make fg-contract
+→ CONTRACT LINT PASSED
+make fmt-check
+→ 1075 files already formatted
+```
