@@ -28,7 +28,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "assurance:write"
+        "assurance.write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -45,7 +45,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "assurance:read"
+        "assurance.read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -62,7 +62,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "assurance:read"
+        "assurance.read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -79,7 +79,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "assurance:read"
+        "assurance.read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -96,7 +96,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "assurance:read"
+        "assurance.read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -20199,7 +20199,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-13T20:28:57.439919+00:00",
+  "generated_at": "2026-07-15T10:58:43.735810+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
