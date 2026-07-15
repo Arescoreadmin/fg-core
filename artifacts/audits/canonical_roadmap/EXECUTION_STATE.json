@@ -3,7 +3,7 @@
   "execution_state_version": "1.1",
   "roadmap_version": "1.1",
   "last_updated": "2026-07-15",
-  "audited_commit": "663c7318",
+  "audited_commit": "2d993229",
 
   "integrity": {
     "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
@@ -19,17 +19,17 @@
     "current_step": 1,
     "current_step_name": "Trust Chain Completion",
     "current_focus": "First Paying Client",
-    "last_completed_pr": "R-1",
-    "last_completed_pr_title": "Remediation authority canonical (retire legacy api/remediation.py)",
-    "current_pr": "R-2",
-    "current_pr_title": "Remediation portal routing validated with live data",
+    "last_completed_pr": "R-2",
+    "last_completed_pr_title": "Remediation portal routing validated with live data",
+    "current_pr": "FA-2",
+    "current_pr_title": "Connector credential pre-flight",
     "current_pr_size": "S",
-    "current_pr_kpi": "Remediation MRR",
+    "current_pr_kpi": "Reliable scan execution",
     "current_pr_file": null,
     "current_pr_days_estimate": "1 day",
     "current_pr_deps": [],
-    "parallelizable_now": ["R-2", "FA-2", "P-2"],
-    "unblocked_now": ["R-2", "FA-2", "P-2"],
+    "parallelizable_now": ["FA-2", "P-2"],
+    "unblocked_now": ["FA-2", "P-2"],
     "next_pr": null,
     "next_pr_title": "Dry Run H1-H18 (operational milestone, no PR)",
     "next_pr_deps": ["R-2", "FA-2", "P-2"],
@@ -39,8 +39,8 @@
   "gate": {
     "id": "Revenue Gate 1",
     "total": 12,
-    "cleared": 6,
-    "completion": "6/12",
+    "cleared": 7,
+    "completion": "7/12",
     "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened",
     "items": {
       "G1.1_startup_keys_asserted": true,
@@ -51,7 +51,7 @@
       "G1.6_credential_preflight_operational": false,
       "G1.7_ai_auto_enable_on_qa": false,
       "G1.8_provisioning_deterministic": true,
-      "G1.9_remediation_live_validated": false,
+      "G1.9_remediation_live_validated": true,
       "G1.10_dry_run_h1_h18_complete": false,
       "G1.11_anthropic_credit_verified": false,
       "G1.12_railway_headroom_verified": false
@@ -134,6 +134,14 @@
   ],
 
   "recent_execution": [
+    {
+      "pr": "R-2",
+      "title": "feat(portal): R-2 — validate portal remediation with live engagement data",
+      "merged_at": "2026-07-15",
+      "gate_items_cleared": ["G1.9_remediation_live_validated"],
+      "kpi": "Remediation MRR",
+      "note": "Wired RemediationCenter 4-tab view (open/overdue/completed/blocked) into portal home page. Fixed Codex P2: completed/blocked tabs were always empty because getRemediationRoadmap only returns open/in_progress findings — RemediationCenterSection now fetches fetchAllFindings in parallel and passes terminal findings as terminalFindings prop. 12 acceptance tests (R2-1 through R2-4). G1.9 cleared. Unblocks remediation MRR."
+    },
     {
       "pr": "#544",
       "title": "fix(rbac): normalize assurance permission names to dot notation",
