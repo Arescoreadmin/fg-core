@@ -2,8 +2,8 @@
   "schema_version": "1.1",
   "execution_state_version": "1.1",
   "roadmap_version": "1.1",
-  "last_updated": "2026-07-14",
-  "audited_commit": "f45a4036e218621cc4e680e6f986125cae51aec8",
+  "last_updated": "2026-07-15",
+  "audited_commit": "7a6c7f0c",
 
   "integrity": {
     "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
@@ -19,34 +19,34 @@
     "current_step": 1,
     "current_step_name": "Trust Chain Completion",
     "current_focus": "First Paying Client",
-    "last_completed_pr": "P-1",
-    "last_completed_pr_title": "Provisioning to portal activation is deterministic",
-    "current_pr": "R-1",
-    "current_pr_title": "Remediation authority canonical (retire legacy api/remediation.py)",
+    "last_completed_pr": "R-1",
+    "last_completed_pr_title": "Remediation authority canonical (retire legacy api/remediation.py)",
+    "current_pr": "R-2",
+    "current_pr_title": "Remediation portal routing validated with live data",
     "current_pr_size": "S",
     "current_pr_kpi": "Remediation MRR",
     "current_pr_file": null,
-    "current_pr_days_estimate": "0.25 days",
+    "current_pr_days_estimate": "1 day",
     "current_pr_deps": [],
-    "parallelizable_now": ["R-1", "FA-2", "P-2"],
-    "unblocked_now": ["R-1", "FA-2", "P-2"],
-    "next_pr": "R-2",
-    "next_pr_title": "Remediation portal routing validated with live data",
-    "next_pr_deps": ["R-1"],
-    "next_pr_kpi": "Remediation MRR"
+    "parallelizable_now": ["R-2", "FA-2", "P-2"],
+    "unblocked_now": ["R-2", "FA-2", "P-2"],
+    "next_pr": null,
+    "next_pr_title": "Dry Run H1-H18 (operational milestone, no PR)",
+    "next_pr_deps": ["R-2", "FA-2", "P-2"],
+    "next_pr_kpi": "First Client Confidence"
   },
 
   "gate": {
     "id": "Revenue Gate 1",
     "total": 12,
-    "cleared": 5,
-    "completion": "5/12",
+    "cleared": 6,
+    "completion": "6/12",
     "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened",
     "items": {
       "G1.1_startup_keys_asserted": true,
       "G1.2_provenance_foundation_durable": true,
       "G1.3_report_quality_real": true,
-      "G1.4_remediation_canonical": false,
+      "G1.4_remediation_canonical": true,
       "G1.5_portal_pages_live_validated": true,
       "G1.6_credential_preflight_operational": false,
       "G1.7_ai_auto_enable_on_qa": false,
@@ -74,14 +74,6 @@
       "reason": "services/report_authority/engine.py:96 — _PLACEHOLDER_COVERAGE = 0.5 assigned to all five quality inputs; every delivered report shows fabricated quality scores; first invoice carries legal exposure",
       "effort": "3-5 days",
       "unblocks": ["FA-1", "P-1", "first invoice"]
-    },
-    {
-      "id": "G1.4",
-      "title": "Remediation authority canonical",
-      "blocking_pr": "R-1",
-      "reason": "api/remediation.py (legacy) and api/remediation_authority.py (canonical, 24 routes) are both active; portal remediation traffic may route to the wrong system; client remediation state is unreliable at scale",
-      "effort": "0.25 days",
-      "unblocks": ["R-2", "remediation MRR"]
     },
     {
       "id": "G1.5",
@@ -142,6 +134,14 @@
   ],
 
   "recent_execution": [
+    {
+      "pr": "R-1",
+      "title": "feat(remediation): R-1 — declare remediation authority canonical (retire legacy api/remediation.py)",
+      "merged_at": "2026-07-15",
+      "gate_items_cleared": ["G1.4_remediation_canonical"],
+      "kpi": "Remediation MRR",
+      "note": "All 17 routes in api/remediation.py marked deprecated=True in OpenAPI. NON-CANONICAL module docstring added. api/portal_remediation.py docstring clarified: routes through PortalRemediationEngine, not the legacy router. Contract-Authority-SHA256 updated (d9c017f4 → 330f4390). 3 acceptance tests (R1-1 through R1-3). G1.4 cleared. Unblocks R-2 and remediation MRR."
+    },
     {
       "pr": "P-1",
       "title": "feat(provisioning): P-1 — provisioning to portal activation is deterministic",
