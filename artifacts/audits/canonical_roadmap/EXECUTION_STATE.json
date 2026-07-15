@@ -3,7 +3,7 @@
   "execution_state_version": "1.1",
   "roadmap_version": "1.1",
   "last_updated": "2026-07-15",
-  "audited_commit": "8441e235",
+  "audited_commit": "e9e2bb79",
 
   "integrity": {
     "roadmap_sha256": "sha256:1daf19fe235f350d8d4e380c980ef3d146379ff6ae86431689bc4a7aa39aa483",
@@ -19,28 +19,28 @@
     "current_step": 1,
     "current_step_name": "Trust Chain Completion",
     "current_focus": "First Paying Client",
-    "last_completed_pr": "FA-2",
-    "last_completed_pr_title": "Connector credential pre-flight",
-    "current_pr": "P-2",
-    "current_pr_title": "Auto-enable AI assistant on QA approval",
+    "last_completed_pr": "P-2",
+    "last_completed_pr_title": "Auto-enable AI assistant on QA approval",
+    "current_pr": null,
+    "current_pr_title": "Dry Run H1-H18 (operational milestone, no PR)",
     "current_pr_size": "S",
-    "current_pr_kpi": "AI workspace adoption",
+    "current_pr_kpi": "First Client Confidence",
     "current_pr_file": null,
-    "current_pr_days_estimate": "1-2 days",
+    "current_pr_days_estimate": "1 day",
     "current_pr_deps": [],
-    "parallelizable_now": ["P-2"],
-    "unblocked_now": ["P-2"],
+    "parallelizable_now": [],
+    "unblocked_now": [],
     "next_pr": null,
-    "next_pr_title": "Dry Run H1-H18 (operational milestone, no PR)",
-    "next_pr_deps": ["R-2", "FA-2", "P-2"],
-    "next_pr_kpi": "First Client Confidence"
+    "next_pr_title": null,
+    "next_pr_deps": [],
+    "next_pr_kpi": null
   },
 
   "gate": {
     "id": "Revenue Gate 1",
     "total": 12,
-    "cleared": 8,
-    "completion": "8/12",
+    "cleared": 9,
+    "completion": "9/12",
     "exit_condition": "One paying client — invoice issued, paid, portal accessed, remediation roadmap opened",
     "items": {
       "G1.1_startup_keys_asserted": true,
@@ -49,7 +49,7 @@
       "G1.4_remediation_canonical": true,
       "G1.5_portal_pages_live_validated": true,
       "G1.6_credential_preflight_operational": true,
-      "G1.7_ai_auto_enable_on_qa": false,
+      "G1.7_ai_auto_enable_on_qa": true,
       "G1.8_provisioning_deterministic": true,
       "G1.9_remediation_live_validated": true,
       "G1.10_dry_run_h1_h18_complete": false,
@@ -134,6 +134,14 @@
   ],
 
   "recent_execution": [
+    {
+      "pr": "P-2",
+      "title": "feat(portal): P-2 — auto-enable AI assistant on QA approval",
+      "merged_at": "2026-07-15",
+      "gate_items_cleared": ["G1.7_ai_auto_enable_on_qa"],
+      "kpi": "AI workspace adoption",
+      "note": "Sets portal_ai_enabled = True in FaEngagement.engagement_metadata on QA approval in qa_approve_report_route (api/field_assessment.py) — fires unconditionally before the delivery gate check, so the flag is set even when delivery is blocked by other gates. aiEnabled gate retained in apps/portal/app/assistant/page.tsx (reads portal_ai_enabled via getEngagement on page load) to guard legacy portal grants issued before P-2 deployment. _build_engagement_system_prompt in ui_ai_console.py now returns grounded context for QA-approved engagements. 8 acceptance tests (P2-1 through P2-8). G1.7 cleared. Unblocks AI workspace adoption and subscription conversion."
+    },
     {
       "pr": "FA-2",
       "title": "feat(connectors): FA-2 — MS Graph connector credential pre-flight validation",
