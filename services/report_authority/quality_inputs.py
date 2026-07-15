@@ -108,10 +108,7 @@ def _verification_coverage(db: Session, tenant_id: str, engagement_id: str) -> f
         FaEvidenceProvenance.event_hash.not_in(superseded_hashes),
     ]
     total = (
-        db.query(func.count(FaEvidenceProvenance.id))
-        .filter(*head_filter)
-        .scalar()
-        or 0
+        db.query(func.count(FaEvidenceProvenance.id)).filter(*head_filter).scalar() or 0
     )
     if total == 0:
         return 0.0
@@ -143,9 +140,7 @@ def _freshness(db: Session, tenant_id: str, engagement_id: str) -> float:
             if collected_at.tzinfo is None:
                 collected_at = collected_at.replace(tzinfo=timezone.utc)
             age_days = max(0.0, (now - collected_at).total_seconds() / 86400.0)
-            scores.append(
-                math.exp(-math.log(2) * age_days / _FRESHNESS_HALF_LIFE_DAYS)
-            )
+            scores.append(math.exp(-math.log(2) * age_days / _FRESHNESS_HALF_LIFE_DAYS))
         except (ValueError, TypeError):
             scores.append(0.0)
     return sum(scores) / len(scores)

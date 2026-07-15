@@ -1,6 +1,13 @@
 # api/remediation.py
-"""Remediation Management API router.
+"""Remediation Management API router — NON-CANONICAL.
 
+ROUTING AUTHORITY: api/remediation_authority.py (routes at /remediation-authority/*)
+This module (routes at /remediation/*) is legacy. All 17 routes are marked
+deprecated in the OpenAPI spec. New integrations must use api/remediation_authority.py.
+The portal-facing path (api/portal_remediation.py) is independently authoritative
+for client portal interactions and does not route through this module.
+
+R-1 — Declared non-canonical 2026-07-14; all routes deprecated in OpenAPI.
 PR 13.1 — Remediation Management Foundation.
 PR 13.2 — Remediation Status Workflow Engine.
 
@@ -72,6 +79,7 @@ def _actor(request: Request) -> str:
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=TaskResponse,
+    deprecated=True,
 )
 def create_remediation_task(
     body: CreateTaskRequest,
@@ -100,6 +108,7 @@ def create_remediation_task(
     "/remediation/tasks/overdue",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=TaskListResponse,
+    deprecated=True,
 )
 def list_overdue_remediation_tasks(
     request: Request,
@@ -122,6 +131,7 @@ def list_overdue_remediation_tasks(
     "/remediation/tasks/unassigned",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=TaskListResponse,
+    deprecated=True,
 )
 def list_unassigned_remediation_tasks(
     request: Request,
@@ -144,6 +154,7 @@ def list_unassigned_remediation_tasks(
     "/remediation/tasks/{task_id}",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=TaskResponse,
+    deprecated=True,
 )
 def get_remediation_task(
     task_id: str,
@@ -168,6 +179,7 @@ def get_remediation_task(
     "/remediation/tasks",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=TaskListResponse,
+    deprecated=True,
 )
 def list_remediation_tasks(
     request: Request,
@@ -201,6 +213,7 @@ def list_remediation_tasks(
     "/remediation/tasks/{task_id}",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=TaskResponse,
+    deprecated=True,
 )
 def update_remediation_task(
     task_id: str,
@@ -232,6 +245,7 @@ def update_remediation_task(
     "/remediation/tasks/{task_id}/transition",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=TransitionResponse,
+    deprecated=True,
 )
 def transition_remediation_task(
     task_id: str,
@@ -265,6 +279,7 @@ def transition_remediation_task(
     "/remediation/tasks/{task_id}/allowed-transitions",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=AllowedTransitionsResponse,
+    deprecated=True,
 )
 def get_allowed_transitions(
     task_id: str,
@@ -289,6 +304,7 @@ def get_allowed_transitions(
     "/remediation/tasks/{task_id}/close",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=TaskResponse,
+    deprecated=True,
 )
 def close_remediation_task(
     task_id: str,
@@ -319,6 +335,7 @@ def close_remediation_task(
     "/remediation/tasks/{task_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_scopes("governance:write"))],
+    deprecated=True,
 )
 def delete_remediation_task(
     task_id: str,
@@ -344,6 +361,7 @@ def delete_remediation_task(
     "/remediation/tasks/{task_id}/audit",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=AuditListResponse,
+    deprecated=True,
 )
 def get_remediation_task_audit(
     task_id: str,
@@ -365,6 +383,7 @@ def get_remediation_task_audit(
     "/remediation/tasks/{task_id}/assign",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=TaskResponse,
+    deprecated=True,
 )
 def assign_remediation_task_owner(
     task_id: str,
@@ -396,6 +415,7 @@ def assign_remediation_task_owner(
     "/remediation/tasks/{task_id}/unassign",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=TaskResponse,
+    deprecated=True,
 )
 def unassign_remediation_task_owner(
     task_id: str,
@@ -429,6 +449,7 @@ def unassign_remediation_task_owner(
     "/remediation/tasks/{task_id}/due-date",
     dependencies=[Depends(require_scopes("governance:write"))],
     response_model=TaskResponse,
+    deprecated=True,
 )
 def set_remediation_task_due_date(
     task_id: str,
@@ -460,6 +481,7 @@ def set_remediation_task_due_date(
     "/remediation/tasks/{task_id}/sla",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=SlaResponse,
+    deprecated=True,
 )
 def get_remediation_task_sla(
     task_id: str,
@@ -485,6 +507,7 @@ def get_remediation_task_sla(
     "/remediation/tasks/{task_id}/timeline",
     dependencies=[Depends(require_scopes("governance:read"))],
     response_model=TimelineListResponse,
+    deprecated=True,
 )
 def get_remediation_task_timeline(
     task_id: str,
@@ -523,6 +546,7 @@ def get_remediation_task_timeline(
 @router.post(
     "/remediation/tasks/{task_id}/notifications/{notification_id}/acknowledge",
     dependencies=[Depends(require_scopes("governance:write"))],
+    deprecated=True,
 )
 def acknowledge_notification(
     task_id: str,
