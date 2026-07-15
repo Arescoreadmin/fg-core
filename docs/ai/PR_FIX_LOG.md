@@ -18777,3 +18777,39 @@ node --test apps/portal/tests/portal-structure.test.js
 make fmt-check
 → PASS
 ```
+
+
+## feat/fa-2-connector-credential-preflight — FA-2: Connector Credential Pre-Flight Validation (2026-07-15)
+
+### What changed
+
+1. `services/connectors/msgraph/preflight.py` — New module: `validate_msgraph_tenant_preflight(azure_tenant_id)`.
+   - UUID format validation via regex + `uuid.UUID()` normalisation (no HTTP call).
+   - OIDC discovery probe: `GET https://login.microsoftonline.com/{tenant_id}/v2.0/.well-known/openid-configuration` (8s timeout).
+   - 200 → pass; 400/404 → `MsgraphTenantNotFoundError`; timeout → `MsgraphPreflightError` with CONNECTOR_PREFLIGHT_TIMEOUT; other non-200 → `MsgraphPreflightError` with CONNECTOR_PREFLIGHT_FAILED.
+   - Three exception classes: `MsgraphPreflightError` (base), `MsgraphTenantFormatError`, `MsgraphTenantNotFoundError`.
+
+2. `api/field_assessment.py` — Added import of `validate_msgraph_tenant_preflight` and exception classes from `preflight.py`. Inserted preflight call in `initiate_msgraph_scan` between the MSAL import check and `PublicClientApplication` instantiation. Maps exceptions to 422/502 HTTP responses.
+
+3. `tests/test_fa2_msgraph_preflight.py` — New: 8 acceptance tests (FA2-1 through FA2-8) covering happy path, 5 bad-UUID variants, Azure AD 400/404, network timeout, Azure AD 503, and 2 unit tests for the preflight function directly.
+
+### Why
+
+G1.6 ("Connector credential pre-flight operational"). Without pre-flight, an invalid `azure_tenant_id` causes a scan to silently fail hours into a live engagement with no early warning. Jason needs a clear error at scan launch time, not at background job failure.
+
+### No behavior change for valid tenants
+
+A valid UUID pointing to a real Azure AD tenant passes the OIDC probe in <100ms, then proceeds to device-code flow exactly as before. The only new behavior is the early 422 for invalid/non-existent tenants.
+
+### Verification
+
+```
+pytest tests/test_fa2_msgraph_preflight.py -v
+→ 12 passed
+make fmt-check
+→ PASS
+make fg-contract
+→ CONTRACT LINT PASSED
+make fg-fast
+→ 489 passed, 2 skipped
+```
