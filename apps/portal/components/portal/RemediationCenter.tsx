@@ -1,6 +1,6 @@
 'use client';
 import PortalShell from './PortalShell';
-import type { RemediationRoadmap, RemediationPhaseFinding } from '@/lib/portalApi';
+import type { RemediationRoadmap, RemediationPhaseFinding, FindingSummary } from '@/lib/portalApi';
 
 const MCIM_ID = 'MCIM-18.6-PORTAL-REMEDIATION';
 const AUTHORITY = 'Customer Remediation Authority';
@@ -16,6 +16,7 @@ interface Props {
   onTabChange?: (t: RemediationTab) => void;
   loading: boolean;
   lastUpdated?: string;
+  terminalFindings?: FindingSummary[];
 }
 
 const TABS: { id: RemediationTab; label: string }[] = [
@@ -57,32 +58,53 @@ function SeverityBadge({ severity }: { severity: string }) {
 function getTabFindings(
   roadmap: RemediationRoadmap,
   tab: RemediationTab,
+  terminalFindings?: FindingSummary[],
 ): Array<RemediationPhaseFinding & { phaseLabel: string }> {
-  const all = roadmap.phases.flatMap((phase) =>
+  const open = roadmap.phases.flatMap((phase) =>
     phase.findings.map((f) => ({ ...f, phaseLabel: phase.label })),
   );
 
+  // Terminal findings (completed/blocked) come from listFindings — the roadmap
+  // endpoint only returns open/in_progress findings.
+  const toCard = (f: FindingSummary): RemediationPhaseFinding & { phaseLabel: string } => ({
+    finding_id: f.finding_id,
+    title: f.title,
+    severity: f.severity,
+    status: f.status,
+    finding_type: f.finding_type,
+    remediation_hint: f.remediation_hint,
+    remediation_priority: f.remediation_priority,
+    effort_level: f.effort_level,
+    nist_ai_rmf_mappings: f.nist_ai_rmf_mappings,
+    framework_mappings: f.framework_mappings,
+    nist_controls_addressed: 0,
+    phaseLabel: '—',
+  });
+
   switch (tab) {
     case 'open':
-      return all.filter((f) => f.status === 'open' || f.status === 'in_progress');
+      return open.filter((f) => f.status === 'open' || f.status === 'in_progress');
     case 'overdue':
-      // Show high/critical open findings as overdue proxy
-      return all.filter(
+      return open.filter(
         (f) =>
           (f.status === 'open' || f.status === 'in_progress') &&
           (f.severity === 'critical' || f.severity === 'high'),
       );
     case 'completed':
-      return all.filter((f) => f.status === 'resolved' || f.status === 'remediated');
+      return (terminalFindings ?? [])
+        .filter((f) => f.status === 'resolved' || f.status === 'remediated')
+        .map(toCard);
     case 'blocked':
-      return all.filter((f) => f.status === 'deferred' || f.status === 'accepted');
+      return (terminalFindings ?? [])
+        .filter((f) => f.status === 'deferred' || f.status === 'accepted' || f.status === 'false_positive')
+        .map(toCard);
     default:
       return [];
   }
 }
 
-export default function RemediationCenter({ roadmap, activeTab, onTabChange, loading, lastUpdated }: Props) {
-  const tabFindings = roadmap ? getTabFindings(roadmap, activeTab) : [];
+export default function RemediationCenter({ roadmap, activeTab, onTabChange, loading, lastUpdated, terminalFindings }: Props) {
+  const tabFindings = roadmap ? getTabFindings(roadmap, activeTab, terminalFindings) : [];
 
   return (
     <PortalShell

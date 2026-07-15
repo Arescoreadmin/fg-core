@@ -547,21 +547,30 @@ function EngagementCard({
 // Remediation status widget — 4-tab live view backed by remediation-roadmap
 // ---------------------------------------------------------------------------
 
+const TERMINAL_STATUSES = new Set(['remediated', 'resolved', 'accepted', 'deferred', 'false_positive']);
+
 function RemediationCenterSection({ engagementId }: { engagementId: string }) {
   const [roadmap, setRoadmap] = useState<RemediationRoadmap | null>(null);
+  const [allFindings, setAllFindings] = useState<FindingSummary[]>([]);
   const [activeTab, setActiveTab] = useState<RemediationTab>('open');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isCurrent = true;
     setLoading(true);
-    portalApi
-      .getRemediationRoadmap(engagementId)
-      .then((r) => { if (isCurrent) setRoadmap(r); })
-      .catch(() => { if (isCurrent) setRoadmap(null); })
-      .finally(() => { if (isCurrent) setLoading(false); });
+    Promise.allSettled([
+      portalApi.getRemediationRoadmap(engagementId),
+      fetchAllFindings(engagementId),
+    ]).then(([rmRes, fnRes]) => {
+      if (!isCurrent) return;
+      if (rmRes.status === 'fulfilled') setRoadmap(rmRes.value);
+      if (fnRes.status === 'fulfilled') setAllFindings(fnRes.value);
+      setLoading(false);
+    });
     return () => { isCurrent = false; };
   }, [engagementId]);
+
+  const terminalFindings = allFindings.filter((f) => TERMINAL_STATUSES.has(f.status));
 
   return (
     <div className="space-y-2">
@@ -580,6 +589,7 @@ function RemediationCenterSection({ engagementId }: { engagementId: string }) {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         loading={loading}
+        terminalFindings={terminalFindings}
       />
     </div>
   );
