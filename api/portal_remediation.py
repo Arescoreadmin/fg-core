@@ -1,6 +1,12 @@
 # api/portal_remediation.py
 """Client Portal Remediation API — PR 13.4.
 
+ROUTING AUTHORITY: This module is independently authoritative for client portal
+remediation interactions. It routes through PortalRemediationEngine (backed by
+the legacy remediation_tasks table) and does NOT call api/remediation.py or
+its /remediation/* HTTP routes. The canonical operator-facing remediation system
+is api/remediation_authority.py (routes at /remediation-authority/*).
+
 Routes:
   GET  /portal/remediation                                    — dashboard
   GET  /portal/remediation/tasks/{task_id}                    — task detail
