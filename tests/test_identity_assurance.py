@@ -1021,7 +1021,7 @@ def test_ia_138_read_scope_grants_get(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     assert resp.status_code == 200, resp.text
 
@@ -1029,7 +1029,7 @@ def test_ia_138_read_scope_grants_get(build_app, fresh_db):
 def test_ia_139_write_scope_needed_for_recalculate(build_app, fresh_db):
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id="t-139")
+    key = mint_key("assurance:read", tenant_id="t-139")
     resp = client.post(
         "/actor-assurance/recalculate",
         headers={"X-API-Key": key},
@@ -1041,7 +1041,7 @@ def test_ia_139_write_scope_needed_for_recalculate(build_app, fresh_db):
 def test_ia_140_unbound_tenant_returns_400(build_app, fresh_db):
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read")
+    key = mint_key("assurance:read")
     resp = client.get("/actor-assurance/any-id", headers={"X-API-Key": key})
     assert resp.status_code == 400
 
@@ -1052,7 +1052,7 @@ def test_ia_140_unbound_tenant_returns_400(build_app, fresh_db):
 def test_ia_141_404_when_no_record(build_app, fresh_db):
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id="t-141")
+    key = mint_key("assurance:read", tenant_id="t-141")
     resp = client.get("/actor-assurance/nope", headers={"X-API-Key": key})
     assert resp.status_code == 404
     assert resp.json()["detail"]["code"] == "ASSURANCE_NOT_FOUND"
@@ -1066,7 +1066,7 @@ def test_ia_142_get_returns_expected_fields(build_app, fresh_db):
     )
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     body = resp.json()
     assert body["actor_id"] == actor
@@ -1082,7 +1082,7 @@ def test_ia_143_cross_tenant_read_returns_404(build_app, fresh_db):
     _insert_assurance(fresh_db, "t-143-a", actor)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id="t-143-b")
+    key = mint_key("assurance:read", tenant_id="t-143-b")
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     assert resp.status_code == 404
 
@@ -1093,7 +1093,7 @@ def test_ia_144_get_returns_is_current_bool(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor, is_current=1)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     assert resp.status_code == 200
     body = resp.json()
@@ -1107,7 +1107,7 @@ def test_ia_145_get_returns_schema_version(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     assert resp.json()["schema_version"] == "1.0"
 
@@ -1118,7 +1118,7 @@ def test_ia_146_get_returns_decision_fingerprint(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor, fingerprint="d" * 64)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     assert resp.json()["decision_fingerprint"] == "d" * 64
 
@@ -1129,7 +1129,7 @@ def test_ia_147_low_trust_score_maps_to_low_band(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor, level="PASSWORD", score=32)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     assert resp.json()["trust_band"] == "LOW"
 
@@ -1140,7 +1140,7 @@ def test_ia_148_high_score_maps_to_high_band(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor, level="SSO", score=74)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     assert resp.json()["trust_band"] == "HIGH"
 
@@ -1151,7 +1151,7 @@ def test_ia_149_zero_score_maps_to_critical(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor, level="UNVERIFIED", score=0)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     assert resp.json()["trust_band"] == "CRITICAL"
 
@@ -1162,7 +1162,7 @@ def test_ia_150_hundred_score_maps_to_very_high(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor, level="WORKLOAD_IDENTITY", score=100)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key})
     assert resp.json()["trust_band"] == "VERY_HIGH"
 
@@ -1174,7 +1174,7 @@ def test_ia_151_history_empty(build_app, fresh_db):
     tenant = "t-151"
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get("/actor-assurance/anyone/history", headers={"X-API-Key": key})
     assert resp.status_code == 200
     body = resp.json()
@@ -1189,7 +1189,7 @@ def test_ia_152_history_returns_all_events(build_app, fresh_db):
         _insert_history(fresh_db, tenant, actor, event_type="assurance_computed")
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}/history", headers={"X-API-Key": key})
     body = resp.json()
     assert body["total"] == 3
@@ -1203,7 +1203,7 @@ def test_ia_153_history_respects_limit(build_app, fresh_db):
         _insert_history(fresh_db, tenant, actor)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(
         f"/actor-assurance/{actor}/history?limit=2", headers={"X-API-Key": key}
     )
@@ -1219,7 +1219,7 @@ def test_ia_154_history_offset(build_app, fresh_db):
         _insert_history(fresh_db, tenant, actor)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(
         f"/actor-assurance/{actor}/history?limit=2&offset=2",
         headers={"X-API-Key": key},
@@ -1236,7 +1236,7 @@ def test_ia_155_history_isolated_by_tenant(build_app, fresh_db):
     _insert_history(fresh_db, "t-155-b", actor)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id="t-155-a")
+    key = mint_key("assurance:read", tenant_id="t-155-a")
     resp = client.get(f"/actor-assurance/{actor}/history", headers={"X-API-Key": key})
     assert resp.json()["total"] == 2
 
@@ -1248,7 +1248,7 @@ def test_ia_156_snapshot_404_when_none(build_app, fresh_db):
     tenant = "t-156"
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get("/actor-assurance/none/snapshot", headers={"X-API-Key": key})
     assert resp.status_code == 404
     assert resp.json()["detail"]["code"] == "ASSURANCE_NOT_FOUND"
@@ -1263,7 +1263,7 @@ def test_ia_157_snapshot_returns_latest_sequence(build_app, fresh_db):
     )
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}/snapshot", headers={"X-API-Key": key})
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -1278,7 +1278,7 @@ def test_ia_158_snapshot_cross_tenant_isolated(build_app, fresh_db):
     )
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id="t-158-b")
+    key = mint_key("assurance:read", tenant_id="t-158-b")
     resp = client.get(f"/actor-assurance/{actor}/snapshot", headers={"X-API-Key": key})
     assert resp.status_code == 404
 
@@ -1289,7 +1289,7 @@ def test_ia_159_snapshot_carries_trust_band(build_app, fresh_db):
     _insert_snapshot(fresh_db, tenant, actor, None, "SSO_MFA", 84, sequence_number=0)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}/snapshot", headers={"X-API-Key": key})
     assert resp.json()["trust_band"] == "VERY_HIGH"
 
@@ -1309,7 +1309,7 @@ def test_ia_160_snapshot_carries_chain_hash(build_app, fresh_db):
     )
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}/snapshot", headers={"X-API-Key": key})
     assert resp.json()["chain_hash"] == "e" * 64
 
@@ -1323,7 +1323,7 @@ def test_ia_161_trust_returns_score_and_band(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor, level="SSO_MFA", score=84)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}/trust", headers={"X-API-Key": key})
     body = resp.json()
     assert body["trust_score"] == 84
@@ -1337,7 +1337,7 @@ def test_ia_162_trust_includes_score_breakdown(build_app, fresh_db):
     _insert_assurance(fresh_db, tenant, actor, level="SSO_MFA", score=84)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id=tenant)
+    key = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}/trust", headers={"X-API-Key": key})
     breakdown = resp.json()["score_breakdown"]
     assert breakdown["base_score"] == 84
@@ -1348,7 +1348,7 @@ def test_ia_162_trust_includes_score_breakdown(build_app, fresh_db):
 def test_ia_163_trust_404_when_missing(build_app, fresh_db):
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id="t-163")
+    key = mint_key("assurance:read", tenant_id="t-163")
     resp = client.get("/actor-assurance/nope/trust", headers={"X-API-Key": key})
     assert resp.status_code == 404
 
@@ -1366,7 +1366,7 @@ def test_ia_165_trust_isolated_by_tenant(build_app, fresh_db):
     _insert_assurance(fresh_db, "t-165-a", actor)
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.read", tenant_id="t-165-b")
+    key = mint_key("assurance:read", tenant_id="t-165-b")
     resp = client.get(f"/actor-assurance/{actor}/trust", headers={"X-API-Key": key})
     assert resp.status_code == 404
 
@@ -1379,7 +1379,7 @@ def test_ia_166_recalculate_creates_snapshot_and_history(build_app, fresh_db):
     actor = f"a-{_uid()[:8]}"
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.write", tenant_id=tenant)
+    key = mint_key("assurance:write", tenant_id=tenant)
     resp = client.post(
         "/actor-assurance/recalculate",
         headers={"X-API-Key": key},
@@ -1420,7 +1420,7 @@ def test_ia_167_recalculate_idempotent_same_claims(build_app, fresh_db):
     actor = f"a-{_uid()[:8]}"
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.write", tenant_id=tenant)
+    key = mint_key("assurance:write", tenant_id=tenant)
     payload = {
         "actor_id": actor,
         "reason": "manual",
@@ -1456,7 +1456,7 @@ def test_ia_168_recalculate_change_creates_second_snapshot(build_app, fresh_db):
     actor = f"a-{_uid()[:8]}"
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.write", tenant_id=tenant)
+    key = mint_key("assurance:write", tenant_id=tenant)
 
     # First: password only.
     client.post(
@@ -1501,7 +1501,7 @@ def test_ia_169_recalculate_bad_body_400(build_app, fresh_db):
     tenant = "t-169"
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.write", tenant_id=tenant)
+    key = mint_key("assurance:write", tenant_id=tenant)
     resp = client.post(
         "/actor-assurance/recalculate",
         headers={"X-API-Key": key},
@@ -1524,7 +1524,7 @@ def test_ia_171_recalculate_tenant_isolation(build_app, fresh_db):
     actor = f"a-{_uid()[:8]}"
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key_a = mint_key("assurance.write", tenant_id=tenant_a)
+    key_a = mint_key("assurance:write", tenant_id=tenant_a)
     client.post(
         "/actor-assurance/recalculate",
         headers={"X-API-Key": key_a},
@@ -1538,7 +1538,7 @@ def test_ia_171_recalculate_tenant_isolation(build_app, fresh_db):
             },
         },
     )
-    key_b = mint_key("assurance.read", tenant_id=tenant_b)
+    key_b = mint_key("assurance:read", tenant_id=tenant_b)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key_b})
     assert resp.status_code == 404
 
@@ -1548,7 +1548,7 @@ def test_ia_172_recalculate_records_current(build_app, fresh_db):
     actor = f"a-{_uid()[:8]}"
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance.write", tenant_id=tenant)
+    key = mint_key("assurance:write", tenant_id=tenant)
     client.post(
         "/actor-assurance/recalculate",
         headers={"X-API-Key": key},
@@ -1563,7 +1563,7 @@ def test_ia_172_recalculate_records_current(build_app, fresh_db):
         },
     )
     # Re-read via GET.
-    key_r = mint_key("assurance.read", tenant_id=tenant)
+    key_r = mint_key("assurance:read", tenant_id=tenant)
     resp = client.get(f"/actor-assurance/{actor}", headers={"X-API-Key": key_r})
     assert resp.status_code == 200
     body = resp.json()

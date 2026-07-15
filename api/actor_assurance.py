@@ -9,7 +9,7 @@ Five endpoints:
 
 All routes:
   - tenant-bound via require_bound_tenant()
-  - scope-gated via require_scopes("assurance.read" | "assurance.write")
+  - scope-gated via require_scopes("assurance:read" | "assurance:write")
   - filter by tenant_id on every query (defence-in-depth alongside PG RLS)
   - 404 shape: {"code": "ASSURANCE_NOT_FOUND", "message": "assurance record not found"}
 """
@@ -214,7 +214,7 @@ class RecalculateBody(BaseModel):
 
 @router.get(
     "/actor-assurance/{actor_id}",
-    dependencies=[Depends(require_scopes("assurance.read"))],
+    dependencies=[Depends(require_scopes("assurance:read"))],
 )
 def get_actor_assurance(actor_id: str, request: Request) -> dict:
     """Return the current assurance record for an actor."""
@@ -255,7 +255,7 @@ def get_actor_assurance(actor_id: str, request: Request) -> dict:
 
 @router.get(
     "/actor-assurance/{actor_id}/history",
-    dependencies=[Depends(require_scopes("assurance.read"))],
+    dependencies=[Depends(require_scopes("assurance:read"))],
 )
 def get_actor_assurance_history(
     actor_id: str,
@@ -295,7 +295,7 @@ def get_actor_assurance_history(
 
 @router.get(
     "/actor-assurance/{actor_id}/snapshot",
-    dependencies=[Depends(require_scopes("assurance.read"))],
+    dependencies=[Depends(require_scopes("assurance:read"))],
 )
 def get_actor_assurance_snapshot(actor_id: str, request: Request) -> dict:
     """Return the latest immutable snapshot in the assurance chain."""
@@ -319,7 +319,7 @@ def get_actor_assurance_snapshot(actor_id: str, request: Request) -> dict:
 
 @router.get(
     "/actor-assurance/{actor_id}/trust",
-    dependencies=[Depends(require_scopes("assurance.read"))],
+    dependencies=[Depends(require_scopes("assurance:read"))],
 )
 def get_actor_trust_summary(actor_id: str, request: Request) -> dict:
     """Return a trust-score summary for an actor."""
@@ -367,7 +367,7 @@ def get_actor_trust_summary(actor_id: str, request: Request) -> dict:
 
 @router.post(
     "/actor-assurance/recalculate",
-    dependencies=[Depends(require_scopes("assurance.write"))],
+    dependencies=[Depends(require_scopes("assurance:write"))],
 )
 def recalculate_actor_assurance(body: RecalculateBody, request: Request) -> dict:
     """Recompute the assurance for an actor and append snapshot + history rows.
