@@ -18747,3 +18747,33 @@ Same 5 endpoints, same protection, same tenant isolation. The rename is internal
 pytest tests/test_h14_rbac.py::TestPermissionModel::test_P01_all_permissions_are_explicit tests/test_identity_assurance.py -q
 → 178 passed
 ```
+
+
+## feat/r-2-remediation-live-validation — R-2: Validate Portal Remediation with Live Engagement Data (2026-07-15)
+
+### What changed
+
+1. `tests/test_r2_remediation_live_validation.py` — New: 12 acceptance tests covering R2-1 through R2-4:
+   - R2-1: Roadmap phases populated with open findings; overdue proxy (high/critical); terminal findings excluded from open count.
+   - R2-2: PATCH finding status to remediated returns `observation_id`; 409 on double-patch; roadmap open count decrements.
+   - R2-3: Evidence notes from PATCH stored in observation description; `owner_email` stored in `structured_evidence`.
+   - R2-4: Empty engagement returns `total_open_findings=0`; all-terminal returns 0; unknown engagement returns 404.
+
+2. `apps/portal/app/page.tsx` — Added `RemediationCenterSection` wired to the portal home page (after Risk Posture). Fetches `getRemediationRoadmap` and `fetchAllFindings` in parallel; filters terminal findings; passes them as `terminalFindings` prop to `RemediationCenter`.
+
+3. `apps/portal/components/portal/RemediationCenter.tsx` — Added `terminalFindings?: FindingSummary[]` prop; updated `getTabFindings` to use that list for the completed and blocked tabs instead of roadmap phase findings (which only contain open/in_progress items).
+
+### Why
+
+Revenue Gate G1.9 ("Remediation portal routing confirmed with live engagement data"). The completed/blocked tabs were always empty because `getRemediationRoadmap` only returns open/in_progress findings — terminal findings require a separate `listFindings` fetch.
+
+### Verification
+
+```
+pytest tests/test_r2_remediation_live_validation.py -v
+→ 12 passed
+node --test apps/portal/tests/portal-structure.test.js
+→ 17 passed
+make fmt-check
+→ PASS
+```
