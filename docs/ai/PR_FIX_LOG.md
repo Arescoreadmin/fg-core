@@ -18677,3 +18677,45 @@ pytest tests/test_identity_assurance.py -q
 make fg-fast-full
 → all gates green, exit 0
 ```
+
+## feat/r-1-remediation-authority-canonical — R-1: Declare Remediation Authority Canonical
+
+**PR #543 | 2026-07-14 | G1.4**
+
+### What changed
+
+1. `api/remediation.py` — Added NON-CANONICAL module docstring header. All 17
+   `/remediation/*` routes marked `deprecated=True` in OpenAPI. No business
+   logic changed; no routes removed. This is a declaration, not a rewrite.
+
+2. `api/portal_remediation.py` — Docstring updated to clarify routing authority:
+   portal remediation routes through `PortalRemediationEngine` directly; it does
+   NOT call `api/remediation.py` or its HTTP routes.
+
+3. `contracts/core/openapi.json` + `schemas/api/openapi.json` — Regenerated
+   after deprecated-flag schema change. Contract-Authority-SHA256 updated in
+   `BLUEPRINT_STAGED.md` and `CONTRACT.md` (`d9c017f4` → `330f4390`).
+
+4. `tests/test_r1_remediation_authority_canonical.py` — 3 acceptance tests:
+   R1-1 (all 17 `/remediation/*` routes deprecated in OpenAPI), R1-2
+   (`/remediation-authority/*` routes NOT deprecated), R1-3 (legacy routes
+   still respond — not removed).
+
+### Why
+
+Two remediation systems (`api/remediation.py` at `/remediation/*` and
+`api/remediation_authority.py` at `/remediation-authority/*`) were both active
+with no declared authority. Portal traffic ambiguity and split-brain risk exist
+until canonical authority is declared. R-1 makes the declaration; R-2 will
+validate the canonical path with live data.
+
+### Verification
+
+```
+pytest tests/test_r1_remediation_authority_canonical.py -v
+→ 3 passed
+make fg-contract
+→ CONTRACT LINT PASSED, Core OpenAPI contract matches, authority markers match
+make fg-fast
+→ all gates green, exit 0
+```
