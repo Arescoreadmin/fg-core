@@ -276,7 +276,7 @@ function RecordingWidget({
 
       {recState === 'stopped' && blobUrl && audioInfo && (
         <div className="space-y-2">
-          <audio controls src={blobUrl} className="w-full h-8" />
+          <audio controls src={blobUrl} className="w-full" />
           <div className="flex items-center justify-between text-[11px] text-muted">
             <span>{formatDuration(audioInfo.durationSec)} · {audioInfo.sizeKb} KB</span>
             <span className="font-mono truncate max-w-[160px]" title={audioInfo.hash}>
