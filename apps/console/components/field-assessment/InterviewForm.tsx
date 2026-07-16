@@ -486,11 +486,11 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
       .join('\n\n') + nistLine + audioLine;
 
     try {
-      const structured_evidence: Record<string, string> = {};
+      const structured_evidence: Record<string, string | number> = {};
       if (audioArtifact?.hash) {
         structured_evidence['_audio_hash'] = audioArtifact.hash;
-        structured_evidence['_audio_duration_sec'] = String(audioArtifact.durationSec);
-        structured_evidence['_audio_size_kb'] = String(audioArtifact.sizeKb);
+        structured_evidence['_audio_duration_sec'] = audioArtifact.durationSec;
+        structured_evidence['_audio_size_kb'] = audioArtifact.sizeKb;
       }
       if (audioArtifact?.artifactId) {
         structured_evidence['_audio_artifact_id'] = audioArtifact.artifactId;
