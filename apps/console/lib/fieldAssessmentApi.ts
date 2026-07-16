@@ -1266,7 +1266,7 @@ export const fieldAssessmentApi = {
   submitQuestionnaire(engagementId: string, questionnaireId: string): Promise<Questionnaire> {
     return request(
       `/engagements/${engagementId}/questionnaires/${questionnaireId}/submit`,
-      { method: 'POST' },
+      { method: 'POST', body: JSON.stringify({}) },
     );
   },
 
