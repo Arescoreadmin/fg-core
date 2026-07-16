@@ -304,6 +304,7 @@ export interface ConnectorImportPayload {
 
 export interface MsgraphScanInitiatePayload {
   azure_tenant_id: string;
+  azure_client_id?: string;
   operator_name?: string;
   operator_org?: string;
   client_org_name?: string;

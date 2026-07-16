@@ -3188,6 +3188,7 @@ class MsgraphScanInitiateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     azure_tenant_id: str
+    azure_client_id: str | None = None
     operator_name: str = "operator"
     operator_org: str = "FrostGate"
     client_org_name: str = ""
@@ -3427,11 +3428,11 @@ def initiate_msgraph_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
         )
 
     try:
@@ -3700,11 +3701,11 @@ def initiate_oauth_inventory_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -3946,11 +3947,11 @@ def initiate_endpoint_inventory_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -5147,11 +5148,11 @@ def initiate_entra_governance_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -5399,11 +5400,11 @@ def initiate_sharepoint_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -5651,11 +5652,11 @@ def initiate_oauth_risk_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -5907,11 +5908,11 @@ def initiate_ai_tool_discovery_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    client_id = os.environ.get("FG_MSAL_CLIENT_ID", "")
+    client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "FG_MSAL_CLIENT_ID is not set"),
+            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
         )
     try:
         import msal  # type: ignore[import-untyped]

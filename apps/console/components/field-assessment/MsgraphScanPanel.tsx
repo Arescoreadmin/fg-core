@@ -30,6 +30,7 @@ interface Props {
 
 export function MsgraphScanPanel({ engagementId, onSuccess }: Props) {
   const [azureTenantId, setAzureTenantId] = useState('');
+  const [azureClientId, setAzureClientId] = useState('');
   const [operatorName, setOperatorName] = useState('');
   const [operatorOrg, setOperatorOrg] = useState('');
 
@@ -86,6 +87,7 @@ export function MsgraphScanPanel({ engagementId, onSuccess }: Props) {
     try {
       const initiated = await fieldAssessmentApi.initiateMsgraphScan(engagementId, {
         azure_tenant_id: azureTenantId.trim(),
+        ...(azureClientId.trim() ? { azure_client_id: azureClientId.trim() } : {}),
         ...(operatorName.trim() ? { operator_name: operatorName.trim() } : {}),
         ...(operatorOrg.trim() ? { operator_org: operatorOrg.trim() } : {}),
       });
@@ -116,6 +118,7 @@ export function MsgraphScanPanel({ engagementId, onSuccess }: Props) {
     setRunStatus(null);
     setInitError(null);
     setCopied(false);
+    setAzureClientId('');
     successFiredRef.current = false;
   }
 
@@ -153,6 +156,19 @@ export function MsgraphScanPanel({ engagementId, onSuccess }: Props) {
               value={azureTenantId}
               onChange={(e) => setAzureTenantId(e.target.value)}
               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              className="flex h-9 w-full rounded border border-border bg-surface-2 px-3 py-2 text-sm text-foreground font-mono placeholder:font-sans placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              disabled={initiating}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="msgraph-client-id">Azure Client ID</Label>
+            <input
+              id="msgraph-client-id"
+              type="text"
+              value={azureClientId}
+              onChange={(e) => setAzureClientId(e.target.value)}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (overrides server default)"
               className="flex h-9 w-full rounded border border-border bg-surface-2 px-3 py-2 text-sm text-foreground font-mono placeholder:font-sans placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               disabled={initiating}
             />
