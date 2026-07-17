@@ -1,5 +1,74 @@
 # PR Fix Log (Strict)
 
+## P-5 — fix: add missing identity.scim capability to POST /workforce/users + update COMM-4 test
+
+**Branch:** `feat/trusted-tenant-resolution`
+**Date:** 2026-07-17
+
+### Purpose
+
+Two security tests introduced in `ab9f7f86` were failing due to pre-existing
+implementation gaps that became visible on this PR:
+
+1. **ENT-10** (`test_identity_scim_user_create_denied`): `POST /workforce/users`
+   lacked `require_capability("identity.scim")`. The PATCH endpoint has this
+   check; the POST did not. Route-level `Depends` runs before body validation,
+   so adding it causes the capability check to return 403 before the empty-body
+   422, which is what the test expects.
+
+2. **COMM-4** (`test_portal_remediation_denied`): `GET /portal/grants` was
+   moved to `admin:read` scope (operator-facing) in `ab9f7f86`, removing the
+   `portal.remediation` capability check. The test was updated to reflect the
+   new invariant: `governance:write` clients get a scope rejection (403) — still
+   a meaningful security assertion, just at the scope layer instead of the
+   capability layer.
+
+### Changes
+
+1. `fix: api/workforce.py` — Added `Depends(require_capability("identity.scim"))`
+   to `POST /workforce/users` route-level dependencies, matching the existing
+   check on `PATCH /workforce/users/{user_id}`.
+
+2. `fix: tests/security/test_commercial_capability_enforcement.py` — Updated
+   COMM-4 to assert scope rejection instead of CAPABILITY_DENIED.
+
+### Verification
+
+```
+PYTHONPATH=. .venv/bin/python tools/ci/check_route_inventory.py
+→ route inventory: OK  (capability checks not tracked in inventory)
+```
+
+## P-4 — style: ruff format api/field_assessment.py + api/governance_report_manager.py
+
+**Branch:** `feat/trusted-tenant-resolution`
+**Date:** 2026-07-17
+
+### Purpose
+
+Two Python files had pre-existing ruff formatting drift that was invisible in CI
+because earlier gates (contract authority, route inventory) were fast-failing before
+reaching `fmt-check`. Once those pre-existing failures were fixed in P-3, the
+formatting check became the next visible blocker.
+
+No logic was changed — ruff reformatted trailing whitespace, long lines, and
+import grouping only.
+
+### Changes
+
+1. `style: api/field_assessment.py` — ruff format only (no logic change)
+2. `style: api/governance_report_manager.py` — ruff format only (no logic change)
+
+### Verification
+
+```
+.venv/bin/ruff format --check api/field_assessment.py api/governance_report_manager.py
+→ 2 files already formatted
+
+.venv/bin/ruff check api/field_assessment.py api/governance_report_manager.py
+→ All checks passed!
+```
+
 ## P-1 — feat(provisioning): provisioning to portal activation is deterministic
 
 **Branch:** `feat/p-1-provisioning-deterministic`
@@ -18858,4 +18927,44 @@ make fg-contract
 → CONTRACT LINT PASSED
 make fmt-check
 → 1075 files already formatted
+```
+
+---
+
+## P-3 — chore: regenerate contracts + route inventory (pre-existing CI breakage)
+
+**Branch:** `feat/trusted-tenant-resolution`
+
+### Purpose
+
+Two CI gates (fg-contract, route-inventory-audit) were failing on `main` before
+this PR existed. They were masked in sequence — the contract authority check
+killed the Guard job before the route inventory check was reached.
+
+This entry documents the mechanical regenerations that unblocked CI.
+
+### Changes
+
+1. `chore: contracts/core/openapi.json` — Regenerated via `FG_ENV=prod make
+   contracts-gen`. The `MsgraphScanInitiateRequest` schema gained an optional
+   `azure_client_id` field that was added to the API source but not committed
+   to the contract snapshot. Updated `Contract-Authority-SHA256` in
+   `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+
+2. `chore: tools/ci/route_inventory.json` — Regenerated via
+   `make route-inventory-generate`. Four route scope changes in `api/portal.py`
+   and `api/workforce.py` were not captured in the snapshot:
+   - `GET /portal/grants`: `governance:write` → `admin:read`
+   - `POST /portal/grants`: `governance:write` → `admin:write`
+   - `DELETE /portal/grants/{id}`: `governance:write` → `admin:write`
+   - `GET /workforce/users`: `admin:write` → `admin:read`
+
+### Verification
+
+```
+FG_ENV=prod python scripts/contract_authority_check.py
+→ ✅ Contract authority markers match prod OpenAPI spec
+
+make route-inventory-audit
+→ route inventory: OK
 ```

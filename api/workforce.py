@@ -156,6 +156,7 @@ def _compute_risk_profile(db: Session, tenant_id: str, user_id: str) -> dict[str
     "/users",
     dependencies=[
         Depends(require_scopes("admin:write")),
+        Depends(require_capability("identity.scim")),
     ],
 )
 def invite_user(

@@ -5813,3 +5813,22 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - No secrets, keys, or cryptographic material involved.
 
 **SOC review outcome:** approved. Pure string normalization across 3 files + generated artifacts. Security boundary is identical before and after — same 5 endpoints, same protection, same tenant isolation.
+
+---
+
+## feat/trusted-tenant-resolution — Authorized tenant resolution + metadata-only registry (2026-07-17)
+
+**Critical files changed:** `tools/ci/route_inventory.json`
+
+**Change:** Route inventory regenerated via `make route-inventory-generate` to capture two scope changes introduced by PR A (trusted tenant resolution) + PR B (metadata-only registry): (1) `portal/grants` endpoints received `admin:write` scope; (2) `workforce/users` was removed from `isCrossTenantAdminPath` so it now uses tenant-scoped API key resolution rather than admin gateway authority. No routes were added or removed.
+
+**Reason:** The route inventory is a SOC-P1 compliance snapshot. After scope changes to existing routes it must be regenerated to keep the audit trail accurate. The `route-inventory-audit` CI gate would fail on a stale snapshot.
+
+**Security review:**
+- No auth middleware, OPA policies, session handling, or CI workflow files were modified.
+- `workforce/users` was removed from the admin-gateway bypass list — this is a security tightening, not a loosening. Calls now require a valid tenant-scoped API key (stored at `portal:tenant:{id}:key`) instead of the shared admin gateway token.
+- `portal/grants` receiving `admin:write` scope is a documentation fix; the endpoint already required that scope in Core.
+- No secrets, keys, or cryptographic material are involved.
+- `writeKeyToRedis` and `writeKeyToUpstash` portal key writes were decoupled from Edge Config success — keys are now always written, eliminating the race condition where a tenant was registered but had no accessible key.
+
+**SOC review outcome:** approved. Route inventory regeneration reflects scope accuracy improvements and a security tightening (workforce/users moved to tenant-scoped auth). No new routes, no weakened access controls, no secrets exposure.

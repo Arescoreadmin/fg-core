@@ -186,7 +186,9 @@ def _enrich_freshness(
     tenant_id: str,
 ) -> list[EvidenceRef]:
     """Fill in freshness_days for refs that don't have it by looking up scan result timestamps."""
-    missing_ids = [r.evidence_id for r in refs if r.freshness_days is None and r.evidence_id]
+    missing_ids = [
+        r.evidence_id for r in refs if r.freshness_days is None and r.evidence_id
+    ]
     if not missing_ids:
         return refs
 

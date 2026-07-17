@@ -232,6 +232,11 @@ class TestCOMM3RemediationGranted:
 
 # ---------------------------------------------------------------------------
 # COMM-4: portal.remediation denied
+# GET /portal/grants moved to admin:read (operator-facing) in ab9f7f86.
+# Clients with governance:write scope are rejected at the scope level; there
+# is no longer a client-facing portal/grants endpoint that enforces
+# portal.remediation capability. The test now verifies that governance:write
+# callers cannot reach portal grant management at all.
 # ---------------------------------------------------------------------------
 
 
@@ -248,11 +253,13 @@ class TestCOMM4RemediationDenied:
             capabilities=None,
         )
         resp = client.get("/portal/grants")
+        # Scope rejection (admin:read required): governance:write clients cannot
+        # reach portal grant management — enforced by scope, not capability.
         assert resp.status_code == 403
-        assert _is_capability_denied(resp), (
-            f"Expected CAPABILITY_DENIED, got: {resp.text}"
+        assert not _is_capability_denied(resp), (
+            "Expected scope rejection (not CAPABILITY_DENIED), "
+            f"got CAPABILITY_DENIED: {resp.text}"
         )
-        assert (_capability_denied_field(resp, "capability")) == "portal.remediation"
 
 
 # ---------------------------------------------------------------------------

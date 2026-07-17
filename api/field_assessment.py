@@ -3432,7 +3432,10 @@ def initiate_msgraph_scan(
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
+            detail=api_error(
+                "MSAL_NOT_CONFIGURED",
+                "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id",
+            ),
         )
 
     try:
@@ -3705,7 +3708,10 @@ def initiate_oauth_inventory_scan(
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
+            detail=api_error(
+                "MSAL_NOT_CONFIGURED",
+                "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id",
+            ),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -3951,7 +3957,10 @@ def initiate_endpoint_inventory_scan(
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
+            detail=api_error(
+                "MSAL_NOT_CONFIGURED",
+                "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id",
+            ),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -5152,7 +5161,10 @@ def initiate_entra_governance_scan(
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
+            detail=api_error(
+                "MSAL_NOT_CONFIGURED",
+                "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id",
+            ),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -5404,7 +5416,10 @@ def initiate_sharepoint_scan(
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
+            detail=api_error(
+                "MSAL_NOT_CONFIGURED",
+                "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id",
+            ),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -5656,7 +5671,10 @@ def initiate_oauth_risk_scan(
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
+            detail=api_error(
+                "MSAL_NOT_CONFIGURED",
+                "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id",
+            ),
         )
     try:
         import msal  # type: ignore[import-untyped]
@@ -5912,7 +5930,10 @@ def initiate_ai_tool_discovery_scan(
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail=api_error("MSAL_NOT_CONFIGURED", "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id"),
+            detail=api_error(
+                "MSAL_NOT_CONFIGURED",
+                "No MSAL client ID: set FG_MSAL_CLIENT_ID or provide azure_client_id",
+            ),
         )
     try:
         import msal  # type: ignore[import-untyped]
