@@ -1,12 +1,13 @@
 /**
- * Portal tenant registry — reads from Vercel Edge Config (primary) or Redis (fallback).
+ * Portal tenant registry — reads from Edge Config, ioredis, or Upstash REST (in priority order).
  *
  * Mirrors the shape written by the console's provision-tenant flow.
  * Read-only; write path lives in the console.
  *
- * Required env var (read path only):
- *   EDGE_CONFIG — connection string (auto-set when you connect the store in Vercel dashboard)
- *   PORTAL_REDIS_URL — Redis URL (used if Edge Config is not configured; share with console's REDIS_URL)
+ * Resolution order:
+ *   1. EDGE_CONFIG — Vercel Edge Config (auto-set when store is connected)
+ *   2. PORTAL_REDIS_URL / REDIS_URL — ioredis (Redis protocol, e.g. rediss://)
+ *   3. UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN — Upstash REST API
  */
 
 import { getRedisClient } from './redis';
@@ -39,7 +40,7 @@ export async function getPortalTenantApiKey(tenantId: string): Promise<string | 
     }
   }
 
-  // 2. Redis fallback (zero-touch when Edge Config not configured)
+  // 2. Redis fallback (ioredis, requires PORTAL_REDIS_URL or REDIS_URL in redis:// format)
   const redis = getRedisClient();
   if (redis) {
     try {
@@ -47,6 +48,26 @@ export async function getPortalTenantApiKey(tenantId: string): Promise<string | 
       if (key) return key;
     } catch {
       // Redis unavailable — fall through
+    }
+  }
+
+  // 3. Upstash REST fallback (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN)
+  const upstashUrl = (process.env.UPSTASH_REDIS_REST_URL || '').trim();
+  const upstashToken = (process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
+  if (upstashUrl && upstashToken) {
+    try {
+      const res = await fetch(upstashUrl, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${upstashToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(['GET', `${PORTAL_KEY_PREFIX}:${tenantId}:key`]),
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const { result } = await res.json() as { result: string | null };
+        if (typeof result === 'string') return result;
+      }
+    } catch {
+      // Upstash unavailable — fall through
     }
   }
 

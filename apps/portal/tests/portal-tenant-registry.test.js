@@ -96,6 +96,27 @@ test('tenant_registry_falls_back_to_redis_after_edge_config', () => {
   assert.match(src, /redis\.get\(`\$\{PORTAL_KEY_PREFIX\}/);
 });
 
+test('tenant_registry_falls_back_to_upstash_rest_after_ioredis', () => {
+  const src = read('lib/tenant-registry.ts');
+  // Upstash REST env vars must be checked
+  assert.match(src, /UPSTASH_REDIS_REST_URL/);
+  assert.match(src, /UPSTASH_REDIS_REST_TOKEN/);
+  // Must use Authorization: Bearer token pattern
+  assert.match(src, /Bearer.*upstashToken/);
+  // Upstash block must come after ioredis block (use process.env. prefix to skip doc comment)
+  const redisPos = src.indexOf('getRedisClient()');
+  const upstashPos = src.indexOf('process.env.UPSTASH_REDIS_REST_URL');
+  assert.ok(redisPos > -1, 'getRedisClient() call must be present');
+  assert.ok(upstashPos > -1, 'process.env.UPSTASH_REDIS_REST_URL must be present');
+  assert.ok(redisPos < upstashPos, 'ioredis must be checked before Upstash REST');
+});
+
+test('tenant_registry_upstash_rest_uses_same_key_prefix', () => {
+  const src = read('lib/tenant-registry.ts');
+  // Upstash GET command must reference the same key prefix constant
+  assert.match(src, /\['GET', `\$\{PORTAL_KEY_PREFIX\}/);
+});
+
 test('tenant_registry_key_format_uses_portal_tenant_prefix', () => {
   const src = read('lib/tenant-registry.ts');
   assert.match(src, /portal:tenant/);

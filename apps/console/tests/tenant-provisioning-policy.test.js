@@ -63,3 +63,25 @@ test('provision tenant suppresses raw API key in response when any registry back
   const src = read('app/api/admin/provision-tenant/route.ts');
   assert.match(src, /api_key: registryLive \? null : rawKey/);
 });
+
+test('provision tenant tries Upstash REST as third fallback after ioredis', () => {
+  const src = read('app/api/admin/provision-tenant/route.ts');
+  assert.match(src, /async function writeKeyToUpstash/);
+  assert.match(src, /registryLive = await writeKeyToUpstash/);
+  // Must use same key prefix and TTL
+  assert.match(src, /\['SET', `\$\{PORTAL_KEY_PREFIX\}/);
+  assert.match(src, /'EX', ONE_YEAR_SECONDS/);
+  // Upstash block must appear after Redis block
+  const redisCallPos = src.indexOf('registryLive = await writeKeyToRedis');
+  const upstashCallPos = src.indexOf('registryLive = await writeKeyToUpstash');
+  assert.ok(redisCallPos < upstashCallPos, 'ioredis must be tried before Upstash REST');
+});
+
+test('provision tenant Upstash REST write uses BFF or shared env vars — not public vars', () => {
+  const src = read('app/api/admin/provision-tenant/route.ts');
+  assert.match(src, /BFF_UPSTASH_REDIS_REST_URL/);
+  assert.match(src, /UPSTASH_REDIS_REST_URL/);
+  assert.match(src, /BFF_UPSTASH_REDIS_REST_TOKEN/);
+  assert.match(src, /UPSTASH_REDIS_REST_TOKEN/);
+  assert.doesNotMatch(src, /NEXT_PUBLIC_/);
+});

@@ -45,6 +45,32 @@ function adminHeaders(): HeadersInit {
   };
 }
 
+async function writeKeyToUpstash(tenantId: string, apiKey: string): Promise<boolean> {
+  const url = (
+    process.env.BFF_UPSTASH_REDIS_REST_URL ||
+    process.env.UPSTASH_REDIS_REST_URL ||
+    ''
+  ).trim();
+  const token = (
+    process.env.BFF_UPSTASH_REDIS_REST_TOKEN ||
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    ''
+  ).trim();
+  if (!url || !token) return false;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['SET', `${PORTAL_KEY_PREFIX}:${tenantId}:key`, apiKey, 'EX', ONE_YEAR_SECONDS]),
+    });
+    if (!res.ok) return false;
+    const data = await res.json() as { result: string };
+    return data.result === 'OK';
+  } catch {
+    return false;
+  }
+}
+
 async function writeKeyToRedis(tenantId: string, apiKey: string): Promise<boolean> {
   const url = (process.env.BFF_REDIS_URL || process.env.REDIS_URL || '').trim();
   if (!url) return false;
@@ -141,7 +167,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const rawKey: string = keyData.key;
 
   // Step 3: Write to tenant registry so portal can authenticate on behalf of this client.
-  // Priority: Edge Config (low-latency, Vercel-native) → Redis (cross-service fallback)
+  // Priority: Edge Config → ioredis (REDIS_URL) → Upstash REST (UPSTASH_REDIS_REST_URL)
   let registryLive = false;
   let registryError: string | null = null;
 
@@ -164,6 +190,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (registryLive) registryError = null;
     } catch (e) {
       if (!registryError) registryError = e instanceof Error ? e.message : 'Redis write failed';
+    }
+  }
+
+  if (!registryLive) {
+    try {
+      registryLive = await writeKeyToUpstash(tenantId, rawKey);
+      if (registryLive) registryError = null;
+    } catch (e) {
+      if (!registryError) registryError = e instanceof Error ? e.message : 'Upstash write failed';
     }
   }
 
