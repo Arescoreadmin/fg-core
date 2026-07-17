@@ -1,5 +1,44 @@
 # PR Fix Log (Strict)
 
+## P-5 — fix: add missing identity.scim capability to POST /workforce/users + update COMM-4 test
+
+**Branch:** `feat/trusted-tenant-resolution`
+**Date:** 2026-07-17
+
+### Purpose
+
+Two security tests introduced in `ab9f7f86` were failing due to pre-existing
+implementation gaps that became visible on this PR:
+
+1. **ENT-10** (`test_identity_scim_user_create_denied`): `POST /workforce/users`
+   lacked `require_capability("identity.scim")`. The PATCH endpoint has this
+   check; the POST did not. Route-level `Depends` runs before body validation,
+   so adding it causes the capability check to return 403 before the empty-body
+   422, which is what the test expects.
+
+2. **COMM-4** (`test_portal_remediation_denied`): `GET /portal/grants` was
+   moved to `admin:read` scope (operator-facing) in `ab9f7f86`, removing the
+   `portal.remediation` capability check. The test was updated to reflect the
+   new invariant: `governance:write` clients get a scope rejection (403) — still
+   a meaningful security assertion, just at the scope layer instead of the
+   capability layer.
+
+### Changes
+
+1. `fix: api/workforce.py` — Added `Depends(require_capability("identity.scim"))`
+   to `POST /workforce/users` route-level dependencies, matching the existing
+   check on `PATCH /workforce/users/{user_id}`.
+
+2. `fix: tests/security/test_commercial_capability_enforcement.py` — Updated
+   COMM-4 to assert scope rejection instead of CAPABILITY_DENIED.
+
+### Verification
+
+```
+PYTHONPATH=. .venv/bin/python tools/ci/check_route_inventory.py
+→ route inventory: OK  (capability checks not tracked in inventory)
+```
+
 ## P-4 — style: ruff format api/field_assessment.py + api/governance_report_manager.py
 
 **Branch:** `feat/trusted-tenant-resolution`
