@@ -14,11 +14,15 @@
 
 export interface TenantRecord {
   label: string;
-  api_key: string;
   created_at: string;
+  /** @deprecated Keys are stored at portal:tenant:{id}:key. Will be removed in Phase E. */
+  api_key?: string;
 }
 
 export type TenantMap = Record<string, TenantRecord>;
+
+// Prefix for per-tenant API keys written by provision-tenant and read by the portal.
+const PORTAL_KEY_PREFIX = 'portal:tenant';
 
 // Key used to store the full console tenant registry as a JSON blob in Upstash.
 // Separate from portal:tenant:{id}:key — this blob drives the client list UI.
@@ -87,10 +91,10 @@ export async function getTenantRegistry(): Promise<TenantMap> {
   return merged;
 }
 
-// Write tenant metadata to Upstash so the console client list persists across sessions.
+// Write tenant display metadata to Upstash so the console client list persists across sessions.
 // This is separate from the portal key write (portal:tenant:{id}:key) and stores
-// the full TenantRecord needed for the console to route BFF requests.
-export async function upsertTenantInUpstash(tenantId: string, record: TenantRecord): Promise<boolean> {
+// only display fields (label, created_at) — api_key is intentionally excluded.
+export async function upsertTenantInUpstash(tenantId: string, record: Omit<TenantRecord, 'api_key'>): Promise<boolean> {
   const cfg = getUpstashConfig();
   if (!cfg) return false;
   try {
@@ -112,6 +116,18 @@ export async function upsertTenantInUpstash(tenantId: string, record: TenantReco
 }
 
 export async function getTenantApiKey(tenantId: string): Promise<string | null> {
+  // Primary: read from portal:tenant:{id}:key (written by provision-tenant)
+  const cfg = getUpstashConfig();
+  if (cfg) {
+    try {
+      const result = await upstashCommand(cfg.url, cfg.token, ['GET', `${PORTAL_KEY_PREFIX}:${tenantId}:key`]);
+      if (typeof result === 'string' && result) return result;
+    } catch {
+      // Upstash unavailable — fall through to compatibility read
+    }
+  }
+
+  // Compatibility: read api_key from existing console registry entries written before Phase 4
   const registry = await getTenantRegistry();
   return registry[tenantId]?.api_key ?? null;
 }
@@ -149,7 +165,7 @@ function getStoreId(): string {
 
 export async function upsertTenantInRegistry(
   tenantId: string,
-  record: TenantRecord,
+  record: Omit<TenantRecord, 'api_key'>,
 ): Promise<void> {
   const token = process.env.VERCEL_API_TOKEN;
   if (!token || !process.env.EDGE_CONFIG) {
@@ -158,11 +174,15 @@ export async function upsertTenantInRegistry(
 
   const storeId = getStoreId();
 
-  // Read current state, then merge
+  // Read current state, then merge — strip api_key from existing records on the way out
   let current: TenantMap = {};
   try {
     const { get } = await import('@vercel/edge-config');
-    current = (await get<TenantMap>('tenants')) ?? {};
+    const raw = (await get<TenantMap>('tenants')) ?? {};
+    for (const [id, rec] of Object.entries(raw)) {
+      const { api_key: _removed, ...display } = rec;
+      current[id] = display;
+    }
   } catch {
     // Start fresh if unreadable
   }

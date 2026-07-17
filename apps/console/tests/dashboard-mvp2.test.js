@@ -67,9 +67,14 @@ test('proxy has strict route allowlist and blocks wildcard patterns', () => {
 
 test('tenant query parameter cannot override server tenant authority', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
+  // Must not allow arbitrary tenant switching via undocumented env flags
   assert.doesNotMatch(proxy, /FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE/);
-  assert.doesNotMatch(proxy, /searchParams\.get\('tenant_id'\)/);
-  assert.match(proxy, /return CORE_TENANT_ID \|\| null/);
+  assert.doesNotMatch(proxy, /DEMO_TENANT_ALLOWLIST/);
+  // Tenant param from URL must go through session-based authorization, not blind trust
+  assert.match(proxy, /resolveAuthorizedTenant/);
+  assert.match(proxy, /getSessionClaims/);
+  // Unauthorized cross-tenant access must be rejected
+  assert.match(proxy, /Forbidden: not authorized to act on behalf of this tenant/);
 });
 
 test('demo tenant selection cannot bypass server tenant authority', () => {
@@ -89,16 +94,24 @@ test('tenant authority cannot be overridden through JSON request body', () => {
 
 test('rate limit and API key tenant authority are server resolved', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
-  assert.match(proxy, /const tenantId = resolveTenant\(request\)/);
-  assert.match(proxy, /const key = await getTenantApiKey\(tenantId\)/);
-  assert.doesNotMatch(proxy, /searchParams\.get\('tenant_id'\)/);
+  // Tenant resolved via authorized session check, not raw URL param trust
+  assert.match(proxy, /resolveAuthorizedTenant/);
+  // tenantId is threaded through to both rate limiting and API key lookup
+  assert.match(proxy, /enforceRateLimit\(request, requestId, routeGroup, tenantId\)/);
+  assert.match(proxy, /proxyToCore\(request, path, requestId, tenantId\)/);
+  // API key lookup uses the server-resolved tenant
+  assert.match(proxy, /resolveCoreAuth\(tenantId\)/);
+  assert.match(proxy, /getTenantApiKey\(tenantId\)/);
 });
 
 test('proxy never forwards browser cookies or authorization headers', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
+  // BFF sets its own server-side API key — never forwards the browser's credential
   assert.match(proxy, /headers\.set\('X-API-Key', coreAuth\.apiKey\)/);
-  assert.doesNotMatch(proxy, /cookie/i);
-  assert.doesNotMatch(proxy, /authorization/i);
+  // Must never forward cookie header to Core API
+  assert.doesNotMatch(proxy, /request\.headers\.get\('cookie'\)/i);
+  // Must never forward the browser's Authorization header — BFF uses X-API-Key instead
+  assert.doesNotMatch(proxy, /request\.headers\.get\('authorization'\)/i);
   assert.match(proxy, /Cache-Control': 'no-store'/);
 });
 

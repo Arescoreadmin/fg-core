@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { canAccessCoreApiPath } from '@/lib/consoleAccess';
+import { canAccessCoreApiPath, getSessionClaims } from '@/lib/consoleAccess';
 import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
 import { getTenantApiKey } from '@/lib/tenant-registry';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
+
+// Allowable tenant_id character set: matches provision-tenant validation
+const TENANT_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ADMIN_GATEWAY_TOKEN = (
   process.env.FG_ADMIN_GATEWAY_TOKEN ||
@@ -69,7 +72,6 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'ui/audit/chain-integrity', methods: new Set(['GET', 'HEAD']) },
   // Field Assessment Engagement Substrate — operator console (PR 2)
   // governance:write required for mutations; governance:read for queries.
-  // tenant_id injected server-side from CORE_TENANT_ID — never from request body.
   { prefix: 'field-assessment/engagements', methods: new Set(['GET', 'POST', 'PATCH', 'DELETE', 'HEAD']) },
   // Governance topology graph — tenant-scoped, governance:read/write gated (PR 20)
   { prefix: 'governance/graph', methods: new Set(['GET', 'POST', 'HEAD']) },
@@ -108,13 +110,12 @@ function jsonError(message: string, status: number, requestId: string) {
  *   fg:bff:rl:{route_group}:{tenant_id}:{client_identity}
  *
  * - route_group: first path segment (e.g. "decisions", "keys")
- * - tenant_id: from CORE_TENANT_ID env (server-resolved, never from request body)
+ * - tenant_id: authorized tenant resolved from URL params or CORE_TENANT_ID env
  * - client_identity: session/user from x-frostgate-user header, else IP fallback
  *
  * Keys contain no secrets — only stable identity tokens already in headers.
  */
-function buildRateLimitKey(request: NextRequest, routeGroup: string): string {
-  const tenantId = resolveTenant(request) || 'default';
+function buildRateLimitKey(request: NextRequest, routeGroup: string, tenantId: string): string {
   // x-frostgate-user is set by the session layer upstream (server-side only).
   // Fall back to IP — never trust body-provided user identity.
   const userOrSession =
@@ -124,12 +125,12 @@ function buildRateLimitKey(request: NextRequest, routeGroup: string): string {
     'unknown';
   // Sanitize: remove characters that could cause key collision (colon is delimiter)
   const safeGroup = routeGroup.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 64);
-  const safeTenant = tenantId.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 128);
+  const safeTenant = (tenantId || 'default').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 128);
   const safeUser = userOrSession.replace(/[^a-zA-Z0-9_\-.:]/g, '_').slice(0, 128);
   return `fg:bff:rl:${safeGroup}:${safeTenant}:${safeUser}`;
 }
 
-async function enforceRateLimit(request: NextRequest, requestId: string, routeGroup: string): Promise<NextResponse | null> {
+async function enforceRateLimit(request: NextRequest, requestId: string, routeGroup: string, tenantId: string): Promise<NextResponse | null> {
   const { windowSec, maxRequests } = getBffRateLimitConfig();
   const storeResult = await getRateLimitStore();
 
@@ -140,7 +141,7 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
     return null;
   }
 
-  const key = buildRateLimitKey(request, routeGroup);
+  const key = buildRateLimitKey(request, routeGroup, tenantId);
   try {
     const result = await storeResult.store.increment(key, windowSec, maxRequests);
     if (!result.allowed) {
@@ -153,13 +154,53 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
   return null;
 }
 
-function resolveTenant(_request: NextRequest): string | null {
-  // Human-facing BFF requests cannot select tenant authority through the URL.
-  return CORE_TENANT_ID || null;
+/**
+ * Validates and authorizes a tenant_id from the request URL against the session.
+ *
+ * Returns { tenantId } when the operator is authorized to act on the requested
+ * tenant, or a NextResponse error when authorization fails.
+ *
+ * Authorization rules:
+ *   - No ?tenant_id param → operator default (CORE_TENANT_ID)
+ *   - internal_console / legacy_internal → may act on any tenant
+ *   - console_enabled_client → may only act on their own session tenant
+ *   - All others → 403
+ */
+function resolveAuthorizedTenant(
+  request: NextRequest,
+  session: NonNullable<Awaited<ReturnType<typeof auth>>>,
+  requestId: string,
+): { tenantId: string } | NextResponse {
+  const url = new URL(request.url);
+  const raw = url.searchParams.get('tenant_id');
+
+  if (raw === null) {
+    return { tenantId: CORE_TENANT_ID || '' };
+  }
+
+  const tenantId = raw.trim();
+  if (!TENANT_ID_RE.test(tenantId)) {
+    return jsonError(
+      'tenant_id is malformed — must be 1–128 characters: letters, numbers, hyphens, underscores',
+      422,
+      requestId,
+    );
+  }
+
+  const claims = getSessionClaims(session);
+
+  if (claims.experienceClass === 'internal_console' || claims.experienceClass === 'legacy_internal') {
+    return { tenantId };
+  }
+
+  if (claims.experienceClass === 'console_enabled_client' && claims.tenantId === tenantId) {
+    return { tenantId };
+  }
+
+  return jsonError('Forbidden: not authorized to act on behalf of this tenant', 403, requestId);
 }
 
-async function resolveCoreAuth(request: NextRequest): Promise<{ tenantId: string | null; apiKey: string | null }> {
-  const tenantId = resolveTenant(request);
+async function resolveCoreAuth(tenantId: string): Promise<{ tenantId: string; apiKey: string | null }> {
   if (!tenantId || tenantId === CORE_TENANT_ID) {
     return { tenantId, apiKey: CORE_API_KEY || null };
   }
@@ -167,14 +208,11 @@ async function resolveCoreAuth(request: NextRequest): Promise<{ tenantId: string
   return { tenantId, apiKey: key };
 }
 
-function buildCoreUrl(path: string[], request: NextRequest): string {
+function buildCoreUrl(path: string[], request: NextRequest, tenantId: string): string {
   const incoming = new URL(request.url);
   const query = new URLSearchParams(incoming.search);
   query.delete('tenant_id');
-
-  const tenant = resolveTenant(request);
-  if (tenant) query.set('tenant_id', tenant);
-
+  if (tenantId) query.set('tenant_id', tenantId);
   return `${CORE_API_URL}/${path.join('/')}?${query.toString()}`.replace(/\?$/, '');
 }
 
@@ -189,9 +227,7 @@ function isCrossTenantAdminPath(path: string[]): boolean {
     joined === 'admin/identity/invitations' ||
     joined.startsWith('admin/identity/invitations/') ||
     joined === 'portal/grants' ||
-    joined.startsWith('portal/grants/') ||
-    joined === 'workforce/users' ||
-    joined.startsWith('workforce/users/')
+    joined.startsWith('portal/grants/')
   );
 }
 
@@ -227,7 +263,7 @@ function isPrivateHost(hostname: string): boolean {
   return false;
 }
 
-async function proxyToCore(request: NextRequest, path: string[], requestId: string): Promise<NextResponse> {
+async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string): Promise<NextResponse> {
   const isAdminPath = isCrossTenantAdminPath(path);
 
   if (!isProxyPathAllowed(path, request.method)) {
@@ -243,11 +279,10 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
     headers.set('X-Admin-Gateway-Internal', 'true');
   } else {
-    const coreAuth = await resolveCoreAuth(request);
+    const coreAuth = await resolveCoreAuth(tenantId);
     if (!coreAuth.apiKey) return jsonError('Tenant API key is not configured', 500, requestId);
     headers.set('X-API-Key', coreAuth.apiKey);
-    const tenant = coreAuth.tenantId;
-    if (tenant) headers.set('X-Tenant-ID', tenant);
+    if (coreAuth.tenantId) headers.set('X-Tenant-ID', coreAuth.tenantId);
   }
 
   const contentType = request.headers.get('content-type');
@@ -277,7 +312,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     }
   }
 
-  const target = isAdminPath ? buildAdminUrl(path, request) : buildCoreUrl(path, request);
+  const target = isAdminPath ? buildAdminUrl(path, request) : buildCoreUrl(path, request, tenantId);
   console.info(`[core-proxy] ${requestId} ${request.method} ${target}`);
 
   const response = await fetch(target, init);
@@ -356,7 +391,11 @@ async function handle(request: NextRequest, { params }: { params: { path: string
     return jsonError('Forbidden for this console role', 403, requestId);
   }
 
-  const rate = await enforceRateLimit(request, requestId, routeGroup);
+  const tenantResolution = resolveAuthorizedTenant(request, session, requestId);
+  if (tenantResolution instanceof NextResponse) return tenantResolution;
+  const { tenantId } = tenantResolution;
+
+  const rate = await enforceRateLimit(request, requestId, routeGroup, tenantId);
   if (rate) return rate;
 
   if (!path.length) return jsonError('Missing path', 400, requestId);
@@ -374,7 +413,7 @@ async function handle(request: NextRequest, { params }: { params: { path: string
     );
   }
 
-  return proxyToCore(request, path, requestId);
+  return proxyToCore(request, path, requestId, tenantId);
 }
 
 export async function GET(request: NextRequest, context: { params: { path: string[] } }) {

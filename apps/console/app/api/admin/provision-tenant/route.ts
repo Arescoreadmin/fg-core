@@ -183,7 +183,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       await upsertTenantInRegistry(tenantId, {
         label: name,
-        api_key: rawKey,
         created_at: new Date().toISOString(),
       });
       registryLive = true;
@@ -214,7 +213,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // list persists across sessions even without Edge Config.
   await upsertTenantInUpstash(tenantId, {
     label: name,
-    api_key: rawKey,
     created_at: new Date().toISOString(),
   }).catch(() => {});
 
