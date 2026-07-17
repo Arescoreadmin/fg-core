@@ -26210,6 +26210,17 @@
       "MsgraphScanInitiateRequest": {
         "additionalProperties": false,
         "properties": {
+          "azure_client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Azure Client Id"
+          },
           "azure_tenant_id": {
             "title": "Azure Tenant Id",
             "type": "string"
