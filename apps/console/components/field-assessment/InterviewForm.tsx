@@ -502,7 +502,7 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
         severity: severity as ObservationSeverity,
         title: title.trim(),
         description,
-        interview_role: interviewRole.trim(),
+        interview_role: prefill?.role ?? interviewRole.trim(),
         structured_evidence,
       });
       setLastObs(obs);
