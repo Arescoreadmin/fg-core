@@ -8073,6 +8073,17 @@ def _build_engagement_report_json(
         db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
     )
     scan_result_ids: list[str] = [sr.id for sr in scan_rows]
+    _now = datetime.now(timezone.utc)
+
+    def _freshness_days(collected_at_str: str) -> int | None:
+        try:
+            dt = datetime.fromisoformat(collected_at_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return max(0, (_now - dt).days)
+        except (ValueError, TypeError):
+            return None
+
     evidence_refs: list[EvidenceRef] = [
         EvidenceRef(
             evidence_id=sr.id,
@@ -8080,7 +8091,7 @@ def _build_engagement_report_json(
             validation_state=ValidationState.VALIDATED,
             classification="scan_result",
             provenance=f"engagement:{engagement_id}",
-            freshness_days=None,
+            freshness_days=_freshness_days(sr.collected_at),
         )
         for sr in scan_rows
     ]
