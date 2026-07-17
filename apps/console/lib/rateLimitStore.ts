@@ -294,21 +294,10 @@ export async function buildRateLimitStore(): Promise<
       };
     }
 
-    try {
-      const store = new UpstashRestRateLimitStore(upstashRestUrl!, upstashRestToken!);
-      await store.ping();
-      return { store, unavailable: false };
-    } catch {
-      if (devOrTest) {
-        return { store: new MemoryRateLimitStore(), unavailable: false };
-      }
-      return {
-        store: null,
-        unavailable: true,
-        errorCode: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE',
-        required: true,
-      };
-    }
+    // No connectivity check at cold start — a transient Upstash failure during
+    // initialization would permanently brick this singleton for the worker's lifetime.
+    // Failures are caught per-request in enforceRateLimit instead.
+    return { store: new UpstashRestRateLimitStore(upstashRestUrl!, upstashRestToken!), unavailable: false };
   }
 
   // Redis backend
@@ -326,34 +315,20 @@ export async function buildRateLimitStore(): Promise<
     };
   }
 
-  try {
-    // ioredis is a server-only dependency — top-level ESM import is safe here
-    // because this file is never imported into browser/client components.
-    const client = new Redis(redisUrl!, {
+  // ioredis is a server-only dependency — top-level ESM import is safe here
+  // because this file is never imported into browser/client components.
+  // lazyConnect: true defers the TCP handshake to the first command; no eager
+  // connect so a transient DNS/network issue at cold start doesn't brick the singleton.
+  return {
+    store: new RedisRateLimitStore(new Redis(redisUrl!, {
       lazyConnect: true,
       connectTimeout: 2000,
       commandTimeout: 1000,
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
-    });
-
-    // Eagerly test connectivity
-    await (client as unknown as { connect(): Promise<void> }).connect();
-
-    return { store: new RedisRateLimitStore(client as unknown as RedisClientInterface), unavailable: false };
-  } catch {
-    if (devOrTest) {
-      // Dev/test: Redis unavailable → fall back to memory (deterministic)
-      return { store: new MemoryRateLimitStore(), unavailable: false };
-    }
-    // Prod-like: Redis unreachable → unavailable
-    return {
-      store: null,
-      unavailable: true,
-      errorCode: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE',
-      required: true,
-    };
-  }
+    }) as unknown as RedisClientInterface),
+    unavailable: false,
+  };
 }
 
 /**

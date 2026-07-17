@@ -134,20 +134,21 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
   const storeResult = await getRateLimitStore();
 
   if (storeResult.unavailable) {
-    // Rate store unavailable in a prod-like environment — fail closed (503).
-    // In dev/test the memory fallback is used and unavailable is never true.
-    console.error(`[core-proxy] rate-limit store unavailable (${storeResult.errorCode}), returning 503 — request_id=${requestId}`);
-    return NextResponse.json(
-      { detail: 'Rate limit store unavailable', code: storeResult.errorCode, request_id: requestId },
-      { status: 503, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
-    );
+    // Rate store not configured or unreachable — fail open so a Redis/Upstash
+    // outage never takes down the entire console. Log and allow through.
+    console.warn(`[core-proxy] rate-limit store unavailable (${storeResult.errorCode}), allowing request — request_id=${requestId}`);
+    return null;
   }
 
   const key = buildRateLimitKey(request, routeGroup);
-  const result = await storeResult.store.increment(key, windowSec, maxRequests);
-
-  if (!result.allowed) {
-    return jsonError('Too many requests', 429, requestId);
+  try {
+    const result = await storeResult.store.increment(key, windowSec, maxRequests);
+    if (!result.allowed) {
+      return jsonError('Too many requests', 429, requestId);
+    }
+  } catch {
+    // Per-request failure (e.g. Upstash network error) — fail open, log and continue.
+    console.warn(`[core-proxy] rate-limit increment failed, allowing request — request_id=${requestId}`);
   }
   return null;
 }

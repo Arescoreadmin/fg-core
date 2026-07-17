@@ -90,10 +90,7 @@ async function simulateBuildRateLimitStore({ env, redisReachable = true } = {}) 
       if (devOrTest) return { store: { type: 'memory' }, unavailable: false };
       return { store: null, unavailable: true, errorCode: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED', required: true };
     }
-    if (!redisReachable) {
-      if (devOrTest) return { store: { type: 'memory' }, unavailable: false };
-      return { store: null, unavailable: true, errorCode: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE', required: true };
-    }
+    // No eager ping — store is always returned when config is present.
     return { store: { type: 'upstash-rest' }, unavailable: false };
   }
 
@@ -105,14 +102,7 @@ async function simulateBuildRateLimitStore({ env, redisReachable = true } = {}) 
     return { store: null, unavailable: true, errorCode: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED', required: true };
   }
 
-  // Valid URL provided
-  if (!redisReachable) {
-    if (devOrTest) {
-      return { store: { type: 'memory' }, unavailable: false };
-    }
-    return { store: null, unavailable: true, errorCode: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE', required: true };
-  }
-
+  // No eager connect — store is always returned when config is present.
   return { store: { type: 'redis' }, unavailable: false };
 }
 
@@ -213,10 +203,11 @@ test('memory_fallback_rejected_in_prod', async () => {
   assert.equal(result.required, true);
 });
 
-// ─── Test 7: redis_unavailable_in_prod_returns_stable_error ──────────────────
+// ─── Test 7: redis_configured_returns_store_regardless_of_reachability ────────
+// Store is created without an eager connectivity check — per-request failures
+// are caught in enforceRateLimit so a transient outage doesn't brick the singleton.
 
-test('redis_unavailable_in_prod_returns_stable_error', async () => {
-  // Valid URL provided but Redis is unreachable
+test('redis_configured_returns_store_regardless_of_reachability', async () => {
   const result = await simulateBuildRateLimitStore({
     env: {
       NODE_ENV: 'production',
@@ -225,10 +216,8 @@ test('redis_unavailable_in_prod_returns_stable_error', async () => {
     },
     redisReachable: false,
   });
-  assert.equal(result.unavailable, true);
-  assert.equal(result.errorCode, 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE');
-  assert.equal(result.required, true);
-  assert.equal(result.store, null);
+  assert.equal(result.unavailable, false);
+  assert.equal(result.store?.type, 'redis');
 });
 
 // ─── Test 8: rate_limit_under_limit_still_allows_request (regression) ─────────
@@ -356,17 +345,20 @@ test('prod_enforcement_error_codes_defined_in_source', () => {
   assert.match(rateLimitSrc, /errorCode/);
 });
 
-// ─── Static source: route passes errorCode through to response ────────────────
+// ─── Static source: route fails open when store unavailable ──────────────────
 
-test('route_passes_errorCode_through_to_503_response', () => {
+test('route_fails_open_when_store_unavailable', () => {
   const routeSrc = read('app/api/core/[...path]/route.ts');
 
-  // Must use storeResult.errorCode in the response body (not hardcoded string)
+  // Must check unavailable and reference errorCode (in the log line)
+  assert.match(routeSrc, /storeResult\.unavailable/);
   assert.match(routeSrc, /storeResult\.errorCode/);
 
-  // Must still return 503 and check unavailable
-  assert.match(routeSrc, /status:\s*503/);
-  assert.match(routeSrc, /storeResult\.unavailable/);
+  // Must NOT return 503 — a rate-limit store outage must not block the console
+  assert.doesNotMatch(routeSrc, /status:\s*503/);
+
+  // Must return null (allow through) in the unavailable branch
+  assert.match(routeSrc, /allowing request/);
 });
 
 // ─── Static source: CHANGE_ME detection is present ───────────────────────────

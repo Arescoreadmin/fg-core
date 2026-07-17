@@ -230,31 +230,29 @@ test('redis_outage_uses_memory_fallback_in_test', async () => {
   );
 });
 
-// ─── Test 7: redis_outage_does_not_fail_open_in_prod ─────────────────────────
+// ─── Test 7: rate_limit_store_outage_fails_open_not_503 ──────────────────────
 
-test('redis_outage_does_not_fail_open_in_prod', () => {
-  // Verify that the route source code returns 503 when storeResult.unavailable
-  // is true — not 200 or a silent pass. Error codes are defined in rateLimitStore.ts
-  // and passed through dynamically via storeResult.errorCode.
+test('rate_limit_store_outage_fails_open_not_503', () => {
+  // A rate-limit store outage must never take down the entire console.
+  // The route logs a warning and allows the request through (fail open).
   const routeSrc = read('app/api/core/[...path]/route.ts');
   const rateLimitSrc = read('lib/rateLimitStore.ts');
 
   // The route must check storeResult.unavailable
   assert.match(routeSrc, /storeResult\.unavailable/);
 
-  // The route must return 503
-  assert.match(routeSrc, /status:\s*503/);
+  // Must NOT return 503 for a rate-limit store outage
+  assert.doesNotMatch(routeSrc, /status:\s*503/);
 
-  // The route must pass through the errorCode from the store result (not hardcode it)
+  // Must reference errorCode in the log line
   assert.match(routeSrc, /storeResult\.errorCode/);
 
-  // The stable error codes must be defined in rateLimitStore.ts
+  // Must allow the request through (return null) in the unavailable branch
+  assert.match(routeSrc, /allowing request/);
+
+  // The stable error codes must still be defined in rateLimitStore.ts
   assert.match(rateLimitSrc, /BFF_RATE_LIMIT_REDIS_UNAVAILABLE/);
   assert.match(rateLimitSrc, /BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED/);
-
-  // The route must NOT silently pass (no early return before unavailable check)
-  // Verify the unavailable branch returns explicitly (no fall-through)
-  assert.match(routeSrc, /if \(storeResult\.unavailable\)/);
 });
 
 // ─── Test 8: bff_rate_limit_does_not_expose_redis_url ────────────────────────
