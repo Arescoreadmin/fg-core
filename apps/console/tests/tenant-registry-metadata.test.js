@@ -160,14 +160,10 @@ test('logs_and_responses_do_not_expose_api_key_field', () => {
     'registry module must not log api_key values',
   );
 
-  // provision-tenant response still exposes api_key when ALL registry paths fail
-  // (so operators can manually configure the portal key) — this is intentional
-  assert.match(provisionSrc, /api_key: registryLive \? null : rawKey/, 'raw key only on total failure');
-
-  // But it must never appear in success-path response fields
-  assert.doesNotMatch(
-    provisionSrc,
-    /api_key:\s*rawKey[^,]/,
-    'must not unconditionally expose rawKey',
-  );
+  // R0 fail-closed: raw key must never appear in any response (not even on failure).
+  // When persistence fails, the route returns 503 PERSISTENCE_UNAVAILABLE instead of
+  // exposing the key. Operators must fix the Redis/Upstash connection, not copy raw keys.
+  assert.doesNotMatch(provisionSrc, /api_key:.*rawKey/, 'raw key must never be in response');
+  assert.match(provisionSrc, /PERSISTENCE_UNAVAILABLE/, '503 path required when persistence fails');
+  assert.match(provisionSrc, /status: 503/, '503 status required when persistence fails');
 });

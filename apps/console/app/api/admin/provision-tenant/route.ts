@@ -79,6 +79,17 @@ async function writeKeyToUpstash(tenantId: string, apiKey: string): Promise<bool
   }
 }
 
+async function revokeKey(prefix: string, tenantId: string): Promise<void> {
+  try {
+    await fetch(
+      `${CORE_API_URL}/admin/keys/${encodeURIComponent(prefix)}/revoke?tenant_id=${encodeURIComponent(tenantId)}`,
+      { method: 'POST', headers: adminHeaders(), cache: 'no-store' },
+    );
+  } catch (e) {
+    console.error('[provision-tenant] revokeKey failed (best-effort):', e instanceof Error ? e.message : e);
+  }
+}
+
 async function writeKeyToRedis(tenantId: string, apiKey: string): Promise<boolean> {
   const url = (process.env.BFF_REDIS_URL || process.env.REDIS_URL || '').trim();
   if (!url) return false;
@@ -205,6 +216,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Fail closed: both persistence paths failed. Revoke the dangling key so Postgres
+  // doesn't accumulate unreachable credentials, then return a structured error.
+  // R7 will make Postgres the rebuild source so this revocation becomes unnecessary.
+  if (!registryLive) {
+    console.error('[provision-tenant] credential persistence failed — revoking key and aborting', {
+      tenantId,
+      registryError,
+    });
+    await revokeKey(keyData.prefix, tenantId);
+    return NextResponse.json(
+      {
+        error: 'PERSISTENCE_UNAVAILABLE',
+        detail: registryError ?? 'Both Redis and Upstash writes failed. Tenant key not persisted.',
+      },
+      { status: 503 },
+    );
+  }
+
   // Always write full tenant record to Upstash console registry so the client
   // list persists across sessions even without Edge Config.
   await upsertTenantInUpstash(tenantId, {
@@ -216,10 +245,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     tenant_id: tenantId,
     name,
     already_existed: tenantAlreadyExisted,
-    registry_live: registryLive,
-    registry_error: registryError,
-    // Only expose the raw key if both registry paths failed — otherwise it's already stored
-    api_key: registryLive ? null : rawKey,
+    registry_live: true,
     api_key_prefix: keyData.prefix,
     api_key_expires_at: keyData.expires_at,
   });

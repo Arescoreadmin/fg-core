@@ -61,9 +61,24 @@ test('provision tenant reads Redis URL from BFF_REDIS_URL or REDIS_URL — not a
   assert.doesNotMatch(src, /NEXT_PUBLIC_/);
 });
 
-test('provision tenant suppresses raw API key in response when any registry backend succeeds', () => {
+test('provision tenant never exposes raw API key in any response', () => {
   const src = read('app/api/admin/provision-tenant/route.ts');
-  assert.match(src, /api_key: registryLive \? null : rawKey/);
+  // Raw key must not appear in any response body
+  assert.doesNotMatch(src, /api_key:.*rawKey/);
+  assert.doesNotMatch(src, /api_key: registryLive \? null : rawKey/);
+});
+
+test('provision tenant fails closed with 503 when credential persistence fails', () => {
+  const src = read('app/api/admin/provision-tenant/route.ts');
+  assert.match(src, /PERSISTENCE_UNAVAILABLE/);
+  assert.match(src, /status: 503/);
+  // Must attempt key revocation before returning error (prevent dangling Postgres keys)
+  assert.match(src, /revokeKey/);
+  // The 503 path must follow the registryLive persistence check
+  const registryCheck = src.indexOf('if (!registryLive)');
+  const persistenceError = src.indexOf('PERSISTENCE_UNAVAILABLE');
+  assert.ok(registryCheck >= 0, 'registryLive check must exist');
+  assert.ok(registryCheck < persistenceError, '503 path must follow persistence check');
 });
 
 test('provision tenant tries Upstash REST as third fallback after ioredis', () => {
