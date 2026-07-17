@@ -18859,3 +18859,43 @@ make fg-contract
 make fmt-check
 → 1075 files already formatted
 ```
+
+---
+
+## P-3 — chore: regenerate contracts + route inventory (pre-existing CI breakage)
+
+**Branch:** `feat/trusted-tenant-resolution`
+
+### Purpose
+
+Two CI gates (fg-contract, route-inventory-audit) were failing on `main` before
+this PR existed. They were masked in sequence — the contract authority check
+killed the Guard job before the route inventory check was reached.
+
+This entry documents the mechanical regenerations that unblocked CI.
+
+### Changes
+
+1. `chore: contracts/core/openapi.json` — Regenerated via `FG_ENV=prod make
+   contracts-gen`. The `MsgraphScanInitiateRequest` schema gained an optional
+   `azure_client_id` field that was added to the API source but not committed
+   to the contract snapshot. Updated `Contract-Authority-SHA256` in
+   `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+
+2. `chore: tools/ci/route_inventory.json` — Regenerated via
+   `make route-inventory-generate`. Four route scope changes in `api/portal.py`
+   and `api/workforce.py` were not captured in the snapshot:
+   - `GET /portal/grants`: `governance:write` → `admin:read`
+   - `POST /portal/grants`: `governance:write` → `admin:write`
+   - `DELETE /portal/grants/{id}`: `governance:write` → `admin:write`
+   - `GET /workforce/users`: `admin:write` → `admin:read`
+
+### Verification
+
+```
+FG_ENV=prod python scripts/contract_authority_check.py
+→ ✅ Contract authority markers match prod OpenAPI spec
+
+make route-inventory-audit
+→ route inventory: OK
+```
