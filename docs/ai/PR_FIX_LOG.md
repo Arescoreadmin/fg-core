@@ -1,5 +1,35 @@
 # PR Fix Log (Strict)
 
+## P-4 — style: ruff format api/field_assessment.py + api/governance_report_manager.py
+
+**Branch:** `feat/trusted-tenant-resolution`
+**Date:** 2026-07-17
+
+### Purpose
+
+Two Python files had pre-existing ruff formatting drift that was invisible in CI
+because earlier gates (contract authority, route inventory) were fast-failing before
+reaching `fmt-check`. Once those pre-existing failures were fixed in P-3, the
+formatting check became the next visible blocker.
+
+No logic was changed — ruff reformatted trailing whitespace, long lines, and
+import grouping only.
+
+### Changes
+
+1. `style: api/field_assessment.py` — ruff format only (no logic change)
+2. `style: api/governance_report_manager.py` — ruff format only (no logic change)
+
+### Verification
+
+```
+.venv/bin/ruff format --check api/field_assessment.py api/governance_report_manager.py
+→ 2 files already formatted
+
+.venv/bin/ruff check api/field_assessment.py api/governance_report_manager.py
+→ All checks passed!
+```
+
 ## P-1 — feat(provisioning): provisioning to portal activation is deterministic
 
 **Branch:** `feat/p-1-provisioning-deterministic`
