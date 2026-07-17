@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { COOKIE_NAME, getSessionUser, getGrantSession } from '@/lib/session';
 import { getRedisClient } from '@/lib/redis';
+import { getPortalTenantApiKey } from '@/lib/tenant-registry';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.CORE_API_KEY;
@@ -10,11 +11,6 @@ const DEMO_TENANT_ALLOWLIST = (process.env.FG_PORTAL_DEMO_TENANTS || process.env
   .split(',')
   .map((value) => value.trim())
   .filter((value) => /^[a-zA-Z0-9_-]{1,128}$/.test(value));
-
-function resolvePortalTenant(sessionTenantId: string | null): string | null {
-  if (sessionTenantId && DEMO_TENANT_ALLOWLIST.includes(sessionTenantId)) return sessionTenantId;
-  return CORE_TENANT_ID || null;
-}
 
 function parseDemoTenantKeys(raw: string | undefined): Record<string, string> {
   if (!raw) return {};
@@ -35,9 +31,25 @@ const DEMO_TENANT_API_KEYS = parseDemoTenantKeys(
   process.env.FG_PORTAL_DEMO_TENANT_KEYS || process.env.FG_DEMO_TENANT_API_KEYS,
 );
 
-function resolveCoreApiKey(tenantId: string): string | null {
-  if (tenantId === CORE_TENANT_ID) return CORE_API_KEY || null;
-  return DEMO_TENANT_API_KEYS[tenantId] || null;
+async function resolveAuth(
+  grantSession: { sessionId: string; tenantId: string | null } | null,
+): Promise<{ tenantId: string | null; apiKey: string | null }> {
+  const sessionTenantId = grantSession?.tenantId ?? null;
+
+  if (sessionTenantId) {
+    // 1. Env var allowlist (no I/O, fast path)
+    if (DEMO_TENANT_ALLOWLIST.includes(sessionTenantId)) {
+      return { tenantId: sessionTenantId, apiKey: DEMO_TENANT_API_KEYS[sessionTenantId] || null };
+    }
+    // 2. Edge Config registry (dynamic — no redeploy needed when a new client is provisioned)
+    const ecKey = await getPortalTenantApiKey(sessionTenantId);
+    if (ecKey) {
+      return { tenantId: sessionTenantId, apiKey: ecKey };
+    }
+  }
+
+  // 3. Static fallback
+  return { tenantId: CORE_TENANT_ID || null, apiKey: CORE_API_KEY || null };
 }
 
 const _rlBuckets = new Map<string, { count: number; resetAt: number }>();
@@ -150,7 +162,6 @@ async function proxyToCore(
   path: string[],
   requestId: string,
 ): Promise<NextResponse> {
-  if (!CORE_API_KEY) return jsonError('CORE_API_KEY is not configured', 500, requestId);
   if (!isPortalPathAllowed(path, request.method)) {
     return jsonError('Route/method is not permitted by portal policy', 403, requestId);
   }
@@ -159,9 +170,8 @@ async function proxyToCore(
   const sessionUser = await getSessionUser(sessionToken);
   const grantSession = await getGrantSession(sessionToken);
   const sessionId = grantSession?.sessionId ?? null;
-  const tenantId = resolvePortalTenant(grantSession?.tenantId ?? null);
+  const { tenantId, apiKey: coreApiKey } = await resolveAuth(grantSession);
   if (!tenantId) return jsonError('CORE_TENANT_ID is not configured', 500, requestId);
-  const coreApiKey = resolveCoreApiKey(tenantId);
   if (!coreApiKey) return jsonError('Tenant API key is not configured', 500, requestId);
 
   const target = buildCoreUrl(path, request);

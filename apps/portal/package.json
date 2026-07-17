@@ -12,6 +12,7 @@
   "dependencies": {
     "@fg/navigation": "file:../../packages/navigation",
     "@fg/ui": "file:../../packages/ui",
+    "@vercel/edge-config": "^1.4.3",
     "@hookform/resolvers": "^3.9.1",
     "@tanstack/react-query": "^5.62.16",
     "clsx": "^2.1.1",
