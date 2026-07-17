@@ -16470,7 +16470,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "admin:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -16487,7 +16487,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "admin:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -16504,7 +16504,7 @@
       "plane_id": "control",
       "scoped": true,
       "scopes": [
-        "governance:write"
+        "admin:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -20113,7 +20113,7 @@
       "plane_id": "workforce",
       "scoped": true,
       "scopes": [
-        "admin:write"
+        "admin:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -20199,7 +20199,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-15T11:56:00.732343+00:00",
+  "generated_at": "2026-07-17T17:58:37.346275+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
