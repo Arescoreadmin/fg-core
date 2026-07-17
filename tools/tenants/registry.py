@@ -14,7 +14,11 @@ from loguru import logger
 
 # Resolve project root: tools/tenants -> tools -> project_root
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-STATE_DIR = PROJECT_ROOT / "state"
+# Prefer the Dockerfile-prepared writable directory (/var/lib/frostgate/state)
+# over /app/state, which is root-owned in the container and not writable by
+# the unprivileged frostgate user the app runs as.
+_DOCKER_STATE = Path("/var/lib/frostgate/state")
+STATE_DIR = _DOCKER_STATE if _DOCKER_STATE.is_dir() else PROJECT_ROOT / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Allow override in tests / ops via env
@@ -76,10 +80,18 @@ def _load_raw() -> Dict[str, Dict]:
 
 
 def _save_raw(data: Dict[str, Dict]) -> None:
-    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = REGISTRY_PATH.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(data, indent=2, sort_keys=True))
-    tmp_path.replace(REGISTRY_PATH)
+    try:
+        REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = REGISTRY_PATH.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(data, indent=2, sort_keys=True))
+        tmp_path.replace(REGISTRY_PATH)
+    except OSError as exc:
+        logger.error(
+            "tenant_registry_write_error",
+            path=str(REGISTRY_PATH),
+            error=str(exc),
+        )
+        raise
 
 
 def load_registry() -> Dict[str, TenantRecord]:
