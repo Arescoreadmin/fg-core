@@ -174,30 +174,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const keyData = await keyRes.json();
   const rawKey: string = keyData.key;
 
-  // Step 3: Write to tenant registry so portal can authenticate on behalf of this client.
-  // Priority: Edge Config → ioredis (REDIS_URL) → Upstash REST (UPSTASH_REDIS_REST_URL)
+  // Step 3a: Write display metadata to Edge Config (does NOT store the auth key).
+  // Fire-and-forget — Edge Config is for the client list UI, not portal authentication.
+  if (isRegistryConfigured()) {
+    upsertTenantInRegistry(tenantId, {
+      label: name,
+      created_at: new Date().toISOString(),
+    }).catch(() => {});
+  }
+
+  // Step 3b: Write the portal auth key (portal:tenant:{id}:key) so the portal can
+  // authenticate on behalf of this tenant. Always runs — independent of Edge Config.
+  // Priority: ioredis (REDIS_URL) → Upstash REST (UPSTASH_REDIS_REST_URL)
   let registryLive = false;
   let registryError: string | null = null;
 
-  if (isRegistryConfigured()) {
-    try {
-      await upsertTenantInRegistry(tenantId, {
-        label: name,
-        created_at: new Date().toISOString(),
-      });
-      registryLive = true;
-    } catch (e) {
-      registryError = e instanceof Error ? e.message : 'Unknown error writing to Edge Config';
-    }
-  }
-
-  if (!registryLive) {
-    try {
-      registryLive = await writeKeyToRedis(tenantId, rawKey);
-      if (registryLive) registryError = null;
-    } catch (e) {
-      if (!registryError) registryError = e instanceof Error ? e.message : 'Redis write failed';
-    }
+  try {
+    registryLive = await writeKeyToRedis(tenantId, rawKey);
+    if (registryLive) registryError = null;
+  } catch (e) {
+    registryError = e instanceof Error ? e.message : 'Redis write failed';
   }
 
   if (!registryLive) {

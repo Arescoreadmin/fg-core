@@ -75,10 +75,13 @@ test('upsert_to_registry_excludes_api_key', () => {
 test('provision_tenant_writes_display_metadata_only_to_registry', () => {
   const src = read('app/api/admin/provision-tenant/route.ts');
 
-  // upsertTenantInRegistry call must not include api_key field
-  const registryCallBlock = src.match(/await upsertTenantInRegistry\(tenantId,\s*\{[\s\S]*?\}\)/)?.[0] ?? '';
+  // upsertTenantInRegistry must be called (fire-and-forget — no await) without api_key
+  // Regex matches both awaited and fire-and-forget call forms
+  const registryCallBlock = src.match(/upsertTenantInRegistry\(tenantId,\s*\{[\s\S]*?\}\)/)?.[0] ?? '';
   assert.ok(registryCallBlock, 'upsertTenantInRegistry call must exist');
   assert.doesNotMatch(registryCallBlock, /api_key/, 'must not write api_key to Edge Config registry');
+  // Must be fire-and-forget (display metadata only — not a blocking auth step)
+  assert.match(src, /upsertTenantInRegistry\(tenantId[\s\S]*?\)\.catch/, 'upsertTenantInRegistry must be fire-and-forget');
 
   // upsertTenantInUpstash (console registry) call must not include api_key field
   const upstashCallBlock = src.match(/await upsertTenantInUpstash\(tenantId,\s*\{[\s\S]*?\}\)/)?.[0] ?? '';

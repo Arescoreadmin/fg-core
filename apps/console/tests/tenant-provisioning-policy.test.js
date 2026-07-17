@@ -25,13 +25,15 @@ test('tenant provisioning authenticates admin core calls with the internal token
   assert.doesNotMatch(headers, /'X-API-Key': CORE_API_KEY/);
 });
 
-test('provision tenant writes API key to Redis as fallback when Edge Config is absent', () => {
+test('provision tenant always writes portal auth key to Redis then Upstash', () => {
   const src = read('app/api/admin/provision-tenant/route.ts');
-  // writeKeyToRedis must be called in the !registryLive branch
+  // Portal key write (Redis) always runs — no longer gated on Edge Config success
   assert.match(src, /writeKeyToRedis/);
-  assert.match(src, /if \(!registryLive\)/);
-  // Redis write must clear registryError on success
   assert.match(src, /registryLive = await writeKeyToRedis/);
+  // Upstash portal key write is the Redis fallback (still gated on !registryLive)
+  assert.match(src, /if \(!registryLive\)/);
+  assert.match(src, /registryLive = await writeKeyToUpstash/);
+  // Redis write must clear registryError on success
   assert.match(src, /if \(registryLive\) registryError = null/);
 });
 

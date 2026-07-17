@@ -174,15 +174,12 @@ export async function upsertTenantInRegistry(
 
   const storeId = getStoreId();
 
-  // Read current state, then merge — strip api_key from existing records on the way out
+  // Read current state, then merge — preserve existing records as-is (including any
+  // legacy api_key fields) so pre-Phase-4 tenants retain their backward-compat fallback.
   let current: TenantMap = {};
   try {
     const { get } = await import('@vercel/edge-config');
-    const raw = (await get<TenantMap>('tenants')) ?? {};
-    for (const [id, rec] of Object.entries(raw)) {
-      const { api_key: _removed, ...display } = rec;
-      current[id] = display;
-    }
+    current = (await get<TenantMap>('tenants')) ?? {};
   } catch {
     // Start fresh if unreadable
   }
