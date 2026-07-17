@@ -1221,6 +1221,7 @@ export const fieldAssessmentApi = {
   verifyReport(engagementId: string, version: number): Promise<ReportVerifyResult> {
     return request(`/engagements/${engagementId}/reports/${version}/verify`, {
       method: 'POST',
+      body: JSON.stringify({}),
     });
   },
 
@@ -1278,6 +1279,7 @@ export const fieldAssessmentApi = {
   generateVerificationBundle(engagementId: string): Promise<VerificationBundle> {
     return request(`/engagements/${engagementId}/verification-bundle/generate`, {
       method: 'POST',
+      body: JSON.stringify({}),
     });
   },
 
