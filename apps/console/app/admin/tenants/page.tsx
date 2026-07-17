@@ -119,7 +119,7 @@ function ProvisionResultModal({ result, onClose }: { result: ProvisionResult; on
             <p style={{ fontSize: '0.875rem', color: 'var(--muted)', marginTop: 4, lineHeight: 1.6 }}>
               {result.registry_error
                 ? `Registry write failed: ${result.registry_error}`
-                : 'Edge Config is not configured — copy the API key below and add it to Vercel manually.'}
+                : 'Neither Edge Config nor Redis is configured — copy the API key below and add it manually.'}
             </p>
             {result.api_key && (
               <label style={s.field}>
@@ -132,15 +132,15 @@ function ProvisionResultModal({ result, onClose }: { result: ProvisionResult; on
             )}
             <div style={s.stepsBox}>
               <p style={{ margin: '0 0 6px', fontWeight: 600, fontSize: '0.8rem' }}>
-                To complete setup, add to Vercel Edge Config (or env vars) and redeploy:
+                Set one of the following to enable zero-touch provisioning:
               </p>
               <div style={s.stepRow}>
-                <span style={s.envName}>EDGE_CONFIG</span>
-                <span style={s.stepDesc}>Connect an Edge Config store to this project in Vercel dashboard</span>
+                <span style={s.envName}>REDIS_URL</span>
+                <span style={s.stepDesc}>Shared Redis — set same value in console and portal (recommended)</span>
               </div>
               <div style={s.stepRow}>
-                <span style={s.envName}>VERCEL_API_TOKEN</span>
-                <span style={s.stepDesc}>A Vercel API token — then "Regen key" to auto-register</span>
+                <span style={s.envName}>EDGE_CONFIG + VERCEL_API_TOKEN</span>
+                <span style={s.stepDesc}>Vercel Edge Config store with a write-enabled API token</span>
               </div>
             </div>
           </>

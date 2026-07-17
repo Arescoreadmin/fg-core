@@ -156,7 +156,6 @@ def _compute_risk_profile(db: Session, tenant_id: str, user_id: str) -> dict[str
     "/users",
     dependencies=[
         Depends(require_scopes("admin:write")),
-        Depends(require_capability("identity.scim")),
     ],
 )
 def invite_user(
@@ -247,7 +246,7 @@ def invite_user(
     }
 
 
-@router.get("/users", dependencies=[Depends(require_scopes("admin:write"))])
+@router.get("/users", dependencies=[Depends(require_scopes("admin:read"))])
 def list_users(
     request: Request,
     db: Session = Depends(tenant_db_required),

@@ -24,3 +24,42 @@ test('tenant provisioning authenticates admin core calls with the internal token
   assert.match(headers, /'X-Admin-Gateway-Internal': 'true'/);
   assert.doesNotMatch(headers, /'X-API-Key': CORE_API_KEY/);
 });
+
+test('provision tenant writes API key to Redis as fallback when Edge Config is absent', () => {
+  const src = read('app/api/admin/provision-tenant/route.ts');
+  // writeKeyToRedis must be called in the !registryLive branch
+  assert.match(src, /writeKeyToRedis/);
+  assert.match(src, /if \(!registryLive\)/);
+  // Redis write must clear registryError on success
+  assert.match(src, /registryLive = await writeKeyToRedis/);
+  assert.match(src, /if \(registryLive\) registryError = null/);
+});
+
+test('provision tenant Redis write uses portal:tenant key prefix and one-year TTL', () => {
+  const src = read('app/api/admin/provision-tenant/route.ts');
+  assert.match(src, /PORTAL_KEY_PREFIX = 'portal:tenant'/);
+  assert.match(src, /`\$\{PORTAL_KEY_PREFIX\}:\$\{tenantId\}:key`/);
+  assert.match(src, /ONE_YEAR_SECONDS = 365 \* 24 \* 60 \* 60/);
+  assert.match(src, /'EX', ONE_YEAR_SECONDS/);
+});
+
+test('provision tenant Redis write returns false without throwing on connection failure', () => {
+  const src = read('app/api/admin/provision-tenant/route.ts');
+  // The catch block inside writeKeyToRedis must return false, not rethrow
+  assert.match(src, /async function writeKeyToRedis/);
+  assert.match(src, /} catch \{/);
+  assert.match(src, /return false/);
+  assert.doesNotMatch(src, /throw.*writeKeyToRedis/i);
+});
+
+test('provision tenant reads Redis URL from BFF_REDIS_URL or REDIS_URL — not a public env var', () => {
+  const src = read('app/api/admin/provision-tenant/route.ts');
+  assert.match(src, /process\.env\.BFF_REDIS_URL/);
+  assert.match(src, /process\.env\.REDIS_URL/);
+  assert.doesNotMatch(src, /NEXT_PUBLIC_/);
+});
+
+test('provision tenant suppresses raw API key in response when any registry backend succeeds', () => {
+  const src = read('app/api/admin/provision-tenant/route.ts');
+  assert.match(src, /api_key: registryLive \? null : rawKey/);
+});

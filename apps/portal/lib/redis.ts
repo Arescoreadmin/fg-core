@@ -5,7 +5,7 @@ let _unavailable = false;
 
 export function getRedisClient(): Redis | null {
   if (_unavailable) return null;
-  const url = process.env.PORTAL_REDIS_URL;
+  const url = process.env.PORTAL_REDIS_URL || process.env.REDIS_URL;
   if (!url) return null;
   if (!_client) {
     _client = new Redis(url, {

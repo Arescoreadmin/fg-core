@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { canAccessConsoleRoute } from '@/lib/consoleAccess';
 import { upsertTenantInRegistry, isRegistryConfigured } from '@/lib/tenant-registry';
+import Redis from 'ioredis';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 
@@ -32,6 +33,7 @@ const PROVISION_SCOPES = [
 ];
 
 const ONE_YEAR_SECONDS = 365 * 24 * 60 * 60;
+const PORTAL_KEY_PREFIX = 'portal:tenant';
 
 function adminHeaders(): HeadersInit {
   const token = internalToken();
@@ -41,6 +43,27 @@ function adminHeaders(): HeadersInit {
     'X-FG-Internal-Token': token,
     'X-Admin-Gateway-Internal': 'true',
   };
+}
+
+async function writeKeyToRedis(tenantId: string, apiKey: string): Promise<boolean> {
+  const url = (process.env.BFF_REDIS_URL || process.env.REDIS_URL || '').trim();
+  if (!url) return false;
+  let client: Redis | null = null;
+  try {
+    client = new Redis(url, {
+      maxRetriesPerRequest: 1,
+      connectTimeout: 2000,
+      enableOfflineQueue: false,
+      lazyConnect: true,
+    });
+    await client.connect();
+    await client.set(`${PORTAL_KEY_PREFIX}:${tenantId}:key`, apiKey, 'EX', ONE_YEAR_SECONDS);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    try { client?.disconnect(); } catch { /* ignore */ }
+  }
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -117,7 +140,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const keyData = await keyRes.json();
   const rawKey: string = keyData.key;
 
-  // Step 3: Write to Edge Config registry so client is live immediately
+  // Step 3: Write to tenant registry so portal can authenticate on behalf of this client.
+  // Priority: Edge Config (low-latency, Vercel-native) → Redis (cross-service fallback)
   let registryLive = false;
   let registryError: string | null = null;
 
@@ -130,7 +154,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
       registryLive = true;
     } catch (e) {
-      registryError = e instanceof Error ? e.message : 'Unknown error writing to registry';
+      registryError = e instanceof Error ? e.message : 'Unknown error writing to Edge Config';
+    }
+  }
+
+  if (!registryLive) {
+    try {
+      registryLive = await writeKeyToRedis(tenantId, rawKey);
+      if (registryLive) registryError = null;
+    } catch (e) {
+      if (!registryError) registryError = e instanceof Error ? e.message : 'Redis write failed';
     }
   }
 
@@ -140,7 +173,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     already_existed: tenantAlreadyExisted,
     registry_live: registryLive,
     registry_error: registryError,
-    // Only expose the raw key if registry write failed — otherwise it's already stored
+    // Only expose the raw key if both registry paths failed — otherwise it's already stored
     api_key: registryLive ? null : rawKey,
     api_key_prefix: keyData.prefix,
     api_key_expires_at: keyData.expires_at,

@@ -73,7 +73,7 @@ test('BFF never forwards Authorization or Cookie headers to core API', () => {
 
 test('BFF injects X-Tenant-ID from server-resolved context — never from client request', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
-  assert.match(proxy, /resolvePortalTenant/);
+  assert.match(proxy, /resolveAuth/);
   assert.match(proxy, /DEMO_TENANT_ALLOWLIST\.includes\(sessionTenantId\)/);
   assert.match(proxy, /headers\.set\('X-Tenant-ID', tenantId\)/);
   assert.match(proxy, /headers\.set\('X-API-Key', coreApiKey\)/);

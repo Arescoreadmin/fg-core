@@ -258,8 +258,7 @@ class ListGrantsResponse(BaseModel):
     response_model=ListGrantsResponse,
     status_code=200,
     dependencies=[
-        Depends(require_scopes("governance:write")),
-        Depends(require_capability("portal.remediation")),
+        Depends(require_scopes("admin:read")),
     ],
 )
 def list_portal_grants(
@@ -318,8 +317,7 @@ class CreateGrantResponse(BaseModel):
     response_model=CreateGrantResponse,
     status_code=201,
     dependencies=[
-        Depends(require_scopes("governance:write")),
-        Depends(require_capability("portal.remediation")),
+        Depends(require_scopes("admin:write")),
     ],
 )
 def create_portal_grant(
@@ -389,8 +387,7 @@ class RevokeGrantResponse(BaseModel):
     response_model=RevokeGrantResponse,
     status_code=200,
     dependencies=[
-        Depends(require_scopes("governance:write")),
-        Depends(require_capability("portal.remediation")),
+        Depends(require_scopes("admin:write")),
     ],
 )
 def revoke_portal_grant(

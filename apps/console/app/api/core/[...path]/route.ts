@@ -8,6 +8,12 @@ const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').repla
 const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const ADMIN_GATEWAY_TOKEN = (
+  process.env.FG_ADMIN_GATEWAY_TOKEN ||
+  process.env.FG_INTERNAL_AUTH_SECRET ||
+  process.env.FG_INTERNAL_TOKEN ||
+  ''
+).trim();
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'health/live', methods: new Set(['GET', 'HEAD']) },
@@ -175,6 +181,24 @@ function isAlignmentArtifact(path: string[]) {
   return path.length === 1 && path[0] === 'alignment-artifact';
 }
 
+function isCrossTenantAdminPath(path: string[]): boolean {
+  const joined = path.join('/');
+  return (
+    joined.startsWith('admin/identity/tenants/') ||
+    joined === 'portal/grants' ||
+    joined.startsWith('portal/grants/') ||
+    joined === 'workforce/users' ||
+    joined.startsWith('workforce/users/')
+  );
+}
+
+function buildAdminUrl(path: string[], request: NextRequest): string {
+  const incoming = new URL(request.url);
+  const query = new URLSearchParams(incoming.search);
+  const qs = query.toString();
+  return `${CORE_API_URL}/${path.join('/')}${qs ? `?${qs}` : ''}`;
+}
+
 function isProxyPathAllowed(path: string[], method: string): boolean {
   const joined = path.join('/');
   const rule = PROXY_RULES.find((item) => joined === item.prefix || joined.startsWith(`${item.prefix}/`));
@@ -201,18 +225,27 @@ function isPrivateHost(hostname: string): boolean {
 }
 
 async function proxyToCore(request: NextRequest, path: string[], requestId: string): Promise<NextResponse> {
-  const coreAuth = await resolveCoreAuth(request);
-  if (!coreAuth.apiKey) return jsonError('Tenant API key is not configured', 500, requestId);
+  const isAdminPath = isCrossTenantAdminPath(path);
 
   if (!isProxyPathAllowed(path, request.method)) {
     return jsonError('Route/method is not allowed by proxy policy', 403, requestId);
   }
 
   const headers = new Headers();
-  headers.set('X-API-Key', coreAuth.apiKey);
   headers.set('X-Request-ID', requestId);
-  const tenant = coreAuth.tenantId;
-  if (tenant) headers.set('X-Tenant-ID', tenant);
+
+  if (isAdminPath) {
+    if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
+    headers.set('X-API-Key', ADMIN_GATEWAY_TOKEN);
+    headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
+    headers.set('X-Admin-Gateway-Internal', 'true');
+  } else {
+    const coreAuth = await resolveCoreAuth(request);
+    if (!coreAuth.apiKey) return jsonError('Tenant API key is not configured', 500, requestId);
+    headers.set('X-API-Key', coreAuth.apiKey);
+    const tenant = coreAuth.tenantId;
+    if (tenant) headers.set('X-Tenant-ID', tenant);
+  }
 
   const contentType = request.headers.get('content-type');
   if (contentType && (request.method === 'POST' || request.method === 'DELETE' || request.method === 'PATCH' || request.method === 'PUT')) {
@@ -241,7 +274,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     }
   }
 
-  const target = buildCoreUrl(path, request);
+  const target = isAdminPath ? buildAdminUrl(path, request) : buildCoreUrl(path, request);
   console.info(`[core-proxy] ${requestId} ${request.method} ${target}`);
 
   const response = await fetch(target, init);
