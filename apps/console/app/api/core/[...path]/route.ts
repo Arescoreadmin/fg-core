@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import type { Session } from 'next-auth';
 import { canAccessCoreApiPath, getSessionClaims } from '@/lib/consoleAccess';
 import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
 import { getTenantApiKey } from '@/lib/tenant-registry';
@@ -168,7 +169,7 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
  */
 function resolveAuthorizedTenant(
   request: NextRequest,
-  session: NonNullable<Awaited<ReturnType<typeof auth>>>,
+  session: Session,
   requestId: string,
 ): { tenantId: string } | NextResponse {
   const url = new URL(request.url);
