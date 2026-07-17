@@ -20,6 +20,31 @@ export interface TenantRecord {
 
 export type TenantMap = Record<string, TenantRecord>;
 
+// Key used to store the full console tenant registry as a JSON blob in Upstash.
+// Separate from portal:tenant:{id}:key — this blob drives the client list UI.
+const UPSTASH_CONSOLE_REGISTRY_KEY = 'console:tenant-registry';
+
+// ─── Upstash REST helpers ─────────────────────────────────────────────────────
+
+function getUpstashConfig(): { url: string; token: string } | null {
+  const url = (process.env.BFF_UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_URL || '').trim();
+  const token = (process.env.BFF_UPSTASH_REDIS_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
+  return url && token ? { url, token } : null;
+}
+
+async function upstashCommand(url: string, token: string, command: unknown[]): Promise<unknown> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(command),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Upstash HTTP ${res.status}`);
+  const data = await res.json() as { result?: unknown; error?: string };
+  if (data.error) throw new Error(data.error);
+  return data.result;
+}
+
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
 let _cache: { data: TenantMap; at: number } | null = null;
@@ -36,16 +61,54 @@ export async function getTenantRegistry(): Promise<TenantMap> {
       const { get } = await import('@vercel/edge-config');
       ecData = (await get<TenantMap>('tenants')) ?? {};
     } catch {
-      // Edge Config unavailable — fall through to env var fallback
+      // Edge Config unavailable — fall through to Upstash fallback
     }
   }
 
-  // Merge in legacy env var keys so existing tenants keep working
+  // If Edge Config has no data, fall back to Upstash console registry
+  let upstashData: TenantMap = {};
+  if (Object.keys(ecData).length === 0) {
+    const cfg = getUpstashConfig();
+    if (cfg) {
+      try {
+        const result = await upstashCommand(cfg.url, cfg.token, ['GET', UPSTASH_CONSOLE_REGISTRY_KEY]);
+        if (typeof result === 'string') upstashData = JSON.parse(result) as TenantMap;
+      } catch {
+        // Upstash unavailable — fall through to env var fallback
+      }
+    }
+  }
+
+  // Merge: legacy env vars < Upstash < Edge Config (highest priority wins)
   const legacy = parseLegacyEnvKeys();
-  const merged: TenantMap = { ...legacy, ...ecData };
+  const merged: TenantMap = { ...legacy, ...upstashData, ...ecData };
 
   _cache = { data: merged, at: Date.now() };
   return merged;
+}
+
+// Write tenant metadata to Upstash so the console client list persists across sessions.
+// This is separate from the portal key write (portal:tenant:{id}:key) and stores
+// the full TenantRecord needed for the console to route BFF requests.
+export async function upsertTenantInUpstash(tenantId: string, record: TenantRecord): Promise<boolean> {
+  const cfg = getUpstashConfig();
+  if (!cfg) return false;
+  try {
+    let current: TenantMap = {};
+    try {
+      const existing = await upstashCommand(cfg.url, cfg.token, ['GET', UPSTASH_CONSOLE_REGISTRY_KEY]);
+      if (typeof existing === 'string') current = JSON.parse(existing) as TenantMap;
+    } catch { /* start fresh */ }
+    const updated = { ...current, [tenantId]: record };
+    const result = await upstashCommand(cfg.url, cfg.token, ['SET', UPSTASH_CONSOLE_REGISTRY_KEY, JSON.stringify(updated)]);
+    if (result === 'OK') {
+      _cache = null; // invalidate so next read reflects the new tenant
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 export async function getTenantApiKey(tenantId: string): Promise<string | null> {

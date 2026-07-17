@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { canAccessConsoleRoute } from '@/lib/consoleAccess';
-import { upsertTenantInRegistry, isRegistryConfigured } from '@/lib/tenant-registry';
+import { upsertTenantInRegistry, isRegistryConfigured, upsertTenantInUpstash } from '@/lib/tenant-registry';
 import Redis from 'ioredis';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
@@ -209,6 +209,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (!registryError) registryError = e instanceof Error ? e.message : 'Upstash write failed';
     }
   }
+
+  // Always write full tenant record to Upstash console registry so the client
+  // list persists across sessions even without Edge Config.
+  await upsertTenantInUpstash(tenantId, {
+    label: name,
+    api_key: rawKey,
+    created_at: new Date().toISOString(),
+  }).catch(() => {});
 
   return NextResponse.json({
     tenant_id: tenantId,
