@@ -29,7 +29,9 @@ Security invariants:
 
 from __future__ import annotations
 
+import dataclasses
 import logging
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -40,6 +42,7 @@ from api.assessments import _resolve_caller_tenant, _get_assessment_or_404
 from api.auth_scopes.resolution import require_scopes
 from api.entitlements import require_capability
 from api.db_models_governance_report import GovernanceReportRecord
+from api.db_models_field_assessment import FaScanResult
 from api.deps import auth_ctx_db_session
 from services.governance.timeline import TimelineStore
 from services.governance.timeline.adapters import governance_report_to_timeline_event
@@ -177,6 +180,46 @@ def _build_evidence_refs(inputs: list[EvidenceRefInput]) -> list[EvidenceRef]:
     return refs
 
 
+def _enrich_freshness(
+    refs: list[EvidenceRef],
+    db: Session,
+    tenant_id: str,
+) -> list[EvidenceRef]:
+    """Fill in freshness_days for refs that don't have it by looking up scan result timestamps."""
+    missing_ids = [r.evidence_id for r in refs if r.freshness_days is None and r.evidence_id]
+    if not missing_ids:
+        return refs
+
+    rows = (
+        db.query(FaScanResult.id, FaScanResult.collected_at)
+        .filter(
+            FaScanResult.tenant_id == tenant_id,
+            FaScanResult.id.in_(missing_ids),
+        )
+        .all()
+    )
+    now = datetime.now(tz=timezone.utc)
+    freshness_map: dict[str, int] = {}
+    for row_id, collected_at_str in rows:
+        try:
+            collected_at = datetime.fromisoformat(collected_at_str)
+            if collected_at.tzinfo is None:
+                collected_at = collected_at.replace(tzinfo=timezone.utc)
+            freshness_map[row_id] = max(0, (now - collected_at).days)
+        except (ValueError, TypeError):
+            pass
+
+    if not freshness_map:
+        return refs
+
+    return [
+        dataclasses.replace(r, freshness_days=freshness_map[r.evidence_id])
+        if r.freshness_days is None and r.evidence_id in freshness_map
+        else r
+        for r in refs
+    ]
+
+
 def _emit_audit(
     event_type_str: str,
     tenant_id: str,
@@ -273,7 +316,11 @@ def generate_governance_report(
         )
 
     tenant_id = rec.tenant_id
-    evidence_refs = _build_evidence_refs(body.evidence_refs)
+    evidence_refs = _enrich_freshness(
+        _build_evidence_refs(body.evidence_refs),
+        db=db,
+        tenant_id=tenant_id,
+    )
 
     try:
         report = _engine.generate(

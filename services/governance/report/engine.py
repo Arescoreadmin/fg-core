@@ -473,28 +473,22 @@ def _infer_evidence_domain(ref: EvidenceRef) -> str:
 
 
 def _estimate_completion(scores: dict[str, float], responses: dict[str, Any]) -> float:
-    """Estimate assessment completion percentage from scores and responses."""
-    expected_domains = {
-        "data_governance",
-        "security_posture",
-        "ai_maturity",
-        "infra_readiness",
-        "compliance_awareness",
-        "automation_potential",
-    }
-    answered_domains = {d for d, s in scores.items() if d in expected_domains and s > 0}
-    if not expected_domains:
-        return 0.0
-    domain_completion = len(answered_domains) / len(expected_domains) * 100.0
+    """Estimate assessment completion percentage from responses or scores.
 
-    # Weight responses if available
+    Prefers response-based completion so NIST AI RMF and other control-level
+    questionnaires (which don't use the six legacy domain keys) score correctly.
+    Falls back to the fraction of non-zero scores when no responses are present.
+    """
     if responses:
-        response_completion = min(
-            len(responses) / max(len(expected_domains) * 5, 1) * 100.0, 100.0
-        )
-        return domain_completion * 0.7 + response_completion * 0.3
+        answered = sum(1 for v in responses.values() if v)
+        total = len(responses)
+        if total > 0:
+            return min(answered / total * 100.0, 100.0)
 
-    return domain_completion
+    if not scores:
+        return 0.0
+    answered = sum(1 for s in scores.values() if s > 0)
+    return min(answered / len(scores) * 100.0, 100.0)
 
 
 def _build_framework_summary(
