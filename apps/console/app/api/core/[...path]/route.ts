@@ -186,6 +186,8 @@ function isCrossTenantAdminPath(path: string[]): boolean {
   const joined = path.join('/');
   return (
     joined.startsWith('admin/identity/tenants/') ||
+    joined === 'admin/identity/invitations' ||
+    joined.startsWith('admin/identity/invitations/') ||
     joined === 'portal/grants' ||
     joined.startsWith('portal/grants/') ||
     joined === 'workforce/users' ||

@@ -56,17 +56,25 @@ async function writeKeyToUpstash(tenantId: string, apiKey: string): Promise<bool
     process.env.UPSTASH_REDIS_REST_TOKEN ||
     ''
   ).trim();
-  if (!url || !token) return false;
+  if (!url || !token) {
+    console.warn('[provision-tenant] writeKeyToUpstash: url or token missing', { hasUrl: !!url, hasToken: !!token });
+    return false;
+  }
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(['SET', `${PORTAL_KEY_PREFIX}:${tenantId}:key`, apiKey, 'EX', ONE_YEAR_SECONDS]),
     });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      console.warn('[provision-tenant] writeKeyToUpstash: non-ok response', { status: res.status });
+      return false;
+    }
     const data = await res.json() as { result: string };
+    console.info('[provision-tenant] writeKeyToUpstash result:', data.result);
     return data.result === 'OK';
-  } catch {
+  } catch (e) {
+    console.error('[provision-tenant] writeKeyToUpstash threw:', e instanceof Error ? e.message : e);
     return false;
   }
 }
