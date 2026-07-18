@@ -20,14 +20,6 @@ import pytest
 class TestResolveInternalGatewaySecret:
     """Unit tests for api/config/internal_gateway_secret.py::resolve_internal_gateway_secret."""
 
-    def _resolve(self):
-        # Re-import each call so monkeypatch env changes take effect.
-        from importlib import import_module, reload
-        import api.config.internal_gateway_secret as m
-
-        reload(m)
-        return m.resolve_internal_gateway_secret()
-
     def _clear_all(self, monkeypatch):
         for name in (
             "FG_INTERNAL_GATEWAY_SECRET",
