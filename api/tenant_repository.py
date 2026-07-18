@@ -148,9 +148,7 @@ class TenantRepository:
         meta_json = json.dumps(metadata or {})
         with self._engine.begin() as conn:
             existing = conn.execute(
-                text(
-                    "SELECT tenant_id FROM tenants WHERE tenant_id = :tid"
-                ),
+                text("SELECT tenant_id FROM tenants WHERE tenant_id = :tid"),
                 {"tid": tenant_id},
             ).fetchone()
 
@@ -266,9 +264,7 @@ class TenantRepository:
                 raise KeyError(f"Tenant not found: {tenant_id}")
             if archived_at:
                 conn.execute(
-                    text(
-                        "UPDATE tenants SET archived_at = :a WHERE tenant_id = :tid"
-                    ),
+                    text("UPDATE tenants SET archived_at = :a WHERE tenant_id = :tid"),
                     {"a": archived_at, "tid": tenant_id},
                 )
         row = self._pg_get(tenant_id)
@@ -330,7 +326,9 @@ class TenantRepository:
         return TenantRow(
             tenant_id=rec.tenant_id,
             display_name=rec.name,
-            lifecycle_state=rec.status if rec.status in _SUPPORTED_LIFECYCLE_STATES else "active",
+            lifecycle_state=rec.status
+            if rec.status in _SUPPORTED_LIFECYCLE_STATES
+            else "active",
             created_at=rec.created_at,
             updated_at=rec.updated_at,
             created_by=None,

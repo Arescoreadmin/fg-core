@@ -192,16 +192,16 @@ def test_migration_empty_json(sqlite_engine, tmp_path, monkeypatch):
 
     monkeypatch.setattr(m, "REGISTRY_PATH", tmp_path / "tenants.json")
     # Override dialect check to allow SQLite for testing.
-    monkeypatch.setattr(
-        sqlite_engine.dialect, "name", "postgresql", raising=False
-    )
+    monkeypatch.setattr(sqlite_engine.dialect, "name", "postgresql", raising=False)
 
     result = m.run_migration(engine=sqlite_engine, stop_json_writes=False)
     assert result.status == "complete"
     assert result.tenants_created == 0
 
 
-def test_migration_creates_rows(sqlite_engine, tmp_path, monkeypatch, json_registry_path):
+def test_migration_creates_rows(
+    sqlite_engine, tmp_path, monkeypatch, json_registry_path
+):
     """JSON with 2 tenants → 2 Postgres rows."""
     from tools.tenants import migrate_to_postgres as m
 
@@ -410,7 +410,9 @@ def test_freeze_blocks_exclusive_create(tmp_path, monkeypatch):
     # Create the .frozen sentinel.
     frozen_path = registry_path.with_suffix(".frozen")
     frozen_path.write_text(
-        json.dumps({"frozen_at": "2024-01-01T00:00:00+00:00", "migration_version": "r7-v1"}),
+        json.dumps(
+            {"frozen_at": "2024-01-01T00:00:00+00:00", "migration_version": "r7-v1"}
+        ),
         encoding="utf-8",
     )
 
