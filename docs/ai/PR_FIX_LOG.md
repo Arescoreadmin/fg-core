@@ -19017,3 +19017,21 @@ python -m py_compile api/tenant_repository.py tools/tenants/migrate_to_postgres.
 Critical invariant: `test_critical_invariant_resolves_without_json` creates a
 tenant in Postgres, hides `state/tenants.json`, and confirms `repo.get()` still
 returns the tenant — filesystem can be empty and tenants resolve.
+
+
+## PR #550 — R7 canonical formatting follow-up
+
+- **Date:** 2026-07-18
+- **Category:** formatting-only / no behavioral change
+- **Files changed:**
+  - `tools/tenants/migrate_to_postgres.py`
+  - `tools/tenants/registry.py`
+- **Reason:** Apply canonical Ruff formatting after R7 merge.
+- **Behavioral impact:** None.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Validation:**
+  - `ruff format --check tools/tenants/migrate_to_postgres.py tools/tenants/registry.py`
+  - `ruff check tools/tenants/migrate_to_postgres.py tools/tenants/registry.py`
+  - `git diff --check`
+- **Result:** Pass.
