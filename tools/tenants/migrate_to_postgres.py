@@ -229,7 +229,14 @@ def run_migration(
             result.tenants_failed += 1
             continue
 
-        name = payload.get("name") or payload.get("display_name") or ""
+        if not isinstance(payload, dict):
+            warn = f"Tenant {tenant_id!r} has non-object payload ({type(payload).__name__}) — skipping"
+            result.warnings.append(warn)
+            result.tenants_failed += 1
+            continue
+
+        raw_name = payload.get("name") or payload.get("display_name")
+        name = raw_name if isinstance(raw_name, str) else ""
         if not name or not name.strip():
             warn = f"Tenant {tenant_id!r} has empty name — skipping"
             result.warnings.append(warn)
@@ -247,7 +254,7 @@ def run_migration(
                 text(
                     """
                     SELECT DISTINCT tenant_id FROM api_keys
-                    WHERE enabled = 1 AND tenant_id IS NOT NULL
+                    WHERE enabled IS TRUE AND tenant_id IS NOT NULL
                     """
                 )
             ).fetchall()
@@ -340,9 +347,46 @@ def run_migration(
     _write_ledger(engine, result, checksum)
 
     # Step 11: freeze JSON if all tenants migrated successfully.
+    # Re-read the JSON to catch tenants written between the initial snapshot
+    # (step 1) and now.  Any new arrivals are upserted before the sentinel
+    # is written so the frozen file is consistent with Postgres.
     if stop_json_writes and result.status == "complete":
         try:
-            _freeze_json(checksum)
+            current_bytes = REGISTRY_PATH.read_bytes() if REGISTRY_PATH.exists() else b"{}"
+            current_data: Dict[str, Any] = json.loads(current_bytes)
+            new_tenant_ids = set(current_data.keys()) - set(valid_records.keys())
+            if new_tenant_ids:
+                warn = (
+                    f"Late-arriving tenants detected before freeze "
+                    f"(written after initial snapshot): {sorted(new_tenant_ids)}"
+                )
+                result.warnings.append(warn)
+                log.warning(warn)
+                for late_id in new_tenant_ids:
+                    late_payload = current_data[late_id]
+                    if not isinstance(late_payload, dict):
+                        continue
+                    late_name = (
+                        late_payload.get("name") or late_payload.get("display_name") or late_id
+                    ).strip() if isinstance(
+                        late_payload.get("name") or late_payload.get("display_name") or late_id, str
+                    ) else late_id
+                    try:
+                        repo.upsert(
+                            tenant_id=late_id,
+                            display_name=late_name,
+                            migration_source="tenants.json.late",
+                            migration_version=_MIGRATION_VERSION,
+                            original_created_at=late_payload.get("created_at"),
+                        )
+                        log.info("late_tenant_migrated tenant_id=%s", late_id)
+                    except Exception as exc:
+                        result.warnings.append(
+                            f"Late-arrival upsert failed for {late_id!r}: {exc}"
+                        )
+            # Use the current checksum for the freeze sentinel.
+            current_checksum = __import__("hashlib").sha256(current_bytes).hexdigest()
+            _freeze_json(current_checksum)
         except Exception as exc:
             result.warnings.append(f"Could not write freeze sentinel: {exc}")
             log.warning("freeze_sentinel_failed error=%s", exc)

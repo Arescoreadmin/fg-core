@@ -282,7 +282,7 @@ class TenantRepository:
                 text(
                     """
                     SELECT prefix FROM api_keys
-                    WHERE tenant_id = :tid AND enabled = 1
+                    WHERE tenant_id = :tid AND enabled IS TRUE
                     """
                 ),
                 {"tid": tenant_id},

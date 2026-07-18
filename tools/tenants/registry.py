@@ -90,6 +90,11 @@ def _load_raw() -> Dict[str, Dict]:
 
 
 def _save_raw(data: Dict[str, Dict]) -> None:
+    if _is_frozen():
+        raise TenantRegistryFrozenError(
+            "JSON tenant registry is frozen (R7 migration complete). "
+            "Use TenantRepository for tenant management."
+        )
     try:
         REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = REGISTRY_PATH.with_suffix(".tmp")

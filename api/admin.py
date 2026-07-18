@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.actor_context import ActorContext
@@ -868,7 +869,7 @@ async def create_tenant(
                 created_by=_actor_id,
                 migration_source="api",
             )
-        except ValueError:
+        except (ValueError, IntegrityError):
             raise HTTPException(
                 status_code=409, detail=f"Tenant already exists: {req.tenant_id}"
             )
@@ -982,7 +983,7 @@ async def list_tenants(
 
     repo = get_tenant_repository()
     if repo is not None:
-        records_pg = repo.list_all(include_archived=False)
+        records_pg = repo.list_all(include_archived=include_revoked)
         return {
             "tenants": [
                 {
