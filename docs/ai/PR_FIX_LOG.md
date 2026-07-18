@@ -18968,3 +18968,52 @@ FG_ENV=prod python scripts/contract_authority_check.py
 make route-inventory-audit
 → route inventory: OK
 ```
+
+---
+
+## P-6 — feat(r7): canonical tenant persistence — Postgres-authoritative tenant registry
+
+**Branch:** `feat/r7-canonical-tenant-persistence`
+
+### Purpose
+
+R7 of the Platform Recovery plan. Establishes Postgres as the authoritative
+source for tenant identity, replacing the filesystem-based `state/tenants.json`
+registry discovered in the R1 audit.
+
+### Changes
+
+1. `migrations/postgres/0156_canonical_tenants.sql` — new schema migration.
+   Creates `tenants` (12-column canonical tenant table, no RLS — platform-level
+   not per-tenant) and `tenant_migration_ledger` (append-only migration audit
+   table). Both use `IF NOT EXISTS` for idempotency.
+
+2. `api/tenant_repository.py` — new service module. `TenantRepository` provides
+   Postgres-first CRUD with JSON fallback during transition window. `upsert()`
+   is idempotent for migration reruns. `get_tenant_repository()` factory returns
+   `None` on SQLite so non-Postgres environments fall through to existing paths.
+
+3. `api/admin.py` — minimal routing update. `create_tenant`, `list_tenants`,
+   and `get_tenant` routes now call `get_tenant_repository()` first; if it
+   returns `None` (SQLite/dev), existing JSON path is unchanged. On success,
+   `create_tenant` dual-writes to both Postgres and JSON (best-effort) for
+   rollback safety during the R7 transition window.
+
+### Verification
+
+```
+pytest tests/test_r7_tenant_persistence.py -v
+→ 16 passed
+
+pytest tests/test_tenant_create.py tests/test_tenant_invariant.py \
+       tests/test_provisioning_manager.py tests/test_tenant_binding.py \
+       tests/test_auth_tenants.py -v
+→ 99 passed, 3 skipped
+
+python -m py_compile api/tenant_repository.py tools/tenants/migrate_to_postgres.py
+→ clean
+```
+
+Critical invariant: `test_critical_invariant_resolves_without_json` creates a
+tenant in Postgres, hides `state/tenants.json`, and confirms `repo.get()` still
+returns the tenant — filesystem can be empty and tenants resolve.
