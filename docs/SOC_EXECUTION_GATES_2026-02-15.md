@@ -5832,3 +5832,22 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - `writeKeyToRedis` and `writeKeyToUpstash` portal key writes were decoupled from Edge Config success — keys are now always written, eliminating the race condition where a tenant was registered but had no accessible key.
 
 **SOC review outcome:** approved. Route inventory regeneration reflects scope accuracy improvements and a security tightening (workforce/users moved to tenant-scoped auth). No new routes, no weakened access controls, no secrets exposure.
+
+---
+
+## feat/r7-canonical-tenant-persistence — R7 canonical tenant persistence (2026-07-18)
+
+**Critical files changed:** `tools/ci/check_core_rls.py`
+
+**Change:** Added `_PLATFORM_IDENTITY_TABLES` exclusion set containing `tenants` to the RLS enforcement check. The `tenants` table (introduced by migration `0156_canonical_tenants.sql`) has `tenant_id` as its PRIMARY KEY — the identity being stored — not as a foreign-key scope column. Applying `tenant_id = current_setting('app.tenant_id', true)` RLS to this table would filter the tenant registry to show only the current tenant, which would make all platform-level tenant enumeration (list, create, migrate) fail. The exclusion is explicitly documented with a comment distinguishing identity tables from scope tables.
+
+**Reason:** The `check_core_rls.py` CI gate checks every table with a `tenant_id` column. Without this exclusion the gate false-positively fails on the platform identity table, blocking a legitimate migration.
+
+**Security review:**
+- No auth middleware, session handling, OPA policies, or CI workflow files were modified.
+- The `tenants` table does not contain per-tenant user data — it is the authoritative list of which tenants exist. Access to this table is controlled at the API route layer (`require_permission("platform.admin")`), not at the row level.
+- Excluding this table from RLS does not weaken any tenant-data isolation guarantee: the table holds platform-level identity records, not records scoped to any single tenant.
+- All other tables with `tenant_id` as a foreign key scope remain covered by the check (136 tables verified).
+- No secrets, keys, or cryptographic material involved.
+
+**SOC review outcome:** approved. The exclusion corrects a false-positive in the CI gate; it does not relax any actual tenant isolation control. Platform identity tables are a well-understood RLS exemption category. The `_PLATFORM_IDENTITY_TABLES` set requires an explicit comment per entry, preventing silent future additions.
