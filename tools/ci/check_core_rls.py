@@ -107,6 +107,18 @@ _CONNECTOR_TABLES: frozenset[str] = frozenset(
     }
 )
 
+# Platform-level identity tables where tenant_id is the PRIMARY KEY (the
+# identity itself), not a foreign-key scope column.  RLS on these tables is
+# not just unnecessary — it would be circular: filtering the tenant registry
+# by app.tenant_id would prevent platform operations from seeing all tenants.
+# Added in R7 (migration 0156_canonical_tenants.sql).
+_PLATFORM_IDENTITY_TABLES: frozenset[str] = frozenset(
+    {
+        # tenants: the authoritative tenant registry.  tenant_id IS the PK.
+        "tenants",
+    }
+)
+
 
 def _is_excluded(table: str) -> bool:
     if any(table.startswith(p) for p in _DYNAMIC_PREFIXES):
@@ -115,6 +127,7 @@ def _is_excluded(table: str) -> bool:
         table in _AGENT_PHASE2_TABLES
         or table in _CONNECTOR_TABLES
         or table in _NONSTANDARD_POLICY_TABLES
+        or table in _PLATFORM_IDENTITY_TABLES
     )
 
 

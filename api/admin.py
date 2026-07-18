@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.actor_context import ActorContext
@@ -845,6 +846,71 @@ async def create_tenant(
             detail="tenant_id contains invalid characters (alphanumeric, dash, underscore only, max 128)",
         )
 
+    # Derive actor from auth context early (needed for both Postgres and JSON paths).
+    _auth_ctx = getattr(getattr(request, "state", None), "auth", None)
+    _actor_id: str = (
+        getattr(_auth_ctx, "key_prefix", None)
+        or getattr(_auth_ctx, "subject", None)
+        or "global"
+    )
+    _scope_values: list[str] = sorted(
+        getattr(_auth_ctx, "scopes", set()) or {"admin:write"}
+    )
+
+    # Try Postgres-first (R7).
+    from api.tenant_repository import get_tenant_repository
+
+    repo = get_tenant_repository()
+    if repo is not None:
+        try:
+            pg_record = repo.create(
+                tenant_id=req.tenant_id,
+                display_name=req.name or req.tenant_id,
+                created_by=_actor_id,
+                migration_source="api",
+            )
+        except (ValueError, IntegrityError):
+            raise HTTPException(
+                status_code=409, detail=f"Tenant already exists: {req.tenant_id}"
+            )
+
+        # Also write to JSON for rollback safety during R7 transition.
+        try:
+            from tools.tenants.registry import create_tenant_exclusive
+
+            create_tenant_exclusive(
+                tenant_id=req.tenant_id,
+                name=req.name or req.tenant_id,
+            )
+        except Exception:
+            pass  # JSON write is best-effort during transition
+
+        audit_admin_action(
+            action="tenant_created",
+            tenant_id=req.tenant_id,
+            request=request,
+            details={
+                "name": pg_record.display_name,
+                "actor_id": _actor_id,
+                "scope": _scope_values,
+            },
+        )
+        log.info(
+            "tenant.created",
+            extra={
+                "tenant_id": req.tenant_id,
+                "request_id": getattr(request.state, "request_id", None),
+            },
+        )
+        return TenantRecord(
+            tenant_id=pg_record.tenant_id,
+            name=pg_record.display_name,
+            status=pg_record.lifecycle_state,
+            created_at=str(pg_record.created_at),
+            updated_at=str(pg_record.updated_at),
+        )
+
+    # Fallback: original JSON path (for non-Postgres environments).
     try:
         from tools.tenants.registry import (
             TenantAlreadyExistsError,
@@ -873,17 +939,6 @@ async def create_tenant(
         )
     except TenantAlreadyExistsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    # Derive actor from auth context; global API key has no key_prefix or scopes.
-    _auth_ctx = getattr(getattr(request, "state", None), "auth", None)
-    _actor_id: str = (
-        getattr(_auth_ctx, "key_prefix", None)
-        or getattr(_auth_ctx, "subject", None)
-        or "global"
-    )
-    _scope_values: list[str] = sorted(
-        getattr(_auth_ctx, "scopes", set()) or {"admin:write"}
-    )
 
     audit_admin_action(
         action="tenant_created",
@@ -923,6 +978,27 @@ async def list_tenants(
     include_revoked: bool = Query(default=False),
 ) -> Dict[str, Any]:
     """List all provisioned tenants."""
+    # Try Postgres-first (R7).
+    from api.tenant_repository import get_tenant_repository
+
+    repo = get_tenant_repository()
+    if repo is not None:
+        records_pg = repo.list_all(include_archived=include_revoked)
+        return {
+            "tenants": [
+                {
+                    "tenant_id": r.tenant_id,
+                    "name": r.display_name,
+                    "status": r.lifecycle_state,
+                    "created_at": str(r.created_at),
+                    "updated_at": str(r.updated_at),
+                }
+                for r in records_pg
+            ],
+            "total": len(records_pg),
+        }
+
+    # Fallback: original JSON path.
     try:
         from tools.tenants.registry import list_tenants as _list_tenants
     except ImportError:
@@ -968,6 +1044,29 @@ async def get_tenant(
             ),
         )
 
+    # Try Postgres-first (R7); repo.get() handles JSON fallback internally.
+    from api.tenant_repository import get_tenant_repository
+
+    repo = get_tenant_repository()
+    if repo is not None:
+        pg_record = repo.get(tenant_id)
+        if pg_record is None:
+            raise HTTPException(
+                status_code=404,
+                detail=api_error(
+                    "TENANT_NOT_FOUND",
+                    f"tenant not found: {tenant_id}",
+                ),
+            )
+        return TenantRecord(
+            tenant_id=pg_record.tenant_id,
+            name=pg_record.display_name,
+            status=pg_record.lifecycle_state,
+            created_at=str(pg_record.created_at),
+            updated_at=str(pg_record.updated_at),
+        )
+
+    # Fallback: original JSON path.
     try:
         from tools.tenants.registry import load_registry
     except ImportError:

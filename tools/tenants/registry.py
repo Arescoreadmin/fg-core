@@ -38,6 +38,16 @@ class TenantAlreadyExistsError(ValueError):
         self.tenant_id = tenant_id
 
 
+class TenantRegistryFrozenError(RuntimeError):
+    """Raised when a write is attempted after R7 migration has frozen the registry."""
+    pass
+
+
+def _is_frozen() -> bool:
+    """True if the .frozen sentinel exists next to the registry file."""
+    return REGISTRY_PATH.with_suffix(".frozen").exists()
+
+
 @dataclass
 class TenantRecord:
     tenant_id: str
@@ -80,6 +90,11 @@ def _load_raw() -> Dict[str, Dict]:
 
 
 def _save_raw(data: Dict[str, Dict]) -> None:
+    if _is_frozen():
+        raise TenantRegistryFrozenError(
+            "JSON tenant registry is frozen (R7 migration complete). "
+            "Use TenantRepository for tenant management."
+        )
     try:
         REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = REGISTRY_PATH.with_suffix(".tmp")
@@ -164,7 +179,14 @@ def create_tenant_exclusive(
     Authoritative uniqueness guarantee: the duplicate check and write occur
     inside _REGISTRY_LOCK, preventing double-create under concurrent callers.
     Unlike ensure_tenant, this function never silently returns an existing record.
+
+    Raises TenantRegistryFrozenError if the R7 migration has frozen the registry.
     """
+    if _is_frozen():
+        raise TenantRegistryFrozenError(
+            "JSON tenant registry is frozen (R7 migration complete). "
+            "Use TenantRepository for tenant management."
+        )
     with _REGISTRY_LOCK:
         raw = _load_raw()
         if tenant_id in raw:
