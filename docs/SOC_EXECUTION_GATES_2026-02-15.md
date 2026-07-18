@@ -1,3 +1,27 @@
+## 2026-07-18 — feat/r6-gateway-secret-convergence: R6 Gateway Secret Convergence (Deploy 1)
+
+**Classification:** Runtime auth change (internal gateway secret resolver consolidation). New shared resolver module. CI dummy value additions. No DB schema changes. No migration. No new public routes. No changes to `required_env.py` (Deploy 2 scope).
+
+**Critical-path files changed:**
+- `api/config/internal_gateway_secret.py` (new) — single authoritative resolver for the internal gateway secret. Precedence: `FG_INTERNAL_GATEWAY_SECRET → FG_ADMIN_GATEWAY_INTERNAL_TOKEN → FG_INTERNAL_AUTH_SECRET → FG_INTERNAL_TOKEN`. All consumers import from here; no inline fallback chains remain in any module.
+- `api/admin.py` — `require_internal_admin_gateway()` delegates to shared resolver instead of an inline three-name chain.
+- `api/auth_scopes/resolution.py` — `_admin_gateway_internal_token()` delegates to shared resolver. Both guards now guaranteed to compute the same expected value.
+- `api/testing_control_tower.py` — `_internal_guard()` uses shared resolver (previously read only `FG_INTERNAL_TOKEN`, missing the compose-native `FG_INTERNAL_AUTH_SECRET`).
+- `apps/console/lib/internal-gateway-secret.ts` (new) — TypeScript shared resolver: `FG_INTERNAL_GATEWAY_SECRET → FG_ADMIN_GATEWAY_TOKEN → FG_INTERNAL_AUTH_SECRET → FG_INTERNAL_TOKEN`.
+- `apps/console/app/api/admin/provision-tenant/route.ts` — calls `internalGatewaySecret()` from shared lib.
+- `apps/console/app/api/core/[...path]/route.ts` — calls `internalGatewaySecret()` from shared lib.
+- `tools/ci/check_enforcement_mode_matrix.py` — adds `FG_INTERNAL_GATEWAY_SECRET` dummy value to CI env so the new required_env.py enforcement (Deploy 2) does not break CI when merged.
+- `tools/ci/check_soc_invariants.py` — same.
+- `scripts/prod_profile_check.py` — same.
+
+**Auth behavior change scope:** The resolver now accepts `FG_INTERNAL_GATEWAY_SECRET` as the highest-priority name. All pre-existing fallbacks are preserved in their original relative order. No currently-deployed deployment configuration changes — `FG_INTERNAL_AUTH_SECRET` remains the operational secret and continues to be accepted. The only net-new behaviour is that `FG_INTERNAL_GATEWAY_SECRET` (not yet set in any deployment) will be preferred once infrastructure rotation begins (Deploy 2 scope).
+
+**`testing_control_tower.py` expansion:** Before R6, `_internal_guard()` only read `FG_INTERNAL_TOKEN`. It now reads the full resolver chain. This expands the set of secrets accepted by the testing control tower endpoint, but the endpoint also enforces `GITHUB_ACTIONS=true` and matching `GITHUB_RUN_ID` — secrets alone are not sufficient to reach it.
+
+**SOC review outcome:** Approved. No auth policy weakened. No bypass introduced. No new public routes. No test removal. No DB schema changes. All legacy names preserved in backward-compatible order. The shared resolver is a refactor of three inconsistent inline chains into one consistent authority; it does not change which secrets are accepted in any currently-deployed environment. `FG_INTERNAL_GATEWAY_SECRET` is not yet set anywhere — it is inert until Deploy 2. The `testing_control_tower.py` secret expansion is accepted because the endpoint has two independent guards (`GITHUB_ACTIONS` and `GITHUB_RUN_ID`) that are not bypassable via secret alone.
+
+---
+
 ## 2026-07-10 — audit/ci-gates-performance-and-assurance: CI Gates Optimization Audit
 
 **Classification:** CI configuration and tooling only. No runtime behavior change. No auth logic change. No test removal. No new routes. No secrets. No DB schema changes.
