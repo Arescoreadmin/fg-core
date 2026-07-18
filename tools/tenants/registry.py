@@ -40,6 +40,7 @@ class TenantAlreadyExistsError(ValueError):
 
 class TenantRegistryFrozenError(RuntimeError):
     """Raised when a write is attempted after R7 migration has frozen the registry."""
+
     pass
 
 
