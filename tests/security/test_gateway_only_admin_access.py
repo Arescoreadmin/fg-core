@@ -105,6 +105,7 @@ class TestRequireInternalAdminGateway:
     def test_hosted_rejects_when_token_not_configured(self, env, monkeypatch):
         """If gateway token is not configured in hosted profile, request must be rejected."""
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_INTERNAL_GATEWAY_SECRET", raising=False)
         monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
         monkeypatch.delenv("FG_INTERNAL_AUTH_SECRET", raising=False)
         monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
@@ -130,6 +131,7 @@ class TestRequireInternalAdminGateway:
         core has FG_INTERNAL_AUTH_SECRET set. Both guards must use the same secret.
         """
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_INTERNAL_GATEWAY_SECRET", raising=False)
         monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
         monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "shared-compose-secret")
         monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
@@ -151,6 +153,7 @@ class TestRequireInternalAdminGateway:
         global API key with the internal trust token is a security anti-pattern.
         """
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_INTERNAL_GATEWAY_SECRET", raising=False)
         monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
         monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "shared-compose-secret")
         monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
@@ -179,6 +182,7 @@ class TestRequireInternalAdminGateway:
         rejects it — resulting in 403 on valid internal admin calls.
         """
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_INTERNAL_GATEWAY_SECRET", raising=False)
         monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
         monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "shared-compose-secret")
         monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
@@ -220,6 +224,7 @@ class TestNonHostedAdminGatewayNotEnforced:
     def test_non_hosted_allows_direct_admin_access(self, env, monkeypatch):
         """Gateway token must NOT be required in non-hosted profiles when no token is configured."""
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_INTERNAL_GATEWAY_SECRET", raising=False)
         monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
         monkeypatch.delenv("FG_INTERNAL_AUTH_SECRET", raising=False)
         monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
@@ -288,6 +293,7 @@ class TestDevWithConfiguredTokenEnforces:
     def test_dev_with_configured_token_rejects_missing_header(self, env, monkeypatch):
         """Dev env with internal token configured must reject calls without the header."""
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_INTERNAL_GATEWAY_SECRET", raising=False)
         monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
         monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "dev-internal-secret")
         monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
@@ -307,6 +313,7 @@ class TestDevWithConfiguredTokenEnforces:
     def test_dev_with_configured_token_rejects_wrong_token(self, env, monkeypatch):
         """Dev env with internal token configured must reject wrong token values."""
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_INTERNAL_GATEWAY_SECRET", raising=False)
         monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
         monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "dev-internal-secret")
         monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
@@ -323,6 +330,7 @@ class TestDevWithConfiguredTokenEnforces:
     def test_dev_with_configured_token_accepts_correct_token(self, env, monkeypatch):
         """Dev env with internal token configured must accept the correct token."""
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_INTERNAL_GATEWAY_SECRET", raising=False)
         monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
         monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "dev-internal-secret")
         monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)

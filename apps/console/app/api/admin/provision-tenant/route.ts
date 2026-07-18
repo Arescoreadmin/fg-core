@@ -2,18 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { canAccessConsoleRoute } from '@/lib/consoleAccess';
 import { upsertTenantInRegistry, isRegistryConfigured, upsertTenantInUpstash } from '@/lib/tenant-registry';
+import { internalGatewaySecret } from '@/lib/internal-gateway-secret';
 import Redis from 'ioredis';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
-
-function internalToken(): string {
-  return (
-    process.env.FG_ADMIN_GATEWAY_TOKEN ||
-    process.env.FG_INTERNAL_AUTH_SECRET ||
-    process.env.FG_INTERNAL_TOKEN ||
-    ''
-  ).trim();
-}
 
 const PROVISION_SCOPES = [
   'governance:read',
@@ -36,7 +28,7 @@ const ONE_YEAR_SECONDS = 365 * 24 * 60 * 60;
 const PORTAL_KEY_PREFIX = 'portal:tenant';
 
 function adminHeaders(): HeadersInit {
-  const token = internalToken();
+  const token = internalGatewaySecret();
   return {
     'Content-Type': 'application/json',
     'X-API-Key': token,
@@ -120,9 +112,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  if (!internalToken()) {
+  if (!internalGatewaySecret()) {
     return NextResponse.json(
-      { error: 'Tenant provisioning is not configured. Set FG_ADMIN_GATEWAY_TOKEN in Vercel.' },
+      { error: 'Tenant provisioning is not configured. Set FG_INTERNAL_GATEWAY_SECRET in Vercel.' },
       { status: 503 },
     );
   }
