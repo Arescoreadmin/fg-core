@@ -98,7 +98,9 @@ def _now_iso() -> str:
 # ---------------------------------------------------------------------------
 
 
-def _write_ledger(engine: Any, result: MigrationResult, checksum: Optional[str]) -> None:
+def _write_ledger(
+    engine: Any, result: MigrationResult, checksum: Optional[str]
+) -> None:
     from sqlalchemy import text
 
     ledger_id = uuid.uuid4().hex
@@ -167,6 +169,7 @@ def run_migration(
     if engine is None:
         try:
             from api.db import get_engine
+
             engine = get_engine()
         except Exception as exc:
             result.status = "error"
@@ -262,10 +265,7 @@ def run_migration(
         orphaned = key_tenant_ids - set(raw_data.keys())
         if orphaned:
             result.orphaned_key_tenant_ids = sorted(orphaned)
-            warn = (
-                f"Orphaned api_key tenant_ids (not in JSON): "
-                f"{sorted(orphaned)}"
-            )
+            warn = f"Orphaned api_key tenant_ids (not in JSON): {sorted(orphaned)}"
             result.warnings.append(warn)
             log.warning(warn)
     except Exception as exc:
@@ -352,7 +352,9 @@ def run_migration(
     # is written so the frozen file is consistent with Postgres.
     if stop_json_writes and result.status == "complete":
         try:
-            current_bytes = REGISTRY_PATH.read_bytes() if REGISTRY_PATH.exists() else b"{}"
+            current_bytes = (
+                REGISTRY_PATH.read_bytes() if REGISTRY_PATH.exists() else b"{}"
+            )
             current_data: Dict[str, Any] = json.loads(current_bytes)
             new_tenant_ids = set(current_data.keys()) - set(valid_records.keys())
             if new_tenant_ids:
@@ -367,10 +369,19 @@ def run_migration(
                     if not isinstance(late_payload, dict):
                         continue
                     late_name = (
-                        late_payload.get("name") or late_payload.get("display_name") or late_id
-                    ).strip() if isinstance(
-                        late_payload.get("name") or late_payload.get("display_name") or late_id, str
-                    ) else late_id
+                        (
+                            late_payload.get("name")
+                            or late_payload.get("display_name")
+                            or late_id
+                        ).strip()
+                        if isinstance(
+                            late_payload.get("name")
+                            or late_payload.get("display_name")
+                            or late_id,
+                            str,
+                        )
+                        else late_id
+                    )
                     try:
                         repo.upsert(
                             tenant_id=late_id,
