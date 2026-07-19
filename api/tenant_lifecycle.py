@@ -31,10 +31,10 @@ from sqlalchemy.engine import Engine
 VALID_STATES: frozenset[str] = frozenset({"active", "suspended", "archived", "deleted"})
 
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    "active":    frozenset({"suspended", "archived"}),
+    "active": frozenset({"suspended", "archived"}),
     "suspended": frozenset({"active", "archived"}),
-    "archived":  frozenset({"deleted"}),
-    "deleted":   frozenset(),
+    "archived": frozenset({"deleted"}),
+    "deleted": frozenset(),
 }
 
 

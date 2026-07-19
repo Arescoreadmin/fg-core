@@ -107,7 +107,9 @@ class TestStateMachine:
 
     def test_all_valid_states_have_transition_entries(self):
         for state in VALID_STATES:
-            assert state in ALLOWED_TRANSITIONS, f"{state} missing from ALLOWED_TRANSITIONS"
+            assert state in ALLOWED_TRANSITIONS, (
+                f"{state} missing from ALLOWED_TRANSITIONS"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +145,9 @@ class TestExecuteTransitionHappyPaths:
 
         with engine.connect() as conn:
             row = conn.execute(
-                text("SELECT lifecycle_state, archived_at FROM tenants WHERE tenant_id = 't3'")
+                text(
+                    "SELECT lifecycle_state, archived_at FROM tenants WHERE tenant_id = 't3'"
+                )
             ).fetchone()
         assert row[0] == "archived"
         assert row[1] is not None, "archived_at must be set when archiving"
@@ -277,7 +281,9 @@ class TestIdempotency:
         # reactivate so second transition is valid
         with engine.begin() as conn:
             conn.execute(
-                text("UPDATE tenants SET lifecycle_state = 'active' WHERE tenant_id = 'ti3'")
+                text(
+                    "UPDATE tenants SET lifecycle_state = 'active' WHERE tenant_id = 'ti3'"
+                )
             )
         rec2 = execute_transition(
             engine, tenant_id="ti3", to_state="suspended", idempotency_key="k2"
@@ -296,7 +302,9 @@ class TestGetTransitionHistory:
         execute_transition(engine, tenant_id="th1", to_state="suspended")
         with engine.begin() as conn:
             conn.execute(
-                text("UPDATE tenants SET lifecycle_state = 'active' WHERE tenant_id = 'th1'")
+                text(
+                    "UPDATE tenants SET lifecycle_state = 'active' WHERE tenant_id = 'th1'"
+                )
             )
         execute_transition(engine, tenant_id="th1", to_state="suspended")
 
