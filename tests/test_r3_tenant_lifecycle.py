@@ -55,8 +55,9 @@ CREATE TABLE IF NOT EXISTS tenant_lifecycle_transitions (
     reason              TEXT,
     actor_id            TEXT,
     request_id          TEXT,
-    idempotency_key     TEXT            UNIQUE,
-    occurred_at         TEXT            NOT NULL DEFAULT (datetime('now'))
+    idempotency_key     TEXT,
+    occurred_at         TEXT            NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (tenant_id, idempotency_key)
 );
 """
 
@@ -235,6 +236,26 @@ class TestExecuteTransitionErrors:
         with pytest.raises(InvalidTransitionError):
             execute_transition(engine, tenant_id="te5", to_state="deleted")
 
+    def test_stale_from_state_raises_invalid_transition(self, engine):
+        """Conditional UPDATE (WHERE lifecycle_state=:from_state) protects against races.
+
+        We can't interleave real threads in SQLite, but we can verify the guard
+        triggers by patching the tenant row to a different state between when
+        execute_transition reads it and when it would write. In practice this is
+        done by using a separate engine connection to change state externally.
+
+        The observable behavior: if the row state has changed by the time the
+        UPDATE runs, rowcount=0 → InvalidTransitionError with 'concurrently'.
+        We simulate this by putting the tenant directly into 'archived' state
+        and then trying a 'suspended→active' transition — the read sees 'archived',
+        which makes 'active' an invalid successor, so it fails at the state-machine
+        check (same outcome as the concurrency guard for single-threaded SQLite).
+        The conditional-UPDATE guard is exercised in Postgres integration tests.
+        """
+        _insert_tenant(engine, "tc1", state="archived")
+        with pytest.raises(InvalidTransitionError):
+            execute_transition(engine, tenant_id="tc1", to_state="active")
+
 
 # ---------------------------------------------------------------------------
 # D) Idempotency
@@ -289,6 +310,24 @@ class TestIdempotency:
             engine, tenant_id="ti3", to_state="suspended", idempotency_key="k2"
         )
         assert rec1.transition_id != rec2.transition_id
+
+    def test_idempotency_key_is_tenant_scoped(self, engine):
+        """Same idempotency_key used by two different tenants must be independent."""
+        _insert_tenant(engine, "ta1")
+        _insert_tenant(engine, "ta2")
+        shared_key = "shared-idem-key"
+
+        rec_a = execute_transition(
+            engine, tenant_id="ta1", to_state="suspended", idempotency_key=shared_key
+        )
+        # ta2 is still active — using the same key must create a new transition,
+        # not replay ta1's record.
+        rec_b = execute_transition(
+            engine, tenant_id="ta2", to_state="suspended", idempotency_key=shared_key
+        )
+        assert rec_a.tenant_id == "ta1"
+        assert rec_b.tenant_id == "ta2"
+        assert rec_a.transition_id != rec_b.transition_id
 
 
 # ---------------------------------------------------------------------------

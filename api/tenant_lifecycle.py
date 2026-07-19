@@ -94,15 +94,17 @@ def execute_transition(
 
     with engine.begin() as conn:
         # --- idempotency: return existing record if key already processed ---
+        # Scoped to tenant_id so a key used by tenant-A cannot be replayed
+        # as a no-op against tenant-B.
         if idempotency_key:
             existing = conn.execute(
                 text(
                     "SELECT transition_id, tenant_id, from_state, to_state, "
                     "reason, actor_id, request_id, idempotency_key, occurred_at "
                     "FROM tenant_lifecycle_transitions "
-                    "WHERE idempotency_key = :key"
+                    "WHERE tenant_id = :tenant_id AND idempotency_key = :key"
                 ),
-                {"key": idempotency_key},
+                {"tenant_id": tenant_id, "key": idempotency_key},
             ).fetchone()
             if existing is not None:
                 return _row_to_record(existing)
@@ -122,16 +124,28 @@ def execute_transition(
                 f"Valid successors: {sorted(ALLOWED_TRANSITIONS.get(from_state, []))}"
             )
 
-        # --- apply state change ---
+        # --- apply state change (conditional on from_state to handle concurrency) ---
+        # If another request wins the race and changes the state first, rowcount=0
+        # and we raise rather than writing a misleading audit record.
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
-        conn.execute(
+        result = conn.execute(
             text(
                 "UPDATE tenants SET lifecycle_state = :state, updated_at = :now "
-                "WHERE tenant_id = :tid"
+                "WHERE tenant_id = :tid AND lifecycle_state = :from_state"
             ),
-            {"state": to_state, "now": now_iso, "tid": tenant_id},
+            {
+                "state": to_state,
+                "now": now_iso,
+                "tid": tenant_id,
+                "from_state": from_state,
+            },
         )
+        if result.rowcount == 0:
+            raise InvalidTransitionError(
+                f"Tenant {tenant_id!r} state changed concurrently; "
+                f"expected {from_state!r} but row was already updated"
+            )
         if to_state == "archived":
             conn.execute(
                 text("UPDATE tenants SET archived_at = :now WHERE tenant_id = :tid"),

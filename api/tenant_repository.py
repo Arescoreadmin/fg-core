@@ -218,7 +218,11 @@ class TenantRepository:
         if include_archived:
             states = list(_SUPPORTED_LIFECYCLE_STATES)
         else:
-            states = [s for s in _SUPPORTED_LIFECYCLE_STATES if s != "archived"]
+            states = [
+                s
+                for s in _SUPPORTED_LIFECYCLE_STATES
+                if s not in {"archived", "deleted"}
+            ]
 
         # Use IN clause for cross-dialect compatibility (SQLite + Postgres).
         placeholders = ", ".join(f":s{i}" for i in range(len(states)))

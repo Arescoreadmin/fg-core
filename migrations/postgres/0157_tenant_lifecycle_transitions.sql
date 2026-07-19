@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS tenant_lifecycle_transitions (
     reason              TEXT,
     actor_id            TEXT,
     request_id          TEXT,
-    idempotency_key     TEXT            UNIQUE,
+    idempotency_key     TEXT,
     occurred_at         TIMESTAMPTZ     NOT NULL DEFAULT now()
 );
 
@@ -24,3 +24,8 @@ CREATE INDEX IF NOT EXISTS ix_tlt_tenant_id
     ON tenant_lifecycle_transitions (tenant_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS ix_tlt_to_state
     ON tenant_lifecycle_transitions (to_state);
+-- Idempotency key is scoped per-tenant so the same key used by two different
+-- tenants is allowed; only the (tenant_id, key) pair must be unique.
+CREATE UNIQUE INDEX IF NOT EXISTS ix_tlt_idempotency_key
+    ON tenant_lifecycle_transitions (tenant_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
