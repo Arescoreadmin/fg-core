@@ -750,9 +750,7 @@ async def suspend_tenant(
             detail="Tenant usage tracking not available",
         )
 
-    _lifecycle_transition(
-        tenant_id, "suspended", request=request, actor_ctx=actor_ctx
-    )
+    _lifecycle_transition(tenant_id, "suspended", request=request, actor_ctx=actor_ctx)
     tracker = get_usage_tracker()
     tracker.suspend_tenant(tenant_id)
     audit_admin_action(
@@ -805,9 +803,7 @@ async def activate_tenant(
             detail="Tenant usage tracking not available",
         )
 
-    _lifecycle_transition(
-        tenant_id, "active", request=request, actor_ctx=actor_ctx
-    )
+    _lifecycle_transition(tenant_id, "active", request=request, actor_ctx=actor_ctx)
     tracker = get_usage_tracker()
     tracker.activate_tenant(tenant_id)
     audit_admin_action(
