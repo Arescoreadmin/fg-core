@@ -1,5 +1,42 @@
 # PR Fix Log (Strict)
 
+## P-9 — feat(r3b): transition fingerprint, schema version, regression guards
+
+**Branch:** `feat/r3b-lifecycle-enhancements`
+**Date:** 2026-07-19
+
+### Purpose
+
+Five non-blocking R3b enhancements requested after PR #554 merged:
+1. `transition_hash` — SHA-256 tamper-evident fingerprint per audit record
+2. `schema_version` — forward-compatibility marker on every transition row
+3. Explicit terminal-state regression tests (`deleted → *` must always 409)
+4. `archived_at` immutability — conditional `WHERE archived_at IS NULL` prevents overwrite
+5. `ORDER BY occurred_at DESC` enforced by explicit test (never rely on insertion order)
+
+### Changes
+
+1. `fix: api/tenant_lifecycle.py` — `transition_hash` computed from
+   `(transition_id, tenant_id, from_state, to_state, occurred_at, request_id, actor_id)`
+   and written to every audit record. `schema_version = TRANSITION_SCHEMA_VERSION (1)`
+   on every INSERT. `archived_at` update changed to `WHERE archived_at IS NULL`.
+   Public `compute_transition_hash()` for audit export / replay verification.
+   `_row_to_record()` backward-compatible (pre-0158 rows get `None / 0`).
+2. `new: migrations/postgres/0158_tenant_lifecycle_transitions_v2.sql` — ADD COLUMN
+   `transition_hash VARCHAR(64)`, `schema_version INTEGER NOT NULL DEFAULT 1` (safe
+   against existing rows).
+3. `fix: tests/test_r3_tenant_lifecycle.py` — 13 new tests across 5 new classes
+   (G/H/I/J + ordering); total 40 tests.
+
+### Verification
+
+```
+PYTHONPATH=. .venv/bin/pytest tests/test_r3_tenant_lifecycle.py -v
+→ 40 passed in 0.18s
+```
+
+---
+
 ## P-8 — feat(r3): tenant lifecycle authority — single authority for state transitions
 
 **Branch:** `feat/r3-tenant-lifecycle-authority`
