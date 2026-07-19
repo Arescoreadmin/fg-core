@@ -5894,3 +5894,25 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - No secrets, keys, or cryptographic material involved.
 
 **SOC review outcome:** approved. The exclusion corrects a false-positive in the CI gate; it does not relax any actual tenant isolation control. Platform identity tables are a well-understood RLS exemption category. The `_PLATFORM_IDENTITY_TABLES` set requires an explicit comment per entry, preventing silent future additions.
+
+---
+
+## feat/r4.3-credential-authority-service — R4.3 Credential Authority (2026-07-19)
+
+**Critical files changed:** `tools/ci/check_credential_authority.py`
+
+**Change:** Added `check_credential_authority.py` CI gate that scans Python source for direct `INSERT INTO` or `UPDATE` statements targeting `tenant_credentials` or `credential_slots` outside of `api/credential_authority.py`.  Also added `check-credential-authority` Makefile target wired into the `fg-fast` pipeline after `check-core-rls`.  The authority module itself (`api/credential_authority.py`) and the companion test file (`tests/test_r4_credential_authority.py`) are the other new files, but they do not fall under critical prefixes.
+
+**Reason:** R4.3 establishes `api/credential_authority.py` as the single module permitted to mutate `tenant_credentials` and `credential_slots`.  The CI gate enforces this boundary mechanically: any future direct-write outside the authority will fail the pipeline immediately rather than being caught in code review.
+
+**Security review:**
+
+- No auth middleware, session handling, OPA policies, CI workflow (`.github/`), or existing route files are modified.
+- The new `api/credential_authority.py` module is additive — it does not replace any existing validator or route handler in this PR (that happens in R4.7 dual-read and R4.8).  Existing issuance, validation, rotation, and revocation paths are untouched.
+- The module enforces all non-negotiable R4 security invariants: plaintext secret returned exactly once at issuance; HMAC-SHA256 lookup fingerprint for indexed lookup (not a secret); Argon2id PHC hash for verification (never stored as plaintext); tenant lifecycle enforced synchronously via `JOIN tenants` at validation time; idempotency scoped per `(tenant_id, idempotency_key)` so cross-tenant replay is structurally impossible; rotation atomic (new generation committed before old is marked rotated); revocation idempotent; lazy expiration enforced at validation time regardless of sweep state.
+- The CI gate (`check_credential_authority.py`) is additive — it raises the security bar by enforcing the authority boundary automatically.  No existing gate is modified or weakened.
+- Migration `0159_tenant_credentials.sql` (R4.2, already merged) introduced the `tenant_credentials` and `credential_slots` tables with RLS enabled.  This PR adds no new tables and no new migrations.
+- `api/credential_authority.py` does not fall under the `api/security`, `api/middleware`, or `api/auth` critical prefixes — it is a new service module.  The `tools/ci/` addition is what triggers SOC review here.
+- No secrets, keys, or cryptographic material are committed.  `FG_KEY_PEPPER` is read from the environment at runtime.
+
+**SOC review outcome:** approved.  New CI gate is strictly additive and raises the credential write-authority boundary to a mechanical enforcement level.  The authority module itself is a pure addition with no existing surface modified.  All R4 security invariants are enforced by the module and covered by 69 automated tests.

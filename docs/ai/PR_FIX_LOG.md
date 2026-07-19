@@ -1,5 +1,47 @@
 # PR Fix Log (Strict)
 
+## P-10 — feat(r4.3): credential authority service
+
+**Branch:** `feat/r4.3-credential-authority-service`
+**Date:** 2026-07-19
+
+### Purpose
+
+R4.3 — single authority for all `tenant_api_key` credential lifecycle operations.
+No admin routes touched, no validators replaced, no legacy data migrated.
+The module ships the eight public operations and a CI gate enforcing its write monopoly.
+
+### Changes
+
+1. `new: api/credential_authority.py` — 8 public operations (`issue_credential`,
+   `validate_credential`, `rotate_credential`, `revoke_credential`, `expire_credentials`,
+   `get_credential`, `list_credentials`, `get_credential_history`), `CredentialPrincipal`,
+   `CredentialRecord`, `IssuanceResult`, 7 error classes, slot-level serialization via
+   conditional `UPDATE WHERE current_generation = :expected` (same guard as R3), lazy
+   expiration enforcement at validation time, Argon2id verification, HMAC-SHA256
+   lookup fingerprint, idempotency scoped per tenant.
+2. `new: tests/test_r4_credential_authority.py` — 69 tests across 10 classes (A–J).
+   SQLite in-memory schema; `PasswordHasher(time_cost=1, memory_cost=8)` fixture for speed.
+   Covers: models, hash helpers, issuance, validation, rotation, revocation, expiration,
+   read-side, lifecycle enforcement, plaintext security.
+3. `new: tools/ci/check_credential_authority.py` — CI gate scanning Python source for
+   direct `INSERT INTO` / `UPDATE` targeting `tenant_credentials` or `credential_slots`
+   outside the authority module.
+4. `fix: Makefile` — `check-credential-authority` target added; wired into `fg-fast`
+   after `check-core-rls`.
+
+### Verification
+
+```
+python -m pytest tests/test_r4_credential_authority.py -v
+→ 69 passed in 0.28s
+
+python tools/ci/check_credential_authority.py
+→ ✓ credential_slots, tenant_credentials — write authority verified
+```
+
+---
+
 ## P-9 — feat(r3b): transition fingerprint, schema version, regression guards
 
 **Branch:** `feat/r3b-lifecycle-enhancements`
