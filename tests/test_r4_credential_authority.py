@@ -435,6 +435,39 @@ class TestC_Issuance:
         )
         assert result.record.expires_at is not None
 
+    def test_occupied_slot_rejects_second_issue(self, engine: Engine) -> None:
+        """issue_credential on an occupied slot must raise, not silently add a second active row."""
+        issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="occupied",
+        )
+        with pytest.raises(CredentialStateError):
+            issue_credential(
+                engine,
+                tenant_id="tenant-alpha",
+                credential_type="tenant_api_key",
+                credential_slot="occupied",
+            )
+
+    def test_issue_on_different_slot_succeeds(self, engine: Engine) -> None:
+        """Slot guard is scoped: issuing on a new slot must succeed even if another slot is occupied."""
+        issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="slot-one",
+        )
+        r2 = issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="slot-two",
+        )
+        assert r2.record.credential_slot == "slot-two"
+        assert r2.record.generation == 1
+
 
 # ---------------------------------------------------------------------------
 # D — Validation

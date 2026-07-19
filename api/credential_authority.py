@@ -559,6 +559,19 @@ def issue_credential(
             {"tid": tenant_id, "ctype": credential_type, "slot": credential_slot},
         ).fetchone()
         current_gen: int = slot_row[0] if slot_row else 0
+
+        # Occupied-slot guard: a slot with an existing generation must go
+        # through rotate_credential, not issue_credential.  Without this
+        # check every call to issue_credential would insert another active
+        # row on the same slot, violating the max_overlap_count=1 invariant
+        # and leaving multiple usable secrets for the same slot.
+        if current_gen > 0:
+            raise CredentialStateError(
+                f"Slot {credential_slot!r} already has a credential at "
+                f"generation {current_gen}. "
+                "Use rotate_credential() to issue a successor."
+            )
+
         new_gen = current_gen + 1
 
         # Key material — generated inside the transaction so any rollback
