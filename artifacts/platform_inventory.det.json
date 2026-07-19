@@ -8,17 +8,13 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 1012,
+    "contract_count": 1017,
     "contract_only": [],
     "runtime_count": 1183,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
       "GET /_debug/routes",
-      "GET /actor-assurance/{actor_id}",
-      "GET /actor-assurance/{actor_id}/history",
-      "GET /actor-assurance/{actor_id}/snapshot",
-      "GET /actor-assurance/{actor_id}/trust",
       "GET /admin/agent/devices",
       "GET /admin/agent/devices/{device_id}/status",
       "GET /admin/agent/evidence/export/{device_id}",
@@ -125,7 +121,6 @@
       "PATCH /admin/billing/meters/{meter_code}",
       "PATCH /admin/subscriptions/contracts/{contract_id}/status",
       "PATCH /admin/subscriptions/items/{item_id}/status",
-      "POST /actor-assurance/recalculate",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",
@@ -184,7 +179,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "be5d68e9c5d8179293604394fdca9fcc33252381f837ece8eb0b90b5e8a04072",
+  "governance_fingerprint": "97c851b239dff5e57119788c65184619a15f42f24d9c7c4b45791fd4446fa227",
   "planes": [
     {
       "compat": {
