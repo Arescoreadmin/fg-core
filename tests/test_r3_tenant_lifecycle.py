@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS tenant_lifecycle_transitions (
     idempotency_key     TEXT,
     occurred_at         TEXT            NOT NULL DEFAULT (datetime('now')),
     transition_hash     VARCHAR(64),
-    schema_version      INTEGER         NOT NULL DEFAULT 1,
+    schema_version      INTEGER         NOT NULL DEFAULT 0,
     UNIQUE (tenant_id, idempotency_key)
 );
 """
@@ -551,3 +551,36 @@ class TestSchemaVersion:
                 {"tid": rec.transition_id},
             ).fetchone()
         assert row[0] == TRANSITION_SCHEMA_VERSION
+
+    def test_pre_migration_rows_get_schema_version_zero(self, engine):
+        """Rows inserted before migration 0158 must have schema_version = 0,
+        not 1.  This ensures consumers can distinguish hash-bearing v1 records
+        from legacy rows that have no transition_hash.
+
+        The DB DEFAULT is 0, so any row that does not explicitly set
+        schema_version (i.e. a pre-0158 insert) will be classified as version 0.
+        """
+        _insert_tenant(engine, "sv3")
+        # Simulate a pre-0158 row: INSERT without schema_version or transition_hash.
+        legacy_tid = str(__import__("uuid").uuid4())
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO tenant_lifecycle_transitions "
+                    "(transition_id, tenant_id, from_state, to_state, occurred_at) "
+                    "VALUES (:tid, 'sv3', 'active', 'suspended', datetime('now'))"
+                ),
+                {"tid": legacy_tid},
+            )
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT schema_version, transition_hash "
+                    "FROM tenant_lifecycle_transitions WHERE transition_id = :tid"
+                ),
+                {"tid": legacy_tid},
+            ).fetchone()
+
+        assert row[0] == 0, "pre-0158 rows must have schema_version=0, not 1"
+        assert row[1] is None, "pre-0158 rows must have NULL transition_hash"
