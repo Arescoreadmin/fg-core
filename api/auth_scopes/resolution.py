@@ -12,6 +12,7 @@ from typing import Callable, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request
 
+from api.config.internal_gateway_secret import resolve_internal_gateway_secret
 from api.db import set_tenant_context
 
 from .definitions import AuthResult, ERR_INVALID
@@ -46,12 +47,11 @@ def _is_admin_route_path(request_path: Optional[str]) -> bool:
 def _admin_gateway_internal_token() -> str:
     """Return the expected internal token for admin-gateway→core requests.
 
-    Prefers FG_ADMIN_GATEWAY_INTERNAL_TOKEN; falls back to FG_INTERNAL_AUTH_SECRET
-    so that the two-service compose setup only needs one shared secret variable.
+    Delegates to resolve_internal_gateway_secret() — same resolver as
+    require_internal_admin_gateway() in api/admin.py so both guards always
+    compute the same expected value.
     """
-    return (os.getenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN") or "").strip() or (
-        os.getenv("FG_INTERNAL_AUTH_SECRET") or ""
-    ).strip()
+    return resolve_internal_gateway_secret()
 
 
 def _internal_admin_scopes() -> Set[str]:

@@ -167,6 +167,7 @@ def _check_runtime_enforcement_mode(failures: list[str]) -> None:
             "FG_ENFORCEMENT_MODE": "enforce",
             "DATABASE_URL": "postgresql://example",
             "FG_SIGNING_SECRET": "test-signing-secret",
+            "FG_INTERNAL_GATEWAY_SECRET": "test-internal-gateway-secret",
             "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
             "FG_API_KEY": "test-api-key",
             "STRIPE_SECRET_KEY": "test-stripe-secret-key",

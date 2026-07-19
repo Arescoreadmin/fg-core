@@ -1,5 +1,76 @@
 # PR Fix Log (Strict)
 
+## P-7 — feat(r6): gateway secret convergence — unified internal gateway secret resolver
+
+**Branch:** `feat/r6-gateway-secret-convergence`
+**Date:** 2026-07-18
+
+### Purpose
+
+R6 Deploy 1: consolidate four inconsistent legacy env var names for the internal
+gateway secret into a single canonical resolver with a uniform precedence order.
+
+Pre-R6 state: three different Python fallback chains and two different TypeScript
+fallback chains, none of them consistent with each other. Audit confirmed four
+distinct legacy names:
+- `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` — Python-only preferred name; in code and
+  tests but never deployed in Docker or CI
+- `FG_ADMIN_GATEWAY_TOKEN` — TypeScript-only preferred name; in code but never
+  deployed in Docker/CI (intended as Vercel dashboard var)
+- `FG_INTERNAL_AUTH_SECRET` — the only name actually deployed everywhere
+  (docker-compose, GitHub Actions, required_env.py)
+- `FG_INTERNAL_TOKEN` — legacy compat alias in code and tests only
+
+### Changes
+
+**Commit 1 — Runtime compatibility:**
+
+1. `new: api/config/internal_gateway_secret.py` — single authority for resolver
+   precedence: `FG_INTERNAL_GATEWAY_SECRET → FG_ADMIN_GATEWAY_INTERNAL_TOKEN →
+   FG_INTERNAL_AUTH_SECRET → FG_INTERNAL_TOKEN`
+2. `fix: api/admin.py` — `require_internal_admin_gateway()` uses shared resolver
+3. `fix: api/auth_scopes/resolution.py` — `_admin_gateway_internal_token()` uses
+   shared resolver (both guards now guaranteed to compute the same expected value)
+4. `fix: api/testing_control_tower.py` — `_internal_guard()` uses shared resolver
+   (previously only read `FG_INTERNAL_TOKEN`)
+5. `new: apps/console/lib/internal-gateway-secret.ts` — TypeScript shared resolver:
+   `FG_INTERNAL_GATEWAY_SECRET → FG_ADMIN_GATEWAY_TOKEN → FG_INTERNAL_AUTH_SECRET
+   → FG_INTERNAL_TOKEN`
+6. `fix: apps/console/app/api/admin/provision-tenant/route.ts` — calls
+   `internalGatewaySecret()` from shared lib; error message updated to reference
+   canonical name
+7. `fix: apps/console/app/api/core/[...path]/route.ts` — calls
+   `internalGatewaySecret()` from shared lib
+8. `new: tests/test_r6_internal_gateway_secret.py` — 27 tests: 8 resolver unit
+   tests (precedence, fallback, blank/whitespace, conflict) + 19 guard integration
+   tests (canonical accepted, incorrect denied, canonical beats legacy, fail-closed,
+   legacy-only env works, whitespace fallthrough, resolver consistency)
+9. `fix: tests/security/test_gateway_only_admin_access.py` — all delenv blocks
+   updated to also clear `FG_INTERNAL_GATEWAY_SECRET` for test isolation
+
+**Commit 2 — CI and governance compatibility:**
+
+10. `fix: tools/ci/check_enforcement_mode_matrix.py` — adds
+    `FG_INTERNAL_GATEWAY_SECRET` dummy value alongside legacy name
+11. `fix: tools/ci/check_soc_invariants.py` — adds `FG_INTERNAL_GATEWAY_SECRET`
+    dummy value alongside legacy name
+12. `fix: scripts/prod_profile_check.py` — adds `FG_INTERNAL_GATEWAY_SECRET`
+    dummy value alongside legacy name
+13. `fix: docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC entry for this PR
+    (SOC-HIGH-002 gate: `tools/ci/` files changed)
+
+`api/config/required_env.py` is NOT changed — that belongs to Deploy 2 after
+infrastructure rotation is confirmed in every environment.
+
+### Verification
+
+```
+PYTHONPATH=. .venv/bin/pytest tests/test_r6_internal_gateway_secret.py tests/security/test_gateway_only_admin_access.py -v
+→ 71 passed in 3.52s
+```
+
+---
+
 ## P-5 — fix: add missing identity.scim capability to POST /workforce/users + update COMM-4 test
 
 **Branch:** `feat/trusted-tenant-resolution`

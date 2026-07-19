@@ -4,6 +4,7 @@ import type { Session } from 'next-auth';
 import { canAccessCoreApiPath, getSessionClaims } from '@/lib/consoleAccess';
 import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
 import { getTenantApiKey } from '@/lib/tenant-registry';
+import { internalGatewaySecret } from '@/lib/internal-gateway-secret';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
@@ -12,12 +13,7 @@ const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 // Allowable tenant_id character set: matches provision-tenant validation
 const TENANT_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const ADMIN_GATEWAY_TOKEN = (
-  process.env.FG_ADMIN_GATEWAY_TOKEN ||
-  process.env.FG_INTERNAL_AUTH_SECRET ||
-  process.env.FG_INTERNAL_TOKEN ||
-  ''
-).trim();
+const ADMIN_GATEWAY_TOKEN = internalGatewaySecret();
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'health/live', methods: new Set(['GET', 'HEAD']) },

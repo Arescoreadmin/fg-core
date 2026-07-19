@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from api.auth_scopes import bind_tenant_id, require_scopes
+from api.config.internal_gateway_secret import resolve_internal_gateway_secret
 from services.testing_control_tower_store import (
     get_run,
     latest_health,
@@ -46,7 +47,7 @@ _REQUIRED_FIELDS = {
 
 
 def _internal_guard(request: Request) -> None:
-    expected = (os.getenv("FG_INTERNAL_TOKEN") or "").strip()
+    expected = resolve_internal_gateway_secret()
     provided = (request.headers.get("x-fg-internal-token") or "").strip()
     if not expected or provided != expected:
         raise HTTPException(status_code=403, detail="forbidden")
