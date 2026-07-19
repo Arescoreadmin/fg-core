@@ -694,6 +694,43 @@ async def update_tenant_tier(
     }
 
 
+def _lifecycle_transition(
+    tenant_id: str,
+    to_state: str,
+    *,
+    request: Request,
+    actor_ctx: ActorContext,
+    reason: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
+) -> None:
+    """Execute a lifecycle transition through the R3 authority (no-op on non-Postgres)."""
+    from api.tenant_lifecycle import (
+        InvalidTransitionError,
+        TenantNotFoundError,
+        execute_transition,
+    )
+
+    engine = get_engine()
+    if engine.dialect.name != "postgresql":
+        return
+
+    request_id = getattr(getattr(request, "state", None), "request_id", None)
+    try:
+        execute_transition(
+            engine,
+            tenant_id=tenant_id,
+            to_state=to_state,
+            reason=reason,
+            actor_id=actor_ctx.subject,
+            request_id=request_id,
+            idempotency_key=idempotency_key,
+        )
+    except TenantNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Tenant not found: {tenant_id}")
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
 @router.post(
     "/tenants/{tenant_id}/suspend",
     dependencies=[Depends(require_scopes("admin:write"))],
@@ -713,6 +750,9 @@ async def suspend_tenant(
             detail="Tenant usage tracking not available",
         )
 
+    _lifecycle_transition(
+        tenant_id, "suspended", request=request, actor_ctx=actor_ctx
+    )
     tracker = get_usage_tracker()
     tracker.suspend_tenant(tenant_id)
     audit_admin_action(
@@ -765,6 +805,9 @@ async def activate_tenant(
             detail="Tenant usage tracking not available",
         )
 
+    _lifecycle_transition(
+        tenant_id, "active", request=request, actor_ctx=actor_ctx
+    )
     tracker = get_usage_tracker()
     tracker.activate_tenant(tenant_id)
     audit_admin_action(
@@ -778,6 +821,100 @@ async def activate_tenant(
         "tenant_id": tenant_id,
         "status": "active",
         "message": "Tenant activated successfully",
+    }
+
+
+@router.post(
+    "/tenants/{tenant_id}/archive",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+async def archive_tenant(
+    tenant_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+    reason: Optional[str] = Query(default=None, description="Reason for archival"),
+) -> Dict[str, Any]:
+    """Archive a tenant (active or suspended → archived)."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    _lifecycle_transition(
+        tenant_id, "archived", request=request, actor_ctx=actor_ctx, reason=reason
+    )
+    audit_admin_action(
+        action="tenant_archived",
+        tenant_id=tenant_id,
+        request=request,
+        details={"reason": reason},
+    )
+    return {
+        "success": True,
+        "tenant_id": tenant_id,
+        "status": "archived",
+        "message": "Tenant archived successfully",
+    }
+
+
+@router.post(
+    "/tenants/{tenant_id}/delete",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+async def delete_tenant(
+    tenant_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+    reason: Optional[str] = Query(default=None, description="Reason for deletion"),
+) -> Dict[str, Any]:
+    """Mark an archived tenant as deleted (archived → deleted, terminal state)."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    _lifecycle_transition(
+        tenant_id, "deleted", request=request, actor_ctx=actor_ctx, reason=reason
+    )
+    audit_admin_action(
+        action="tenant_deleted",
+        tenant_id=tenant_id,
+        request=request,
+        details={"reason": reason},
+    )
+    return {
+        "success": True,
+        "tenant_id": tenant_id,
+        "status": "deleted",
+        "message": "Tenant marked as deleted",
+    }
+
+
+@router.get(
+    "/tenants/{tenant_id}/lifecycle-history",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+async def get_tenant_lifecycle_history(
+    tenant_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> Dict[str, Any]:
+    """Return the lifecycle transition history for a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    from api.tenant_lifecycle import get_transition_history
+
+    engine = get_engine()
+    if engine.dialect.name != "postgresql":
+        return {"tenant_id": tenant_id, "transitions": []}
+
+    records = get_transition_history(engine, tenant_id, limit=limit)
+    return {
+        "tenant_id": tenant_id,
+        "transitions": [
+            {
+                "transition_id": r.transition_id,
+                "from_state": r.from_state,
+                "to_state": r.to_state,
+                "reason": r.reason,
+                "actor_id": r.actor_id,
+                "request_id": r.request_id,
+                "occurred_at": r.occurred_at.isoformat(),
+            }
+            for r in records
+        ],
     }
 
 

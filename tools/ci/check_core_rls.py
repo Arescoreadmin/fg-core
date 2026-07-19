@@ -116,6 +116,11 @@ _PLATFORM_IDENTITY_TABLES: frozenset[str] = frozenset(
     {
         # tenants: the authoritative tenant registry.  tenant_id IS the PK.
         "tenants",
+        # tenant_lifecycle_transitions: platform audit trail for state changes.
+        # tenant_id is a FK to tenants (the entity being transitioned), not a
+        # per-request scope boundary.  RLS would prevent platform ops from
+        # reading the full audit trail across tenants.
+        "tenant_lifecycle_transitions",
     }
 )
 

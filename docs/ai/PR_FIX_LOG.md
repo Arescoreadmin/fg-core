@@ -1,5 +1,57 @@
 # PR Fix Log (Strict)
 
+## P-8 — feat(r3): tenant lifecycle authority — single authority for state transitions
+
+**Branch:** `feat/r3-tenant-lifecycle-authority`
+**Date:** 2026-07-19
+
+### Purpose
+
+R3 Tenant Lifecycle Authority. Implements the single authority for all tenant
+state transitions (`active / suspended / archived / deleted`). Previously,
+`suspend_tenant` and `activate_tenant` routes called `tenant_usage.suspend_tenant()`
+only — `tenants.lifecycle_state` was never updated and no audit record was written.
+`TenantRepository.set_lifecycle_state()` was implemented in R7 but never called.
+
+### Changes
+
+**Pre-work commit (on this branch):**
+1. `fix: tools/tenants/migrate_to_postgres.py` — `--dry-run` now emits a
+   structured readiness report to stdout and writes an archivable JSON artifact
+   via `--report-out PATH`. `MigrationResult` gains `tenants_duplicate`,
+   `tenants_malformed`, `source_fingerprint`, `generated_at`.
+2. `fix: ROADMAP.md` — R7 row gains explicit "R7 does NOT own" clause; R3 row
+   added with full scope and transition record field definitions.
+
+**R3 implementation commit:**
+3. `new: migrations/postgres/0157_tenant_lifecycle_transitions.sql` — per-transition
+   audit table with 9 prescribed fields.
+4. `new: api/tenant_lifecycle.py` — lifecycle authority: `ALLOWED_TRANSITIONS` state
+   machine, `execute_transition()` (validate → idempotency → `set_lifecycle_state` →
+   audit record, atomic), `get_transition_history()`.
+5. `fix: api/tenant_repository.py` — added `"deleted"` to `_SUPPORTED_LIFECYCLE_STATES`.
+6. `fix: api/admin.py` — `suspend_tenant` and `activate_tenant` now call
+   `_lifecycle_transition()` before tracker. New routes: `POST /tenants/{id}/archive`,
+   `POST /tenants/{id}/delete`, `GET /tenants/{id}/lifecycle-history`.
+7. `new: tests/test_r3_tenant_lifecycle.py` — 25 tests: state machine (6),
+   happy paths (7), error paths (6), idempotency (3), history (3).
+8. `fix: tools/ci/route_inventory.json` + `route_inventory_summary.json` +
+   `plane_registry_snapshot.json` + `topology.sha256` — regenerated for 3 new routes.
+9. `fix: tools/ci/check_core_rls.py` — `tenant_lifecycle_transitions` added to
+   `_PLATFORM_IDENTITY_TABLES` (audit table; `tenant_id` is the entity being
+   transitioned, not a per-request scope boundary).
+10. `fix: docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC entry for `tools/ci/`
+    changes (SOC-HIGH-002 gate).
+
+### Verification
+
+```
+PYTHONPATH=. .venv/bin/pytest tests/test_r3_tenant_lifecycle.py -v
+→ 25 passed in 0.16s
+```
+
+---
+
 ## P-7 — feat(r6): gateway secret convergence — unified internal gateway secret resolver
 
 **Branch:** `feat/r6-gateway-secret-convergence`
