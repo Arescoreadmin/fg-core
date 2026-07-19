@@ -15,6 +15,7 @@ Valid state machine:
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -37,6 +38,9 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     "deleted": frozenset(),
 }
 
+# Bumped when the set of fields that make up transition_hash changes.
+TRANSITION_SCHEMA_VERSION = 1
+
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -54,6 +58,8 @@ class TenantTransitionRecord:
     request_id: Optional[str]
     idempotency_key: Optional[str]
     occurred_at: datetime
+    transition_hash: Optional[str]
+    schema_version: int
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +106,8 @@ def execute_transition(
             existing = conn.execute(
                 text(
                     "SELECT transition_id, tenant_id, from_state, to_state, "
-                    "reason, actor_id, request_id, idempotency_key, occurred_at "
+                    "reason, actor_id, request_id, idempotency_key, occurred_at, "
+                    "transition_hash, schema_version "
                     "FROM tenant_lifecycle_transitions "
                     "WHERE tenant_id = :tenant_id AND idempotency_key = :key"
                 ),
@@ -147,22 +154,38 @@ def execute_transition(
                 f"expected {from_state!r} but row was already updated"
             )
         if to_state == "archived":
+            # Conditional: only write archived_at the first time.
+            # If somehow called twice, the original timestamp is authoritative.
             conn.execute(
-                text("UPDATE tenants SET archived_at = :now WHERE tenant_id = :tid"),
+                text(
+                    "UPDATE tenants SET archived_at = :now "
+                    "WHERE tenant_id = :tid AND archived_at IS NULL"
+                ),
                 {"now": now_iso, "tid": tenant_id},
             )
 
-        # --- write transition audit record ---
+        # --- compute transition hash and write audit record ---
         tid = transition_id or str(uuid.uuid4())
+        t_hash = _compute_transition_hash(
+            transition_id=tid,
+            tenant_id=tenant_id,
+            from_state=from_state,
+            to_state=to_state,
+            occurred_at=now_iso,
+            request_id=request_id,
+            actor_id=actor_id,
+        )
         conn.execute(
             text(
                 """
                 INSERT INTO tenant_lifecycle_transitions
                     (transition_id, tenant_id, from_state, to_state,
-                     reason, actor_id, request_id, idempotency_key, occurred_at)
+                     reason, actor_id, request_id, idempotency_key, occurred_at,
+                     transition_hash, schema_version)
                 VALUES
                     (:tid, :tenant_id, :from_state, :to_state,
-                     :reason, :actor_id, :request_id, :idempotency_key, :occurred_at)
+                     :reason, :actor_id, :request_id, :idempotency_key, :occurred_at,
+                     :transition_hash, :schema_version)
                 """
             ),
             {
@@ -175,6 +198,8 @@ def execute_transition(
                 "request_id": request_id,
                 "idempotency_key": idempotency_key,
                 "occurred_at": now_iso,
+                "transition_hash": t_hash,
+                "schema_version": TRANSITION_SCHEMA_VERSION,
             },
         )
 
@@ -188,6 +213,8 @@ def execute_transition(
         request_id=request_id,
         idempotency_key=idempotency_key,
         occurred_at=now,
+        transition_hash=t_hash,
+        schema_version=TRANSITION_SCHEMA_VERSION,
     )
 
 
@@ -197,12 +224,13 @@ def get_transition_history(
     *,
     limit: int = 50,
 ) -> list[TenantTransitionRecord]:
-    """Return the most recent lifecycle transitions for a tenant."""
+    """Return the most recent lifecycle transitions for a tenant, newest first."""
     with engine.connect() as conn:
         rows = conn.execute(
             text(
                 "SELECT transition_id, tenant_id, from_state, to_state, "
-                "reason, actor_id, request_id, idempotency_key, occurred_at "
+                "reason, actor_id, request_id, idempotency_key, occurred_at, "
+                "transition_hash, schema_version "
                 "FROM tenant_lifecycle_transitions "
                 "WHERE tenant_id = :tid "
                 "ORDER BY occurred_at DESC "
@@ -213,15 +241,71 @@ def get_transition_history(
     return [_row_to_record(r) for r in rows]
 
 
+def compute_transition_hash(
+    *,
+    transition_id: str,
+    tenant_id: str,
+    from_state: str,
+    to_state: str,
+    occurred_at: str,
+    request_id: Optional[str],
+    actor_id: Optional[str],
+) -> str:
+    """Public re-export so callers can verify a stored hash without importing internals."""
+    return _compute_transition_hash(
+        transition_id=transition_id,
+        tenant_id=tenant_id,
+        from_state=from_state,
+        to_state=to_state,
+        occurred_at=occurred_at,
+        request_id=request_id,
+        actor_id=actor_id,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _compute_transition_hash(
+    *,
+    transition_id: str,
+    tenant_id: str,
+    from_state: str,
+    to_state: str,
+    occurred_at: str,
+    request_id: Optional[str],
+    actor_id: Optional[str],
+) -> str:
+    """SHA-256 fingerprint of the immutable transition fields.
+
+    The hash covers transition_id so it's unique even for identical state
+    changes on the same tenant at the same timestamp.  NULL fields are
+    serialised as the empty string to keep the hash stable.
+    """
+    payload = "\n".join(
+        [
+            transition_id,
+            tenant_id,
+            from_state,
+            to_state,
+            occurred_at,
+            request_id or "",
+            actor_id or "",
+        ]
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _row_to_record(row: object) -> TenantTransitionRecord:
     occurred_at = row[8]
     if isinstance(occurred_at, str):
         occurred_at = datetime.fromisoformat(occurred_at)
+    # transition_hash (index 9) and schema_version (index 10) may be absent
+    # on rows inserted before migration 0158.
+    transition_hash = row[9] if len(row) > 9 else None
+    schema_version = row[10] if len(row) > 10 else 0
     return TenantTransitionRecord(
         transition_id=row[0],
         tenant_id=row[1],
@@ -232,4 +316,6 @@ def _row_to_record(row: object) -> TenantTransitionRecord:
         request_id=row[6],
         idempotency_key=row[7],
         occurred_at=occurred_at,
+        transition_hash=transition_hash,
+        schema_version=schema_version,
     )

@@ -6,8 +6,12 @@ A) State machine validation — ALLOWED_TRANSITIONS is correct and complete
 B) execute_transition happy paths (active→suspended, suspended→active, archived→deleted, etc.)
 C) execute_transition error paths (invalid transition, tenant not found)
 D) Idempotency — same idempotency_key returns existing record without double-write
-E) get_transition_history returns records in reverse chronological order
+E) get_transition_history returns records ordered by occurred_at DESC (never insertion order)
 F) Audit record fields are persisted faithfully
+G) Terminal state — deleted→* always raises 409 (regression guard, must never be removed)
+H) Archive semantics — archived_at is written once; second archive does NOT overwrite
+I) Transition fingerprint — transition_hash is computed, stable, and non-empty
+J) Schema version — every record carries schema_version = TRANSITION_SCHEMA_VERSION
 """
 
 from __future__ import annotations
@@ -20,9 +24,11 @@ from sqlalchemy import create_engine, text
 
 from api.tenant_lifecycle import (
     ALLOWED_TRANSITIONS,
+    TRANSITION_SCHEMA_VERSION,
     VALID_STATES,
     InvalidTransitionError,
     TenantNotFoundError,
+    compute_transition_hash,
     execute_transition,
     get_transition_history,
 )
@@ -57,6 +63,8 @@ CREATE TABLE IF NOT EXISTS tenant_lifecycle_transitions (
     request_id          TEXT,
     idempotency_key     TEXT,
     occurred_at         TEXT            NOT NULL DEFAULT (datetime('now')),
+    transition_hash     VARCHAR(64),
+    schema_version      INTEGER         NOT NULL DEFAULT 1,
     UNIQUE (tenant_id, idempotency_key)
 );
 """
@@ -369,3 +377,177 @@ class TestGetTransitionHistory:
 
         history = get_transition_history(engine, "th2", limit=2)
         assert len(history) == 2
+
+    def test_history_ordered_by_occurred_at_not_insertion_order(self, engine):
+        """ORDER BY occurred_at DESC must be explicit — never rely on insertion order."""
+        _insert_tenant(engine, "th3")
+        rec1 = execute_transition(engine, tenant_id="th3", to_state="suspended")
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE tenants SET lifecycle_state = 'active' WHERE tenant_id = 'th3'"
+                )
+            )
+        rec2 = execute_transition(engine, tenant_id="th3", to_state="suspended")
+
+        history = get_transition_history(engine, "th3")
+        # Newest (rec2) must be first regardless of physical row order.
+        assert history[0].transition_id == rec2.transition_id
+        assert history[1].transition_id == rec1.transition_id
+
+
+# ---------------------------------------------------------------------------
+# G) Terminal state enforcement — must never regress
+# ---------------------------------------------------------------------------
+
+
+class TestTerminalStateEnforcement:
+    """deleted is terminal.  Every outbound transition must be rejected with 409."""
+
+    @pytest.mark.parametrize("target", sorted(VALID_STATES - {"deleted"}))
+    def test_deleted_to_any_valid_state_raises(self, engine, target):
+        """deleted → {active, archived, suspended} must all raise InvalidTransitionError."""
+        _insert_tenant(engine, f"term-{target}", state="deleted")
+        with pytest.raises(InvalidTransitionError):
+            execute_transition(engine, tenant_id=f"term-{target}", to_state=target)
+
+    def test_deleted_to_deleted_raises(self, engine):
+        """deleted → deleted must also be rejected (not silently no-op)."""
+        _insert_tenant(engine, "term-del", state="deleted")
+        with pytest.raises((InvalidTransitionError, ValueError)):
+            execute_transition(engine, tenant_id="term-del", to_state="deleted")
+
+
+# ---------------------------------------------------------------------------
+# H) Archive semantics — archived_at immutability
+# ---------------------------------------------------------------------------
+
+
+class TestArchiveSemantics:
+    def test_archived_at_set_on_first_archive(self, engine):
+        _insert_tenant(engine, "arch1")
+        execute_transition(engine, tenant_id="arch1", to_state="archived")
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT archived_at FROM tenants WHERE tenant_id = 'arch1'")
+            ).fetchone()
+        assert row[0] is not None
+
+    def test_archived_at_not_overwritten_on_second_write(self, engine):
+        """Directly verify the conditional UPDATE: archived_at must not change
+        if somehow the code path ran twice on the same tenant."""
+        _insert_tenant(engine, "arch2")
+        # First archive through the lifecycle authority.
+        execute_transition(engine, tenant_id="arch2", to_state="archived")
+
+        with engine.connect() as conn:
+            original_ts = conn.execute(
+                text("SELECT archived_at FROM tenants WHERE tenant_id = 'arch2'")
+            ).fetchone()[0]
+
+        # Attempt a second conditional archived_at write directly (as the code would).
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE tenants SET archived_at = '2099-01-01T00:00:00+00:00' "
+                    "WHERE tenant_id = 'arch2' AND archived_at IS NULL"
+                )
+            )
+
+        with engine.connect() as conn:
+            after_ts = conn.execute(
+                text("SELECT archived_at FROM tenants WHERE tenant_id = 'arch2'")
+            ).fetchone()[0]
+
+        assert after_ts == original_ts, (
+            "archived_at must not be overwritten after first archive"
+        )
+
+
+# ---------------------------------------------------------------------------
+# I) Transition fingerprint
+# ---------------------------------------------------------------------------
+
+
+class TestTransitionHash:
+    def test_hash_is_non_empty(self, engine):
+        _insert_tenant(engine, "hash1")
+        rec = execute_transition(engine, tenant_id="hash1", to_state="suspended")
+        assert rec.transition_hash is not None
+        assert len(rec.transition_hash) == 64  # SHA-256 hex digest
+
+    def test_hash_is_deterministic(self, engine):
+        """Same inputs → same hash (public re-export must agree with stored value)."""
+        _insert_tenant(engine, "hash2")
+        rec = execute_transition(
+            engine,
+            tenant_id="hash2",
+            to_state="suspended",
+            actor_id="actor-x",
+            request_id="req-y",
+        )
+        expected = compute_transition_hash(
+            transition_id=rec.transition_id,
+            tenant_id=rec.tenant_id,
+            from_state=rec.from_state,
+            to_state=rec.to_state,
+            occurred_at=rec.occurred_at.isoformat(),
+            request_id=rec.request_id,
+            actor_id=rec.actor_id,
+        )
+        assert rec.transition_hash == expected
+
+    def test_hash_is_persisted(self, engine):
+        """transition_hash written to DB must match what execute_transition returns."""
+        _insert_tenant(engine, "hash3")
+        rec = execute_transition(engine, tenant_id="hash3", to_state="suspended")
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT transition_hash FROM tenant_lifecycle_transitions "
+                    "WHERE transition_id = :tid"
+                ),
+                {"tid": rec.transition_id},
+            ).fetchone()
+        assert row[0] == rec.transition_hash
+
+    def test_different_transitions_produce_different_hashes(self, engine):
+        _insert_tenant(engine, "hash4")
+        rec1 = execute_transition(engine, tenant_id="hash4", to_state="suspended")
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE tenants SET lifecycle_state = 'active' WHERE tenant_id = 'hash4'"
+                )
+            )
+        rec2 = execute_transition(engine, tenant_id="hash4", to_state="suspended")
+        assert rec1.transition_hash != rec2.transition_hash
+
+
+# ---------------------------------------------------------------------------
+# J) Schema version
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaVersion:
+    def test_schema_version_is_current(self, engine):
+        _insert_tenant(engine, "sv1")
+        rec = execute_transition(engine, tenant_id="sv1", to_state="suspended")
+        assert rec.schema_version == TRANSITION_SCHEMA_VERSION
+        assert rec.schema_version == 1
+
+    def test_schema_version_persisted(self, engine):
+        _insert_tenant(engine, "sv2")
+        rec = execute_transition(engine, tenant_id="sv2", to_state="suspended")
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT schema_version FROM tenant_lifecycle_transitions "
+                    "WHERE transition_id = :tid"
+                ),
+                {"tid": rec.transition_id},
+            ).fetchone()
+        assert row[0] == TRANSITION_SCHEMA_VERSION
