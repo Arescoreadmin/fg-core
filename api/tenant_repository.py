@@ -23,11 +23,12 @@ from sqlalchemy.engine import Engine
 
 log = logging.getLogger("frostgate.tenant_repository")
 
-# Valid lifecycle states (R3 will own the workflow; R7 only enumerates them).
+# Valid lifecycle states (R3 owns the transition workflow; R7 only enumerates them).
 _SUPPORTED_LIFECYCLE_STATES = {
     "active",
     "suspended",
     "archived",
+    "deleted",
     "failed",
     "validating",
 }
@@ -217,7 +218,11 @@ class TenantRepository:
         if include_archived:
             states = list(_SUPPORTED_LIFECYCLE_STATES)
         else:
-            states = [s for s in _SUPPORTED_LIFECYCLE_STATES if s != "archived"]
+            states = [
+                s
+                for s in _SUPPORTED_LIFECYCLE_STATES
+                if s not in {"archived", "deleted"}
+            ]
 
         # Use IN clause for cross-dialect compatibility (SQLite + Postgres).
         placeholders = ", ".join(f":s{i}" for i in range(len(states)))

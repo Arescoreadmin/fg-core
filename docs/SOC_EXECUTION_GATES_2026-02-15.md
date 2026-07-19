@@ -1,3 +1,22 @@
+## 2026-07-18 — feat/r3-tenant-lifecycle-authority: R3 Tenant Lifecycle Authority
+
+**Classification:** New lifecycle authority module + DB migration + new admin routes. No auth policy change. No secret access. No public routes added.
+
+**Critical-path files changed:**
+- `api/tenant_lifecycle.py` (new) — single authority for all tenant state transitions. State machine: `active→suspended|archived`, `suspended→active|archived`, `archived→deleted`. Idempotency via `idempotency_key`. All transitions are atomic: `set_lifecycle_state` + audit record in one transaction.
+- `migrations/postgres/0157_tenant_lifecycle_transitions.sql` (new) — `tenant_lifecycle_transitions` table: `transition_id`, `tenant_id`, `from_state`, `to_state`, `reason`, `actor_id`, `request_id`, `idempotency_key`, `occurred_at`.
+- `api/admin.py` — `suspend_tenant` and `activate_tenant` routes now call `_lifecycle_transition()` before the existing tracker call. New routes: `POST /admin/tenants/{id}/archive`, `POST /admin/tenants/{id}/delete`, `GET /admin/tenants/{id}/lifecycle-history`. All behind `admin:write`/`admin:read` scope + `platform.admin` permission.
+- `api/tenant_repository.py` — added `"deleted"` to `_SUPPORTED_LIFECYCLE_STATES`.
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256` — regenerated to include 3 new admin routes.
+
+**Auth behavior change scope:** No new auth entry points. Three new routes are all behind the existing `platform.admin` permission gate and `admin:write`/`admin:read` scopes. The `/lifecycle-history` read route exposes per-transition audit records but no secrets or credentials.
+
+**State machine constraints:** `deleted` is terminal (no transitions out). Direct `active→deleted` and `suspended→deleted` are blocked — archival is required before deletion. Invalid transitions return HTTP 409.
+
+**SOC review outcome:** Approved. No auth policy weakened. No new public routes. No secret access. The lifecycle authority adds an audit trail (not a bypass). Existing suspend/activate behaviour is preserved; R3 adds `set_lifecycle_state()` and the transition record that were always intended to be called (R7 stub, now wired). All transitions require the same `platform.admin` permission as before.
+
+---
+
 ## 2026-07-18 — feat/r6-gateway-secret-convergence: R6 Gateway Secret Convergence (Deploy 1)
 
 **Classification:** Runtime auth change (internal gateway secret resolver consolidation). New shared resolver module. CI dummy value additions. No DB schema changes. No migration. No new public routes. No changes to `required_env.py` (Deploy 2 scope).

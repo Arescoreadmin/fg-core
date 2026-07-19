@@ -57,10 +57,16 @@ class MigrationResult:
     tenants_created: int = 0
     tenants_skipped: int = 0
     tenants_failed: int = 0
+    # Broken out for the readiness report; both also increment tenants_failed.
+    tenants_duplicate: int = 0
+    tenants_malformed: int = 0
     warnings: List[str] = field(default_factory=list)
     orphaned_key_tenant_ids: List[str] = field(default_factory=list)
     status: str = "running"
     error: Optional[str] = None
+    # Set by run_migration for use in the dry-run readiness report.
+    source_fingerprint: Optional[str] = None
+    generated_at: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +227,8 @@ def run_migration(
         if tenant_id in seen_ids:
             warn = f"Duplicate tenant_id in JSON (skipping second occurrence): {tenant_id!r}"
             result.warnings.append(warn)
+            result.tenants_duplicate += 1
+            result.tenants_failed += 1
             log.warning(warn)
             continue
         seen_ids.add(tenant_id)
@@ -229,12 +237,14 @@ def run_migration(
         if not tenant_id or not isinstance(tenant_id, str):
             warn = f"Malformed tenant_id (empty or non-string): {tenant_id!r}"
             result.warnings.append(warn)
+            result.tenants_malformed += 1
             result.tenants_failed += 1
             continue
 
         if not isinstance(payload, dict):
             warn = f"Tenant {tenant_id!r} has non-object payload ({type(payload).__name__}) — skipping"
             result.warnings.append(warn)
+            result.tenants_malformed += 1
             result.tenants_failed += 1
             continue
 
@@ -243,6 +253,7 @@ def run_migration(
         if not name or not name.strip():
             warn = f"Tenant {tenant_id!r} has empty name — skipping"
             result.warnings.append(warn)
+            result.tenants_malformed += 1
             result.tenants_failed += 1
             continue
 
@@ -341,6 +352,8 @@ def run_migration(
 
     if dry_run:
         result.status = "dry_run"
+        result.source_fingerprint = checksum
+        result.generated_at = _now_iso()
         return result
 
     # Step 10: write ledger entry.
@@ -409,6 +422,59 @@ def run_migration(
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+def _print_readiness_report(result: MigrationResult) -> None:
+    """Print a human-readable migration readiness report to stdout."""
+    ready = result.tenants_failed == 0 and result.error is None
+    print()
+    print("Migration Readiness Report")
+    print("==========================")
+    print()
+    print(f"JSON tenants discovered : {result.tenants_found}")
+    print(f"Duplicate tenant IDs    : {result.tenants_duplicate}")
+    print(f"Malformed records       : {result.tenants_malformed}")
+    print(f"Would insert            : {result.tenants_created}")
+    print(f"Would skip (existing)   : {result.tenants_skipped}")
+    print(f"Orphaned api_keys       : {len(result.orphaned_key_tenant_ids)}")
+    print()
+    if result.source_fingerprint:
+        print(f"Source fingerprint      : {result.source_fingerprint}")
+    if result.generated_at:
+        print(f"Generated               : {result.generated_at}")
+    print()
+    if result.warnings:
+        print(f"Warnings ({len(result.warnings)}):")
+        for w in result.warnings:
+            print(f"  ⚠  {w}")
+        print()
+    status_line = "✅ READY" if ready else "❌ NOT READY — resolve warnings before proceeding"
+    print(f"Verdict: {status_line}")
+    print()
+
+
+def _write_readiness_artifact(result: MigrationResult, out_path: Path) -> None:
+    """Write the readiness report as a JSON artifact for archival."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact = {
+        "report_type": "r7_migration_readiness",
+        "status": result.status,
+        "source_fingerprint": result.source_fingerprint,
+        "generated_at": result.generated_at,
+        "tenants_found": result.tenants_found,
+        "tenants_duplicate": result.tenants_duplicate,
+        "tenants_malformed": result.tenants_malformed,
+        "tenants_would_insert": result.tenants_created,
+        "tenants_would_skip": result.tenants_skipped,
+        "tenants_failed": result.tenants_failed,
+        "orphaned_key_tenant_ids": result.orphaned_key_tenant_ids,
+        "warnings": result.warnings,
+        "ready": result.tenants_failed == 0 and result.error is None,
+    }
+    if result.error:
+        artifact["error"] = result.error
+    out_path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
+    log.info("readiness_artifact_written path=%s", out_path)
+
+
 if __name__ == "__main__":
     import sys
 
@@ -422,22 +488,45 @@ if __name__ == "__main__":
         action="store_true",
         help="Validate and report without writing to Postgres",
     )
+    parser.add_argument(
+        "--report-out",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Write the readiness report JSON artifact to this path "
+            "(default when --dry-run: artifacts/migration/r7_readiness_<timestamp>.json)"
+        ),
+    )
     args = parser.parse_args()
 
     result = run_migration(dry_run=args.dry_run)
 
-    output = {
-        "status": result.status,
-        "tenants_found": result.tenants_found,
-        "tenants_created": result.tenants_created,
-        "tenants_skipped": result.tenants_skipped,
-        "tenants_failed": result.tenants_failed,
-        "warnings": result.warnings,
-        "orphaned_key_tenant_ids": result.orphaned_key_tenant_ids,
-    }
-    if result.error:
-        output["error"] = result.error
+    if args.dry_run:
+        _print_readiness_report(result)
 
-    print(json.dumps(output, indent=2))
+        # Determine artifact path.
+        ts = (result.generated_at or _now_iso()).replace(":", "").replace("+", "Z")[:18]
+        default_path = (
+            Path(__file__).resolve().parents[2]
+            / "artifacts"
+            / "migration"
+            / f"r7_readiness_{ts}.json"
+        )
+        artifact_path = Path(args.report_out) if args.report_out else default_path
+        _write_readiness_artifact(result, artifact_path)
+        print(f"Artifact written: {artifact_path}")
+    else:
+        output = {
+            "status": result.status,
+            "tenants_found": result.tenants_found,
+            "tenants_created": result.tenants_created,
+            "tenants_skipped": result.tenants_skipped,
+            "tenants_failed": result.tenants_failed,
+            "warnings": result.warnings,
+            "orphaned_key_tenant_ids": result.orphaned_key_tenant_ids,
+        }
+        if result.error:
+            output["error"] = result.error
+        print(json.dumps(output, indent=2))
 
     sys.exit(0 if result.status in {"complete", "skipped", "dry_run"} else 1)

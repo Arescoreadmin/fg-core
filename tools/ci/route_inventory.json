@@ -1729,6 +1729,24 @@
         "rate",
         "tenant"
       ],
+      "file": "api/admin.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/archive",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/billing_v2.py",
       "method": "GET",
       "path": "/admin/tenants/{tenant_id}/billing/account",
@@ -1837,6 +1855,24 @@
         "rate",
         "tenant"
       ],
+      "file": "api/admin.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/delete",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/entitlements.py",
       "method": "GET",
       "path": "/admin/tenants/{tenant_id}/entitlements",
@@ -1881,6 +1917,24 @@
       "scoped": true,
       "scopes": [
         "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/lifecycle-history",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -20199,7 +20253,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-17T17:58:37.346275+00:00",
+  "generated_at": "2026-07-19T02:25:20.929767+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
