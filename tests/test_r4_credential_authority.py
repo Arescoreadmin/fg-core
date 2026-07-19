@@ -624,6 +624,45 @@ class TestE_Rotation:
                 credential_slot="never-issued",
             )
 
+    def test_rotation_of_revoked_generation_raises(self, engine: Engine) -> None:
+        r = issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="revoked-slot",
+        )
+        revoke_credential(
+            engine,
+            credential_id=r.record.credential_id,
+            tenant_id="tenant-alpha",
+            actor_id="op",
+            reason="test",
+        )
+        with pytest.raises(CredentialStateError):
+            rotate_credential(
+                engine,
+                tenant_id="tenant-alpha",
+                credential_type="tenant_api_key",
+                credential_slot="revoked-slot",
+            )
+
+    def test_rotation_of_expired_generation_raises(self, engine: Engine) -> None:
+        issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="expired-slot",
+            expires_in_seconds=-1,
+        )
+        expire_credentials(engine, tenant_id="tenant-alpha")
+        with pytest.raises(CredentialStateError):
+            rotate_credential(
+                engine,
+                tenant_id="tenant-alpha",
+                credential_type="tenant_api_key",
+                credential_slot="expired-slot",
+            )
+
     def test_rotation_chain_recorded_in_history(self, engine: Engine) -> None:
         issue_credential(
             engine,

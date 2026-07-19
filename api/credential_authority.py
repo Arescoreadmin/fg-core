@@ -785,6 +785,12 @@ def rotate_credential(
                 f"Active credential at generation {current_gen} not found."
             )
         old_record = _row_to_record(old_row)
+        if old_record.status != "active":
+            raise CredentialStateError(
+                f"Cannot rotate generation {current_gen}: "
+                f"status is {old_record.status!r}. "
+                "Only active credentials may be rotated."
+            )
 
         # New key material.
         now = datetime.now(timezone.utc)
@@ -960,33 +966,22 @@ def expire_credentials(
         params["tid"] = tenant_id
 
     with engine.begin() as conn:
-        # SQLite does not support LIMIT in UPDATE directly; use a subquery.
-        is_postgres = engine.dialect.name == "postgresql"
-        if is_postgres:
-            result = conn.execute(
-                text(
-                    "UPDATE tenant_credentials "
-                    "SET status = 'expired' "
-                    "WHERE status IN ('pending', 'active') "
-                    "  AND expires_at IS NOT NULL "
-                    "  AND expires_at <= :now" + tenant_clause + " LIMIT :batch"
-                ),
-                params,
-            )
-        else:
-            result = conn.execute(
-                text(
-                    "UPDATE tenant_credentials "
-                    "SET status = 'expired' "
-                    "WHERE credential_id IN ("
-                    "  SELECT credential_id FROM tenant_credentials "
-                    "  WHERE status IN ('pending', 'active') "
-                    "    AND expires_at IS NOT NULL "
-                    "    AND expires_at <= :now" + tenant_clause + "  LIMIT :batch"
-                    ")"
-                ),
-                params,
-            )
+        # Both Postgres and SQLite: subquery form required because Postgres does
+        # not support LIMIT directly on UPDATE and SQLite does not support it
+        # without a subquery either.
+        result = conn.execute(
+            text(
+                "UPDATE tenant_credentials "
+                "SET status = 'expired' "
+                "WHERE credential_id IN ("
+                "  SELECT credential_id FROM tenant_credentials "
+                "  WHERE status IN ('pending', 'active') "
+                "    AND expires_at IS NOT NULL "
+                "    AND expires_at <= :now" + tenant_clause + "  LIMIT :batch"
+                ")"
+            ),
+            params,
+        )
 
     return result.rowcount
 
