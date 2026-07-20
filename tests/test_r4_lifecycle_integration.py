@@ -85,6 +85,23 @@ CREATE TABLE IF NOT EXISTS credential_slots (
     PRIMARY KEY (tenant_id, credential_type, credential_slot)
 );
 
+CREATE TABLE IF NOT EXISTS tenant_credential_events (
+    event_id          VARCHAR(64)  NOT NULL PRIMARY KEY,
+    tenant_id         VARCHAR(128) NOT NULL,
+    credential_id     VARCHAR(64),
+    credential_type   VARCHAR(64),
+    credential_slot   VARCHAR(128),
+    generation        INTEGER,
+    event_type        VARCHAR(64)  NOT NULL,
+    actor_id          VARCHAR(256),
+    request_id        VARCHAR(128),
+    occurred_at       TEXT         NOT NULL,
+    outcome           VARCHAR(16)  NOT NULL DEFAULT 'success',
+    failure_reason    TEXT,
+    metadata          TEXT,
+    schema_version    INTEGER      NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS tenant_credentials (
     credential_id               VARCHAR(64)  NOT NULL PRIMARY KEY,
     tenant_id                   VARCHAR(128) NOT NULL,

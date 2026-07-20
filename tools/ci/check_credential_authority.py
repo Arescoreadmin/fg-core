@@ -1,4 +1,4 @@
-"""CI gate: only api/credential_authority.py may write tenant_credentials or credential_slots.
+"""CI gate: only api/credential_authority.py may write to credential tables.
 
 Scans all Python source files (excluding migration files and the authority module itself)
 for direct INSERT or UPDATE statements targeting these tables.  Exits non-zero if any
@@ -24,7 +24,9 @@ REPO = Path(__file__).resolve().parents[2]
 _AUTHORITY_MODULE = REPO / "api" / "credential_authority.py"
 
 # Tables that only the authority module may mutate.
-_PROTECTED_TABLES = frozenset({"tenant_credentials", "credential_slots"})
+_PROTECTED_TABLES = frozenset(
+    {"tenant_credentials", "credential_slots", "tenant_credential_events"}
+)
 
 # Matches INSERT INTO <table> or UPDATE <table> in a Python string literal or SQL call.
 # We look for the table name anywhere in the source line — false-positives are reviewed
@@ -32,7 +34,7 @@ _PROTECTED_TABLES = frozenset({"tenant_credentials", "credential_slots"})
 _WRITE_PATTERN = re.compile(
     r"""(?ix)
     \b(?:INSERT\s+INTO|UPDATE)\s+
-    (?P<table>tenant_credentials|credential_slots)
+    (?P<table>tenant_credentials|credential_slots|tenant_credential_events)
     \b
     """,
 )
@@ -105,6 +107,7 @@ def main() -> int:
         f"✓ check-credential-authority: {table_list} — write authority verified; "
         "TenantRepository import confirmed"
     )
+
     return 0
 
 

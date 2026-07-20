@@ -1,5 +1,56 @@
 # PR Fix Log (Strict)
 
+## P-12 — feat(r4.5): credential audit events
+
+**Branch:** `feat/r4.5-audit-events`
+**Date:** 2026-07-20
+
+### Purpose
+
+R4.5 — append-only audit log for all credential lifecycle and validation events.
+Lifecycle events (issued, rotated, revoked, expired) emitted atomically within write
+transactions.  Validation telemetry (validated, validation_failed, denied_tenant_state)
+emitted best-effort on a fresh connection — never blocks the hot path.
+
+### Changes
+
+1. `new: migrations/postgres/0160_tenant_credential_events.sql` — `tenant_credential_events`
+   table with RLS, 7-value `event_type` check constraint, 3-value `outcome` check constraint,
+   and 3 indexes (tenant+time, credential_id, tenant+event_type+time).
+2. `mod: api/credential_authority.py` — added `CredentialEventRecord` frozen dataclass;
+   `_insert_event(conn, ...)` synchronous helper (called within caller's transaction);
+   `_emit_event_best_effort(engine, ...)` wrapper that opens a fresh connection and swallows
+   all exceptions; wired `issued`/`rotated`/`revoked` events atomically within each write
+   function's `engine.begin()` block; restructured `expire_credentials` from bulk UPDATE to
+   SELECT→UPDATE IN list→per-row `expired` event; restructured `validate_credential` to emit
+   best-effort events at each decision point (not_found, hash_mismatch, status_*, expired,
+   denied_tenant_state, success); added `list_credential_events(engine, tenant_id, ...)`.
+3. `new: tests/test_r4_credential_events.py` — 22 tests across 9 classes (A–I) covering
+   all event types, transaction atomicity, idempotency, best-effort swallowing, list
+   filtering, and cross-tenant isolation.
+4. `mod: tests/test_r4_credential_authority.py` — added `tenant_credential_events` table to
+   `_SCHEMA` so existing 73 tests work with event-emitting authority module.
+5. `mod: tests/test_r4_lifecycle_integration.py` — same `tenant_credential_events` schema
+   addition for 16 integration tests.
+6. `mod: tools/ci/check_credential_authority.py` — extended `_PROTECTED_TABLES` with
+   `tenant_credential_events`; updated `_WRITE_PATTERN` and gate message.
+7. `mod: docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC-HIGH-003 entry for R4.5 CI gate.
+
+### Verification
+
+```
+python -m pytest tests/test_r4_credential_events.py -v
+→ 22 passed in 0.20s
+
+python -m pytest tests/test_r4_credential_events.py tests/test_r4_credential_authority.py tests/test_r4_lifecycle_integration.py -q
+→ 111 passed in 0.41s
+
+python tools/ci/check_credential_authority.py
+→ ✓ credential_slots, tenant_credential_events, tenant_credentials — write authority verified; TenantRepository import confirmed
+```
+
+---
+
 ## P-11 — feat(r4.4): tenant lifecycle enforcement via TenantRepository
 
 **Branch:** `feat/r4.4-lifecycle-enforcement-integration`
