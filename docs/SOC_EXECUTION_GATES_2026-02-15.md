@@ -1,3 +1,18 @@
+## 2026-07-20 — feat/r4.6-admin-api: R4.6 Admin Credential Routes
+
+**Classification:** New admin API routes under `/admin/tenants/{id}/credentials*`. No new tables, no new migrations, no auth mechanism changes. No secret access. Removes BUG-001 (duplicate no-tenant-enforcement rotation route).
+
+**Critical-path files changed:**
+- `api/admin.py` — 6 new route handlers (`list_tenant_credentials`, `issue_tenant_credential`, `get_tenant_credential`, `rotate_tenant_credential`, `revoke_tenant_credential`, `list_tenant_credential_events`); all behind `admin:write`/`admin:read` scopes and `platform.admin` permission; all delegate exclusively to `api/credential_authority.py` — no direct credential table writes. Removed `rotate_key` (BUG-001: `POST /keys/{key_prefix}/rotate` with no tenant enforcement).
+
+**Auth behavior change scope:** All 6 new routes require the existing `platform.admin` permission and `admin:write`/`admin:read` scopes — same gates as all other admin routes. Issue route returns HTTP 201. No credential material is persisted in logs or responses beyond the single issuance call.
+
+**BUG-001 removal:** `rotate_key` (POST /keys/{key_prefix}/rotate) bypassed tenant enforcement by calling `api.key_rotation.rotate_api_key` directly. This handler is removed. All rotation now flows through `rotate_tenant_credential` which enforces tenant ownership via credential_id lookup.
+
+**SOC review outcome:** Approved. No auth policy weakened. All new routes behind existing permission gate. No new public routes. Write authority remains exclusively in `api/credential_authority.py` — confirmed by `check_credential_authority` gate. BUG-001 removal eliminates the only path that allowed rotation without tenant enforcement.
+
+---
+
 ## 2026-07-20 — feat/r4.5-audit-events: R4.5 Credential Audit Events
 
 **Classification:** New audit table + event emission wired into existing authority. No new public routes. No auth policy change. No secret access.
