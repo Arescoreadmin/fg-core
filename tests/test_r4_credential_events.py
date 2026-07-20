@@ -11,6 +11,8 @@ tenant_credential_events.  Argon2id parameters are minimum-cost via monkeypatch.
 
 from __future__ import annotations
 
+from typing import cast
+
 
 import pytest
 from argon2 import PasswordHasher
@@ -399,7 +401,7 @@ class TestE_ValidatedEvent:
             credential_type="tenant_api_key",
             credential_slot="prod",
         )
-        validate_credential(engine, result.plaintext_secret)
+        validate_credential(engine, cast(str, result.plaintext_secret))
 
         evts = list_credential_events(engine, "tenant-alpha", event_type="validated")
         assert len(evts) == 1
@@ -426,7 +428,7 @@ class TestE_ValidatedEvent:
         # exception swallowing is what keeps validation from being blocked.
         monkeypatch.setattr(ca, "_insert_event", boom)
         # Must not raise despite emit failure.
-        principal = validate_credential(engine, result.plaintext_secret)
+        principal = validate_credential(engine, cast(str, result.plaintext_secret))
         assert principal.tenant_id == "tenant-alpha"
 
 
@@ -467,7 +469,7 @@ class TestF_ValidationFailedEvent:
             reason="test",
         )
         with pytest.raises(CredentialNotFoundError):
-            validate_credential(engine, result.plaintext_secret)
+            validate_credential(engine, cast(str, result.plaintext_secret))
 
         evts = list_credential_events(
             engine, "tenant-alpha", event_type="validation_failed"
@@ -487,7 +489,7 @@ class TestF_ValidationFailedEvent:
             expires_in_seconds=-1,
         )
         with pytest.raises(CredentialNotFoundError):
-            validate_credential(engine, result.plaintext_secret)
+            validate_credential(engine, cast(str, result.plaintext_secret))
 
         evts = list_credential_events(
             engine, "tenant-alpha", event_type="validation_failed"
@@ -519,7 +521,7 @@ class TestG_DeniedTenantStateEvent:
             )
 
         with pytest.raises(TenantLifecycleError):
-            validate_credential(engine, result.plaintext_secret)
+            validate_credential(engine, cast(str, result.plaintext_secret))
 
         evts = list_credential_events(
             engine, "tenant-alpha", event_type="denied_tenant_state"
@@ -543,8 +545,8 @@ class TestH_ListCredentialEvents:
             credential_type="tenant_api_key",
             credential_slot="prod",
         )
-        validate_credential(engine, result.plaintext_secret)
-        validate_credential(engine, result.plaintext_secret)
+        validate_credential(engine, cast(str, result.plaintext_secret))
+        validate_credential(engine, cast(str, result.plaintext_secret))
 
         evts = _events(engine)
         # 1 issued + 2 validated
@@ -583,7 +585,7 @@ class TestH_ListCredentialEvents:
             credential_type="tenant_api_key",
             credential_slot="prod",
         )
-        validate_credential(engine, result.plaintext_secret)
+        validate_credential(engine, cast(str, result.plaintext_secret))
 
         issued_evts = list_credential_events(
             engine, "tenant-alpha", event_type="issued"
@@ -602,7 +604,7 @@ class TestH_ListCredentialEvents:
             credential_slot="prod",
         )
         for _ in range(5):
-            validate_credential(engine, result.plaintext_secret)
+            validate_credential(engine, cast(str, result.plaintext_secret))
 
         evts = list_credential_events(engine, "tenant-alpha", limit=3)
         assert len(evts) == 3
@@ -670,8 +672,8 @@ class TestI_TenantIsolation:
             credential_type="tenant_api_key",
             credential_slot="prod",
         )
-        validate_credential(engine, r_a.plaintext_secret)
-        validate_credential(engine, r_b.plaintext_secret)
+        validate_credential(engine, cast(str, r_a.plaintext_secret))
+        validate_credential(engine, cast(str, r_b.plaintext_secret))
 
         alpha_evts = list_credential_events(engine, "tenant-alpha")
         beta_evts = list_credential_events(engine, "tenant-beta")

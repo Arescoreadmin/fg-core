@@ -242,6 +242,7 @@ class TestB_SuspendReactivate:
                 ),
                 {"cid": cid},
             ).fetchone()
+        assert row is not None
         assert row[0] == "active"
 
     def test_credential_row_unchanged_after_reactivate(self, engine: Engine) -> None:
@@ -258,6 +259,7 @@ class TestB_SuspendReactivate:
                 ),
                 {"cid": cid},
             ).fetchone()
+        assert row is not None
         assert row[0] == "active"
 
     def test_tenant_transition_alone_changes_validation_outcome(
@@ -327,6 +329,7 @@ class TestC_Archive:
                 ),
                 {"cid": cid},
             ).fetchone()
+        assert row is not None
         assert row[0] == "active"
 
 
