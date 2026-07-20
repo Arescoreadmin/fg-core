@@ -5916,3 +5916,23 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - No secrets, keys, or cryptographic material are committed.  `FG_KEY_PEPPER` is read from the environment at runtime.
 
 **SOC review outcome:** approved.  New CI gate is strictly additive and raises the credential write-authority boundary to a mechanical enforcement level.  The authority module itself is a pure addition with no existing surface modified.  All R4 security invariants are enforced by the module and covered by 69 automated tests.
+
+---
+
+## feat/r4.4-lifecycle-enforcement-integration — R4.4 Lifecycle Enforcement Integration (2026-07-20)
+
+**Critical files changed:** `tools/ci/check_credential_authority.py`
+
+**Change:** Extended the existing `check_credential_authority.py` CI gate with a positive assertion: `api/credential_authority.py` must import `TenantRepository` from `api.tenant_repository`.  This ensures a future refactor cannot silently drop the canonical lifecycle source and reintroduce inline tenant SQL.
+
+**Reason:** R4.4 replaces the two inline `SELECT lifecycle_state FROM tenants` statements in `issue_credential` and `rotate_credential` with calls to `_get_tenant_lifecycle_state()`, which delegates to `TenantRepository` (the R3/R7 canonical lifecycle authority).  The CI gate addition mechanically enforces this design decision going forward.
+
+**Security review:**
+
+- No auth middleware, session handling, OPA policies, or CI workflow (`.github/`) files are modified.
+- The gate change is purely additive: a positive assertion that the canonical import exists.  It cannot be bypassed by removing it — removal causes the gate to fail.
+- `validate_credential` retains its `JOIN tenants` (documented with `AUTHORIZED-DIRECT-TENANT-SQL` marker) for atomicity on the hot validation path.  The CI gate does not restrict this JOIN because it scans for `INSERT INTO` / `UPDATE`, not `SELECT`.
+- The new `tests/test_r4_lifecycle_integration.py` file (16 tests) proves that suspend/archive/delete lifecycle transitions immediately block `validate_credential` and `issue_credential` with no credential mutation required.
+- No secrets, keys, cryptographic material, or migration files are added or changed.
+
+**SOC review outcome:** approved.  The gate extension closes a regression surface: without it, a developer who refactored `_get_tenant_lifecycle_state()` away could restore raw tenant SQL without any automated check catching it.  The positive assertion is the minimal mechanical control for this invariant.

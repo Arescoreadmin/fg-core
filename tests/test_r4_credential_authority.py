@@ -45,10 +45,18 @@ from api.credential_authority import (
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenants (
-    tenant_id       VARCHAR(128) PRIMARY KEY,
-    lifecycle_state VARCHAR(32)  NOT NULL DEFAULT 'active',
-    created_at      TEXT,
-    updated_at      TEXT
+    tenant_id          VARCHAR(128) PRIMARY KEY,
+    display_name       VARCHAR(256) NOT NULL DEFAULT '',
+    lifecycle_state    VARCHAR(32)  NOT NULL DEFAULT 'active',
+    created_at         TEXT,
+    updated_at         TEXT,
+    created_by         TEXT,
+    metadata           TEXT         NOT NULL DEFAULT '{}',
+    canonical_version  INTEGER      NOT NULL DEFAULT 1,
+    last_reconciled_at TEXT,
+    archived_at        TEXT,
+    migration_source   TEXT,
+    migration_version  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS credential_slots (

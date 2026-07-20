@@ -6,11 +6,26 @@ Single authority for all tenant credential lifecycle operations.
 No other module may INSERT or UPDATE tenant_credentials or credential_slots
 outside of migration files.
 
+Tenant lifecycle integration (R4.4):
+  Tenant existence and lifecycle state are resolved through TenantRepository —
+  the canonical source of truth established by R7 (persistence) and R3
+  (transition authority).  This ensures credential operations observe the same
+  tenant state abstraction used everywhere else in the platform, including the
+  JSON fallback during the R7 transition window.
+
+  validate_credential is the sole exception: it uses a single JOIN query to
+  read credential + tenant lifecycle atomically in one round-trip.  Replacing
+  the JOIN with TenantRepository.get() would introduce a race window (two
+  separate reads) and double the DB round-trips on the hot validation path.
+  The JOIN is documented as intentional and guarded by the CI gate.
+
 Non-negotiable invariants:
   - Plaintext secret returned exactly once at issuance; never stored.
   - lookup_fingerprint (HMAC-SHA256) for indexed lookup.
   - secret_hash (Argon2id) for constant-time verification.
-  - Tenant lifecycle enforced synchronously via JOIN at validation time.
+  - Tenant lifecycle enforced synchronously — via JOIN at validation time,
+    via TenantRepository at issuance/rotation/revocation time.
+  - No caching: lifecycle state is always read fresh from Postgres.
   - Slot-level serialization via SELECT FOR UPDATE on credential_slots.
   - Rotation is atomic: new generation inserted before old is marked rotated.
   - Revocation is idempotent; terminal statuses never reactivate.
@@ -35,6 +50,8 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+
+from api.tenant_repository import TenantRepository
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -106,6 +123,18 @@ def _enforce_lifecycle(lifecycle_state: str, operation: str, tenant_id: str) -> 
             f"Tenant {tenant_id!r} in state {lifecycle_state!r} "
             f"does not permit {operation!r}."
         )
+
+
+def _get_tenant_lifecycle_state(engine: Engine, tenant_id: str) -> str:
+    """Return the current lifecycle_state for a tenant via TenantRepository.
+
+    Raises TenantNotFoundError if the tenant does not exist.  Never caches —
+    each call reads fresh from Postgres (with JSON fallback during R7 window).
+    """
+    row = TenantRepository(engine).get(tenant_id)
+    if row is None:
+        raise TenantNotFoundError(f"Tenant not found: {tenant_id!r}")
+    return row.lifecycle_state
 
 
 # ---------------------------------------------------------------------------
@@ -538,14 +567,9 @@ def issue_credential(
                     record=_row_to_record(existing), plaintext_secret=None
                 )
 
-        # Tenant existence and lifecycle.
-        tenant_row = conn.execute(
-            text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
-            {"tid": tenant_id},
-        ).fetchone()
-        if tenant_row is None:
-            raise TenantNotFoundError(f"Tenant not found: {tenant_id}")
-        _enforce_lifecycle(tenant_row[0], "issue", tenant_id)
+        # Tenant existence and lifecycle — via TenantRepository (canonical source).
+        lifecycle_state = _get_tenant_lifecycle_state(engine, tenant_id)
+        _enforce_lifecycle(lifecycle_state, "issue", tenant_id)
 
         # Ensure slot row exists; lock it.
         _upsert_slot(
@@ -674,6 +698,14 @@ def validate_credential(
                 {"tid": tenant_id_hint},
             )
 
+        # AUTHORIZED-DIRECT-TENANT-SQL: validate_credential JOIN.
+        # This is the only place in the authority that queries tenants directly.
+        # A JOIN is used instead of TenantRepository.get() because:
+        #   (a) credential status and tenant lifecycle state must be read
+        #       atomically in a single round-trip — two separate reads would
+        #       introduce a race window on the hot validation path, and
+        #   (b) it eliminates one DB connection acquisition per validation call.
+        # Any other direct tenant SQL in this module is a regression.
         row = conn.execute(
             text(
                 f"SELECT {_RECORD_SELECT_TC}, tc.secret_hash, t.lifecycle_state "
@@ -758,14 +790,9 @@ def rotate_credential(
                     record=_row_to_record(existing), plaintext_secret=None
                 )
 
-        # Tenant.
-        tenant_row = conn.execute(
-            text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
-            {"tid": tenant_id},
-        ).fetchone()
-        if tenant_row is None:
-            raise TenantNotFoundError(f"Tenant not found: {tenant_id}")
-        _enforce_lifecycle(tenant_row[0], "rotate", tenant_id)
+        # Tenant existence and lifecycle — via TenantRepository (canonical source).
+        lifecycle_state = _get_tenant_lifecycle_state(engine, tenant_id)
+        _enforce_lifecycle(lifecycle_state, "rotate", tenant_id)
 
         # Lock slot.
         slot_row = conn.execute(
