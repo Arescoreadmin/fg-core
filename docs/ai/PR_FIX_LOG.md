@@ -1,5 +1,63 @@
 # PR Fix Log (Strict)
 
+## P-15 — fix(r4.7): P1-A RBAC prefix fallback; P1-B lifecycle denial fallthrough
+
+**Branch:** `feat/r4.7-dual-validation`
+**Date:** 2026-07-20
+
+### Purpose
+
+Two P1 security regressions introduced in the R4.7 dual-validation block of
+`verify_api_key_detailed`:
+
+- **P1-A**: `_get_auth_role()` in `api/tenant_rbac.py` fell through to the
+  `_get_key_role_by_prefix()` fallback whenever `key_db_id` was absent.
+  Canonical `AuthResult` values never carry `key_db_id`, so any canonical
+  credential for a tenant could inherit the RBAC role of an unrelated legacy
+  key that shares the `"fgk"` prefix — bypassing role enforcement on
+  `require_role()`-guarded routes.
+- **P1-B**: The broad `except Exception` in the canonical auth block also
+  caught `TenantLifecycleError` raised by `validate_credential()` when a
+  tenant is suspended, archived, or deleted. During dual-validation, where the
+  same key material may still exist in `api_keys`, this turned a lifecycle
+  denial into a possible legacy authentication success.
+
+### Changes
+
+1. `mod: api/tenant_rbac.py` — in `_get_auth_role()`, added a short-circuit
+   before the prefix fallback: if `auth.credential_id` is set (canonical
+   credential), return `None` immediately; canonical credentials have no
+   `api_keys` row and therefore no role binding yet.
+2. `mod: api/auth_scopes/resolution.py` — added `TenantLifecycleError as
+   _CaLifecycleError` to the existing lazy import from `api.credential_authority`
+   (same import block, no new module-level import); added an explicit
+   `except _CaLifecycleError` clause before the broad `except Exception` that
+   returns `AuthResult(valid=False, reason="tenant_lifecycle_denied",
+   key_prefix="fgk")` without falling through.
+
+### Non-obvious design choices
+
+- **`credential_id` as the canonical sentinel** — `key_db_id` is always `None`
+  for canonical auth and could be legitimately absent for old-format legacy
+  keys too (the original fallback rationale). Using `credential_id` instead is
+  unambiguous: only canonical `AuthResult` values ever set it.
+- **`TenantLifecycleError` before `Exception`** — ordering ensures lifecycle
+  denials are never silently swallowed by the "transient outage" fallback path.
+  `CredentialNotFoundError` is still caught first (its ordering is unchanged)
+  because not-found/hash-mismatch are distinct semantics.
+
+### Verification
+
+```
+/snap/bin/ruff check api/auth_scopes/resolution.py api/tenant_rbac.py
+→ All checks passed!
+
+/snap/bin/ruff format --check api/auth_scopes/resolution.py api/tenant_rbac.py
+→ 2 files already formatted
+```
+
+---
+
 ## P-14 — feat(r4.7): dual-validation Deploy 1
 
 **Branch:** `feat/r4.7-dual-validation`
