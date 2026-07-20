@@ -939,7 +939,6 @@ class IssueCredentialRequest(BaseModel):
     credential_slot: str
     scopes: Optional[List[str]] = None
     expires_in_seconds: Optional[int] = None
-    actor_id: Optional[str] = None
     request_id: Optional[str] = None
     idempotency_key: Optional[str] = None
 
@@ -948,7 +947,6 @@ class RotateCredentialRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     expires_in_seconds: Optional[int] = None
-    actor_id: Optional[str] = None
     request_id: Optional[str] = None
 
 
@@ -956,7 +954,6 @@ class RevokeCredentialRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     reason: str
-    actor_id: Optional[str] = None
     request_id: Optional[str] = None
 
 
@@ -1022,7 +1019,7 @@ async def issue_tenant_credential(
             credential_slot=req.credential_slot,
             scopes=req.scopes,
             expires_in_seconds=req.expires_in_seconds,
-            actor_id=req.actor_id or str(actor_ctx.actor_id),
+            actor_id=actor_ctx.subject,
             request_id=req.request_id,
             idempotency_key=req.idempotency_key,
         )
@@ -1085,7 +1082,7 @@ async def rotate_tenant_credential(
             credential_type=existing.credential_type,
             credential_slot=existing.credential_slot,
             expires_in_seconds=req.expires_in_seconds,
-            actor_id=req.actor_id or str(actor_ctx.actor_id),
+            actor_id=actor_ctx.subject,
             request_id=req.request_id,
         )
     except TenantLifecycleError as exc:
@@ -1117,7 +1114,7 @@ async def revoke_tenant_credential(
             engine,
             credential_id=credential_id,
             tenant_id=tenant_id,
-            actor_id=req.actor_id or str(actor_ctx.actor_id),
+            actor_id=actor_ctx.subject,
             reason=req.reason,
             request_id=req.request_id,
         )

@@ -161,7 +161,7 @@ def _mock_request() -> MagicMock:
 
 def _mock_actor() -> MagicMock:
     actor = MagicMock()
-    actor.actor_id = "test-actor"
+    actor.subject = "test-actor"
     return actor
 
 
