@@ -409,6 +409,81 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="no_db_configured")
 
+    # ------------------------------------------------------------------
+    # R4.7 — Canonical authority path (dual-validation, Deploy 1)
+    # Keys issued by the credential authority carry the "fgk." prefix.
+    # Try tenant_credentials first; on CredentialNotFoundError fall through
+    # to the legacy api_keys path below.  Any other exception also falls
+    # through — the canonical path must never block the hot auth path.
+    # Migration telemetry: reason="canonical_validated" in auth_attempt
+    # log distinguishes canonical hits from legacy hits.
+    # ------------------------------------------------------------------
+    if raw.startswith("fgk.") and _is_postgres:
+        _ca_principal = None
+        try:
+            from api.credential_authority import (  # noqa: PLC0415
+                CredentialNotFoundError as _CaNotFound,
+                validate_credential as _ca_validate,
+            )
+            from api.db import get_engine as _ca_get_engine  # noqa: PLC0415
+
+            try:
+                _ca_principal = _ca_validate(_ca_get_engine(), raw)
+            except _CaNotFound:
+                log.debug("auth_path=canonical_miss falling_back=legacy")
+            except Exception:
+                log.warning(
+                    "auth_path=canonical_error falling_back=legacy", exc_info=True
+                )
+        except ImportError:
+            log.warning(
+                "auth_path=canonical_import_error falling_back=legacy", exc_info=True
+            )
+
+        if _ca_principal is not None:
+            _ca_scopes: Set[str] = set(_ca_principal.scopes)
+
+            if required_scopes:
+                if isinstance(required_scopes, str):
+                    _ca_needed: Set[str] = {required_scopes}
+                elif isinstance(required_scopes, (list, set, frozenset)):
+                    _ca_needed = set(required_scopes)
+                else:
+                    _ca_needed = {str(required_scopes)}
+                _ca_needed = {s.strip() for s in _ca_needed if str(s).strip()}
+                if _ca_needed and "*" not in _ca_scopes and not _ca_needed.issubset(
+                    _ca_scopes
+                ):
+                    return AuthResult(
+                        valid=False,
+                        reason=f"missing_scopes:{','.join(_ca_needed - _ca_scopes)}",
+                        key_prefix="fgk",
+                        tenant_id=_ca_principal.tenant_id,
+                        scopes=_ca_scopes,
+                    )
+
+            _log_auth_event(
+                "auth_attempt",
+                success=True,
+                key_prefix="fgk",
+                tenant_id=_ca_principal.tenant_id,
+                reason="canonical_validated",
+                request_path=request_path,
+                client_ip=client_ip,
+            )
+            log.debug(
+                "auth_path=canonical tenant=%s cred=%s",
+                _ca_principal.tenant_id,
+                _ca_principal.credential_id,
+            )
+            return AuthResult(
+                valid=True,
+                reason="canonical_validated",
+                key_prefix="fgk",
+                tenant_id=_ca_principal.tenant_id,
+                scopes=_ca_scopes,
+            )
+
     def _row_for(
         prefix: str,
         lookup_hash: Optional[str],

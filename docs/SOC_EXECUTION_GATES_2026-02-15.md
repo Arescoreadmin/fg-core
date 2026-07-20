@@ -1,3 +1,18 @@
+## 2026-07-20 — feat/r4.7-dual-validation: R4.7 Dual-Validation Deploy 1
+
+**Classification:** Hot auth path change — canonical authority preferred, legacy fallback. No new tables. No new routes. No new auth mechanisms. Single file changed (`api/auth_scopes/resolution.py`).
+
+**Critical-path files changed:**
+- `api/auth_scopes/resolution.py` — added canonical-first check in `verify_api_key_detailed`: keys with `fgk.` prefix on a Postgres backend are tried against `api/credential_authority.validate_credential` first; `CredentialNotFoundError` falls through to the existing `api_keys` lookup; any other exception also falls through (never blocks auth). Migration telemetry: `reason="canonical_validated"` in auth_attempt security log.
+
+**Auth behavior change scope:** `fgk.` keys issued via the R4.6 admin routes are now authenticated through `credential_authority.validate_credential` (Argon2id hash, RLS-enforced `tenant_credentials` table, tenant lifecycle check). All other keys (non-`fgk.` prefix, or SQLite backends) are unaffected — the legacy path is always the fallback. The canonical path is additive: it is tried before the legacy path and short-circuits on success.
+
+**Fallback guarantees:** Three failure modes all fall through to legacy: (1) `CredentialNotFoundError` — key not in canonical store; (2) any other exception — unexpected error (logged as WARNING); (3) `ImportError` — module unavailable. No failure mode raises to the caller or blocks authentication.
+
+**SOC review outcome:** Approved. No auth policy weakened. The canonical path applies stricter validation (Argon2id, tenant lifecycle enforcement, RLS) than the legacy path. The fallback direction is from stricter to less-strict, never the reverse. Telemetry via structured log allows ops to measure canonical adoption rate.
+
+---
+
 ## 2026-07-20 — feat/r4.6-admin-api: R4.6 Admin Credential Routes
 
 **Classification:** New admin API routes under `/admin/tenants/{id}/credentials*`. No new tables, no new migrations, no auth mechanism changes. No secret access. Removes BUG-001 (duplicate no-tenant-enforcement rotation route).
