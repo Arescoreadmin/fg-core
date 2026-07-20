@@ -4,6 +4,9 @@ Scans all Python source files (excluding migration files and the authority modul
 for direct INSERT or UPDATE statements targeting these tables.  Exits non-zero if any
 violation is found.
 
+Also asserts (R4.4) that api/credential_authority.py imports TenantRepository — the
+canonical lifecycle source — so a future refactor cannot silently drop it.
+
 Allows:
   - api/credential_authority.py  — the one authority
   - migrations/postgres/*.sql    — schema bootstrap only, never in Python
@@ -35,13 +38,11 @@ _WRITE_PATTERN = re.compile(
 )
 
 # Directories and file-name patterns whose Python files may contain these strings.
-_ALLOWED_PATHS: tuple[Path, ...] = (
-    _AUTHORITY_MODULE,
-)
+_ALLOWED_PATHS: tuple[Path, ...] = (_AUTHORITY_MODULE,)
 
 _ALLOWED_PATH_PREFIXES: tuple[str, ...] = (
-    "tests/",           # fixture schema helpers (DDL, not DML mutations)
-    "migrations/",      # SQL files — not scanned (Python only)
+    "tests/",  # fixture schema helpers (DDL, not DML mutations)
+    "migrations/",  # SQL files — not scanned (Python only)
 )
 
 
@@ -87,8 +88,23 @@ def main() -> int:
         )
         return 1
 
+    # R4.4: positive assertion — TenantRepository must be the lifecycle source.
+    authority_source = _AUTHORITY_MODULE.read_text(encoding="utf-8")
+    if "from api.tenant_repository import TenantRepository" not in authority_source:
+        print(
+            "❌ check-credential-authority: api/credential_authority.py does not import "
+            "TenantRepository.\n"
+            "  Tenant lifecycle state must be read via TenantRepository, not raw SQL.\n"
+            "  Add: from api.tenant_repository import TenantRepository",
+            file=sys.stderr,
+        )
+        return 1
+
     table_list = ", ".join(sorted(_PROTECTED_TABLES))
-    print(f"✓ check-credential-authority: {table_list} — write authority verified")
+    print(
+        f"✓ check-credential-authority: {table_list} — write authority verified; "
+        "TenantRepository import confirmed"
+    )
     return 0
 
 

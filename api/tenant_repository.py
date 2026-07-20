@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 log = logging.getLogger("frostgate.tenant_repository")
 
@@ -80,6 +80,23 @@ class TenantRepository:
         if row is not None:
             return row
         return self._json_get(tenant_id)
+
+    @classmethod
+    def get_lifecycle_state_on_conn(
+        cls, conn: Connection, tenant_id: str
+    ) -> Optional[str]:
+        """Read lifecycle_state on an already-open connection.
+
+        For callers that already hold a connection (e.g. inside engine.begin())
+        this avoids a second pool checkout.  The JSON fallback is not needed
+        because an open connection implies Postgres is available.
+        Returns None if the tenant does not exist.
+        """
+        row = conn.execute(
+            text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
+            {"tid": tenant_id},
+        ).fetchone()
+        return row[0] if row else None
 
     def create(
         self,
