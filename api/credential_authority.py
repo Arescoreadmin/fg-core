@@ -39,12 +39,13 @@ import base64
 import hashlib
 import hmac as _hmac
 import json
+import logging
 import os
 import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -52,6 +53,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
 from api.tenant_repository import TenantRepository
+
+log = logging.getLogger("frostgate.credential_authority")
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -139,6 +142,102 @@ def _get_tenant_lifecycle_state(conn: Connection, tenant_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Audit events
+# ---------------------------------------------------------------------------
+
+_EVENT_INSERT = """
+INSERT INTO tenant_credential_events (
+    event_id, tenant_id, credential_id, credential_type,
+    credential_slot, generation, event_type, actor_id, request_id,
+    occurred_at, outcome, failure_reason, metadata, schema_version
+) VALUES (
+    :eid, :tid, :cid, :ctype,
+    :slot, :gen, :etype, :actor, :req,
+    :occurred_at, :outcome, :reason, :meta, 1
+)
+"""
+
+
+def _insert_event(
+    conn: Connection,
+    *,
+    tenant_id: str,
+    event_type: str,
+    outcome: str = "success",
+    credential_id: Optional[str] = None,
+    credential_type: Optional[str] = None,
+    credential_slot: Optional[str] = None,
+    generation: Optional[int] = None,
+    actor_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+    failure_reason: Optional[str] = None,
+    metadata: Optional[dict] = None,
+) -> str:
+    """Insert a credential audit event on the caller's connection. Returns event_id."""
+    event_id = str(uuid.uuid4())
+    conn.execute(
+        text(_EVENT_INSERT),
+        {
+            "eid": event_id,
+            "tid": tenant_id,
+            "cid": credential_id,
+            "ctype": credential_type,
+            "slot": credential_slot,
+            "gen": generation,
+            "etype": event_type,
+            "actor": actor_id,
+            "req": request_id,
+            "occurred_at": datetime.now(timezone.utc).isoformat(),
+            "outcome": outcome,
+            "reason": failure_reason,
+            "meta": json.dumps(metadata) if metadata else None,
+        },
+    )
+    return event_id
+
+
+def _emit_event_best_effort(
+    engine: Engine,
+    *,
+    tenant_id: str,
+    event_type: str,
+    outcome: str = "success",
+    credential_id: Optional[str] = None,
+    credential_type: Optional[str] = None,
+    credential_slot: Optional[str] = None,
+    generation: Optional[int] = None,
+    actor_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+    failure_reason: Optional[str] = None,
+    metadata: Optional[dict] = None,
+) -> None:
+    """Emit an audit event on a fresh connection; swallow all exceptions.
+
+    Used for validation telemetry — emission failure must never block the
+    validation response.  Lifecycle events (issue/rotate/revoke/expire) use
+    _insert_event directly on the credential write connection instead.
+    """
+    try:
+        with engine.begin() as conn:
+            _insert_event(
+                conn,
+                tenant_id=tenant_id,
+                event_type=event_type,
+                outcome=outcome,
+                credential_id=credential_id,
+                credential_type=credential_type,
+                credential_slot=credential_slot,
+                generation=generation,
+                actor_id=actor_id,
+                request_id=request_id,
+                failure_reason=failure_reason,
+                metadata=metadata,
+            )
+    except Exception:
+        log.debug("credential event emission failed (best-effort)", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
 
@@ -214,6 +313,26 @@ class IssuanceResult:
             f"IssuanceResult(record={self.record!r}, "
             f"plaintext_secret={'<present>' if self.plaintext_secret is not None else 'None'})"
         )
+
+
+@dataclass(frozen=True)
+class CredentialEventRecord:
+    """Single entry in the credential audit log."""
+
+    event_id: str
+    tenant_id: str
+    credential_id: Optional[str]
+    credential_type: Optional[str]
+    credential_slot: Optional[str]
+    generation: Optional[int]
+    event_type: str
+    actor_id: Optional[str]
+    request_id: Optional[str]
+    occurred_at: datetime
+    outcome: str
+    failure_reason: Optional[str]
+    metadata: Optional[dict]
+    schema_version: int
 
 
 # ---------------------------------------------------------------------------
@@ -671,6 +790,18 @@ def issue_credential(
             {"cid": cred_id},
         ).fetchone()
 
+        _insert_event(
+            conn,
+            tenant_id=tenant_id,
+            credential_id=cred_id,
+            credential_type=credential_type,
+            credential_slot=credential_slot,
+            generation=new_gen,
+            event_type="issued",
+            actor_id=actor_id,
+            request_id=request_id,
+        )
+
     return IssuanceResult(record=_row_to_record(record), plaintext_secret=raw_key)
 
 
@@ -718,13 +849,35 @@ def validate_credential(
             {"fp": fp, "ctype": credential_type},
         ).fetchone()
 
+    # All checks happen outside the connection block (connection already closed).
+    # Emit validation telemetry best-effort after each decision point.
     if row is None:
+        _emit_event_best_effort(
+            engine,
+            tenant_id=tenant_id_hint or "unknown",
+            event_type="validation_failed",
+            credential_type=credential_type,
+            outcome="failure",
+            failure_reason="not_found",
+        )
         raise CredentialNotFoundError("credential authentication failed")
 
     stored_hash: str = row[20]
     lifecycle_state: str = row[21]
 
     if not _verify_secret(secret_part, stored_hash):
+        rec = _row_to_record(row)
+        _emit_event_best_effort(
+            engine,
+            tenant_id=rec.tenant_id,
+            credential_id=rec.credential_id,
+            credential_type=rec.credential_type,
+            credential_slot=rec.credential_slot,
+            generation=rec.generation,
+            event_type="validation_failed",
+            outcome="failure",
+            failure_reason="hash_mismatch",
+        )
         raise CredentialNotFoundError("credential authentication failed")
 
     rec = _row_to_record(row)
@@ -732,13 +885,59 @@ def validate_credential(
     # Lazy expiration enforcement — status field may still read 'active'
     # if the sweep hasn't run yet; enforce at validation time regardless.
     if rec.status != "active":
+        _emit_event_best_effort(
+            engine,
+            tenant_id=rec.tenant_id,
+            credential_id=rec.credential_id,
+            credential_type=rec.credential_type,
+            credential_slot=rec.credential_slot,
+            generation=rec.generation,
+            event_type="validation_failed",
+            outcome="failure",
+            failure_reason=f"status_{rec.status}",
+        )
         raise CredentialNotFoundError(
             f"credential is {rec.status} and cannot be used for authentication"
         )
     if rec.expires_at is not None and rec.expires_at <= datetime.now(timezone.utc):
+        _emit_event_best_effort(
+            engine,
+            tenant_id=rec.tenant_id,
+            credential_id=rec.credential_id,
+            credential_type=rec.credential_type,
+            credential_slot=rec.credential_slot,
+            generation=rec.generation,
+            event_type="validation_failed",
+            outcome="failure",
+            failure_reason="expired",
+        )
         raise CredentialNotFoundError("credential has expired")
 
-    _enforce_lifecycle(lifecycle_state, "validate", rec.tenant_id)
+    try:
+        _enforce_lifecycle(lifecycle_state, "validate", rec.tenant_id)
+    except TenantLifecycleError:
+        _emit_event_best_effort(
+            engine,
+            tenant_id=rec.tenant_id,
+            credential_id=rec.credential_id,
+            credential_type=rec.credential_type,
+            credential_slot=rec.credential_slot,
+            generation=rec.generation,
+            event_type="denied_tenant_state",
+            outcome="denied",
+        )
+        raise
+
+    _emit_event_best_effort(
+        engine,
+        tenant_id=rec.tenant_id,
+        credential_id=rec.credential_id,
+        credential_type=rec.credential_type,
+        credential_slot=rec.credential_slot,
+        generation=rec.generation,
+        event_type="validated",
+        outcome="success",
+    )
 
     scopes = frozenset(rec.scopes_csv.split(",")) if rec.scopes_csv else frozenset()
     return CredentialPrincipal(
@@ -920,6 +1119,19 @@ def rotate_credential(
             {"cid": new_cred_id},
         ).fetchone()
 
+        _insert_event(
+            conn,
+            tenant_id=tenant_id,
+            credential_id=new_cred_id,
+            credential_type=credential_type,
+            credential_slot=credential_slot,
+            generation=new_gen,
+            event_type="rotated",
+            actor_id=actor_id,
+            request_id=request_id,
+            metadata={"replaced_credential_id": old_record.credential_id},
+        )
+
     return IssuanceResult(record=_row_to_record(new_row), plaintext_secret=raw_key)
 
 
@@ -982,6 +1194,19 @@ def revoke_credential(
             {"cid": credential_id},
         ).fetchone()
 
+        _insert_event(
+            conn,
+            tenant_id=tenant_id,
+            credential_id=credential_id,
+            credential_type=rec.credential_type,
+            credential_slot=rec.credential_slot,
+            generation=rec.generation,
+            event_type="revoked",
+            actor_id=actor_id,
+            request_id=request_id,
+            metadata={"reason": reason},
+        )
+
     return _row_to_record(updated)
 
 
@@ -1007,22 +1232,46 @@ def expire_credentials(
         params["tid"] = tenant_id
 
     with engine.begin() as conn:
-        # Both Postgres and SQLite: subquery form required because Postgres does
-        # not support LIMIT directly on UPDATE and SQLite does not support it
-        # without a subquery either.
-        result = conn.execute(
+        # Fetch targets first so we can emit per-credential audit events.
+        targets = conn.execute(
             text(
-                "UPDATE tenant_credentials "
-                "SET status = 'expired' "
-                "WHERE credential_id IN ("
-                "  SELECT credential_id FROM tenant_credentials "
-                "  WHERE status IN ('pending', 'active') "
-                "    AND expires_at IS NOT NULL "
-                "    AND expires_at <= :now" + tenant_clause + "  LIMIT :batch"
-                ")"
+                "SELECT credential_id, tenant_id, credential_type, "
+                "  credential_slot, generation "
+                "FROM tenant_credentials "
+                "WHERE status IN ('pending', 'active') "
+                "  AND expires_at IS NOT NULL "
+                "  AND expires_at <= :now" + tenant_clause + " LIMIT :batch"
             ),
             params,
+        ).fetchall()
+
+        if not targets:
+            return 0
+
+        # UPDATE using an IN list built from the pre-selected IDs so that
+        # the same WHERE guard protects against concurrent status changes.
+        cid_params = {f"cid_{i}": r[0] for i, r in enumerate(targets)}
+        in_clause = ", ".join(f":cid_{i}" for i in range(len(targets)))
+        result = conn.execute(
+            text(
+                "UPDATE tenant_credentials SET status = 'expired' "
+                f"WHERE credential_id IN ({in_clause}) "
+                "  AND status IN ('pending', 'active') "
+                "  AND expires_at IS NOT NULL AND expires_at <= :now"
+            ),
+            {"now": now_iso, **cid_params},
         )
+
+        for cid, tid, ctype, slot, gen in targets:
+            _insert_event(
+                conn,
+                tenant_id=tid,
+                credential_id=cid,
+                credential_type=ctype,
+                credential_slot=slot,
+                generation=gen,
+                event_type="expired",
+            )
 
     return result.rowcount
 
@@ -1111,3 +1360,86 @@ def get_credential_history(
             },
         ).fetchall()
     return [_row_to_record(r) for r in rows]
+
+
+_EVENT_SELECT = (
+    "event_id, tenant_id, credential_id, credential_type, credential_slot, "
+    "generation, event_type, actor_id, request_id, occurred_at, outcome, "
+    "failure_reason, metadata, schema_version"
+)
+
+
+def _row_to_event(row) -> CredentialEventRecord:
+    (
+        event_id,
+        tenant_id,
+        credential_id,
+        credential_type,
+        credential_slot,
+        generation,
+        event_type,
+        actor_id,
+        request_id,
+        occurred_at,
+        outcome,
+        failure_reason,
+        metadata_raw,
+        schema_version,
+    ) = row[:14]
+    occurred_dt = (
+        datetime.fromisoformat(occurred_at)
+        if isinstance(occurred_at, str)
+        else occurred_at
+    )
+    meta = json.loads(metadata_raw) if metadata_raw else None
+    return CredentialEventRecord(
+        event_id=event_id,
+        tenant_id=tenant_id,
+        credential_id=credential_id,
+        credential_type=credential_type,
+        credential_slot=credential_slot,
+        generation=generation,
+        event_type=event_type,
+        actor_id=actor_id,
+        request_id=request_id,
+        occurred_at=occurred_dt,
+        outcome=outcome,
+        failure_reason=failure_reason,
+        metadata=meta,
+        schema_version=schema_version,
+    )
+
+
+def list_credential_events(
+    engine: Engine,
+    tenant_id: str,
+    *,
+    credential_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    limit: int = 100,
+) -> List[CredentialEventRecord]:
+    """Return audit events for a tenant, newest first.
+
+    Optionally filter by credential_id or event_type.
+    """
+    clauses = ["tenant_id = :tid"]
+    params: dict = {"tid": tenant_id, "limit": limit}
+    if credential_id is not None:
+        clauses.append("credential_id = :cid")
+        params["cid"] = credential_id
+    if event_type is not None:
+        clauses.append("event_type = :etype")
+        params["etype"] = event_type
+
+    where = " AND ".join(clauses)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                f"SELECT {_EVENT_SELECT} FROM tenant_credential_events "
+                f"WHERE {where} "
+                "ORDER BY occurred_at DESC "
+                "LIMIT :limit"
+            ),
+            params,
+        ).fetchall()
+    return [_row_to_event(r) for r in rows]

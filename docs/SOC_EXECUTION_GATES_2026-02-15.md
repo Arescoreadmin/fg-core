@@ -1,3 +1,20 @@
+## 2026-07-20 — feat/r4.5-audit-events: R4.5 Credential Audit Events
+
+**Classification:** New audit table + event emission wired into existing authority. No new public routes. No auth policy change. No secret access.
+
+**Critical-path files changed:**
+- `migrations/postgres/0160_tenant_credential_events.sql` (new) — append-only `tenant_credential_events` table with RLS (same tenant_id policy as `tenant_credentials`), `event_type` check constraint (7 values), `outcome` check constraint (3 values), 3 indexes.
+- `api/credential_authority.py` — added `_insert_event(conn, ...)` (synchronous, within caller's transaction); `_emit_event_best_effort(engine, ...)` (fresh connection, all exceptions swallowed); `issued`/`rotated`/`revoked`/`expired` events emitted atomically within each write transaction; `validated`/`validation_failed`/`denied_tenant_state` emitted best-effort after validation result; `list_credential_events()` read function added.
+- `tools/ci/check_credential_authority.py` — SOC-HIGH-003: `tenant_credential_events` added to `_PROTECTED_TABLES` and `_WRITE_PATTERN`. No other module may INSERT or UPDATE this table.
+
+**Auth behavior change scope:** None. All new writes are within the existing `api/credential_authority.py` write monopoly. The read function `list_credential_events` is internal-only; no route added. Validation telemetry is best-effort and never blocks or alters the authentication result.
+
+**SOC-HIGH-003:** `tools/ci/check_credential_authority.py` now guards `tenant_credential_events` alongside `tenant_credentials` and `credential_slots`. Direct writes from any module other than the authority cause CI to fail.
+
+**SOC review outcome:** Approved. No auth policy weakened. No new public routes. No secret access. The audit table is append-only by design — no UPDATE path on event rows. RLS mirrors the existing `tenant_credentials` policy. Best-effort validation telemetry is explicitly non-blocking: any exception is swallowed and logged at DEBUG. The CI gate extension (SOC-HIGH-003) actively prevents future write-authority drift.
+
+---
+
 ## 2026-07-18 — feat/r3-tenant-lifecycle-authority: R3 Tenant Lifecycle Authority
 
 **Classification:** New lifecycle authority module + DB migration + new admin routes. No auth policy change. No secret access. No public routes added.
