@@ -54,6 +54,19 @@ CREATE POLICY tenant_credential_events_tenant_isolation
     FOR ALL
     USING (tenant_id = current_setting('app.tenant_id', true));
 
+-- Append-only enforcement: prevent any UPDATE or DELETE on audit rows.
+CREATE OR REPLACE FUNCTION tce_prevent_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'tenant_credential_events is append-only: % on row % is not permitted',
+        TG_OP, OLD.event_id;
+END;
+$$;
+
+CREATE TRIGGER tce_no_update_or_delete
+    BEFORE UPDATE OR DELETE ON tenant_credential_events
+    FOR EACH ROW EXECUTE FUNCTION tce_prevent_mutation();
+
 -- Tenant-ordered timeline — primary read pattern.
 CREATE INDEX IF NOT EXISTS ix_tce_tenant_occurred
     ON tenant_credential_events (tenant_id, occurred_at DESC);

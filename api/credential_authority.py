@@ -219,6 +219,15 @@ def _emit_event_best_effort(
     """
     try:
         with engine.begin() as conn:
+            # Set the tenant context so RLS on tenant_credential_events accepts
+            # the INSERT.  SET LOCAL is transaction-scoped and is lost when the
+            # previous (validation) transaction closed, so each fresh connection
+            # must re-establish it.  Postgres-only: SQLite has no set_config().
+            if conn.dialect.name == "postgresql":
+                conn.execute(
+                    text("SELECT set_config('app.tenant_id', :tid, true)"),
+                    {"tid": tenant_id},
+                )
             _insert_event(
                 conn,
                 tenant_id=tenant_id,
@@ -1250,19 +1259,28 @@ def expire_credentials(
 
         # UPDATE using an IN list built from the pre-selected IDs so that
         # the same WHERE guard protects against concurrent status changes.
+        # RETURNING credential_id limits event emission to rows this UPDATE
+        # actually changed — concurrent revoke/rotate/expire on a pre-selected
+        # row re-checks status IN ('pending','active') and skips that row.
         cid_params = {f"cid_{i}": r[0] for i, r in enumerate(targets)}
         in_clause = ", ".join(f":cid_{i}" for i in range(len(targets)))
-        result = conn.execute(
-            text(
-                "UPDATE tenant_credentials SET status = 'expired' "
-                f"WHERE credential_id IN ({in_clause}) "
-                "  AND status IN ('pending', 'active') "
-                "  AND expires_at IS NOT NULL AND expires_at <= :now"
-            ),
-            {"now": now_iso, **cid_params},
-        )
+        updated_ids = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "UPDATE tenant_credentials SET status = 'expired' "
+                    f"WHERE credential_id IN ({in_clause}) "
+                    "  AND status IN ('pending', 'active') "
+                    "  AND expires_at IS NOT NULL AND expires_at <= :now "
+                    "RETURNING credential_id"
+                ),
+                {"now": now_iso, **cid_params},
+            ).fetchall()
+        }
 
         for cid, tid, ctype, slot, gen in targets:
+            if cid not in updated_ids:
+                continue
             _insert_event(
                 conn,
                 tenant_id=tid,
@@ -1273,7 +1291,7 @@ def expire_credentials(
                 event_type="expired",
             )
 
-    return result.rowcount
+    return len(updated_ids)
 
 
 def get_credential(
