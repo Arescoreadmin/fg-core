@@ -49,7 +49,7 @@ from typing import Optional
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from api.tenant_repository import TenantRepository
 
@@ -125,16 +125,17 @@ def _enforce_lifecycle(lifecycle_state: str, operation: str, tenant_id: str) -> 
         )
 
 
-def _get_tenant_lifecycle_state(engine: Engine, tenant_id: str) -> str:
-    """Return the current lifecycle_state for a tenant via TenantRepository.
+def _get_tenant_lifecycle_state(conn: Connection, tenant_id: str) -> str:
+    """Read tenant lifecycle_state on the caller's existing connection.
 
-    Raises TenantNotFoundError if the tenant does not exist.  Never caches —
-    each call reads fresh from Postgres (with JSON fallback during R7 window).
+    Uses TenantRepository.get_lifecycle_state_on_conn() so no second pool slot
+    is consumed — issue_credential/rotate_credential already hold engine.begin().
+    Raises TenantNotFoundError if the tenant does not exist.
     """
-    row = TenantRepository(engine).get(tenant_id)
-    if row is None:
+    state = TenantRepository.get_lifecycle_state_on_conn(conn, tenant_id)
+    if state is None:
         raise TenantNotFoundError(f"Tenant not found: {tenant_id!r}")
-    return row.lifecycle_state
+    return state
 
 
 # ---------------------------------------------------------------------------
@@ -567,8 +568,8 @@ def issue_credential(
                     record=_row_to_record(existing), plaintext_secret=None
                 )
 
-        # Tenant existence and lifecycle — via TenantRepository (canonical source).
-        lifecycle_state = _get_tenant_lifecycle_state(engine, tenant_id)
+        # Tenant existence and lifecycle — via TenantRepository on existing conn.
+        lifecycle_state = _get_tenant_lifecycle_state(conn, tenant_id)
         _enforce_lifecycle(lifecycle_state, "issue", tenant_id)
 
         # Ensure slot row exists; lock it.
@@ -790,8 +791,8 @@ def rotate_credential(
                     record=_row_to_record(existing), plaintext_secret=None
                 )
 
-        # Tenant existence and lifecycle — via TenantRepository (canonical source).
-        lifecycle_state = _get_tenant_lifecycle_state(engine, tenant_id)
+        # Tenant existence and lifecycle — via TenantRepository on existing conn.
+        lifecycle_state = _get_tenant_lifecycle_state(conn, tenant_id)
         _enforce_lifecycle(lifecycle_state, "rotate", tenant_id)
 
         # Lock slot.
