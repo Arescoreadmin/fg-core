@@ -429,8 +429,14 @@ def verify_api_key_detailed(
 
             try:
                 _ca_principal = _ca_validate(_ca_get_engine(), raw)
-            except _CaNotFound:
-                log.debug("auth_path=canonical_miss falling_back=legacy")
+            except _CaNotFound as _ca_exc:
+                if getattr(_ca_exc, "absent", True):
+                    log.debug("auth_path=canonical_miss falling_back=legacy")
+                else:
+                    # Credential exists in canonical store but is denied (hash
+                    # mismatch, revoked, expired, etc.) — must not fall through.
+                    log.debug("auth_path=canonical_denied")
+                    return AuthResult(valid=False, reason="key_invalid", key_prefix="fgk")
             except Exception:
                 log.warning(
                     "auth_path=canonical_error falling_back=legacy", exc_info=True
@@ -482,6 +488,7 @@ def verify_api_key_detailed(
                 key_prefix="fgk",
                 tenant_id=_ca_principal.tenant_id,
                 scopes=_ca_scopes,
+                credential_id=_ca_principal.credential_id,
             )
 
     def _row_for(

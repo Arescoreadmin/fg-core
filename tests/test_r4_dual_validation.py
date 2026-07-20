@@ -68,6 +68,17 @@ class TestA_CanonicalHit:
 
         assert result.tenant_id == "tenant-beta"
 
+    def test_fgk_key_propagates_credential_id(self, monkeypatch) -> None:
+        """credential_id must be set on canonical AuthResult for downstream identity."""
+        monkeypatch.setenv("FG_DB_BACKEND", "postgres")
+        principal = _make_principal()
+
+        with patch("api.credential_authority.validate_credential", return_value=principal):
+            with patch("api.db.get_engine", return_value=MagicMock()):
+                result = verify_api_key_detailed(raw=_FGK_KEY)
+
+        assert result.credential_id == "cred-00000001"
+
 
 # ---------------------------------------------------------------------------
 # B — Canonical miss falls through to legacy
@@ -75,13 +86,13 @@ class TestA_CanonicalHit:
 
 
 class TestB_CanonicalMiss:
-    def test_canonical_miss_falls_to_legacy_key_not_found(self, monkeypatch) -> None:
-        """CredentialNotFoundError → falls through; legacy also fails → key_not_found."""
+    def test_canonical_miss_absent_falls_to_legacy(self, monkeypatch) -> None:
+        """absent=True → falls through; legacy also fails → key_not_found."""
         monkeypatch.setenv("FG_DB_BACKEND", "postgres")
 
         with patch(
             "api.credential_authority.validate_credential",
-            side_effect=CredentialNotFoundError("not found"),
+            side_effect=CredentialNotFoundError("not found", absent=True),
         ):
             with patch("api.db.get_engine", return_value=MagicMock()):
                 with patch(
@@ -92,6 +103,20 @@ class TestB_CanonicalMiss:
 
         assert result.valid is False
         assert result.reason == "key_not_found"
+
+    def test_canonical_denied_does_not_fall_through(self, monkeypatch) -> None:
+        """absent=False (hash mismatch / revoked / expired) must NOT fall through to legacy."""
+        monkeypatch.setenv("FG_DB_BACKEND", "postgres")
+
+        with patch(
+            "api.credential_authority.validate_credential",
+            side_effect=CredentialNotFoundError("hash mismatch", absent=False),
+        ):
+            with patch("api.db.get_engine", return_value=MagicMock()):
+                result = verify_api_key_detailed(raw=_FGK_KEY)
+
+        assert result.valid is False
+        assert result.reason == "key_invalid"
 
     def test_canonical_error_falls_to_legacy(self, monkeypatch) -> None:
         """Unexpected error in canonical path falls back without raising."""

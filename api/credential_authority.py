@@ -80,7 +80,16 @@ class CredentialNotFoundError(KeyError):
 
     We do not distinguish "not found" from "wrong secret" at the API boundary
     to avoid timing and enumeration attacks.
+
+    absent=True means the credential was not found in the canonical store (safe
+    to fall through to the legacy path during dual-read migration).
+    absent=False (default) means the credential was found but authentication
+    failed — callers MUST NOT fall through to any legacy path.
     """
+
+    def __init__(self, *args: object, absent: bool = False, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.absent = absent
 
 
 class CredentialTypeError(ValueError):
@@ -428,13 +437,13 @@ def _parse_key(raw_key: str) -> tuple[str, str]:
     """
     parts = raw_key.split(".")
     if len(parts) < 3 or parts[0] != "fgk":
-        raise CredentialNotFoundError("credential authentication failed")
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
     try:
         padding = "=" * (-len(parts[1]) % 4)
         payload = json.loads(base64.urlsafe_b64decode(parts[1] + padding))
         tenant_id_hint: str = payload.get("t", "")
     except Exception:
-        raise CredentialNotFoundError("credential authentication failed")
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
     return tenant_id_hint, parts[-1]
 
 
@@ -869,7 +878,7 @@ def validate_credential(
             outcome="failure",
             failure_reason="not_found",
         )
-        raise CredentialNotFoundError("credential authentication failed")
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
 
     stored_hash: str = row[20]
     lifecycle_state: str = row[21]

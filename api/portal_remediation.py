@@ -88,6 +88,7 @@ def _actor(request: Request) -> str:
     return str(
         getattr(state, "portal_client_id", None)
         or getattr(auth, "key_db_id", None)
+        or getattr(auth, "credential_id", None)
         or getattr(state, "key_prefix", None)
         or _ACTOR_UNKNOWN
     )
