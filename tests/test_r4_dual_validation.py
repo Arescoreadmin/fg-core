@@ -13,8 +13,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from api.auth_scopes.resolution import verify_api_key_detailed
 from api.credential_authority import CredentialNotFoundError, CredentialPrincipal
 
