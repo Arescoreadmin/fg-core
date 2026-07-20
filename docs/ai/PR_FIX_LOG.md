@@ -1,5 +1,49 @@
 # PR Fix Log (Strict)
 
+## P-11 — feat(r4.4): tenant lifecycle enforcement via TenantRepository
+
+**Branch:** `feat/r4.4-lifecycle-enforcement-integration`
+**Date:** 2026-07-20
+
+### Purpose
+
+R4.4 — replace inline tenant lifecycle SQL in `issue_credential` and `rotate_credential`
+with `_get_tenant_lifecycle_state()`, which delegates to `TenantRepository` (the canonical
+source established by R3/R7).  `validate_credential` retains its `JOIN tenants` for
+atomicity on the hot validation path.  Adds 16 cross-authority integration tests proving
+R3 + R4 compose correctly.
+
+### Changes
+
+1. `mod: api/credential_authority.py` — added `from api.tenant_repository import TenantRepository`;
+   added `_get_tenant_lifecycle_state(engine, tenant_id) -> str` helper; replaced two inline
+   `SELECT lifecycle_state FROM tenants` queries in `issue_credential` and `rotate_credential`
+   with `_get_tenant_lifecycle_state()` calls; documented `validate_credential` JOIN with
+   `AUTHORIZED-DIRECT-TENANT-SQL` marker explaining the atomicity requirement.
+2. `new: tests/test_r4_lifecycle_integration.py` — 16 cross-authority integration tests
+   (classes A–E): baseline active validation, unknown tenant closed, suspend blocks
+   validation immediately, reactivate restores it, credential row unchanged after lifecycle
+   transitions, tenant transition alone changes validation outcome, archive/delete block
+   issue+validate, tenant isolation (suspend alpha does not affect beta).
+3. `mod: tests/test_r4_credential_authority.py` — expanded `tenants` fixture schema to
+   full TenantRepository column set (12 columns) required by `TenantRepository.get()`.
+4. `mod: tools/ci/check_credential_authority.py` — added positive assertion: authority
+   module must import `TenantRepository`; regression to inline SQL fails the gate.
+5. `mod: docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC-HIGH-002 entry for CI gate extension.
+
+### Verification
+
+```
+python -m pytest tests/test_r4_lifecycle_integration.py tests/test_r4_credential_authority.py -v
+→ 89 passed in 0.30s  (16 integration + 73 unit)
+
+python tools/ci/check_credential_authority.py
+→ ✓ credential_slots, tenant_credentials — write authority verified; TenantRepository import confirmed
+
+make fg-fast
+→ all gates green
+```
+
 ## P-10 — feat(r4.3): credential authority service
 
 **Branch:** `feat/r4.3-credential-authority-service`
