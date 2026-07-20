@@ -1,5 +1,58 @@
 # PR Fix Log (Strict)
 
+## P-14 — feat(r4.7): dual-validation Deploy 1
+
+**Branch:** `feat/r4.7-dual-validation`
+**Date:** 2026-07-20
+
+### Purpose
+
+R4.7 — `verify_api_key_detailed` now tries the canonical `tenant_credentials`
+authority first for `fgk.` keys on Postgres. Falls back to the legacy `api_keys`
+path on miss or any error. Adds migration telemetry (`reason="canonical_validated"`
+in security log) so ops can measure canonical adoption without changing log levels.
+
+### Changes
+
+1. `mod: api/auth_scopes/resolution.py` — inserted canonical authority block after
+   the `no_db_configured` guard and before the `_row_for` closure: gated on
+   `raw.startswith("fgk.") and _is_postgres`; imports `validate_credential` and
+   `get_engine` lazily inside the block; three fallback cases (CredentialNotFoundError,
+   any other Exception, ImportError) all fall through silently; required_scopes check
+   mirrors the existing scope-gate logic; success returns `AuthResult(reason="canonical_validated")`.
+2. `new: tests/test_r4_dual_validation.py` — 8 tests across 4 classes (A: canonical
+   hit, B: canonical miss/error fallback, C: legacy bypass, D: scope enforcement);
+   monkeypatches `FG_DB_BACKEND`, `api.credential_authority.validate_credential`, and
+   `api.db.get_engine`; patches `api.auth_scopes.store.get_key_row` for clean legacy
+   fallback simulation.
+
+### Non-obvious design choices
+
+- **Lazy local imports inside the function** — avoids a circular import between
+  `auth_scopes.resolution` and `api.credential_authority` at module load time.
+  `ImportError` is caught and falls back so a future refactor cannot silently block auth.
+- **`fgk.` prefix gate** — canonical keys are the only keys that can exist in
+  `tenant_credentials`; `_parse_key()` in the authority raises `CredentialNotFoundError`
+  for anything else. The prefix gate avoids an unnecessary DB round-trip for all
+  legacy keys.
+- **`_is_postgres` gate** — `tenant_credentials` is Postgres-only. SQLite deployments
+  (dev/test) continue to use the legacy path exclusively with no code change.
+
+### Verification
+
+```
+python -m pytest tests/test_r4_dual_validation.py -v
+→ 8 passed in 3.47s
+
+python -m pytest tests/test_r4_dual_validation.py tests/test_r4_admin_credential_routes.py tests/test_r4_credential_authority.py tests/test_r4_credential_events.py tests/test_r4_lifecycle_integration.py -q
+→ 134 passed in 4.04s
+
+python tools/ci/check_credential_authority.py
+→ ✓ credential_slots, tenant_credential_events, tenant_credentials — write authority verified; TenantRepository import confirmed
+```
+
+---
+
 ## P-13 — feat(r4.6): admin credential routes
 
 **Branch:** `feat/r4.6-admin-api`
