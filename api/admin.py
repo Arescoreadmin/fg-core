@@ -45,6 +45,19 @@ from api.auth_scopes import (
     revoke_api_key,
     rotate_api_key_by_prefix,
 )
+from api.credential_authority import (
+    CredentialNotFoundError,
+    CredentialStateError,
+    CredentialTypeError,
+    TenantLifecycleError,
+    TenantNotFoundError,
+    get_credential,
+    issue_credential,
+    list_credential_events,
+    list_credentials,
+    revoke_credential,
+    rotate_credential,
+)
 from api.error_contracts import api_error
 from api.db import get_engine
 from api.db_models import SecurityAuditLog
@@ -915,6 +928,247 @@ async def get_tenant_lifecycle_history(
 
 
 # =============================================================================
+# Tenant Credential Management (R4.6)
+# =============================================================================
+
+
+class IssueCredentialRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    credential_type: str = "tenant_api_key"
+    credential_slot: str
+    scopes: Optional[List[str]] = None
+    expires_in_seconds: Optional[int] = None
+    request_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
+
+
+class RotateCredentialRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    expires_in_seconds: Optional[int] = None
+    request_id: Optional[str] = None
+
+
+class RevokeCredentialRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    reason: str
+    request_id: Optional[str] = None
+
+
+def _credential_record_dict(rec) -> Dict[str, Any]:
+    return {
+        "credential_id": rec.credential_id,
+        "tenant_id": rec.tenant_id,
+        "credential_type": rec.credential_type,
+        "credential_slot": rec.credential_slot,
+        "generation": rec.generation,
+        "status": rec.status,
+        "expires_at": rec.expires_at.isoformat() if rec.expires_at else None,
+        "issued_at": rec.issued_at.isoformat() if rec.issued_at else None,
+        "last_used_at": rec.last_used_at.isoformat() if rec.last_used_at else None,
+        "approximate_use_count": rec.approximate_use_count,
+        "scopes": rec.scopes_csv.split(",") if rec.scopes_csv else None,
+    }
+
+
+@router.get(
+    "/tenants/{tenant_id}/credentials",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+async def list_tenant_credentials(
+    tenant_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+    credential_type: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> Dict[str, Any]:
+    """List credentials for a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    records = list_credentials(
+        engine, tenant_id, credential_type=credential_type, status=status, limit=limit
+    )
+    return {
+        "tenant_id": tenant_id,
+        "credentials": [_credential_record_dict(r) for r in records],
+    }
+
+
+@router.post(
+    "/tenants/{tenant_id}/credentials",
+    status_code=201,
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+async def issue_tenant_credential(
+    tenant_id: str,
+    req: IssueCredentialRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> Dict[str, Any]:
+    """Issue a new credential for a tenant slot. Plaintext secret returned once only."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    try:
+        result = issue_credential(
+            engine,
+            tenant_id=tenant_id,
+            credential_type=req.credential_type,
+            credential_slot=req.credential_slot,
+            scopes=req.scopes,
+            expires_in_seconds=req.expires_in_seconds,
+            actor_id=actor_ctx.subject,
+            request_id=req.request_id,
+            idempotency_key=req.idempotency_key,
+        )
+    except TenantNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except TenantLifecycleError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except CredentialTypeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    resp: Dict[str, Any] = _credential_record_dict(result.record)
+    resp["plaintext_secret"] = result.plaintext_secret  # None on idempotency replay
+    return resp
+
+
+@router.get(
+    "/tenants/{tenant_id}/credentials/{credential_id}",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+async def get_tenant_credential(
+    tenant_id: str,
+    credential_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> Dict[str, Any]:
+    """Get a specific credential by ID."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    try:
+        rec = get_credential(engine, credential_id, tenant_id)
+    except CredentialNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return _credential_record_dict(rec)
+
+
+@router.post(
+    "/tenants/{tenant_id}/credentials/{credential_id}/rotate",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+async def rotate_tenant_credential(
+    tenant_id: str,
+    credential_id: str,
+    req: RotateCredentialRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> Dict[str, Any]:
+    """Rotate the slot that the given credential belongs to. Returns the new credential."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    try:
+        existing = get_credential(engine, credential_id, tenant_id)
+    except CredentialNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    try:
+        result = rotate_credential(
+            engine,
+            tenant_id=tenant_id,
+            credential_type=existing.credential_type,
+            credential_slot=existing.credential_slot,
+            expires_in_seconds=req.expires_in_seconds,
+            actor_id=actor_ctx.subject,
+            request_id=req.request_id,
+        )
+    except TenantLifecycleError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except CredentialStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    resp: Dict[str, Any] = _credential_record_dict(result.record)
+    resp["plaintext_secret"] = result.plaintext_secret
+    return resp
+
+
+@router.post(
+    "/tenants/{tenant_id}/credentials/{credential_id}/revoke",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+async def revoke_tenant_credential(
+    tenant_id: str,
+    credential_id: str,
+    req: RevokeCredentialRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> Dict[str, Any]:
+    """Revoke a specific credential. Idempotent."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    try:
+        rec = revoke_credential(
+            engine,
+            credential_id=credential_id,
+            tenant_id=tenant_id,
+            actor_id=actor_ctx.subject,
+            reason=req.reason,
+            request_id=req.request_id,
+        )
+    except CredentialNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except CredentialStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _credential_record_dict(rec)
+
+
+@router.get(
+    "/tenants/{tenant_id}/credential-events",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+async def list_tenant_credential_events(
+    tenant_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+    credential_id: Optional[str] = Query(default=None),
+    event_type: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> Dict[str, Any]:
+    """List credential audit events for a tenant, newest first."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    engine = get_engine()
+    events = list_credential_events(
+        engine,
+        tenant_id,
+        credential_id=credential_id,
+        event_type=event_type,
+        limit=limit,
+    )
+    return {
+        "tenant_id": tenant_id,
+        "events": [
+            {
+                "event_id": e.event_id,
+                "credential_id": e.credential_id,
+                "credential_type": e.credential_type,
+                "credential_slot": e.credential_slot,
+                "generation": e.generation,
+                "event_type": e.event_type,
+                "outcome": e.outcome,
+                "actor_id": e.actor_id,
+                "request_id": e.request_id,
+                "occurred_at": e.occurred_at.isoformat(),
+                "failure_reason": e.failure_reason,
+            }
+            for e in events
+        ],
+    }
+
+
+# =============================================================================
 # Tenant Create / Read Endpoints
 # =============================================================================
 
@@ -1716,39 +1970,10 @@ async def get_keys_needing_rotation(
     ]
 
 
-@router.post(
-    "/keys/{key_prefix}/rotate",
-    response_model=KeyRotationResponse,
-    dependencies=[Depends(require_scopes("admin:write"))],
-)
-async def rotate_key(
-    key_prefix: str,
-) -> KeyRotationResponse:
-    """Rotate an API key."""
-    try:
-        from api.key_rotation import rotate_api_key
-    except ImportError:
-        raise HTTPException(
-            status_code=501,
-            detail="Key rotation management not available",
-        )
-
-    result = rotate_api_key(key_prefix)
-
-    if not result.success:
-        raise HTTPException(status_code=400, detail=result.message)
-
-    # Note: The new key is only returned once, on rotation
-    # In a real SaaS, this would be sent securely to the tenant
-    return KeyRotationResponse(
-        success=result.success,
-        old_key_prefix=result.old_key_prefix,
-        new_key_prefix=result.new_key_prefix,
-        grace_period_until=(
-            result.grace_period_until.isoformat() if result.grace_period_until else None
-        ),
-        message=result.message,
-    )
+# BUG-001 removed: the duplicate POST /keys/{key_prefix}/rotate that called
+# api.key_rotation.rotate_api_key with no tenant enforcement has been deleted.
+# The tenant-enforced route admin_rotate_key (POST /keys/{key_prefix}/rotate,
+# keys:write + key.manage + bind_tenant_id) above is the sole rotation path.
 
 
 # =============================================================================

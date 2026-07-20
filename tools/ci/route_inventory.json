@@ -1483,23 +1483,6 @@
         "rate"
       ],
       "file": "api/admin.py",
-      "method": "POST",
-      "path": "/admin/keys/{key_prefix}/rotate",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "admin:write"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": false
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "rate"
-      ],
-      "file": "api/admin.py",
       "method": "GET",
       "path": "/admin/keys/{key_prefix}/rotation-status",
       "plane": "control",
@@ -1840,6 +1823,114 @@
       "file": "api/entitlements.py",
       "method": "DELETE",
       "path": "/admin/tenants/{tenant_id}/bundles/{bundle_key}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/credential-events",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/credentials",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/credentials",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/credentials/{credential_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/credentials/{credential_id}/revoke",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/admin.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/credentials/{credential_id}/rotate",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -20253,7 +20344,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-19T02:25:20.929767+00:00",
+  "generated_at": "2026-07-20T14:04:04.062763+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

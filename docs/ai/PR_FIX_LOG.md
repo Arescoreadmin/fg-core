@@ -1,5 +1,58 @@
 # PR Fix Log (Strict)
 
+## P-13 — feat(r4.6): admin credential routes
+
+**Branch:** `feat/r4.6-admin-api`
+**Date:** 2026-07-20
+
+### Purpose
+
+R4.6 — Admin API routes for credential lifecycle management under
+`/admin/tenants/{id}/credentials*`.  Removes BUG-001 (duplicate rotation handler
+with no tenant enforcement).  All new routes delegate to `api/credential_authority.py`;
+no credential tables are written outside the authority.
+
+### Changes
+
+1. `mod: api/admin.py` — added `IssueCredentialRequest`, `RotateCredentialRequest`,
+   `RevokeCredentialRequest` Pydantic models; `_credential_record_dict()` helper;
+   6 route handlers: `list_tenant_credentials` (GET), `issue_tenant_credential` (POST,
+   201), `get_tenant_credential` (GET), `rotate_tenant_credential` (POST),
+   `revoke_tenant_credential` (POST), `list_tenant_credential_events` (GET); all scoped
+   to `admin:write`/`admin:read` + `platform.admin`.  Removed `rotate_key` (BUG-001).
+2. `new: tests/test_r4_admin_credential_routes.py` — 15 tests across 7 classes (A: Issue,
+   B: List, C: Get, D: Rotate, E: Revoke, F: Events, G: BugOneAbsent); handlers called
+   directly via `asyncio.run()` bypassing auth stack; monkeypatches `get_engine` and
+   `bind_tenant_id`; verifies 404 for unknown tenant/credential, 400 for bad type,
+   idempotent revoke, BUG-001 absence.
+
+### Non-obvious fixes
+
+- **Direct handler invocation instead of TestClient** — router Depends are baked at module
+  load time; monkeypatching after import has no effect on baked guards.  Calling async
+  handlers directly via `asyncio.run()` correctly exercises business logic without needing
+  to stub the full auth stack.
+- **Explicit Query parameter values** — FastAPI's DI system doesn't unwrap `Query(default)`
+  when handlers are called directly; passing `credential_type=None, status=None, limit=50`
+  explicitly avoids `Query(None)` objects reaching SQLAlchemy.
+- **`scopes_csv` not `scopes`** — `CredentialRecord` dataclass uses `scopes_csv` (raw DB
+  column); `secret_prefix` is never on the record (no credential material in record objects).
+
+### Verification
+
+```
+python -m pytest tests/test_r4_admin_credential_routes.py -v
+→ 15 passed in 3.51s
+
+python -m pytest tests/test_r4_admin_credential_routes.py tests/test_r4_credential_authority.py tests/test_r4_credential_events.py tests/test_r4_lifecycle_integration.py -q
+→ 111 passed, 1 skipped in 0.42s
+
+python tools/ci/check_credential_authority.py
+→ ✓ credential_slots, tenant_credential_events, tenant_credentials — write authority verified; TenantRepository import confirmed
+```
+
+---
+
 ## P-12 — feat(r4.5): credential audit events
 
 **Branch:** `feat/r4.5-audit-events`
