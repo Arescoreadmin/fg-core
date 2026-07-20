@@ -3,6 +3,7 @@
 ## Before starting any work
 
 Read these files first — they are the authoritative product state:
+- `FOUNDER_DIRECTIVE.md` — **MANDATORY FIRST READ** for any agent producing planning artifacts; contains founder strategic direction that overrides defaults on competitive positioning, moat framing, and enterprise requirements
 - `SYSTEM.md` — unified system reference (architecture, tech stack, what is built)
 - `ROADMAP.md` — living PR tracker (what is done, what is next, client readiness blockers)
 - `BLUEPRINT_STAGED.md` — governance compliance gates (authoritative for compliance decisions)
