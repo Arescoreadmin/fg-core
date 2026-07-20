@@ -10,7 +10,7 @@ compromising code-path coverage.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Generator
+from typing import Generator, Mapping, cast
 
 import pytest
 from argon2 import PasswordHasher
@@ -180,6 +180,18 @@ def engine() -> Generator[Engine, None, None]:
 # ---------------------------------------------------------------------------
 
 
+def _compute_test_record_hash(values: Mapping[str, object]) -> str:
+    """Call the strongly typed record-hash helper from mutable test data."""
+    return ca._compute_record_hash(
+        credential_id=cast(str, values["credential_id"]),
+        tenant_id=cast(str, values["tenant_id"]),
+        credential_type=cast(str, values["credential_type"]),
+        credential_slot=cast(str, values["credential_slot"]),
+        generation=cast(int, values["generation"]),
+        issued_at=cast(str, values["issued_at"]),
+    )
+
+
 class TestA_Models:
     def test_credential_principal_repr_safe(self) -> None:
         p = CredentialPrincipal(
@@ -229,7 +241,7 @@ class TestA_Models:
             credential_slot="repr-test",
         )
         r_repr = repr(result)
-        assert result.plaintext_secret not in r_repr
+        assert cast(str, result.plaintext_secret) not in r_repr
         assert "<present>" in r_repr
 
     def test_error_hierarchy(self) -> None:
@@ -270,7 +282,7 @@ class TestB_HashHelpers:
             generation=1,
             issued_at="2026-01-01T00:00:00+00:00",
         )
-        assert ca._compute_record_hash(**kwargs) == ca._compute_record_hash(**kwargs)
+        assert _compute_test_record_hash(kwargs) == _compute_test_record_hash(kwargs)
 
     def test_record_hash_differs_on_any_field_change(self) -> None:
         base = dict(
@@ -281,11 +293,11 @@ class TestB_HashHelpers:
             generation=1,
             issued_at="2026-01-01T00:00:00+00:00",
         )
-        h_base = ca._compute_record_hash(**base)
-        assert ca._compute_record_hash(**{**base, "generation": 2}) != h_base
-        assert ca._compute_record_hash(**{**base, "tenant_id": "t2"}) != h_base
+        h_base = _compute_test_record_hash(base)
+        assert _compute_test_record_hash({**base, "generation": 2}) != h_base
+        assert _compute_test_record_hash({**base, "tenant_id": "t2"}) != h_base
         assert (
-            ca._compute_record_hash(**{**base, "credential_slot": "staging"}) != h_base
+            _compute_test_record_hash({**base, "credential_slot": "staging"}) != h_base
         )
 
     def test_generated_key_has_fgk_prefix(self, engine: Engine) -> None:
@@ -325,7 +337,7 @@ class TestC_Issuance:
             credential_slot="prod",
         )
         assert result.plaintext_secret is not None
-        assert result.plaintext_secret.startswith("fgk.")
+        assert cast(str, result.plaintext_secret).startswith("fgk.")
 
     def test_plaintext_not_stored_in_record(self, engine: Engine) -> None:
         result = issue_credential(
@@ -334,7 +346,7 @@ class TestC_Issuance:
             credential_type="tenant_api_key",
             credential_slot="prod",
         )
-        secret = result.plaintext_secret
+        secret = cast(str, result.plaintext_secret)
         assert secret is not None
         # Read raw row from DB and confirm secret is absent
         with engine.connect() as conn:
@@ -345,6 +357,7 @@ class TestC_Issuance:
                 ),
                 {"cid": result.record.credential_id},
             ).fetchone()
+        assert row is not None
         assert secret not in (row[0], row[1], row[2])
         assert "$argon2" in row[0]  # PHC format stored, not plaintext
 
@@ -511,14 +524,14 @@ class TestD_Validation:
 
     def test_correct_secret_accepted(self, engine: Engine) -> None:
         result = self._issue(engine)
-        principal = validate_credential(engine, result.plaintext_secret)
+        principal = validate_credential(engine, cast(str, result.plaintext_secret))
         assert isinstance(principal, CredentialPrincipal)
         assert principal.tenant_id == "tenant-alpha"
         assert principal.credential_id == result.record.credential_id
 
     def test_principal_fields_populated(self, engine: Engine) -> None:
         result = self._issue(engine)
-        p = validate_credential(engine, result.plaintext_secret)
+        p = validate_credential(engine, cast(str, result.plaintext_secret))
         assert p.credential_type == "tenant_api_key"
         assert p.credential_slot == "prod"
         assert p.generation == 1
@@ -541,7 +554,7 @@ class TestD_Validation:
     ) -> None:
         result = self._issue(engine, expires_in_seconds=-1)
         with pytest.raises(CredentialNotFoundError):
-            validate_credential(engine, result.plaintext_secret)
+            validate_credential(engine, cast(str, result.plaintext_secret))
 
     def test_revoked_credential_rejected(self, engine: Engine) -> None:
         result = self._issue(engine)
@@ -553,7 +566,7 @@ class TestD_Validation:
             reason="test",
         )
         with pytest.raises(CredentialNotFoundError):
-            validate_credential(engine, result.plaintext_secret)
+            validate_credential(engine, cast(str, result.plaintext_secret))
 
     def test_rotated_credential_rejected(self, engine: Engine) -> None:
         result = self._issue(engine)
@@ -564,11 +577,11 @@ class TestD_Validation:
             credential_slot="prod",
         )
         with pytest.raises(CredentialNotFoundError):
-            validate_credential(engine, result.plaintext_secret)
+            validate_credential(engine, cast(str, result.plaintext_secret))
 
     def test_validation_returns_principal_not_row(self, engine: Engine) -> None:
         result = self._issue(engine)
-        principal = validate_credential(engine, result.plaintext_secret)
+        principal = validate_credential(engine, cast(str, result.plaintext_secret))
         assert not hasattr(principal, "secret_hash")
         assert not hasattr(principal, "lookup_fingerprint")
         assert not hasattr(principal, "hash_params")
@@ -595,7 +608,7 @@ class TestE_Rotation:
         )
         assert r2.record.generation == r1.record.generation + 1
         assert r2.plaintext_secret is not None
-        assert r2.plaintext_secret != r1.plaintext_secret
+        assert cast(str, r2.plaintext_secret) != cast(str, r1.plaintext_secret)
 
     def test_old_secret_fails_after_rotation(self, engine: Engine) -> None:
         r1 = issue_credential(
@@ -611,7 +624,7 @@ class TestE_Rotation:
             credential_slot="prod",
         )
         with pytest.raises(CredentialNotFoundError):
-            validate_credential(engine, r1.plaintext_secret)
+            validate_credential(engine, cast(str, r1.plaintext_secret))
 
     def test_new_secret_works_after_rotation(self, engine: Engine) -> None:
         issue_credential(
@@ -626,7 +639,7 @@ class TestE_Rotation:
             credential_type="tenant_api_key",
             credential_slot="prod",
         )
-        p = validate_credential(engine, r2.plaintext_secret)
+        p = validate_credential(engine, cast(str, r2.plaintext_secret))
         assert p.generation == 2
 
     def test_rotation_links_replaced_by_credential_id(self, engine: Engine) -> None:
@@ -908,10 +921,11 @@ class TestG_Expiration:
                 ),
                 {"cid": r.record.credential_id},
             ).fetchone()
+        assert row is not None
         assert row[0] == "active"
         # Validation rejects it immediately without waiting for the sweep.
         with pytest.raises(CredentialNotFoundError):
-            validate_credential(engine, r.plaintext_secret)
+            validate_credential(engine, cast(str, r.plaintext_secret))
 
     def test_expiration_sweep_updates_status(self, engine: Engine) -> None:
         issue_credential(
@@ -931,6 +945,7 @@ class TestG_Expiration:
                     "WHERE tenant_id = 'tenant-alpha' AND credential_slot = 'exp-sweep'"
                 )
             ).fetchone()
+        assert row is not None
         assert row[0] == "expired"
 
     def test_expiration_sweep_is_idempotent(self, engine: Engine) -> None:
@@ -982,6 +997,7 @@ class TestG_Expiration:
                     "WHERE tenant_id = 'tenant-beta' AND credential_slot = 'exp-b'"
                 )
             ).fetchone()
+        assert row is not None
         assert row[0] == "active"  # tenant-beta not swept
 
 
@@ -1112,7 +1128,7 @@ class TestI_LifecycleEnforcement:
         )
         _insert_tenant(engine, "tenant-alpha", state=state)
         with pytest.raises((TenantLifecycleError, CredentialNotFoundError)):
-            validate_credential(engine, r.plaintext_secret)
+            validate_credential(engine, cast(str, r.plaintext_secret))
 
     def test_revoke_allowed_for_suspended_tenant(self, engine: Engine) -> None:
         r = issue_credential(
@@ -1155,7 +1171,7 @@ class TestJ_PlaintextSecurity:
             credential_slot="sec-test",
         )
         assert r.plaintext_secret is not None
-        assert r.plaintext_secret not in repr(r)
+        assert cast(str, r.plaintext_secret) not in repr(r)
 
     def test_plaintext_not_in_credential_record_repr(self, engine: Engine) -> None:
         r = issue_credential(
@@ -1165,7 +1181,7 @@ class TestJ_PlaintextSecurity:
             credential_slot="sec-test2",
         )
         assert r.plaintext_secret is not None
-        assert r.plaintext_secret not in repr(r.record)
+        assert cast(str, r.plaintext_secret) not in repr(r.record)
 
     def test_idempotency_replay_never_exposes_original_plaintext(
         self, engine: Engine
@@ -1194,8 +1210,10 @@ class TestJ_PlaintextSecurity:
             credential_type="tenant_api_key",
             credential_slot="principal-check",
         )
-        principal = validate_credential(engine, r.plaintext_secret)
+        principal = validate_credential(engine, cast(str, r.plaintext_secret))
         principal_dict = vars(principal)
         for key, val in principal_dict.items():
             if isinstance(val, str):
-                assert r.plaintext_secret not in val, f"Secret leaked into {key}"
+                assert cast(str, r.plaintext_secret) not in val, (
+                    f"Secret leaked into {key}"
+                )

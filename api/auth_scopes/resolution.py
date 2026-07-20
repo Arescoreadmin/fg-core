@@ -423,6 +423,7 @@ def verify_api_key_detailed(
         try:
             from api.credential_authority import (  # noqa: PLC0415
                 CredentialNotFoundError as _CaNotFound,
+                TenantLifecycleError as _CaLifecycleError,
                 validate_credential as _ca_validate,
             )
             from api.db import get_engine as _ca_get_engine  # noqa: PLC0415
@@ -439,6 +440,14 @@ def verify_api_key_detailed(
                     return AuthResult(
                         valid=False, reason="key_invalid", key_prefix="fgk"
                     )
+            except _CaLifecycleError:
+                # Tenant lifecycle denial (suspended, archived, deleted) must
+                # never fall through to the legacy path — policy denials are
+                # not transient outages or misses.
+                log.debug("auth_path=canonical_lifecycle_denied")
+                return AuthResult(
+                    valid=False, reason="tenant_lifecycle_denied", key_prefix="fgk"
+                )
             except Exception:
                 log.warning(
                     "auth_path=canonical_error falling_back=legacy", exc_info=True

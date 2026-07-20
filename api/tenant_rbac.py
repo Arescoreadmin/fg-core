@@ -507,6 +507,12 @@ def _get_auth_role(request: Request, conn: Session) -> Optional[str]:
     key_db_id = getattr(auth, "key_db_id", None)
     if key_db_id is not None:
         return get_key_role(conn, tenant_id=tenant_id, key_id=int(key_db_id))
+    # Canonical credentials carry credential_id but no key_db_id.  The prefix
+    # fallback below selects an arbitrary legacy api_keys row by prefix+tenant,
+    # which would allow a canonical credential to inherit a legacy key's role.
+    # Short-circuit here: canonical auth has no RBAC role binding yet.
+    if getattr(auth, "credential_id", None) is not None:
+        return None
     key_prefix = getattr(auth, "key_prefix", None)
     if not key_prefix:
         return None

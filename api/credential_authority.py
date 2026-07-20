@@ -45,12 +45,12 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from sqlalchemy import text
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Connection, Engine, Row
 
 from api.tenant_repository import TenantRepository
 
@@ -499,7 +499,7 @@ _RECORD_SELECT = (
 _RECORD_SELECT_TC = ", ".join(f"tc.{c.strip()}" for c in _RECORD_SELECT.split(","))
 
 
-def _row_to_record(row: object) -> CredentialRecord:
+def _row_to_record(row: Row[Any]) -> CredentialRecord:
     r = row
     return CredentialRecord(
         credential_id=r[0],
@@ -540,9 +540,13 @@ def _select_slot_sql(is_postgres: bool) -> str:
 
 
 def _upsert_slot(
-    conn: object, *, tenant_id: str, credential_type: str, credential_slot: str
+    conn: Connection,
+    *,
+    tenant_id: str,
+    credential_type: str,
+    credential_slot: str,
 ) -> None:
-    conn.execute(  # type: ignore[union-attr]
+    conn.execute(
         text(
             "INSERT INTO credential_slots "
             "(tenant_id, credential_type, credential_slot) "
@@ -554,7 +558,7 @@ def _upsert_slot(
 
 
 def _advance_slot_generation(
-    conn: object,
+    conn: Connection,
     *,
     tenant_id: str,
     credential_type: str,
@@ -563,7 +567,7 @@ def _advance_slot_generation(
     new_generation: int,
     now_iso: str,
 ) -> None:
-    result = conn.execute(  # type: ignore[union-attr]
+    result = conn.execute(
         text(
             "UPDATE credential_slots "
             "SET current_generation = :new_gen, updated_at = :now "
@@ -593,7 +597,7 @@ def _advance_slot_generation(
 
 
 def _insert_credential(
-    conn: object,
+    conn: Connection,
     *,
     credential_id: str,
     tenant_id: str,
@@ -614,7 +618,7 @@ def _insert_credential(
     metadata: Optional[dict],
     record_hash: str,
 ) -> None:
-    conn.execute(  # type: ignore[union-attr]
+    conn.execute(
         text(
             """
             INSERT INTO tenant_credentials (
@@ -820,6 +824,7 @@ def issue_credential(
             request_id=request_id,
         )
 
+    assert record is not None, "credential insert did not return a row"
     return IssuanceResult(record=_row_to_record(record), plaintext_secret=raw_key)
 
 
@@ -884,7 +889,7 @@ def validate_credential(
     lifecycle_state: str = row[21]
 
     if not _verify_secret(secret_part, stored_hash):
-        rec = _row_to_record(row)
+        rec = _row_to_record(cast(Row[Any], row))
         _emit_event_best_effort(
             engine,
             tenant_id=rec.tenant_id,
@@ -898,7 +903,7 @@ def validate_credential(
         )
         raise CredentialNotFoundError("credential authentication failed")
 
-    rec = _row_to_record(row)
+    rec = _row_to_record(cast(Row[Any], row))
 
     # Lazy expiration enforcement — status field may still read 'active'
     # if the sweep hasn't run yet; enforce at validation time regardless.
@@ -1150,6 +1155,7 @@ def rotate_credential(
             metadata={"replaced_credential_id": old_record.credential_id},
         )
 
+    assert new_row is not None, "credential rotation did not return a row"
     return IssuanceResult(record=_row_to_record(new_row), plaintext_secret=raw_key)
 
 
@@ -1183,7 +1189,7 @@ def revoke_credential(
             raise CredentialNotFoundError(
                 f"Credential {credential_id!r} not found for tenant {tenant_id!r}."
             )
-        rec = _row_to_record(row)
+        rec = _row_to_record(cast(Row[Any], row))
 
         if rec.status == "revoked":
             return rec  # idempotent
@@ -1225,6 +1231,7 @@ def revoke_credential(
             metadata={"reason": reason},
         )
 
+    assert updated is not None, "credential revocation did not return a row"
     return _row_to_record(updated)
 
 
@@ -1325,7 +1332,7 @@ def get_credential(
         raise CredentialNotFoundError(
             f"Credential {credential_id!r} not found for tenant {tenant_id!r}."
         )
-    return _row_to_record(row)
+    return _row_to_record(cast(Row[Any], row))
 
 
 def list_credentials(
