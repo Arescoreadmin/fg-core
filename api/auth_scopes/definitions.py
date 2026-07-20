@@ -9,7 +9,15 @@ DEFAULT_TTL_SECONDS = 24 * 3600
 class AuthResult:
     """Result of API key verification with details for proper status codes."""
 
-    __slots__ = ("valid", "reason", "key_prefix", "tenant_id", "scopes", "key_db_id", "credential_id")
+    __slots__ = (
+        "valid",
+        "reason",
+        "key_prefix",
+        "tenant_id",
+        "scopes",
+        "key_db_id",
+        "credential_id",
+    )
 
     def __init__(
         self,

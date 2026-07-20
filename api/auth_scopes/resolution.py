@@ -436,7 +436,9 @@ def verify_api_key_detailed(
                     # Credential exists in canonical store but is denied (hash
                     # mismatch, revoked, expired, etc.) — must not fall through.
                     log.debug("auth_path=canonical_denied")
-                    return AuthResult(valid=False, reason="key_invalid", key_prefix="fgk")
+                    return AuthResult(
+                        valid=False, reason="key_invalid", key_prefix="fgk"
+                    )
             except Exception:
                 log.warning(
                     "auth_path=canonical_error falling_back=legacy", exc_info=True
@@ -457,8 +459,10 @@ def verify_api_key_detailed(
                 else:
                     _ca_needed = {str(required_scopes)}
                 _ca_needed = {s.strip() for s in _ca_needed if str(s).strip()}
-                if _ca_needed and "*" not in _ca_scopes and not _ca_needed.issubset(
-                    _ca_scopes
+                if (
+                    _ca_needed
+                    and "*" not in _ca_scopes
+                    and not _ca_needed.issubset(_ca_scopes)
                 ):
                     return AuthResult(
                         valid=False,

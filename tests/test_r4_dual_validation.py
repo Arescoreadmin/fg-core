@@ -48,7 +48,9 @@ class TestA_CanonicalHit:
         monkeypatch.setenv("FG_DB_BACKEND", "postgres")
         principal = _make_principal(scopes=frozenset(["api:read"]))
 
-        with patch("api.credential_authority.validate_credential", return_value=principal):
+        with patch(
+            "api.credential_authority.validate_credential", return_value=principal
+        ):
             with patch("api.db.get_engine", return_value=MagicMock()):
                 result = verify_api_key_detailed(raw=_FGK_KEY)
 
@@ -62,7 +64,9 @@ class TestA_CanonicalHit:
         monkeypatch.setenv("FG_DB_BACKEND", "postgres")
         principal = _make_principal(tenant_id="tenant-beta")
 
-        with patch("api.credential_authority.validate_credential", return_value=principal):
+        with patch(
+            "api.credential_authority.validate_credential", return_value=principal
+        ):
             with patch("api.db.get_engine", return_value=MagicMock()):
                 result = verify_api_key_detailed(raw=_FGK_KEY)
 
@@ -73,7 +77,9 @@ class TestA_CanonicalHit:
         monkeypatch.setenv("FG_DB_BACKEND", "postgres")
         principal = _make_principal()
 
-        with patch("api.credential_authority.validate_credential", return_value=principal):
+        with patch(
+            "api.credential_authority.validate_credential", return_value=principal
+        ):
             with patch("api.db.get_engine", return_value=MagicMock()):
                 result = verify_api_key_detailed(raw=_FGK_KEY)
 
@@ -178,7 +184,9 @@ class TestD_ScopeCheck:
         monkeypatch.setenv("FG_DB_BACKEND", "postgres")
         principal = _make_principal(scopes=frozenset(["api:read", "api:write"]))
 
-        with patch("api.credential_authority.validate_credential", return_value=principal):
+        with patch(
+            "api.credential_authority.validate_credential", return_value=principal
+        ):
             with patch("api.db.get_engine", return_value=MagicMock()):
                 result = verify_api_key_detailed(
                     raw=_FGK_KEY, required_scopes={"api:read"}
@@ -191,7 +199,9 @@ class TestD_ScopeCheck:
         monkeypatch.setenv("FG_DB_BACKEND", "postgres")
         principal = _make_principal(scopes=frozenset(["api:read"]))
 
-        with patch("api.credential_authority.validate_credential", return_value=principal):
+        with patch(
+            "api.credential_authority.validate_credential", return_value=principal
+        ):
             with patch("api.db.get_engine", return_value=MagicMock()):
                 result = verify_api_key_detailed(
                     raw=_FGK_KEY, required_scopes={"api:write"}
