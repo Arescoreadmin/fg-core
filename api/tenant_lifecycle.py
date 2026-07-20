@@ -19,7 +19,8 @@ import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from collections.abc import Sequence
+from typing import Any, Optional
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -298,7 +299,7 @@ def _compute_transition_hash(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _row_to_record(row: object) -> TenantTransitionRecord:
+def _row_to_record(row: Sequence[Any]) -> TenantTransitionRecord:
     occurred_at = row[8]
     if isinstance(occurred_at, str):
         occurred_at = datetime.fromisoformat(occurred_at)

@@ -10,7 +10,7 @@
   "governance": {
     "contract_count": 1017,
     "contract_only": [],
-    "runtime_count": 1183,
+    "runtime_count": 1186,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -64,6 +64,7 @@
       "GET /admin/tenants/{tenant_id}/billing/usage",
       "GET /admin/tenants/{tenant_id}/bundles",
       "GET /admin/tenants/{tenant_id}/entitlements",
+      "GET /admin/tenants/{tenant_id}/lifecycle-history",
       "GET /admin/tenants/{tenant_id}/subscriptions/contracts",
       "GET /admin/tenants/{tenant_id}/subscriptions/items",
       "GET /admin/tenants/{tenant_id}/usage",
@@ -156,7 +157,9 @@
       "POST /admin/subscriptions/contracts/{contract_id}/items",
       "POST /admin/tenants",
       "POST /admin/tenants/{tenant_id}/activate",
+      "POST /admin/tenants/{tenant_id}/archive",
       "POST /admin/tenants/{tenant_id}/bundles",
+      "POST /admin/tenants/{tenant_id}/delete",
       "POST /admin/tenants/{tenant_id}/entitlements",
       "POST /admin/tenants/{tenant_id}/subscriptions",
       "POST /admin/tenants/{tenant_id}/suspend",
@@ -179,7 +182,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "97c851b239dff5e57119788c65184619a15f42f24d9c7c4b45791fd4446fa227",
+  "governance_fingerprint": "1dc2597d9d753955f2e01cfed9307d027ed09f032e2e10c8f0c88542bf0a67aa",
   "planes": [
     {
       "compat": {
@@ -504,6 +507,7 @@
       "GET /admin/tenants/{tenant_id}/billing/usage",
       "GET /admin/tenants/{tenant_id}/bundles",
       "GET /admin/tenants/{tenant_id}/entitlements",
+      "GET /admin/tenants/{tenant_id}/lifecycle-history",
       "GET /admin/tenants/{tenant_id}/subscriptions/contracts",
       "GET /admin/tenants/{tenant_id}/subscriptions/items",
       "GET /admin/tenants/{tenant_id}/usage",
@@ -1034,7 +1038,9 @@
       "POST /admin/subscriptions/contracts/{contract_id}/items",
       "POST /admin/tenants",
       "POST /admin/tenants/{tenant_id}/activate",
+      "POST /admin/tenants/{tenant_id}/archive",
       "POST /admin/tenants/{tenant_id}/bundles",
+      "POST /admin/tenants/{tenant_id}/delete",
       "POST /admin/tenants/{tenant_id}/entitlements",
       "POST /admin/tenants/{tenant_id}/subscriptions",
       "POST /admin/tenants/{tenant_id}/suspend",
