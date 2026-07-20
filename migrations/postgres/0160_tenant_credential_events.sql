@@ -58,8 +58,11 @@ CREATE POLICY tenant_credential_events_tenant_isolation
 CREATE OR REPLACE FUNCTION tce_prevent_mutation()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    RAISE EXCEPTION 'tenant_credential_events is append-only: % on row % is not permitted',
-        TG_OP, OLD.event_id;
+    RAISE EXCEPTION USING
+        MESSAGE = 'tenant_credential_events is append-only: '
+                  || TG_OP || ' on event_id ' || COALESCE(OLD.event_id, '(null)') || ' is not permitted',
+        ERRCODE = 'restrict_violation';
+    RETURN NULL;
 END;
 $$;
 
