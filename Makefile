@@ -500,6 +500,9 @@ check-connectors-rls: venv
 check-core-rls: venv
 	@$(PY) tools/ci/check_core_rls.py
 
+check-credential-authority: venv
+	@$(PY) tools/ci/check_credential_authority.py
+
 enforcement-mode-matrix: venv
 	@$(PY) tools/ci/check_enforcement_mode_matrix.py
 
@@ -767,7 +770,7 @@ connectors-gate: venv _require-pytest-venv
 fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	prod-unsafe-config-check safe-telemetry-check security-regression-gates soc-invariants soc-manifest-verify \
 	route-inventory-audit authority-integration-check cgin-privacy-check check-decision-roe test-quality-gate soc-review-sync pr-base-mainline-check \
-	audit-chain-verify audit-coverage-check dos-hardening-check sql-migration-percent-guard gap-audit check-connectors-rls check-core-rls \
+	audit-chain-verify audit-coverage-check dos-hardening-check sql-migration-percent-guard gap-audit check-connectors-rls check-core-rls check-credential-authority \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
