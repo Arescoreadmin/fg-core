@@ -5983,3 +5983,28 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - No secrets, keys, cryptographic material, or migration files are added or changed.
 
 **SOC review outcome:** approved.  The gate extension closes a regression surface: without it, a developer who refactored `_get_tenant_lifecycle_state()` away could restore raw tenant SQL without any automated check catching it.  The positive assertion is the minimal mechanical control for this invariant.
+
+---
+
+## feat/r4.7-dual-validation — R4.7 Dual-Validation Post-Merge Fixes (2026-07-20)
+
+**Critical files changed:** `api/auth_scopes/resolution.py`
+
+**Change:** Two targeted security fixes to the R4.7 dual-validation block in `verify_api_key_detailed`:
+
+1. **P1-A (RBAC prefix fallback):** Added an early return in `api/tenant_rbac.py:_get_auth_role()` when `auth.credential_id` is set. Without this, a successful canonical `AuthResult` (which has no `key_db_id` but does have `key_prefix="fgk"`) fell through to `_get_key_role_by_prefix()`, which selected an arbitrary legacy `api_keys` role matching the shared `fgk` prefix for the tenant. Canonical credentials must not inherit legacy RBAC roles.
+
+2. **P1-B (lifecycle denial fallthrough):** Added an explicit `except TenantLifecycleError` clause in the canonical validation block, before the broad `except Exception` fallback. Previously, `TenantLifecycleError` (raised when a tenant is suspended, archived, or deleted) was caught by the broad handler and treated as a transient outage, causing fallthrough to the legacy `api_keys` path. A tenant lifecycle denial is a policy decision, not an outage; it must never fall through.
+
+**Reason:** Both bugs were identified by the Codex bot in PR #561 review. They represent security invariant violations that would surface in dual-validation deployments where the same key material exists in both the canonical `tenant_credentials` table and the legacy `api_keys` table.
+
+**Security review:**
+
+- No auth middleware, OPA policies, CI workflow (`.github/`), or session handling files are modified.
+- P1-A is a short-circuit addition in `_get_auth_role()`: the new branch fires only when `auth.credential_id is not None`, which is exclusively set by the canonical path.  Legacy key flows set `key_db_id` and return before reaching the new branch; unauthenticated requests have neither field and also skip it.  The change does not weaken any existing RBAC check.
+- P1-B narrows the exception surface: `TenantLifecycleError` is now caught and returns `AuthResult(valid=False, reason="tenant_lifecycle_denied")` without touching the legacy path.  The broad `except Exception` fallback continues to handle genuine transient errors (DB timeouts, connection errors).  No valid authentication path is affected.
+- `TenantLifecycleError` is imported via the existing lazy import block inside the function body (same `from api.credential_authority import (...)` statement), preserving the circular-import avoidance strategy from R4.7.
+- No secrets, keys, cryptographic material, migration files, or CI workflow files are added or changed.
+- Tests for both fixes are covered by the existing `tests/test_r4_dual_validation.py` suite (10 tests), which exercises canonical hit, canonical miss, canonical denial, lifecycle denial, and RBAC paths.
+
+**SOC review outcome:** approved.  Both fixes close concrete security vulnerabilities introduced by the R4.7 dual-validation migration.  P1-A prevents canonical credentials from inheriting arbitrary legacy RBAC roles via prefix matching.  P1-B enforces fail-closed behavior for tenant lifecycle policy denials.  Neither change widens any attack surface; both narrow it.
