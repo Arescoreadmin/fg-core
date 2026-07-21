@@ -125,7 +125,7 @@ def main() -> int:
         for mod in _RETIRED_MODULES:
             if f"from {mod} import" in src or f"import {mod}" in src:
                 print(
-                    f"❌ check-credential-authority: {rel} imports retired module {mod}",
+                    f"❌ check-credential-authority: {relative_file} imports retired module {mod}",
                     file=sys.stderr,
                 )
                 return 1
