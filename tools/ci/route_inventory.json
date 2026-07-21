@@ -1427,23 +1427,6 @@
     {
       "dependency_categories": [
         "auth",
-        "rate"
-      ],
-      "file": "api/admin.py",
-      "method": "GET",
-      "path": "/admin/keys/needing-rotation",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "admin:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": false
-    },
-    {
-      "dependency_categories": [
-        "auth",
         "rate",
         "tenant"
       ],
@@ -1476,23 +1459,6 @@
       ],
       "source": "runtime-ast",
       "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "rate"
-      ],
-      "file": "api/admin.py",
-      "method": "GET",
-      "path": "/admin/keys/{key_prefix}/rotation-status",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "admin:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": false
     },
     {
       "dependency_categories": [
@@ -20344,7 +20310,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-20T14:04:04.062763+00:00",
+  "generated_at": "2026-07-21T01:28:55.629392+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -7,7 +7,6 @@ import os
 import re
 import sqlite3
 import time
-from datetime import datetime
 from typing import Callable, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request
@@ -504,23 +503,24 @@ def verify_api_key_detailed(
                 credential_id=_ca_principal.credential_id,
             )
 
+    # R4.8: Postgres has no legacy fallback — canonical path is the only valid path.
+    if _is_postgres:
+        _log_auth_event(
+            "auth_attempt",
+            success=False,
+            reason="key_not_found",
+            request_path=request_path,
+            client_ip=client_ip,
+        )
+        return AuthResult(valid=False, reason="key_not_found")
+
+    # SQLite legacy api_keys path (dev/test backend only; Postgres uses canonical above).
     def _row_for(
         prefix: str,
         lookup_hash: Optional[str],
         legacy_hash: Optional[str],
         tenant_id_hint: Optional[str] = None,
     ):
-        if _is_postgres:
-            from .store import get_key_row as _pg_get_key_row
-
-            return _pg_get_key_row(
-                prefix=prefix,
-                lookup_hash=lookup_hash,
-                legacy_hash=legacy_hash,
-                tenant_id_hint=tenant_id_hint,
-            )
-
-        # SQLite path (unchanged)
         con = sqlite3.connect(sqlite_path)
         try:
             try:
@@ -696,25 +696,15 @@ def verify_api_key_detailed(
 
     _db_expired = False
     if check_expiration and identifier_col and key_prefix:
-        if _is_postgres:
-            # Postgres row already contains expires_at as a datetime or None.
-            _expires_at_pg = row.get("expires_at") if row else None
-            if _expires_at_pg is not None:
-                _now_ts = int(time.time())
-                if isinstance(_expires_at_pg, datetime):
-                    _db_expired = _now_ts > int(_expires_at_pg.timestamp())
-                elif isinstance(_expires_at_pg, (int, float)):
-                    _db_expired = _now_ts > int(_expires_at_pg)
-        else:
-            _db_expired = bool(
-                (key_lookup or key_hash)
-                and _check_db_expiration(
-                    sqlite_path,
-                    key_prefix,
-                    identifier_col,
-                    key_lookup if identifier_col == "key_lookup" else key_hash,
-                )
+        _db_expired = bool(
+            (key_lookup or key_hash)
+            and _check_db_expiration(
+                sqlite_path,
+                key_prefix,
+                identifier_col,
+                key_lookup if identifier_col == "key_lookup" else key_hash,
             )
+        )
 
     if _db_expired:
         _log_auth_event(
@@ -748,8 +738,7 @@ def verify_api_key_detailed(
                 scopes=have,
             )
 
-        if hash_alg != "argon2id" and not _is_postgres:
-            # Legacy hash upgrade is SQLite-only; Postgres keys are always argon2id.
+        if hash_alg != "argon2id":
             if (
                 "hash_alg" in col_names
                 and "hash_params" in col_names

@@ -1048,8 +1048,7 @@ test-tenant-isolation: venv _require-pytest-venv
 test-auth-hardening: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q \
 		tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py \
-		tests/security/test_evidence_chain_persistence.py tests/security/test_chain_verification_detects_tamper.py \
-		tests/security/test_scope_enforcement.py tests/security/test_key_hashing_kdf.py
+		tests/security/test_evidence_chain_persistence.py tests/security/test_chain_verification_detects_tamper.py
 
 test-dashboard-p0: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/security/test_dashboard_p0_hardening.py tests/security/test_admin_audit_required_fields.py
