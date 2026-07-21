@@ -20,7 +20,7 @@ class RequiredTestsGateResolutionTests(unittest.TestCase):
             return mock.Mock(returncode=0, stdout="")
 
         with mock.patch.object(required_tests_gate, "_run_git", side_effect=fake_run):
-            base, head = required_tests_gate._resolve_diff_range(
+            base, head, _diags = required_tests_gate._resolve_diff_range(
                 base_ref=None, base_sha=None, head_sha=None
             )
         self.assertEqual(base, "abc123")
