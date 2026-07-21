@@ -1758,6 +1758,15 @@ async def admin_create_key(
     actor_ctx: ActorContext = Depends(require_permission("key.manage")),
 ) -> CreateKeyResponse:
     """Create a new API key via admin."""
+    if (os.getenv("FG_DB_BACKEND") or "").strip().lower() == "postgres":
+        raise HTTPException(
+            status_code=410,
+            detail=(
+                "POST /admin/keys is retired on Postgres (R4.8). "
+                "Issue credentials via POST /admin/tenants/{tenant_id}/credentials."
+            ),
+        )
+
     bound_tenant = bind_tenant_id(
         request,
         req.tenant_id,
