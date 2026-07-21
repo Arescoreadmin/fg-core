@@ -1412,7 +1412,9 @@ def _group_by(rows: Iterable[Any], attr: str) -> dict[str, list[Any]]:
 
 
 def _normalize_role(role: str) -> str:
-    return role.strip().lower().replace(" / ", "_or_").replace(" ", "_").replace("-", "_")
+    return (
+        role.strip().lower().replace(" / ", "_or_").replace(" ", "_").replace("-", "_")
+    )
 
 
 def _label(value: str) -> str:

@@ -43,7 +43,6 @@ from api.auth_scopes import (
     mint_key,
     require_scopes,
     revoke_api_key,
-    rotate_api_key_by_prefix,
 )
 from api.credential_authority import (
     CredentialNotFoundError,
@@ -66,13 +65,11 @@ from api.keys import (
     KeyInfo,
     ListKeysResponse,
     RevokeKeyResponse,
-    RotateKeyResponse,
 )
 from api.security_audit import (
     audit_admin_action,
     audit_key_created,
     audit_key_revoked,
-    audit_key_rotated,
 )
 
 log = logging.getLogger("frostgate.admin")
@@ -1836,52 +1833,6 @@ async def admin_revoke_key(
         revoked=False,
         prefix=key_prefix,
         message="Key not found or already revoked",
-    )
-
-
-@router.post(
-    "/keys/{key_prefix}/rotate",
-    response_model=RotateKeyResponse,
-    dependencies=[Depends(require_scopes("keys:write"))],
-)
-async def admin_rotate_key(
-    key_prefix: str,
-    req: AdminRotateKeyRequest,
-    request: Request,
-    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
-) -> RotateKeyResponse:
-    """Rotate an API key by prefix."""
-    try:
-        bound_tenant = bind_tenant_id(
-            request,
-            req.tenant_id,
-            require_explicit_for_unscoped=True,
-        )
-        result = rotate_api_key_by_prefix(
-            key_prefix=key_prefix,
-            ttl_seconds=req.ttl_seconds,
-            tenant_id=bound_tenant,
-            revoke_old=req.revoke_old,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    audit_key_rotated(
-        old_prefix=result["old_prefix"],
-        new_prefix=result["new_prefix"],
-        tenant_id=result["tenant_id"],
-        request=request,
-        old_key_revoked=result["old_key_revoked"],
-    )
-
-    return RotateKeyResponse(
-        new_key=result["new_key"],
-        new_prefix=result["new_prefix"],
-        old_prefix=result["old_prefix"],
-        scopes=result["scopes"],
-        tenant_id=result["tenant_id"],
-        expires_at=result["expires_at"],
-        old_key_revoked=result["old_key_revoked"],
     )
 
 

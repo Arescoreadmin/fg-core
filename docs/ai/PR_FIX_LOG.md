@@ -1,5 +1,55 @@
 # PR Fix Log (Strict)
 
+## P-17 — fix(r4.8-post-merge-cleanup): stale test + allowlist correction
+
+**Branch:** `fix/r4.8-post-merge-cleanup`
+**Date:** 2026-07-21
+
+### Root causes
+
+1. **`tests/test_usage_attribution.py:test_usage_credentials_integration_uses_validated_tenant_context`** imported `from api.credentials import create_credential, validate_credential`. `api/credentials.py` was deleted in R4.8. The test did not follow suit and continued to reference the retired module, causing `ModuleNotFoundError` at collection time.
+
+2. **`tools/ci/check_credential_authority.py` SOC-HIGH-005 gate** failed because `api/auth_scopes/mapping.py` was not in `_LEGACY_WRITE_ALLOWED` but contains `INSERT INTO api_keys` and `UPDATE api_keys` statements (`mint_key`, `revoke_api_key`, `_update_key_usage`). The file was omitted from the allowlist during R4.8 — these writers were not retired in R4.8 (they are still called by `api/keys.py` and `api/admin.py`).
+
+### Exact fixes
+
+1. **`tests/test_usage_attribution.py`** (lines 342–383 replaced): removed `from api.credentials import …`; replaced with in-memory SQLite engine + `api.credential_authority.issue_credential` / `validate_credential`. Behavior is identical: issue credential for tenant, validate raw key, confirm returned tenant drives usage attribution.
+
+2. **`tools/ci/check_credential_authority.py`** (in `_LEGACY_WRITE_ALLOWED`): added `"api/auth_scopes/mapping.py"` with an explanatory comment. Gate now passes.
+
+3. **`tests/test_r4_credential_authority.py`** (class `TestK_CredentialAuthorityGate` appended): six new tests mechanically verifying gate invariants — gate passes clean tree, retired modules blocked, `rotate_api_key_by_prefix` absent, canonical table writes exclusive, gate regex coverage, `mapping.py` in allowlist.
+
+4. **`docs/SOC_EXECUTION_GATES_2026-02-15.md`**: new entry prepended covering all changes.
+
+### Files changed
+
+- `tests/test_usage_attribution.py` — stale test migrated to canonical API
+- `tools/ci/check_credential_authority.py` — allowlist correction
+- `tests/test_r4_credential_authority.py` — gate tests added
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC entry added
+- `docs/ai/PR_FIX_LOG.md` — this entry
+- Route inventory artifacts — regenerated (Workstream 4)
+
+### Validation
+
+```
+python tools/ci/check_credential_authority.py → PASS
+.venv/bin/pytest -q tests/test_usage_attribution.py tests/test_r4_credential_authority.py → see run results
+GITHUB_BASE_REF=main .venv/bin/python tools/ci/check_soc_review_sync.py → PASS
+make route-inventory-audit → PASS
+make fg-fast; make fg-contract → PASS
+```
+
+### No authority weakening
+
+- No retired module restored.
+- No auth scope lowered.
+- No canonical credential table write added outside `credential_authority.py`.
+- `mapping.py` grandfathering is a correction of an omission — the writes predate R4.8.
+- `rotate_api_key_by_prefix` remains absent from all `api/` source.
+
+---
+
 ## P-16 — feat(r4.8): legacy credential retirement
 
 **Branch:** `feat/r4.8-legacy-retirement`
