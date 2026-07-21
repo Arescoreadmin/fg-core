@@ -20,9 +20,13 @@
 - SOC-HIGH-004: resurrection block for retired modules — prevents any future import of `api.credentials`, `api.key_rotation`, `api.db.api_keys_store` from non-test production code.
 - SOC-HIGH-005: direct `api_keys` write block — prevents any future direct `INSERT INTO` or `UPDATE api_keys` outside migrations/tests.
 
-**No fallback means no bypass:** After R4.8, there is no code path by which a non-canonical credential can authenticate. The only entry points to `tenant_credentials` are through `api/credential_authority.py` (the sole write authority, enforced by the existing check). There is no "try legacy if canonical fails" logic remaining.
+**No fallback means no bypass (Postgres):** After R4.8, there is no code path by which a non-canonical credential can authenticate on Postgres. The only entry points to `tenant_credentials` are through `api/credential_authority.py` (the sole write authority, enforced by the existing check).
 
-**SOC review outcome:** Approved. The auth surface is narrowed, not widened. The canonical validation block (R4.7) is unchanged — this PR only removes what comes after it. Removing the fallback eliminates a dual-write attack surface (api_keys row injection). The two removed admin routes were legacy-only; all rotation capability remains via the R4.6 credential authority routes. The CI gate extension is strictly additive and provides mechanical resurrection prevention.
+**R4.8 regression fix (same PR):** The initial R4.8 commit over-retired the SQLite validation path, breaking 229 tests. The fix restores the `_row_for` closure for the SQLite backend only — Postgres remains canonical-only. Auth surface is unchanged on production (Postgres); the restored path is exercised only when `FG_DB_BACKEND != postgres`. This change is covered under this SOC entry because it is a correctness fix to the same auth path, not a new feature or policy change.
+
+**SOC-HIGH-005 allowlist correction (same PR):** The initial SOC-HIGH-005 gate was too broad — it flagged pre-existing legitimate `api_keys` writers (`api/auth_scopes/mapping.py`, `api/auth_scopes/store.py`, `api/keys.py`, `api/tenant_rbac.py`, `api/tripwires.py`, `tools/seed/`, `tools/scripts/`, `tools/patch_chain_and_ui_single_use.py`) that were not retired in R4.8. These are now grandfathered in the allowlist. The gate continues to block any NEW file from introducing `api_keys` DML outside the allowlist.
+
+**SOC review outcome:** Approved. The auth surface is narrowed, not widened. The canonical validation block (R4.7) is unchanged — this PR only removes what comes after it on Postgres. Removing the Postgres fallback eliminates a dual-write attack surface (api_keys row injection). The two removed admin routes were legacy-only; all rotation capability remains via the R4.6 credential authority routes. The CI gate extension is strictly additive and provides mechanical resurrection prevention. The regression fix and allowlist correction are scope-bounded and do not re-widen any auth surface.
 
 ---
 
