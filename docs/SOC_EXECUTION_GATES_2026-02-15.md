@@ -1,3 +1,31 @@
+## 2026-07-20 — feat/r4.8-legacy-retirement: R4.8 Legacy Credential Retirement
+
+**Classification:** Hot auth path simplification — legacy fallback removed. No new tables. Two routes removed. No new auth mechanisms. Critical files: `api/auth_scopes/resolution.py` (auth path), `api/admin.py` (routes), `api/auth_scopes/store.py` (key lookup). `tools/ci/check_credential_authority.py` (CI gate extension).
+
+**Critical-path files changed:**
+- `api/auth_scopes/resolution.py` — removed `_row_for` closure and entire legacy `api_keys` lookup block from `verify_api_key_detailed`. After the canonical `fgk.`/Postgres block (unchanged), all other cases — non-`fgk.` prefixes, SQLite backend, keys absent from `tenant_credentials` — now return `AuthResult(valid=False, reason="key_not_found")` immediately. The canonical block itself is preserved exactly as shipped in R4.7.
+- `api/auth_scopes/store.py` — removed `get_key_row()` and `_get_key_row_postgres()`. These were the only Postgres lookup functions for the legacy `api_keys` table. No other functions in this file are touched.
+- `api/admin.py` — removed two GET route handlers: `GET /admin/keys/{prefix}/rotation-status` (called `api.key_rotation.check_key_rotation_status`) and `GET /admin/keys/needing-rotation` (called `api.key_rotation.get_rotation_manager`). Both routed through the deleted `api/key_rotation.py` module. Route inventory regenerated.
+- `tools/ci/check_credential_authority.py` — added R4.8 resurrection-block assertions. Two new checks: (1) any production Python file importing `api.credentials`, `api.key_rotation`, or `api.db.api_keys_store` fails CI immediately; (2) any production Python file containing direct `INSERT INTO` or `UPDATE api_keys` statements fails CI. Both checks skip `migrations/`, `tests/`, and `tools/ci/` paths.
+
+**Auth behavior change scope:** The canonical `fgk.` validation path (introduced in R4.7) is completely unchanged. The only change is that the fallback that followed it is removed. Before R4.8, a `fgk.` key that returned `CredentialNotFoundError(absent=True)` would fall through to the legacy `api_keys` lookup. After R4.8 that fallback is gone — the function returns `key_not_found`. Keys that do not start with `fgk.` or are on a non-Postgres backend also return `key_not_found` immediately. The `FG_API_KEY` global bypass and the admin-gateway internal token path are unaffected (they are in the upper block, which is unchanged).
+
+**Auth surface narrowing:** Removing the fallback path eliminates the dual-path attack surface. In R4.7, an adversary who could plant a row in `api_keys` for a `fgk.` prefix could authenticate even if the canonical store rejected the key. After R4.8 that is impossible — there is only one store and one validation path.
+
+**Routes removed:**
+- `GET /admin/keys/{prefix}/rotation-status` — called deleted `KeyRotationManager`; already guarded by `admin:read` + `key.manage`. Removal does not affect any credential operation.
+- `GET /admin/keys/needing-rotation` — same guard chain, same module. Rotation is now exclusively via `credential_authority.rotate_credential` through the `POST /admin/tenants/{id}/credentials/{cid}/rotate` route (R4.6).
+
+**CI gate extension (SOC-HIGH-004 and SOC-HIGH-005):**
+- SOC-HIGH-004: resurrection block for retired modules — prevents any future import of `api.credentials`, `api.key_rotation`, `api.db.api_keys_store` from non-test production code.
+- SOC-HIGH-005: direct `api_keys` write block — prevents any future direct `INSERT INTO` or `UPDATE api_keys` outside migrations/tests.
+
+**No fallback means no bypass:** After R4.8, there is no code path by which a non-canonical credential can authenticate. The only entry points to `tenant_credentials` are through `api/credential_authority.py` (the sole write authority, enforced by the existing check). There is no "try legacy if canonical fails" logic remaining.
+
+**SOC review outcome:** Approved. The auth surface is narrowed, not widened. The canonical validation block (R4.7) is unchanged — this PR only removes what comes after it. Removing the fallback eliminates a dual-write attack surface (api_keys row injection). The two removed admin routes were legacy-only; all rotation capability remains via the R4.6 credential authority routes. The CI gate extension is strictly additive and provides mechanical resurrection prevention.
+
+---
+
 ## 2026-07-20 — feat/r4.7-dual-validation: R4.7 Dual-Validation Deploy 1
 
 **Classification:** Hot auth path change — canonical authority preferred, legacy fallback. No new tables. No new routes. No new auth mechanisms. Single file changed (`api/auth_scopes/resolution.py`).

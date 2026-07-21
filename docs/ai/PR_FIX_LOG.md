@@ -1,5 +1,69 @@
 # PR Fix Log (Strict)
 
+## P-16 — feat(r4.8): legacy credential retirement
+
+**Branch:** `feat/r4.8-legacy-retirement`
+**Date:** 2026-07-20
+
+### Purpose
+
+Remove all legacy credential infrastructure. After this PR there is exactly one
+credential validation path (`credential_authority`), one storage model
+(`tenant_credentials`), one rotation pipeline (`credential_authority.rotate_credential`),
+and no compatibility fallback code. This is Deploy 2 of the R4 credential authority
+migration (R4.7 was Deploy 1: dual-validation).
+
+### Changes
+
+**Deleted files:**
+1. `del: api/credentials.py` — legacy issuance/validation/rotation/revocation module
+2. `del: api/key_rotation.py` — legacy `KeyRotationManager`
+3. `del: api/db/api_keys_store.py` — legacy `insert_api_key` helper (api_keys table write)
+4. `del: scripts/mint_api_key.py` — old-style bootstrap provisioning script (used api_keys_store)
+5. `del: tests/security/test_credentials.py` — tests for deleted legacy module
+6. `del: tests/agent/test_key_rotation.py` — tests for deleted KeyRotationManager
+7. `del: tests/test_r4_dual_validation.py` — tests for R4.7 dual-path fallback behavior
+
+**Modified files:**
+1. `mod: api/auth_scopes/resolution.py` — removed `_row_for` closure and entire legacy
+   `api_keys` lookup block from `verify_api_key_detailed`; non-`fgk.` keys, SQLite backend,
+   and fgk. keys not found in `tenant_credentials` now return `AuthResult(valid=False,
+   reason="key_not_found")` immediately. Removed 13 now-unused imports (ruff --fix).
+2. `mod: api/auth_scopes/store.py` — removed `get_key_row()` and `_get_key_row_postgres()`
+   (the legacy api_keys lookup functions used by the deleted fallback path).
+3. `mod: api/admin.py` — removed `GET /admin/keys/{prefix}/rotation-status` and
+   `GET /admin/keys/needing-rotation` route handlers (both called `api.key_rotation`);
+   removed `KeyRotationResponse` and `KeyRotationStatusResponse` model classes.
+4. `mod: tests/test_auth_postgres_store.py` — removed 4 test functions covering `get_key_row`
+   (the deleted function); kept all other tests.
+5. `mod: tools/ci/check_credential_authority.py` — added R4.8 resurrection-block assertions:
+   (a) any non-test/non-migration Python file importing a retired module fails CI;
+   (b) any non-test/non-migration Python file writing directly to `api_keys` table fails CI.
+6. `mod: tools/ci/route_inventory.json` + related — regenerated after route removal.
+
+### Non-obvious design choices
+
+- **`mint_api_key.py` deleted (not kept)** — the script inserts directly into `api_keys`
+  using `insert_api_key`. Since credentials are now issued via
+  `credential_authority.issue_credential` (with full lifecycle, RLS, audit events), the
+  old bootstrap script has no valid use. Keeping it would preserve a write path to the
+  legacy table that the CI gate now blocks.
+- **Legacy fallback replaced with single return** — rather than keeping any sqlite fallback
+  (e.g. for dev convenience), the function returns `key_not_found` for all non-canonical
+  cases. This enforces the R4.8 design invariant and avoids a hidden soft bypass.
+
+### Verification
+
+```
+.venv/bin/pytest tests/test_r4_credential_authority.py tests/test_r4_admin_credential_routes.py tests/test_auth_postgres_store.py -x -q
+→ 105 passed in 3.91s
+
+.venv/bin/ruff check api tests scripts tools/ci
+→ All checks passed!
+```
+
+---
+
 ## P-15 — fix(r4.7): P1-A RBAC prefix fallback; P1-B lifecycle denial fallthrough
 
 **Branch:** `feat/r4.7-dual-validation`
